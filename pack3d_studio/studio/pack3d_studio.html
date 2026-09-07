@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pack3d studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<style>
+  :root{
+    --ink:#1b1917; --muted:#7a736c; --line:#e4dfd8; --bg:#f4f2ef;
+    --accent:#1b1917; --warn:#a8442a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+       display:flex;flex-direction:column}
+
+  header{padding:16px 24px;border-bottom:1px solid var(--line);background:#fff;
+         display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
+  .brand{font-size:17px;font-weight:650;letter-spacing:-.015em}
+  .brand span{color:var(--muted);font-weight:400}
+  #status{margin-left:auto;font-size:13px;color:var(--muted)}
+  #status.busy{color:var(--ink)}
+  #status.err{color:var(--warn)}
+
+  #stage{flex:1;position:relative;min-height:320px;
+         background:radial-gradient(120% 90% at 50% 12%,#ffffff 0%,#eae6e1 100%)}
+  canvas{display:block;width:100%;height:100%}
+  #empty{position:absolute;inset:0;display:flex;flex-direction:column;
+         align-items:center;justify-content:center;gap:6px;color:var(--muted);
+         text-align:center;padding:24px;pointer-events:none}
+  #empty strong{color:var(--ink);font-weight:600}
+  #drop{position:absolute;inset:12px;border:2px dashed transparent;border-radius:14px;
+        transition:border-color .15s,background .15s}
+  body.dragging #drop{border-color:var(--ink);background:rgba(27,25,23,.04)}
+
+  #meta{position:absolute;left:18px;bottom:16px;display:flex;gap:8px;flex-wrap:wrap;
+        font-size:12px;color:var(--muted)}
+  #meta span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+
+  footer{border-top:1px solid var(--line);background:#fff;padding:16px 24px 22px}
+  .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
+  button{font:inherit;font-size:14px;padding:11px 20px;border-radius:10px;cursor:pointer;
+         border:1px solid var(--line);background:#fff;color:var(--ink)}
+  button:hover:not(:disabled){background:#faf8f6}
+  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
+  button.primary:hover:not(:disabled){opacity:.9}
+  button:disabled{opacity:.4;cursor:not-allowed}
+
+  #params{max-width:720px;margin:0 auto 14px;display:none;gap:16px;
+          align-items:flex-end;justify-content:center;flex-wrap:wrap;
+          border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fdfcfb}
+  #params.on{display:flex}
+  .fld{display:flex;flex-direction:column;gap:5px}
+  .fld label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+  .fld input,.fld select{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);
+                         border-radius:8px;background:#fff;color:var(--ink)}
+  .fld input{width:110px}
+  #params .note{flex-basis:100%;font-size:12.5px;color:var(--muted);margin:0}
+  .hint{max-width:720px;margin:12px auto 0;text-align:center;font-size:12.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">pack3d <span>studio</span></div>
+  <div id="status">Nessun modello caricato</div>
+</header>
+
+<div id="stage">
+  <div id="drop"></div>
+  <div id="empty">
+    <strong>Carica un artwork PDF</strong>
+    <div>Il modello 3D comparirà qui. Puoi anche trascinare il file.</div>
+  </div>
+  <div id="meta"></div>
+</div>
+
+<footer>
+  <div id="params">
+    <div class="fld">
+      <label for="teeth">Zigrinature per lato</label>
+      <input id="teeth" type="number" min="0" max="120" step="1" value="20">
+    </div>
+    <div class="fld">
+      <label for="soft">Tipo di gonfiore</label>
+      <select id="soft">
+        <option value="rigido">Rigido</option>
+        <option value="medio" selected>Medio</option>
+        <option value="morbido">Morbido</option>
+      </select>
+    </div>
+    <button id="go" class="primary">Costruisci</button>
+    <p class="note">Flowpack riconosciuto. Zigrinatura a 0 lascia le pinne lisce; i denti sono sempre triangoli equilateri contati sul bordo della pinna.</p>
+  </div>
+
+  <div class="row">
+    <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+    <button id="upload" class="primary">Carica PDF</button>
+    <button id="download" disabled>Scarica GLB</button>
+  </div>
+  <p class="hint">Trascina per ruotare, rotella o pizzico per lo zoom. Il viewer scarta le facce posteriori, quindi un modello con le normali girate si vede subito.</p>
+</footer>
+
+<script>
+/* ------------------------------------------------------------------ *
+ * Lettore GLB minimo. Legge quello che scrive pack3d: una mesh, una
+ * primitiva per materiale, POSITION/NORMAL/TEXCOORD_0 e immagini JPEG
+ * incorporate. Evita di dipendere da GLTFLoader, che non e' nel bundle
+ * principale di three.js.
+ * ------------------------------------------------------------------ */
+const COMP = {5120:Int8Array,5121:Uint8Array,5122:Int16Array,5123:Uint16Array,
+              5125:Uint32Array,5126:Float32Array};
+const NCOMP = {SCALAR:1, VEC2:2, VEC3:3, VEC4:4};
+
+function parseGLB(buf){
+  const dv = new DataView(buf);
+  if (dv.getUint32(0,true) !== 0x46546C67) throw new Error("Non e' un file GLB");
+  let off = 12, json = null, bin = null;
+  while (off < dv.byteLength){
+    const len = dv.getUint32(off,true), type = dv.getUint32(off+4,true);
+    const start = off + 8;
+    if (type === 0x4E4F534A) json = JSON.parse(new TextDecoder().decode(new Uint8Array(buf,start,len)));
+    else if (type === 0x004E4942) bin = buf.slice(start, start+len);
+    off = start + len + ((4 - len % 4) % 4);
+  }
+  if (!json || !bin) throw new Error("GLB incompleto");
+  return {json, bin};
+}
+
+function readAccessor(g, i){
+  const a = g.json.accessors[i];
+  const bv = g.json.bufferViews[a.bufferView];
+  const TA = COMP[a.componentType], n = NCOMP[a.type];
+  const base = (bv.byteOffset||0) + (a.byteOffset||0);
+  const stride = bv.byteStride || 0;
+  if (!stride) return new TA(g.bin, base, a.count*n);
+  const out = new TA(a.count*n);          // caso raro: dati interlacciati
+  const src = new DataView(g.bin);
+  const sz = TA.BYTES_PER_ELEMENT;
+  for (let k=0;k<a.count;k++)
+    for (let c=0;c<n;c++)
+      out[k*n+c] = TA===Float32Array ? src.getFloat32(base+k*stride+c*sz,true)
+                                     : src.getUint16(base+k*stride+c*sz,true);
+  return out;
+}
+
+function buildScene(g){
+  const group = new THREE.Group();
+  const mesh = g.json.meshes[0];
+  for (const prim of mesh.primitives){
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(readAccessor(g, prim.attributes.POSITION),3));
+    if (prim.attributes.NORMAL !== undefined)
+      geo.setAttribute('normal', new THREE.BufferAttribute(readAccessor(g, prim.attributes.NORMAL),3));
+    if (prim.attributes.TEXCOORD_0 !== undefined)
+      geo.setAttribute('uv', new THREE.BufferAttribute(readAccessor(g, prim.attributes.TEXCOORD_0),2));
+    if (prim.indices !== undefined)
+      geo.setIndex(new THREE.BufferAttribute(readAccessor(g, prim.indices),1));
+    if (prim.attributes.NORMAL === undefined) geo.computeVertexNormals();
+
+    const mat = new THREE.MeshPhongMaterial({color:0xffffff, shininess:38,
+                                             specular:0x4a4a4a, side:THREE.FrontSide});
+    const m = g.json.materials && g.json.materials[prim.material];
+    const texIdx = m && m.pbrMetallicRoughness && m.pbrMetallicRoughness.baseColorTexture;
+    if (texIdx){
+      const src = g.json.textures[texIdx.index].source;
+      const img = g.json.images[src];
+      const bv = g.json.bufferViews[img.bufferView];
+      const blob = new Blob([new Uint8Array(g.bin, bv.byteOffset||0, bv.byteLength)],
+                            {type: img.mimeType || 'image/jpeg'});
+      const url = URL.createObjectURL(blob);
+      const t = new THREE.TextureLoader().load(url, () => { render(); URL.revokeObjectURL(url); });
+      t.flipY = false;                    // glTF ha l'origine UV in alto a sinistra
+      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+      mat.map = t;
+    }
+    group.add(new THREE.Mesh(geo, mat));
+  }
+  return group;
+}
+
+/* ------------------------------- viewer ------------------------------- */
+const stage = document.getElementById('stage');
+const scene = new THREE.Scene();
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+stage.appendChild(renderer.domElement);
+const camera = new THREE.PerspectiveCamera(28,1,0.1,100000);
+scene.add(new THREE.AmbientLight(0xffffff,0.80));
+const key = new THREE.DirectionalLight(0xffffff,0.46); key.position.set(-0.35,0.62,0.75); scene.add(key);
+const fill = new THREE.DirectionalLight(0xffffff,0.18); fill.position.set(0.7,0.2,-0.5); scene.add(fill);
+
+let model = null, radius = 100, centre = new THREE.Vector3();
+let yaw = -0.52, pitch = 0.22, dist = 400, drag = false, px=0, py=0;
+
+function frame(){
+  const box = new THREE.Box3().setFromObject(model);
+  box.getCenter(centre);
+  radius = box.getSize(new THREE.Vector3()).length()/2 || 100;
+  dist = radius / Math.tan(THREE.MathUtils.degToRad(14)) * 0.95;
+}
+function resize(){
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix(); render();
+}
+function render(){
+  camera.position.set(
+    centre.x + dist*Math.cos(pitch)*Math.sin(yaw),
+    centre.y + dist*Math.sin(pitch),
+    centre.z + dist*Math.cos(pitch)*Math.cos(yaw));
+  camera.lookAt(centre);
+  renderer.render(scene,camera);
+}
+addEventListener('resize', resize);
+
+const el = renderer.domElement;
+el.style.touchAction = 'none';
+el.addEventListener('pointerdown', e => {drag=true; px=e.clientX; py=e.clientY; el.setPointerCapture(e.pointerId);});
+el.addEventListener('pointermove', e => { if(!drag||!model) return;
+  yaw -= (e.clientX-px)*0.008; pitch += (e.clientY-py)*0.006;
+  pitch = Math.max(-1.4, Math.min(1.4, pitch)); px=e.clientX; py=e.clientY; render(); });
+el.addEventListener('pointerup', () => drag=false);
+el.addEventListener('wheel', e => { if(!model) return; e.preventDefault();
+  dist = Math.max(radius*1.2, Math.min(radius*14, dist*(1+e.deltaY*0.0012))); render(); }, {passive:false});
+
+function show(buf){
+  if (model){ scene.remove(model); model.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
+  model = buildScene(parseGLB(buf));
+  scene.add(model);
+  document.getElementById('empty').style.display = 'none';
+  frame(); resize();
+}
+
+/* ------------------------------- stato -------------------------------- */
+const statusEl = document.getElementById('status');
+const params = document.getElementById('params');
+const dlBtn = document.getElementById('download');
+let glbBlob = null, glbName = 'modello.glb', pending = null;
+let backendUp = false;
+const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
+
+(async () => {
+  setStatus('Cerco il backend\u2026','busy');
+  backendUp = await findBackend();
+  if (!backendUp){
+    setStatus(OFFLINE,'err');
+    document.querySelector('#empty div').textContent =
+      'Per generare un modello serve il backend. Puoi comunque trascinare qui un GLB gia\u2019 pronto.';
+  } else {
+    setStatus(API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale','');
+  }
+})();
+
+function setStatus(text, cls){ statusEl.textContent = text; statusEl.className = cls || ''; }
+function setMeta(items){
+  document.getElementById('meta').innerHTML =
+    (items||[]).map(t => '<span>'+t+'</span>').join('');
+}
+
+/* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in
+   iframe fallisce: la fetch passa per postMessage e FormData non e'
+   clonabile. Un ArrayBuffer lo e'. */
+/* Il backend puo' stare altrove: ?api=https://... lo punta a un server
+   remoto. Senza parametro si prova la stessa origine e poi le porte locali
+   piu' probabili, cosi' funziona anche aprendo l'HTML dal disco mentre
+   server.py gira. */
+let API = (new URLSearchParams(location.search).get('api') || '').replace(/\/$/,'');
+function url(p){ return API + p; }
+
+function candidates(){
+  const q = new URLSearchParams(location.search).get('api');
+  if (q) return [q.replace(/\/$/,'')];
+  const list = [];
+  if (location.protocol.startsWith('http')) list.push('');      // stessa origine
+  for (const port of [8000, 8080, 5000])
+    for (const host of ['http://localhost', 'http://127.0.0.1'])
+      list.push(host + ':' + port);
+  return list;
+}
+
+async function findBackend(){
+  for (const base of candidates()){
+    try{
+      const ctl = new AbortController();
+      const t = setTimeout(() => ctl.abort(), 1500);
+      const r = await fetch(base + '/api/ping', {cache:'no-store', signal: ctl.signal});
+      clearTimeout(t);
+      if (r.ok){ API = base; return true; }
+    }catch(e){ /* provo il prossimo */ }
+  }
+  return false;
+}
+
+async function post(p, buf, opts){
+  const r = await fetch(url(p), {method:'POST', body:buf,
+    headers:{'Content-Type':'application/pdf','X-Pack3d':JSON.stringify(opts||{})}});
+  if (!r.ok) throw new Error((await r.text()).slice(0,300));
+  return r;
+}
+
+async function analyze(buf){
+  setStatus('Analisi della fustella…','busy'); setMeta([]); params.classList.remove('on');
+  return (await post('/api/analyze', buf)).json();
+}
+
+async function build(buf, name, opts){
+  setStatus('Costruzione del modello…','busy');
+  glbBlob = await (await post('/api/build', buf, opts)).blob();
+  glbName = name.replace(/\.pdf$/i,'') + '.glb';
+  show(await glbBlob.arrayBuffer());
+  dlBtn.disabled = false;
+}
+
+async function handle(file){
+  if (!file) return;
+  if (/\.glb$/i.test(file.name)){          // comodo per guardare un GLB gia' pronto
+    glbBlob = file; glbName = file.name;
+    show(await file.arrayBuffer()); dlBtn.disabled = false;
+    setStatus('GLB caricato dal disco',''); setMeta([]);
+    return;
+  }
+  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+  if (!isPdf){ setStatus('Solo file PDF','err'); return; }
+  if (!backendUp){ setStatus(OFFLINE,'err'); return; }
+  try{
+    const buf = await file.arrayBuffer();
+    const info = await analyze(buf);
+    setMeta(info.meta || []);
+    if (info.kind === 'flowpack'){
+      // le due domande obbligatorie: non si costruisce senza risposta
+      pending = {buf, name:file.name};
+      document.getElementById('teeth').value = info.teeth_default ?? 20;
+      document.getElementById('soft').value = info.soft_default || 'medio';
+      params.classList.add('on');
+      setStatus('Flowpack riconosciuto: servono zigrinatura e gonfiore','');
+      return;
+    }
+    await build(buf, file.name, {});
+    setStatus(info.title || 'Modello pronto','');
+  }catch(err){
+    const m = String(err.message || err);
+    setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
+                                     : m.slice(0,200), 'err');
+  }
+}
+
+document.getElementById('upload').onclick = () => document.getElementById('file').click();
+document.getElementById('file').onchange = e => { handle(e.target.files[0]); e.target.value=''; };
+document.getElementById('go').onclick = async () => {
+  if (!pending) return;
+  params.classList.remove('on');
+  try{
+    await build(pending.buf, pending.name,
+                {teeth: document.getElementById('teeth').value,
+                 soft:  document.getElementById('soft').value});
+    setStatus('Modello pronto','');
+  }catch(err){ setStatus(String(err.message||err).slice(0,200),'err'); }
+};
+dlBtn.onclick = () => {
+  if (!glbBlob) return;
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(glbBlob); a.download = glbName; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+};
+
+['dragenter','dragover'].forEach(ev => addEventListener(ev, e => {
+  e.preventDefault(); document.body.classList.add('dragging'); }));
+['dragleave','drop'].forEach(ev => addEventListener(ev, e => {
+  e.preventDefault(); if (ev==='drop' || e.target===document.documentElement)
+    document.body.classList.remove('dragging'); }));
+addEventListener('drop', e => { handle(e.dataTransfer.files[0]); });
+
+resize();
+</script>
+</body>
+</html>
