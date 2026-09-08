@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Backend di pack3d studio collegato all'API di Anthropic Claude.
+Backend di pack3d studio collegato all'API di Anthropic Claude 3.5 Sonnet.
 """
 from __future__ import annotations
 
@@ -23,8 +23,12 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Inizializzazione del client Anthropic con la chiave salvata su Render
-anthropic_client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+# Inizializzazione controllata del client Anthropic
+api_key = os.environ.get("ANTHROPIC_API_KEY")
+if not api_key:
+    print("ATTENZIONE: La variabile d'ambiente ANTHROPIC_API_KEY non e' stata trovata!")
+
+anthropic_client = anthropic.Anthropic(api_key=api_key) if api_key else None
 
 # Funzione per caricare le regole dal file REGOLE.md (Project Knowledge)
 def load_project_rules():
@@ -76,6 +80,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         try:
+            if not anthropic_client:
+                return self._send(500, json.dumps({
+                    "error": "ANTHROPIC_API_KEY non configurata nelle variabili d'ambiente su Render."
+                }))
+
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:
                 return self._send(400, "Nessun file ricevuto")
@@ -98,9 +107,9 @@ class Handler(BaseHTTPRequestHandler):
                     # Carica le Project Instructions dal file REGOLE.md
                     system_prompt = load_project_rules()
 
-                    # Chiamata all'API Anthropic (senza il parametro temperature)
+                    # Chiamata a Claude 3.5 Sonnet
                     response = anthropic_client.messages.create(
-                        model="claude-3-5-sonnet-20241022",
+                        model="claude-3-5-sonnet-latest",
                         max_tokens=4096,
                         system=system_prompt,
                         messages=[
@@ -144,5 +153,5 @@ _slots = threading.Semaphore(MAX_JOBS)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print("pack3d studio AI in ascolto su %s:%d" % (host, port))
+    print("pack3d studio AI (Claude 3.5 Sonnet) in ascolto su %s:%d" % (host, port))
     ThreadingHTTPServer((host, port), Handler).serve_forever()
