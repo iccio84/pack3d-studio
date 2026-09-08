@@ -29,12 +29,19 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Inizializzazione controllata del client Anthropic
 api_key = os.environ.get("ANTHROPIC_API_KEY")
+base_url = os.environ.get("ANTHROPIC_BASE_URL")  # Supporto a proxy/gateway custom se specificato
+
 if not api_key:
     print("⚠️ CRITICO: La variabile d'ambiente ANTHROPIC_API_KEY non e' stata trovata!")
 else:
     print(f"ℹ️ ANTHROPIC_API_KEY rilevata: {api_key[:8]}...{api_key[-4:]}")
 
-anthropic_client = anthropic.Anthropic(api_key=api_key) if api_key else None
+client_kwargs = {"api_key": api_key} if api_key else {}
+if base_url:
+    client_kwargs["base_url"] = base_url
+    print(f"ℹ️ Utilizzo BASE_URL personalizzato: {base_url}")
+
+anthropic_client = anthropic.Anthropic(**client_kwargs) if api_key else None
 
 
 def load_project_rules():
@@ -136,12 +143,11 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Lista completa degli identificatori di modelli supportati dalla piattaforma
+                    # Elenco completo degli identificatori di modello
                     models_to_try = [
-                        "claude-3-5-sonnet-latest",
                         "claude-3-5-sonnet-20241022",
+                        "claude-3-5-sonnet-latest",
                         "claude-3-5-sonnet-20240620",
-                        "claude-3-5-haiku-latest",
                         "claude-3-haiku-20240307",
                         "sonnet-5",
                         "haiku-4.5"
@@ -186,7 +192,7 @@ class Handler(BaseHTTPRequestHandler):
 
                     if not response:
                         return self._send(400, json.dumps({
-                            "error": "Tutti gli identificatori di modello hanno restituito errore. Genera una nuova chiave dalla sezione 'Chiavi API' della console e aggiornala su Render.",
+                            "error": "L'API/Gateway ha rifiutato la chiave per tutti i modelli.",
                             "details": errors_log
                         }))
 
