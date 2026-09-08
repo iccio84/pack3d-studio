@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Backend di pack3d studio collegato all'API di Anthropic Claude (Vision via Image Conversion).
+Backend di pack3d studio collegato all'API di Anthropic Claude (Vision via pypdfium2).
 """
 from __future__ import annotations
 
@@ -19,11 +19,11 @@ try:
 except ImportError:
     sys.exit("Manca la libreria 'anthropic'. Installa con: pip install anthropic")
 
-# Importazione di PyMuPDF per convertire PDF in Immagini
+# Importazione di pypdfium2 (già presente nei requisiti)
 try:
-    import fitz  # PyMuPDF
+    import pypdfium2 as pdfium
 except ImportError:
-    sys.exit("Manca la libreria 'PyMuPDF'. Installa con: pip install PyMuPDF")
+    sys.exit("Manca la libreria 'pypdfium2'. Installa con: pip install pypdfium2")
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -42,16 +42,18 @@ def load_project_rules():
     return "Sei un esperto di modellazione 3D da PDF di packaging."
 
 def convert_pdf_to_png_base64(pdf_bytes: bytes) -> str:
-    """Apre il PDF dal buffer di memoria e converte la prima pagina in PNG Base64."""
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    if len(doc) == 0:
+    """Apre il PDF dal buffer di memoria e converte la prima pagina in PNG Base64 usando pypdfium2."""
+    pdf = pdfium.PdfDocument(pdf_bytes)
+    if len(pdf) == 0:
         raise ValueError("Il PDF caricato non contiene pagine.")
     
-    page = doc[0]
-    # Rendering ad alta risoluzione (2x per mantenere nitide le quote e le linee di fustella)
-    pix = page.get_pixmap(dpi=150)
-    img_bytes = pix.tobytes("png")
-    return base64.b64encode(img_bytes).decode("utf-8")
+    page = pdf[0]
+    # Renderizza la prima pagina in un'immagine PIL a risoluzione nitida (scale 2 = 144 DPI)
+    image = page.render(scale=2).to_pil()
+    
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return base64.b64encode(buf.getvalue()).decode("utf-8")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -117,7 +119,7 @@ class Handler(BaseHTTPRequestHandler):
             if not pdf_data.startswith(b"%PDF"):
                 return self._send(400, "Il file caricato non e' un PDF valido")
             
-            # Converte il PDF in un'immagine PNG codificata in Base64
+            # Converte il PDF in un'immagine PNG codificata in Base64 tramite pypdfium2
             png_b64 = convert_pdf_to_png_base64(pdf_data)
 
             if self.path.startswith("/api/build") or self.path.startswith("/api/analyze"):
@@ -127,7 +129,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Chiamata API Vision standard accettata da TUTTI i modelli Claude 3
+                    # Chiamata API Vision standard
                     response = anthropic_client.messages.create(
                         model="claude-3-5-sonnet-20240620",
                         max_tokens=4096,
