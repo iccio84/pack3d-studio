@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pack3D Studio - Visualizzatore Fustelle 3D</title>
+  <!-- Script per il visualizzatore 3D di Google -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { display: flex; height: 100vh; background-color: #f4f5f7; color: #333; }
+    
+    /* Sidebar comandi */
+    .sidebar { width: 340px; background: #ffffff; padding: 24px; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; gap: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.03); }
+    h1 { font-size: 1.25rem; font-weight: 700; color: #0f172a; }
+    
+    .form-group { display: flex; flex-direction: column; gap: 8px; }
+    label { font-size: 0.85rem; font-weight: 600; color: #475569; }
+    select, input[type="number"], input[type="file"] { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 0.9rem; }
+    
+    button { background: #2563eb; color: white; border: none; padding: 12px; border-radius: 6px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    
+    /* Area 3D Main */
+    .viewer-container { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; background: radial-gradient(circle, #ffffff 0%, #e2e8f0 100%); }
+    model-viewer { width: 100%; height: 100%; }
+    
+    /* Stato di caricamento ed errori */
+    .placeholder { position: absolute; color: #64748b; font-size: 1rem; text-align: center; pointer-events: none; }
+    .loader { display: none; position: absolute; background: rgba(255, 255, 255, 0.9); padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); font-weight: 600; color: #2563eb; }
+    .error-msg { color: #dc2626; font-size: 0.85rem; display: none; margin-top: 5px; }
+  </style>
+</head>
+<body>
+
+  <div class="sidebar">
+    <h1>Pack3D Studio</h1>
+    
+    <form id="uploadForm">
+      <div class="form-group">
+        <label for="pdfFile">File PDF Fustella</label>
+        <input type="file" id="pdfFile" accept=".pdf" required>
+      </div>
+
+      <div class="form-group" style="margin-top: 15px;">
+        <label for="kind">Tipologia Packaging</label>
+        <select id="kind">
+          <option value="cartotecnico">Cartotecnica / Astuccio</option>
+          <option value="flowpack">Flowpack</option>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-top: 15px;">
+        <label for="teeth">Denti Seghettatura (Solo Flowpack)</label>
+        <input type="number" id="teeth" value="0" min="0">
+      </div>
+
+      <div class="form-group" style="margin-top: 15px;">
+        <label for="gonfiore">Gonfiore</label>
+        <select id="gonfiore">
+          <option value="basso">Basso</option>
+          <option value="medio" selected>Medio</option>
+          <option value="alto">Alto</option>
+        </select>
+      </div>
+
+      <button type="submit" id="submitBtn" style="margin-top: 20px; width: 100%;">Genera Modello 3D</button>
+      <div id="errorText" class="error-msg"></div>
+    </form>
+  </div>
+
+  <div class="viewer-container">
+    <div id="placeholder" class="placeholder">Carica un PDF e clicca "Genera Modello 3D"<br>per visualizzare la resa 3D.</div>
+    <div id="loader" class="loader">Elaborazione PDF e generazione 3D in corso...</div>
+    
+    <model-viewer 
+      id="viewer" 
+      camera-controls 
+      auto-rotate 
+      shadow-intensity="1" 
+      alt="Modello 3D Packaging">
+    </model-viewer>
+  </div>
+
+  <script>
+    const form = document.getElementById('uploadForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const loader = document.getElementById('loader');
+    const placeholder = document.getElementById('placeholder');
+    const viewer = document.getElementById('viewer');
+    const errorText = document.getElementById('errorText');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      const fileInput = document.getElementById('pdfFile');
+      if (!fileInput.files[0]) return;
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('kind', document.getElementById('kind').value);
+      formData.append('teeth', document.getElementById('teeth').value);
+      formData.append('gonfiore', document.getElementById('gonfiore').value);
+
+      // UI State: Loading
+      loader.style.display = 'block';
+      placeholder.style.display = 'none';
+      errorText.style.display = 'none';
+      submitBtn.disabled = true;
+
+      try {
+        const response = await fetch('/generate-3d', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({ detail: 'Errore generico durante la conversione.' }));
+          throw new Error(errorData.detail || 'Errore nella generazione del modello 3D.');
+        }
+
+        // Converte la risposta binaria GLB in un URL Blob per l'elemento <model-viewer>
+        const blob = await response.blob();
+        const glbUrl = URL.createObjectURL(blob);
+        
+        viewer.src = glbUrl;
+      } catch (err) {
+        errorText.textContent = err.message;
+        errorText.style.display = 'block';
+      } finally {
+        loader.style.display = 'none';
+        submitBtn.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
