@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Backend per pack3d studio.
-Genera e restituisce direttamente il file GLB binario atteso dal viewer HTML.
+Genera e restituisce il file GLB binario sfruttando le funzioni di exporters.py.
 """
 from __future__ import annotations
 
@@ -9,17 +9,17 @@ import io
 import json
 import os
 import sys
+import tempfile
 import traceback
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Aggiunge la root e la sottocartella pack3d al PYTHONPATH
+# Configurazione importazioni per pack3d
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "pack3d"))
 
-# Importazione dei moduli matematici della pipeline 3D
 try:
     import pack3d.dieline as dieline
     import pack3d.flowpack as flowpack
@@ -30,7 +30,7 @@ except ImportError:
         import flowpack
         import exporters
     except ImportError as e:
-        print(f"⚠️ Nota importazione moduli 3D: {e}")
+        print(f"⚠️ Errore importazione moduli pack3d: {e}")
         dieline = flowpack = exporters = None
 
 
@@ -45,41 +45,66 @@ def load_project_rules():
 
 def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int = 0, gonfiore: str = "medio") -> bytes:
     """
-    Invocazione della pipeline deterministica per produrre il file .glb binario.
+    Invocazione della pipeline deterministica per la generazione e lettura del file GLB binario.
     """
     kind = kind.lower().strip()
     
-    # Regola da REGOLE.md: "Altro" non e' ancora supportato
+    # Regola REGOLE.md
     if kind == "altro":
         raise ValueError("La tipologia 'Altro' non e' ancora supportata.")
 
-    # 1. Gestione FLOWPACK
-    if kind == "flowpack":
-        if flowpack and hasattr(flowpack, "build_mesh"):
-            mesh = flowpack.build_mesh(pdf_bytes, teeth=teeth, swelling=gonfiore)
-            if exporters and hasattr(exporters, "export_glb"):
-                return exporters.export_glb(mesh)
-            return mesh # Se build_mesh restituisce gia' il GLB
-        elif flowpack and hasattr(flowpack, "process"):
-            return flowpack.process(pdf_bytes, teeth=teeth, swelling=gonfiore)
+    if not exporters:
+        raise NotImplementedError("Modulo exporters.py non caricato correttamente.")
 
-    # 2. Gestione ASTUCCI / CARTOTECNICO (Default)
-    if dieline:
-        if hasattr(dieline, "build_box_glb"):
-            return dieline.build_box_glb(pdf_bytes)
-        elif hasattr(dieline, "build_box") and exporters:
-            box = dieline.build_box(pdf_bytes)
-            return exporters.export_glb(box)
-        elif hasattr(dieline, "process"):
-            return dieline.process(pdf_bytes)
+    with tempfile.NamedTemporaryFile(suffix=".glb", delete=False) as tmp:
+        tmp_glb_path = tmp.name
 
-    # 3. Fallback ricerca dinamica su exporters
-    if exporters:
-        for fn in ["build_glb", "process_pdf", "pdf_to_glb"]:
-            if hasattr(exporters, fn):
-                return getattr(exporters, fn)(pdf_bytes)
+    try:
+        # 1. CASO FLOWPACK (mesh triangolare)
+        if kind == "flowpack":
+            if flowpack:
+                # Cerca il costruttore di mesh per flowpack
+                if hasattr(flowpack, "build_mesh"):
+                    V, UV, tris, tex = flowpack.build_mesh(pdf_bytes, teeth=teeth, swelling=gonfiore)
+                    exporters.write_glb_mesh(V, UV, tris, tex, tmp_glb_path)
+                elif hasattr(flowpack, "process_pdf"):
+                    V, UV, tris, tex = flowpack.process_pdf(pdf_bytes, teeth=teeth, swelling=gonfiore)
+                    exporters.write_glb_mesh(V, UV, tris, tex, tmp_glb_path)
+                else:
+                    raise NotImplementedError("Funzione di generazione mesh per flowpack non trovata in flowpack.py")
+            else:
+                raise NotImplementedError("Modulo flowpack.py non disponibile.")
 
-    raise NotImplementedError("Impossibile trovare la funzione di esportazione GLB in dieline.py/flowpack.py/exporters.py")
+        # 2. CASO CARTOTECNICO / ASTUCCI (facce)
+        else:
+            if dieline:
+                if hasattr(dieline, "build_box"):
+                    faces = dieline.build_box(pdf_bytes)
+                    exporters.write_glb(faces, tmp_glb_path)
+                elif hasattr(dieline, "process_pdf"):
+                    faces = dieline.process_pdf(pdf_bytes)
+                    exporters.write_glb(faces, tmp_glb_path)
+                elif hasattr(dieline, "analyze_pdf"):
+                    faces = dieline.analyze_pdf(pdf_bytes)
+                    exporters.write_glb(faces, tmp_glb_path)
+                else:
+                    raise NotImplementedError("Funzione di analisi fustella non trovata in dieline.py")
+            else:
+                raise NotImplementedError("Modulo dieline.py non disponibile.")
+
+        # Legge il file GLB appena generato sul percorso temporaneo
+        with open(tmp_glb_path, "rb") as fh:
+            glb_data = fh.read()
+
+        return glb_data
+
+    finally:
+        # Pulisce il file temporaneo
+        if os.path.exists(tmp_glb_path):
+            try:
+                os.remove(tmp_glb_path)
+            except OSError:
+                pass
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -149,11 +174,11 @@ class Handler(BaseHTTPRequestHandler):
                     teeth = int(self.headers.get("X-Teeth", "0"))
                     gonfiore = self.headers.get("X-Gonfiore", "medio")
 
-                    # Generazione del file GLB binario
+                    # Generazione del file GLB binario reale tramite exporters.write_glb
                     glb_bytes = process_pdf_to_glb(pdf_data, kind=kind, teeth=teeth, gonfiore=gonfiore)
 
-                    # Restituzione del file GLB binario con l'MIME type corretto
-                    return self._send(200, glb_bytes, ctype="model/gltf-binary", filename="model3d.glb")
+                    # Restituisce direttamente la sequenza di byte del file .glb
+                    return self._send(200, glb_bytes, ctype="model/gltf-binary", filename="pack3d_model.glb")
 
                 except ValueError as ve:
                     return self._send(400, json.dumps({"error": str(ve)}))
@@ -176,5 +201,5 @@ _slots = threading.Semaphore(MAX_JOBS)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print(f"🚀 pack3d studio avviato su {host}:{port}")
+    print(f"🚀 pack3d studio server attivo su {host}:{port}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()
