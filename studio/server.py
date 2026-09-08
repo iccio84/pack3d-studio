@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Backend di pack3d studio collegato all'API di Anthropic Claude 3.5 Sonnet.
+Backend di pack3d studio collegato all'API di Anthropic.
 """
 from __future__ import annotations
 
@@ -95,22 +95,21 @@ class Handler(BaseHTTPRequestHandler):
             if not data.startswith(b"%PDF"):
                 return self._send(400, "Il file caricato non e' un PDF")
             
-            # Converte il PDF grezzo in formato Base64 per inviarlo a Claude Vision
+            # Converte il PDF in Base64
             pdf_b64 = base64.b64encode(data).decode("utf-8")
 
-            # Endpoint per la costruzione 3D via AI
             if self.path.startswith("/api/build") or self.path.startswith("/api/analyze"):
                 if not _slots.acquire(blocking=False):
                     return self._send(503, "Server occupato: riprova fra qualche secondo")
                 
                 try:
-                    # Carica le Project Instructions dal file REGOLE.md
                     system_prompt = load_project_rules()
 
-                    # Chiamata a Claude 3.5 Sonnet
-                    response = anthropic_client.messages.create(
-                        model="claude-3-5-sonnet-latest",
+                    # Chiamata API Anthropic usando l'ID preciso del modello e l'header per il supporto dei PDF
+                    response = anthropic_client.beta.messages.create(
+                        model="claude-3-5-sonnet-20241022",
                         max_tokens=4096,
+                        betas=["pdfs-2024-09-25"],
                         system=system_prompt,
                         messages=[
                             {
@@ -153,5 +152,5 @@ _slots = threading.Semaphore(MAX_JOBS)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print("pack3d studio AI (Claude 3.5 Sonnet) in ascolto su %s:%d" % (host, port))
+    print("pack3d studio AI in ascolto su %s:%d" % (host, port))
     ThreadingHTTPServer((host, port), Handler).serve_forever()
