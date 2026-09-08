@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Backend per pack3d studio.
-Importa il pacchetto interno 'pack3d' per elaborare i PDF e generare i file GLB binari.
+Genera e restituisce direttamente il file GLB binario atteso dal viewer HTML.
 """
 from __future__ import annotations
 
@@ -15,17 +15,23 @@ from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Assicura che la root del progetto sia nel sys.path per importare il pacchetto 'pack3d'
-if HERE not in sys.path:
-    sys.path.insert(0, HERE)
+# Aggiunge la root e la sottocartella pack3d al PYTHONPATH
+sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "pack3d"))
 
-# Importazione della pipeline di elaborazione 3D
+# Importazione dei moduli matematici della pipeline 3D
 try:
-    import pack3d
-    import pack3d.studio as studio_core
-except ImportError as e:
-    studio_core = None
-    print(f"⚠️ Nota importazione pack3d: {e}")
+    import pack3d.dieline as dieline
+    import pack3d.flowpack as flowpack
+    import pack3d.exporters as exporters
+except ImportError:
+    try:
+        import dieline
+        import flowpack
+        import exporters
+    except ImportError as e:
+        print(f"⚠️ Nota importazione moduli 3D: {e}")
+        dieline = flowpack = exporters = None
 
 
 def load_project_rules():
@@ -39,28 +45,41 @@ def load_project_rules():
 
 def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int = 0, gonfiore: str = "medio") -> bytes:
     """
-    Invocazione della pipeline deterministica contenuta all'interno di pack3d.
+    Invocazione della pipeline deterministica per produrre il file .glb binario.
     """
     kind = kind.lower().strip()
     
-    # Regola da REGOLE.md: "Altro" non è ancora supportato
+    # Regola da REGOLE.md: "Altro" non e' ancora supportato
     if kind == "altro":
         raise ValueError("La tipologia 'Altro' non e' ancora supportata.")
 
-    if studio_core is None:
-        raise NotImplementedError("Impossibile caricare il pacchetto pack3d.studio. Verifica l'installazione delle dipendenze.")
+    # 1. Gestione FLOWPACK
+    if kind == "flowpack":
+        if flowpack and hasattr(flowpack, "build_mesh"):
+            mesh = flowpack.build_mesh(pdf_bytes, teeth=teeth, swelling=gonfiore)
+            if exporters and hasattr(exporters, "export_glb"):
+                return exporters.export_glb(mesh)
+            return mesh # Se build_mesh restituisce gia' il GLB
+        elif flowpack and hasattr(flowpack, "process"):
+            return flowpack.process(pdf_bytes, teeth=teeth, swelling=gonfiore)
 
-    # Cerca la funzione principale all'interno di pack3d.studio / pack3d
-    # Prova i nomi di funzione standard utilizzati nella pipeline pack3d
-    for fn_name in ["build_glb", "process_pdf", "generate_glb", "build_mesh", "analyze_pdf"]:
-        if hasattr(studio_core, fn_name):
-            target_fn = getattr(studio_core, fn_name)
-            return target_fn(pdf_bytes, kind=kind, teeth=teeth, gonfiore=gonfiore)
-        elif hasattr(pack3d, fn_name):
-            target_fn = getattr(pack3d, fn_name)
-            return target_fn(pdf_bytes, kind=kind, teeth=teeth, gonfiore=gonfiore)
+    # 2. Gestione ASTUCCI / CARTOTECNICO (Default)
+    if dieline:
+        if hasattr(dieline, "build_box_glb"):
+            return dieline.build_box_glb(pdf_bytes)
+        elif hasattr(dieline, "build_box") and exporters:
+            box = dieline.build_box(pdf_bytes)
+            return exporters.export_glb(box)
+        elif hasattr(dieline, "process"):
+            return dieline.process(pdf_bytes)
 
-    raise NotImplementedError("Nessuna funzione di esportazione GLB trovata in pack3d.studio.")
+    # 3. Fallback ricerca dinamica su exporters
+    if exporters:
+        for fn in ["build_glb", "process_pdf", "pdf_to_glb"]:
+            if hasattr(exporters, fn):
+                return getattr(exporters, fn)(pdf_bytes)
+
+    raise NotImplementedError("Impossibile trovare la funzione di esportazione GLB in dieline.py/flowpack.py/exporters.py")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -130,11 +149,11 @@ class Handler(BaseHTTPRequestHandler):
                     teeth = int(self.headers.get("X-Teeth", "0"))
                     gonfiore = self.headers.get("X-Gonfiore", "medio")
 
-                    # Genera il file GLB binario
+                    # Generazione del file GLB binario
                     glb_bytes = process_pdf_to_glb(pdf_data, kind=kind, teeth=teeth, gonfiore=gonfiore)
 
-                    # Restituisce il GLB al browser
-                    return self._send(200, glb_bytes, ctype="model/gltf-binary", filename="pack3d_model.glb")
+                    # Restituzione del file GLB binario con l'MIME type corretto
+                    return self._send(200, glb_bytes, ctype="model/gltf-binary", filename="model3d.glb")
 
                 except ValueError as ve:
                     return self._send(400, json.dumps({"error": str(ve)}))
