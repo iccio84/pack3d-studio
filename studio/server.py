@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Backend di pack3d studio collegato alla pipeline 3D locale e a pypdfium2.
-Genera file GLB binari elaborando i PDF vettoriali.
+Backend per pack3d studio.
+Importa il pacchetto interno 'pack3d' per elaborare i PDF e generare i file GLB binari.
 """
 from __future__ import annotations
 
@@ -13,22 +13,19 @@ import traceback
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-# Importazione di pypdfium2 per il rendering PDF
-try:
-    import pypdfium2 as pdfium
-except ImportError:
-    sys.exit("Manca la libreria 'pypdfium2'. Installa con: pip install pypdfium2")
-
-# Importazione dei moduli matematici della pipeline 3D locale
-# (Ipotizzando che i file dieline.py, flowpack.py, exporters.py si trovino nella stessa cartella)
-try:
-    import dieline
-    import flowpack
-    import exporters
-except ImportError as e:
-    print(f"⚠️ Nota: Moduli 3D locali in fase di collegamento ({e})")
-
 HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Assicura che la root del progetto sia nel sys.path per importare il pacchetto 'pack3d'
+if HERE not in sys.path:
+    sys.path.insert(0, HERE)
+
+# Importazione della pipeline di elaborazione 3D
+try:
+    import pack3d
+    import pack3d.studio as studio_core
+except ImportError as e:
+    studio_core = None
+    print(f"⚠️ Nota importazione pack3d: {e}")
 
 
 def load_project_rules():
@@ -42,34 +39,28 @@ def load_project_rules():
 
 def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int = 0, gonfiore: str = "medio") -> bytes:
     """
-    Richiama la pipeline deterministica Python per convertire il PDF in GLB binario.
+    Invocazione della pipeline deterministica contenuta all'interno di pack3d.
     """
     kind = kind.lower().strip()
     
-    # Regola REGOLE.md: "Altro" non è ancora supportato
+    # Regola da REGOLE.md: "Altro" non è ancora supportato
     if kind == "altro":
         raise ValueError("La tipologia 'Altro' non e' ancora supportata.")
 
-    # 1. Caso Flowpack
-    if kind == "flowpack":
-        if 'flowpack' in sys.modules:
-            # Invoca il generatore della mesh flowpack
-            mesh = flowpack.build_mesh(pdf_bytes, teeth=teeth, swelling=gonfiore)
-            return exporters.export_glb(mesh)
-        else:
-            raise NotImplementedError("Modulo flowpack.py non trovato nella directory.")
+    if studio_core is None:
+        raise NotImplementedError("Impossibile caricare il pacchetto pack3d.studio. Verifica l'installazione delle dipendenze.")
 
-    # 2. Caso Cartotecnico / Astucci (Default)
-    if 'dieline' in sys.modules:
-        # Isolamento fustella e generazione modello 3D
-        box_model = dieline.build_box(pdf_bytes)
-        return exporters.export_glb(box_model)
-    
-    # Fallback se le librerie esterne usano un punto d'ingresso principale custom (es. server.analyze_pdf)
-    if 'analyze_pdf' in globals():
-        return globals()['analyze_pdf'](pdf_bytes, kind=kind, teeth=teeth, gonfiore=gonfiore)
+    # Cerca la funzione principale all'interno di pack3d.studio / pack3d
+    # Prova i nomi di funzione standard utilizzati nella pipeline pack3d
+    for fn_name in ["build_glb", "process_pdf", "generate_glb", "build_mesh", "analyze_pdf"]:
+        if hasattr(studio_core, fn_name):
+            target_fn = getattr(studio_core, fn_name)
+            return target_fn(pdf_bytes, kind=kind, teeth=teeth, gonfiore=gonfiore)
+        elif hasattr(pack3d, fn_name):
+            target_fn = getattr(pack3d, fn_name)
+            return target_fn(pdf_bytes, kind=kind, teeth=teeth, gonfiore=gonfiore)
 
-    raise NotImplementedError("I moduli 3D locali (dieline.py/flowpack.py) non sono stati trovati nella cartella root.")
+    raise NotImplementedError("Nessuna funzione di esportazione GLB trovata in pack3d.studio.")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -135,15 +126,14 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(503, json.dumps({"error": "Server occupato: riprova fra qualche secondo"}))
                 
                 try:
-                    # Estrazione opzioni dagli header inviati dall'interfaccia web
                     kind = self.headers.get("X-Kind", "cartotecnico")
                     teeth = int(self.headers.get("X-Teeth", "0"))
                     gonfiore = self.headers.get("X-Gonfiore", "medio")
 
-                    # Genera il file GLB binario reale tramite la tua pipeline locale
+                    # Genera il file GLB binario
                     glb_bytes = process_pdf_to_glb(pdf_data, kind=kind, teeth=teeth, gonfiore=gonfiore)
 
-                    # Restituisce il file binario con l'MIME type GLTF/GLB ufficiale
+                    # Restituisce il GLB al browser
                     return self._send(200, glb_bytes, ctype="model/gltf-binary", filename="pack3d_model.glb")
 
                 except ValueError as ve:
@@ -167,5 +157,5 @@ _slots = threading.Semaphore(MAX_JOBS)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print(f"🚀 pack3d studio server attivo su {host}:{port}")
+    print(f"🚀 pack3d studio avviato su {host}:{port}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()
