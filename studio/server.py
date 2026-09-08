@@ -45,7 +45,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, HEAD")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
         self.send_header("Access-Control-Max-Age", "86400")
 
@@ -60,12 +60,20 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", 'attachment; filename="%s"' % filename)
         self._cors()
         self.end_headers()
-        self.wfile.write(body)
+        if self.command != "HEAD":
+            self.wfile.write(body)
 
     def do_OPTIONS(self):
         self.send_response(204)
         self._cors()
         self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def do_HEAD(self):
+        """Gestisce le verifiche dello stato del server da parte di Render e del browser."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self._cors()
         self.end_headers()
 
     def do_GET(self):
@@ -105,7 +113,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Chiamata API Anthropic usando l'ID preciso del modello e l'header per il supporto dei PDF
+                    # Chiamata API Anthropic usando l'endpoint con supporto PDF
                     response = anthropic_client.beta.messages.create(
                         model="claude-3-5-sonnet-20241022",
                         max_tokens=4096,
