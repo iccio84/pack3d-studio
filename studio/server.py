@@ -2,9 +2,10 @@ import os
 import tempfile
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, FileResponse
+from fastapi.staticfiles import StaticFiles
 
-# Importazione dinamica o standard dei moduli interni
+# Importazione dinamica o standard dei moduli interni della pipeline
 try:
     from pack3d import flowpack, dieline, exporters
 except ImportError:
@@ -14,14 +15,35 @@ except ImportError:
 
 app = FastAPI(title="Pack3D Service")
 
+# --- GESTIONE INTERFACCIA E FILE STATICI ---
+# Monta la cartella static se esiste per servire JS, CSS, Asset
+if os.path.exists("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
+@app.get("/", include_in_schema=False)
+async def serve_index():
+    """
+    Ritorna l'interfaccia utente (index.html).
+    Se index.html non si trova nella root, prova a cercarlo dentro la cartella static.
+    """
+    if os.path.exists("index.html"):
+        return FileResponse("index.html")
+    elif os.path.exists("static/index.html"):
+        return FileResponse("static/index.html")
+    else:
+        return {
+            "status": "online",
+            "message": "Pack3D API Backend attivo. Metti un file index.html nella root per caricare l'interfaccia grafica."
+        }
+
+
+# --- LOGICA DI CONVERSIONE PDF -> GLB ---
 def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int = 0, gonfiore: str = "medio") -> bytes:
     """
     Invocazione della pipeline deterministica per la generazione e lettura del file GLB binario.
     """
     kind = kind.lower().strip()
     
-    # Regola REGOLE.md
     if kind == "altro":
         raise ValueError("La tipologia 'Altro' non e' ancora supportata.")
 
@@ -42,7 +64,6 @@ def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int 
                 tmp_pdf_path = tmp_pdf.name
 
             try:
-                # Esegue l'analisi per ricavare l'oggetto Flowpack
                 if hasattr(flowpack, "analyze_auto"):
                     try:
                         fp = flowpack.analyze_auto(tmp_pdf_path)
@@ -53,10 +74,7 @@ def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int 
                 else:
                     raise NotImplementedError("Funzione di analisi non trovata in flowpack.py")
 
-                # Costruisce la mesh (V, UV, tris)
                 V, UV, tris = flowpack.build_mesh(fp, serr_teeth=teeth)
-                
-                # Export del file GLB
                 exporters.write_glb_mesh(V, UV, tris, None, tmp_glb_path)
             finally:
                 if os.path.exists(tmp_pdf_path):
@@ -75,7 +93,6 @@ def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int 
                 tmp_pdf_path = tmp_pdf.name
 
             try:
-                # Esegue l'analisi della fustella tramite la funzione analyze() di dieline.py
                 if hasattr(dieline, "analyze"):
                     dieline_obj = dieline.analyze(tmp_pdf_path)
                 elif hasattr(dieline, "analyze_auto"):
@@ -83,10 +100,7 @@ def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int 
                 else:
                     raise NotImplementedError("Funzione 'analyze' non trovata in dieline.py")
 
-                # Estrae le facce/pannelli strutturati pronti per exporters.write_glb
                 faces = getattr(dieline_obj, "panels", dieline_obj)
-
-                # Scrive il file GLB basato sui pannelli ricavati
                 exporters.write_glb(faces, tmp_glb_path)
             finally:
                 if os.path.exists(tmp_pdf_path):
@@ -95,7 +109,6 @@ def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int 
                     except OSError:
                         pass
 
-        # Legge il file GLB appena generato e lo restituisce in byte
         with open(tmp_glb_path, "rb") as fh:
             glb_data = fh.read()
 
@@ -109,6 +122,7 @@ def process_pdf_to_glb(pdf_bytes: bytes, kind: str = "cartotecnico", teeth: int 
                 pass
 
 
+# --- ENDPOINT API ---
 @app.post("/generate-3d")
 async def generate_3d(
     file: UploadFile = File(...),
@@ -140,6 +154,9 @@ async def generate_3d(
         raise HTTPException(status_code=500, detail=f"Errore durante l'elaborazione del 3D: {str(e)}")
 
 
+# --- AVVIO SERVER ---
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    # Legge dinamicamente la porta fornita da Render ($PORT) o usa la 8000 in locale
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("server:app", host="0.0.0.0", port=port, reload=False)
