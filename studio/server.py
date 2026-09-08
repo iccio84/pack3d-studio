@@ -1,15 +1,13 @@
 #!/usr/bin/env python3
 """
-Backend di pack3d studio collegato all'API di Anthropic.
+Backend di pack3d studio collegato all'API di Anthropic Claude (Vision via Image Conversion).
 """
 from __future__ import annotations
 
 import io
 import json
-import math
 import os
 import sys
-import tempfile
 import traceback
 import threading
 import base64
@@ -21,6 +19,12 @@ try:
 except ImportError:
     sys.exit("Manca la libreria 'anthropic'. Installa con: pip install anthropic")
 
+# Importazione di PyMuPDF per convertire PDF in Immagini
+try:
+    import fitz  # PyMuPDF
+except ImportError:
+    sys.exit("Manca la libreria 'PyMuPDF'. Installa con: pip install PyMuPDF")
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Inizializzazione controllata del client Anthropic
@@ -30,13 +34,24 @@ if not api_key:
 
 anthropic_client = anthropic.Anthropic(api_key=api_key) if api_key else None
 
-# Funzione per caricare le regole dal file REGOLE.md (Project Knowledge)
 def load_project_rules():
     regole_path = os.path.join(HERE, "REGOLE.md")
     if os.path.exists(regole_path):
         with open(regole_path, "r", encoding="utf-8") as f:
             return f.read()
     return "Sei un esperto di modellazione 3D da PDF di packaging."
+
+def convert_pdf_to_png_base64(pdf_bytes: bytes) -> str:
+    """Apre il PDF dal buffer di memoria e converte la prima pagina in PNG Base64."""
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    if len(doc) == 0:
+        raise ValueError("Il PDF caricato non contiene pagine.")
+    
+    page = doc[0]
+    # Rendering ad alta risoluzione (2x per mantenere nitide le quote e le linee di fustella)
+    pix = page.get_pixmap(dpi=150)
+    img_bytes = pix.tobytes("png")
+    return base64.b64encode(img_bytes).decode("utf-8")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -98,12 +113,12 @@ class Handler(BaseHTTPRequestHandler):
             if n > MAX_UPLOAD:
                 return self._send(413, "PDF troppo grande (limite %d MB)" % (MAX_UPLOAD // (1024 * 1024)))
             
-            data = self.rfile.read(n)
-            if not data.startswith(b"%PDF"):
-                return self._send(400, "Il file caricato non e' un PDF")
+            pdf_data = self.rfile.read(n)
+            if not pdf_data.startswith(b"%PDF"):
+                return self._send(400, "Il file caricato non e' un PDF valido")
             
-            # Converte il PDF in Base64
-            pdf_b64 = base64.b64encode(data).decode("utf-8")
+            # Converte il PDF in un'immagine PNG codificata in Base64
+            png_b64 = convert_pdf_to_png_base64(pdf_data)
 
             if self.path.startswith("/api/build") or self.path.startswith("/api/analyze"):
                 if not _slots.acquire(blocking=False):
@@ -112,7 +127,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Chiamata API standard Anthropic
+                    # Chiamata API Vision standard accettata da TUTTI i modelli Claude 3
                     response = anthropic_client.messages.create(
                         model="claude-3-5-sonnet-20240620",
                         max_tokens=4096,
@@ -122,16 +137,16 @@ class Handler(BaseHTTPRequestHandler):
                                 "role": "user",
                                 "content": [
                                     {
-                                        "type": "document",
+                                        "type": "image",
                                         "source": {
                                             "type": "base64",
-                                            "media_type": "application/pdf",
-                                            "data": pdf_b64
+                                            "media_type": "image/png",
+                                            "data": png_b64
                                         }
                                     },
                                     {
                                         "type": "text",
-                                        "text": "Analizza il PDF di questo packaging e genera la struttura del modello 3D seguendo rigorosamente le regole fornite."
+                                        "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D seguendo rigorosamente le regole fornite."
                                     }
                                 ]
                             }
@@ -148,7 +163,7 @@ class Handler(BaseHTTPRequestHandler):
 
         except Exception as e:
             traceback.print_exc()
-            return self._send(500, "%s: %s" % (type(e).__name__, e))
+            return self._send(500, json.dumps({"error": "%s: %s" % (type(e).__name__, e)}))
 
 
 MAX_UPLOAD = 60 * 1024 * 1024
