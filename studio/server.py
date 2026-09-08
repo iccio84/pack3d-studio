@@ -129,31 +129,50 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Chiamata API Vision standard
-                    response = anthropic_client.messages.create(
-                        model="claude-3-5-sonnet-20240620",
-                        max_tokens=4096,
-                        system=system_prompt,
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": [
+                    # Elenco di modelli da tentare in ordine di priorità
+                    models_to_try = [
+                        "claude-3-5-sonnet-latest",
+                        "claude-3-sonnet-20240229",
+                        "claude-3-haiku-20240307"
+                    ]
+
+                    response = None
+                    last_exception = None
+
+                    for model_name in models_to_try:
+                        try:
+                            response = anthropic_client.messages.create(
+                                model=model_name,
+                                max_tokens=4096,
+                                system=system_prompt,
+                                messages=[
                                     {
-                                        "type": "image",
-                                        "source": {
-                                            "type": "base64",
-                                            "media_type": "image/png",
-                                            "data": png_b64
-                                        }
-                                    },
-                                    {
-                                        "type": "text",
-                                        "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D seguendo rigorosamente le regole fornite."
+                                        "role": "user",
+                                        "content": [
+                                            {
+                                                "type": "image",
+                                                "source": {
+                                                    "type": "base64",
+                                                    "media_type": "image/png",
+                                                    "data": png_b64
+                                                }
+                                            },
+                                            {
+                                                "type": "text",
+                                                "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D seguendo rigorosamente le regole fornite."
+                                            }
+                                        ]
                                     }
                                 ]
-                            }
-                        ]
-                    )
+                            )
+                            # Se la chiamata va a buon fine, usciamo dal ciclo
+                            break
+                        except anthropic.NotFoundError as err:
+                            last_exception = err
+                            continue
+
+                    if not response:
+                        raise last_exception
 
                     result_3d = response.content[0].text
                     return self._send(200, json.dumps({"success": True, "model3d": result_3d}))
