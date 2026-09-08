@@ -70,7 +70,6 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_HEAD(self):
-        """Gestisce le verifiche dello stato del server da parte di Render e del browser."""
         self.send_response(200)
         self.send_header("Content-Type", "text/plain")
         self._cors()
@@ -113,11 +112,10 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Chiamata API Anthropic usando l'endpoint con supporto PDF
-                    response = anthropic_client.beta.messages.create(
-                        model="claude-3-5-sonnet-20241022",
+                    # Chiamata API standard Anthropic
+                    response = anthropic_client.messages.create(
+                        model="claude-3-5-sonnet-20240620",
                         max_tokens=4096,
-                        betas=["pdfs-2024-09-25"],
                         system=system_prompt,
                         messages=[
                             {
