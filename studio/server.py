@@ -19,7 +19,7 @@ try:
 except ImportError:
     sys.exit("Manca la libreria 'anthropic'. Installa con: pip install anthropic")
 
-# Importazione di pypdfium2 (già presente nei requisiti)
+# Importazione di pypdfium2
 try:
     import pypdfium2 as pdfium
 except ImportError:
@@ -27,12 +27,14 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Inizializzazione controllata del client Anthropic
 api_key = os.environ.get("ANTHROPIC_API_KEY")
 if not api_key:
-    print("ATTENZIONE: La variabile d'ambiente ANTHROPIC_API_KEY non e' stata trovata!")
+    print("⚠️ CRITICO: La variabile d'ambiente ANTHROPIC_API_KEY non e' stata trovata!")
+else:
+    print(f"ℹ️ ANTHROPIC_API_KEY configurata: {api_key[:8]}...{api_key[-4:]}")
 
 anthropic_client = anthropic.Anthropic(api_key=api_key) if api_key else None
+
 
 def load_project_rules():
     regole_path = os.path.join(HERE, "REGOLE.md")
@@ -41,6 +43,7 @@ def load_project_rules():
             return f.read()
     return "Sei un esperto di modellazione 3D da PDF di packaging."
 
+
 def convert_pdf_to_png_base64(pdf_bytes: bytes) -> str:
     """Apre il PDF dal buffer di memoria e converte la prima pagina in PNG Base64 usando pypdfium2."""
     pdf = pdfium.PdfDocument(pdf_bytes)
@@ -48,7 +51,6 @@ def convert_pdf_to_png_base64(pdf_bytes: bytes) -> str:
         raise ValueError("Il PDF caricato non contiene pagine.")
     
     page = pdf[0]
-    # Renderizza la prima pagina in un'immagine PIL a risoluzione nitida (scale 2 = 144 DPI)
     image = page.render(scale=2).to_pil()
     
     buf = io.BytesIO()
@@ -94,7 +96,10 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/api/ping"):
-            return self._send(200, json.dumps({"ok": True}))
+            return self._send(200, json.dumps({
+                "ok": True,
+                "api_key_configured": bool(api_key)
+            }))
         
         path = os.path.join(HERE, "pack3d_studio.html")
         if os.path.exists(path):
@@ -106,41 +111,41 @@ class Handler(BaseHTTPRequestHandler):
         try:
             if not anthropic_client:
                 return self._send(500, json.dumps({
-                    "error": "ANTHROPIC_API_KEY non configurata nelle variabili d'ambiente su Render."
+                    "error": "ANTHROPIC_API_KEY non configurata su Render."
                 }))
 
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:
-                return self._send(400, "Nessun file ricevuto")
+                return self._send(400, json.dumps({"error": "Nessun file ricevuto"}))
             if n > MAX_UPLOAD:
-                return self._send(413, "PDF troppo grande (limite %d MB)" % (MAX_UPLOAD // (1024 * 1024)))
+                return self._send(413, json.dumps({"error": f"PDF troppo grande (limite {MAX_UPLOAD // (1024 * 1024)} MB)"}))
             
             pdf_data = self.rfile.read(n)
             if not pdf_data.startswith(b"%PDF"):
-                return self._send(400, "Il file caricato non e' un PDF valido")
+                return self._send(400, json.dumps({"error": "Il file caricato non e' un PDF valido"}))
             
-            # Converte il PDF in un'immagine PNG codificata in Base64 tramite pypdfium2
             png_b64 = convert_pdf_to_png_base64(pdf_data)
 
             if self.path.startswith("/api/build") or self.path.startswith("/api/analyze"):
                 if not _slots.acquire(blocking=False):
-                    return self._send(503, "Server occupato: riprova fra qualche secondo")
+                    return self._send(503, json.dumps({"error": "Server occupato: riprova fra qualche secondo"}))
                 
                 try:
                     system_prompt = load_project_rules()
 
-                    # Elenco di modelli da tentare in ordine di priorità
+                    # Tentativo sequenziale di chiamata
                     models_to_try = [
-                        "claude-3-5-sonnet-latest",
-                        "claude-3-sonnet-20240229",
+                        "claude-3-5-sonnet-20241022",
+                        "claude-3-5-sonnet-20240620",
                         "claude-3-haiku-20240307"
                     ]
 
                     response = None
-                    last_exception = None
+                    last_error_msg = ""
 
                     for model_name in models_to_try:
                         try:
+                            print(f"[API] Invio richiesta a Anthropic col modello: {model_name}")
                             response = anthropic_client.messages.create(
                                 model=model_name,
                                 max_tokens=4096,
@@ -159,20 +164,30 @@ class Handler(BaseHTTPRequestHandler):
                                             },
                                             {
                                                 "type": "text",
-                                                "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D seguendo rigorosamente le regole fornite."
+                                                "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D seguendo le regole fornite."
                                             }
                                         ]
                                     }
                                 ]
                             )
-                            # Se la chiamata va a buon fine, usciamo dal ciclo
+                            print(f"✅ Successo con il modello: {model_name}")
                             break
                         except anthropic.NotFoundError as err:
-                            last_exception = err
-                            continue
+                            last_error_msg = f"404 Not Found su {model_name}. Verificare credito Console Anthropic."
+                            print(f"⚠️ {last_error_msg}")
+                        except anthropic.AuthenticationError:
+                            last_error_msg = "Chiave API non valida o revocata."
+                            print(f"❌ {last_error_msg}")
+                            break
+                        except Exception as err:
+                            last_error_msg = f"Errore {type(err).__name__}: {err}"
+                            print(f"❌ {last_error_msg}")
 
                     if not response:
-                        raise last_exception
+                        return self._send(400, json.dumps({
+                            "error": "L'API di Anthropic ha rifiutato la richiesta. Verificare credito su console.anthropic.com.",
+                            "details": last_error_msg
+                        }))
 
                     result_3d = response.content[0].text
                     return self._send(200, json.dumps({"success": True, "model3d": result_3d}))
@@ -180,11 +195,11 @@ class Handler(BaseHTTPRequestHandler):
                 finally:
                     _slots.release()
 
-            return self._send(404, "Endpoint sconosciuto")
+            return self._send(404, json.dumps({"error": "Endpoint sconosciuto"}))
 
         except Exception as e:
             traceback.print_exc()
-            return self._send(500, json.dumps({"error": "%s: %s" % (type(e).__name__, e)}))
+            return self._send(500, json.dumps({"error": f"{type(e).__name__}: {e}"}))
 
 
 MAX_UPLOAD = 60 * 1024 * 1024
@@ -194,5 +209,5 @@ _slots = threading.Semaphore(MAX_JOBS)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print("pack3d studio AI in ascolto su %s:%d" % (host, port))
+    print(f"🚀 pack3d studio AI avviato su {host}:{port}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()
