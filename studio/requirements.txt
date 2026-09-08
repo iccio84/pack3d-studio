@@ -7,3 +7,4 @@ pypdfium2>=4.30
 anthropic>=0.39.0
 fastapi
 uvicorn
+python-multipart
