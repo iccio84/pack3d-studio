@@ -27,21 +27,14 @@ except ImportError:
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Inizializzazione controllata del client Anthropic
+# Inizializzazione del client Anthropic
 api_key = os.environ.get("ANTHROPIC_API_KEY")
-base_url = os.environ.get("ANTHROPIC_BASE_URL")  # Supporto a proxy/gateway custom se specificato
-
 if not api_key:
     print("⚠️ CRITICO: La variabile d'ambiente ANTHROPIC_API_KEY non e' stata trovata!")
 else:
-    print(f"ℹ️ ANTHROPIC_API_KEY rilevata: {api_key[:8]}...{api_key[-4:]}")
+    print(f"ℹ️ ANTHROPIC_API_KEY caricata correttamente: {api_key[:8]}...{api_key[-4:]}")
 
-client_kwargs = {"api_key": api_key} if api_key else {}
-if base_url:
-    client_kwargs["base_url"] = base_url
-    print(f"ℹ️ Utilizzo BASE_URL personalizzato: {base_url}")
-
-anthropic_client = anthropic.Anthropic(**client_kwargs) if api_key else None
+anthropic_client = anthropic.Anthropic(api_key=api_key) if api_key else None
 
 
 def load_project_rules():
@@ -54,7 +47,7 @@ def load_project_rules():
 
 
 def convert_pdf_to_png_base64(pdf_bytes: bytes) -> str:
-    """Apre il PDF dal buffer e converte la prima pagina in PNG Base64 (DPI 144 / scale 2)."""
+    """Apre il PDF dal buffer e converte la prima pagina in PNG Base64 (scale 2 per alta risoluzione)."""
     pdf = pdfium.PdfDocument(pdf_bytes)
     if len(pdf) == 0:
         raise ValueError("Il PDF caricato non contiene pagine.")
@@ -143,14 +136,13 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     system_prompt = load_project_rules()
 
-                    # Elenco completo degli identificatori di modello
+                    # Elenco modelli prioritario basato sulla tua console
                     models_to_try = [
+                        "claude-sonnet-4-6",
                         "claude-3-5-sonnet-20241022",
                         "claude-3-5-sonnet-latest",
-                        "claude-3-5-sonnet-20240620",
                         "claude-3-haiku-20240307",
-                        "sonnet-5",
-                        "haiku-4.5"
+                        "sonnet-5"
                     ]
 
                     response = None
@@ -158,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
 
                     for model_name in models_to_try:
                         try:
-                            print(f"[API] Chiamata in corso con modello: {model_name}")
+                            print(f"[API] Invio richiesta con modello: {model_name}")
                             response = anthropic_client.messages.create(
                                 model=model_name,
                                 max_tokens=4096,
@@ -177,7 +169,7 @@ class Handler(BaseHTTPRequestHandler):
                                             },
                                             {
                                                 "type": "text",
-                                                "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D seguendo le regole."
+                                                "text": "Analizza l'immagine di questa fustella/packaging e genera la struttura del modello 3D."
                                             }
                                         ]
                                     }
@@ -192,7 +184,7 @@ class Handler(BaseHTTPRequestHandler):
 
                     if not response:
                         return self._send(400, json.dumps({
-                            "error": "L'API/Gateway ha rifiutato la chiave per tutti i modelli.",
+                            "error": "L'API di Anthropic ha rifiutato la richiesta. Verifica di aver incollato la nuova chiave API su Render.",
                             "details": errors_log
                         }))
 
@@ -216,5 +208,5 @@ _slots = threading.Semaphore(MAX_JOBS)
 if __name__ == "__main__":
     port = int(os.environ.get("PORT") or (sys.argv[1] if len(sys.argv) > 1 else 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print(f"🚀 pack3d studio AI in ascolto su {host}:{port}")
+    print(f"🚀 pack3d studio AI avviato con successo su {host}:{port}")
     ThreadingHTTPServer((host, port), Handler).serve_forever()
