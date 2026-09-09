@@ -15,6 +15,11 @@ from pack3d.tools import TOOLS, RUN
 
 MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-5")
 MAX_STEPS = int(os.environ.get("PACK3D_MAX_STEPS", "16"))
+# una conclusione con molte misure e avvisi articolati puo' superare i 4000
+# token di prima: con una cronologia lunga (analisi a fondo, piu' candidati
+# confrontati) il rischio e' un troncamento a meta' di presenta_risultato,
+# che lascia stop_reason diverso da "tool_use" e nessun testo utilizzabile
+MAX_TOKENS = int(os.environ.get("PACK3D_MAX_TOKENS", "8000"))
 
 ISTRUZIONI = """
 Sei l'analista di pack3d: da un artwork PDF ricavi i parametri per costruire un
@@ -134,7 +139,7 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None,
 
     for _ in range(MAX_STEPS):
         r = client.messages.create(
-            model=MODEL, max_tokens=4000,
+            model=MODEL, max_tokens=MAX_TOKENS,
             system=system,
             tools=all_tools, messages=msgs)
         msgs.append({"role": "assistant", "content": r.content})
@@ -146,10 +151,15 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None,
             return finale.input, traccia
 
         if r.stop_reason != "tool_use":
-            # rete di sicurezza: il modello ha risposto in prosa invece di
-            # chiamare presenta_risultato
+            # rete di sicurezza: il modello ha risposto in prosa (o e' stato
+            # troncato) invece di chiamare presenta_risultato. stop_reason
+            # distingue i due casi nei log: "max_tokens" e' un troncamento,
+            # "end_turn" e' davvero prosa.
             testo = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
-            return _json_from(testo), traccia
+            risultato = _json_from(testo)
+            if isinstance(risultato, dict) and "errore" in risultato:
+                risultato["stop_reason"] = r.stop_reason
+            return risultato, traccia
 
         risultati = []
         for b in calls:
