@@ -195,10 +195,15 @@ AI_FALLBACK = os.environ.get("PACK3D_AI_FALLBACK") == "1"
 
 FLOWPACK_FALLBACK_ISTRUZIONI = """
 Il solutore automatico non ha riconosciuto l'impaginato di questo flowpack:
-serve la tua analisi per ricavare la geometria. Oltre ai campi standard,
-includi nel JSON finale anche la chiave "flowpack" con ESATTAMENTE questi
-campi, tutti numeri in millimetri, misurati con gli strumenti (list_paths,
-measure_region, fit_sector) e mai stimati a occhio:
+tocca a te ricavare la geometria dagli strumenti di misura. E' normale che
+analyze_flowpack fallisca con lo stesso errore del solutore automatico, e'
+proprio per questo che sei stata interpellata: non ripeterlo piu' di una
+volta, usa invece list_paths, measure_region e fit_sector per misurare tu le
+fasce del nastro.
+
+Nel JSON finale, OLTRE ai campi standard, la chiave "flowpack" e'
+OBBLIGATORIA, non facoltativa, con ESATTAMENTE questi campi, tutti numeri in
+millimetri, misurati e mai stimati a occhio:
 
 {"flowpack": {
   "W": fronte del prodotto, "T": spessore, "L": lunghezza del corpo fra le
@@ -211,15 +216,15 @@ measure_region, fit_sector) e mai stimati a occhio:
   "sheet_y0_mm": bordo superiore di UNA ripetizione sul foglio
 }}
 
-Prima di rispondere verifica tu stesso questi tre conti, con la stessa
-tolleranza usata per gli avvisi (circa il 3%, o 1 mm se maggiore):
+Prima di concludere verifica tu stesso questi tre conti, con una tolleranza
+di circa il 3% (o 1 mm se maggiore):
 - perimetro + 2 pinne laterali deve dare il nastro: 2*(W+T) + 2*side_fin ~= web_mm
 - i due tratti di retro devono dare il fronte: back_a + back_b ~= W
 - corpo + 2 pinne di testa deve dare il passo: L + 2*end_fin ~= step_mm
-Se non trovi valori che chiudono questi tre conti, dillo negli "avvisi" del
-JSON standard invece di forzare numeri che non tornano: la costruzione verra'
-comunque rifiutata a valle se non tornano, ma un avviso onesto aiuta a capire
-perche'.
+
+Il codice rifiuta comunque la costruzione se questi conti non tornano: non
+omettere "flowpack" per prudenza, restituisci sempre la tua misura migliore e
+usa "avvisi" per segnalare dove sei incerta.
 """
 
 
@@ -265,10 +270,15 @@ def _flowpack_from_ai(pdf, teeth, soft):
     if not AI_FALLBACK or not os.environ.get("ANTHROPIC_API_KEY"):
         raise ValueError("impaginato non coperto dal solutore automatico")
     import agent
-    par, _ = agent.analyse(pdf, "flowpack", {"teeth": teeth, "soft": soft},
-                           extra_system=FLOWPACK_FALLBACK_ISTRUZIONI)
+    par, tr = agent.analyse(pdf, "flowpack", {"teeth": teeth, "soft": soft},
+                            extra_system=FLOWPACK_FALLBACK_ISTRUZIONI)
     fj = par.get("flowpack") if isinstance(par, dict) else None
     if not fj:
+        # nessun'altra traccia arriva al client su questo percorso: senza
+        # questo log non c'e' modo di capire cosa ha risposto l'AI
+        print("ripiego AI senza 'flowpack' utilizzabile.\n  risposta: %.500r\n"
+              "  strumenti chiamati: %r" % (par, [t["tool"] for t in tr]),
+              file=sys.stderr)
         raise ValueError("l'AI non ha prodotto una geometria flowpack utilizzabile")
     return _flowpack_from_ai_json(fj)
 
