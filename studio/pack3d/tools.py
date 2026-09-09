@@ -17,6 +17,7 @@ from . import techink
 
 PT2MM = dl.PT2MM
 _PATHS = {}
+_PREVIEW = {}
 
 
 def _plain(o):
@@ -30,7 +31,16 @@ def _plain(o):
     return o
 
 
+def _single_entry_cache(cache, key):
+    """Tiene al piu' un pdf in cache: ogni richiesta ne usa uno diverso (file
+    temporaneo), quindi accumulare le vecchie voci sarebbe solo una perdita di
+    memoria per la durata del processo, non un guadagno di velocita'."""
+    if set(cache) - {key}:
+        cache.clear()
+
+
 def _paths(pdf):
+    _single_entry_cache(_PATHS, pdf)
     if pdf not in _PATHS:
         _PATHS[pdf] = cupmod.flatten_paths(pdf)
     return _PATHS[pdf]
@@ -121,13 +131,21 @@ def measure_region(pdf, x_mm, y_mm, w_mm, h_mm, dpi: int = 200):
     """
     import pypdfium2 as pdfium
     s = dpi / 72.0
-    im = pdfium.PdfDocument(pdf)[0].render(scale=s).to_pil().convert("RGB")
-    a = np.asarray(im).astype(int)
+    key = (pdf, dpi)
+    _single_entry_cache(_PREVIEW, key)
+    if key not in _PREVIEW:
+        _PREVIEW[key] = pdfium.PdfDocument(pdf)[0].render(scale=s).to_pil().convert("RGB")
+    im = _PREVIEW[key]
     x0, y0 = int(x_mm / PT2MM * s), int(y_mm / PT2MM * s)
     x1, y1 = int((x_mm + w_mm) / PT2MM * s), int((y_mm + h_mm) / PT2MM * s)
-    r = a[max(y0, 0):y1, max(x0, 0):x1]
-    if r.size == 0:
+    # ritaglio con PIL prima di passare a numpy: l'intera pagina come intero a
+    # 64 bit puo' pesare centinaia di MB, troppo sul piano free di Render.
+    # A differenza dello slicing numpy di prima, Image.crop riempie di nero un
+    # box che sconfina: i bordi vanno troncati a mano per lo stesso risultato.
+    c = im.crop((max(x0, 0), max(y0, 0), min(x1, im.width), min(y1, im.height)))
+    if c.width < 2 or c.height < 2:
         return {"errore": "ritaglio vuoto"}
+    r = np.asarray(c).astype(int)
     chroma = (r.max(2) - r.min(2))
     col = chroma.mean(0)
     idx = np.nonzero(col > 25)[0]
