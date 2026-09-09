@@ -352,7 +352,21 @@ def analyze_pdf(pdf, kind=None):
     try:
         fp = fpk.analyze_auto(pdf)
     except Exception:
-        fp = fpk.analyze(pdf)      # se fallisce anche questo, l'errore va al client
+        try:
+            fp = fpk.analyze(pdf)
+        except Exception:
+            if kind != "flowpack":
+                raise          # kind=None: qui l'auto-riconoscimento e' l'unica via, l'errore va al client
+            # la tipologia e' gia' dichiarata dall'utente: niente blocca qui la
+            # costruzione, che ritenta con lo stesso ripiego AI di build_flowpack
+            hint = ("verra' tentato un ripiego AI alla costruzione (puo' richiedere "
+                    "fino a un minuto)" if AI_FALLBACK else
+                    "ripiego AI non attivo (PACK3D_AI_FALLBACK): la costruzione "
+                    "probabilmente fallira'")
+            return dict(kind="flowpack", title="Flowpack",
+                        teeth_default=20, soft_default="medio",
+                        meta=["flowpack", "impaginato non riconosciuto dai solutori automatici",
+                              hint])
     return dict(kind="flowpack", title="Flowpack",
                 teeth_default=20, soft_default="medio",
                 meta=["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
