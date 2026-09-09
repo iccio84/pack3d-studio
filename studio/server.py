@@ -201,20 +201,11 @@ proprio per questo che sei stata interpellata: non ripeterlo piu' di una
 volta, usa invece list_paths, measure_region e fit_sector per misurare tu le
 fasce del nastro.
 
-Nel JSON finale, OLTRE ai campi standard, la chiave "flowpack" e'
-OBBLIGATORIA, non facoltativa, con ESATTAMENTE questi campi, tutti numeri in
-millimetri, misurati e mai stimati a occhio:
-
-{"flowpack": {
-  "W": fronte del prodotto, "T": spessore, "L": lunghezza del corpo fra le
-  due saldature di testa, "end_fin": sporgenza della pinna trasversale,
-  "side_fin": altezza della pinna longitudinale, "back_a": tratto di retro
-  da un lato della pinna longitudinale, "back_b": tratto di retro
-  dall'altro lato, "web_mm": larghezza del nastro (perimetro di stampa),
-  "step_mm": passo di ripetizione lungo il nastro,
-  "sheet_x0_mm": bordo sinistro di UNA ripetizione sul foglio,
-  "sheet_y0_mm": bordo superiore di UNA ripetizione sul foglio
-}}
+Lo strumento di chiusura presenta_risultato qui richiede anche il campo
+"flowpack": fronte, spessore, lunghezza del corpo, sporgenza e altezza delle
+pinne, i due tratti di retro, larghezza e passo del nastro, e l'origine di
+una ripetizione sul foglio. Tutti i valori in millimetri, misurati e mai
+stimati a occhio.
 
 Prima di concludere verifica tu stesso questi tre conti, con una tolleranza
 di circa il 3% (o 1 mm se maggiore):
@@ -222,9 +213,9 @@ di circa il 3% (o 1 mm se maggiore):
 - i due tratti di retro devono dare il fronte: back_a + back_b ~= W
 - corpo + 2 pinne di testa deve dare il passo: L + 2*end_fin ~= step_mm
 
-Il codice rifiuta comunque la costruzione se questi conti non tornano: non
-omettere "flowpack" per prudenza, restituisci sempre la tua misura migliore e
-usa "avvisi" per segnalare dove sei incerta.
+Il codice rifiuta comunque la costruzione se questi conti non tornano:
+restituisci sempre la tua misura migliore e usa "avvisi" per segnalare dove
+sei incerta, invece di lasciare un dubbio senza numeri.
 """
 
 
@@ -271,7 +262,8 @@ def _flowpack_from_ai(pdf, teeth, soft):
         raise ValueError("impaginato non coperto dal solutore automatico")
     import agent
     par, tr = agent.analyse(pdf, "flowpack", {"teeth": teeth, "soft": soft},
-                            extra_system=FLOWPACK_FALLBACK_ISTRUZIONI)
+                            extra_system=FLOWPACK_FALLBACK_ISTRUZIONI,
+                            require_flowpack=True)
     fj = par.get("flowpack") if isinstance(par, dict) else None
     if not fj:
         # nessun'altra traccia arriva al client su questo percorso: senza
