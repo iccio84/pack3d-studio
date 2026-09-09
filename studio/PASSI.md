@@ -45,12 +45,23 @@ Variabile d'ambiente su Lovable: `VITE_PACK3D_API` con l'indirizzo Render.
 Dashboard Render → il tuo servizio → **Environment** → aggiungi:
 
 ```
-ANTHROPIC_API_KEY = sk-ant-...
-PACK3D_MODEL      = claude-sonnet-4-6      (opzionale)
-PACK3D_MAX_STEPS  = 16                     (opzionale)
+ANTHROPIC_API_KEY  = sk-ant-...
+PACK3D_MODEL       = claude-sonnet-5       (opzionale)
+PACK3D_MAX_STEPS   = 16                    (opzionale)
+PACK3D_AI_FALLBACK = 1                     (opzionale, vedi sotto)
 ```
 
 La chiave sta **solo** sul backend. Se finisce nel frontend e' pubblica.
+
+`PACK3D_AI_FALLBACK=1` attiva un terzo tentativo, solo per i flowpack, quando
+ne' `analyze_auto` ne' il solutore storico riconoscono l'impaginato: Claude
+misura la geometria con gli stessi strumenti dell'analisi (non la stima), il
+codice la valida con le stesse coerenze fisiche gia' usate altrove
+(perimetro+falde=nastro, retro=fronte, corpo+pinne=passo) e rifiuta la
+costruzione se non tornano. Senza questa variabile il comportamento resta
+quello di sempre: impaginato non riconosciuto → errore al client. E' un
+tentativo in piu' di 20-60 secondi e un'altra chiamata a pagamento, va quindi
+attivato consapevolmente, non lasciato acceso di default.
 
 ---
 

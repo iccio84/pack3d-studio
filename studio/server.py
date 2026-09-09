@@ -185,9 +185,98 @@ def _flowpack_from_case(case):
                     sheet=case["sheet"], girth_span=case["girth_span"])
 
 
+# --------------------------------------------------------------------------- #
+# ripiego AI per flowpack non riconosciuti
+# --------------------------------------------------------------------------- #
+# Disattivo di default: e' una chiamata di 20-60 secondi a un servizio esterno,
+# non deve scattare senza che chi fa il deploy lo sappia. Richiede comunque
+# ANTHROPIC_API_KEY, altrimenti il ripiego fallisce come se non ci fosse.
+AI_FALLBACK = os.environ.get("PACK3D_AI_FALLBACK") == "1"
+
+FLOWPACK_FALLBACK_ISTRUZIONI = """
+Il solutore automatico non ha riconosciuto l'impaginato di questo flowpack:
+serve la tua analisi per ricavare la geometria. Oltre ai campi standard,
+includi nel JSON finale anche la chiave "flowpack" con ESATTAMENTE questi
+campi, tutti numeri in millimetri, misurati con gli strumenti (list_paths,
+measure_region, fit_sector) e mai stimati a occhio:
+
+{"flowpack": {
+  "W": fronte del prodotto, "T": spessore, "L": lunghezza del corpo fra le
+  due saldature di testa, "end_fin": sporgenza della pinna trasversale,
+  "side_fin": altezza della pinna longitudinale, "back_a": tratto di retro
+  da un lato della pinna longitudinale, "back_b": tratto di retro
+  dall'altro lato, "web_mm": larghezza del nastro (perimetro di stampa),
+  "step_mm": passo di ripetizione lungo il nastro,
+  "sheet_x0_mm": bordo sinistro di UNA ripetizione sul foglio,
+  "sheet_y0_mm": bordo superiore di UNA ripetizione sul foglio
+}}
+
+Prima di rispondere verifica tu stesso questi tre conti, con la stessa
+tolleranza usata per gli avvisi (circa il 3%, o 1 mm se maggiore):
+- perimetro + 2 pinne laterali deve dare il nastro: 2*(W+T) + 2*side_fin ~= web_mm
+- i due tratti di retro devono dare il fronte: back_a + back_b ~= W
+- corpo + 2 pinne di testa deve dare il passo: L + 2*end_fin ~= step_mm
+Se non trovi valori che chiudono questi tre conti, dillo negli "avvisi" del
+JSON standard invece di forzare numeri che non tornano: la costruzione verra'
+comunque rifiutata a valle se non tornano, ma un avviso onesto aiuta a capire
+perche'.
+"""
+
+
+def _flowpack_from_ai_json(j):
+    """Valida e converte la geometria proposta dall'AI in un Flowpack.
+
+    Le stesse coerenze che in flowpack.analyze() restano un avviso qui sono un
+    rigetto secco: un numero non misurato va verificato piu' severamente."""
+    req = ("W", "T", "L", "end_fin", "side_fin", "back_a", "back_b",
+           "web_mm", "step_mm", "sheet_x0_mm", "sheet_y0_mm")
+    try:
+        W, T, L, end_fin, side_fin, back_a, back_b, web_mm, step_mm, x0_mm, y0_mm = \
+            [float(j[k]) for k in req]
+    except (KeyError, TypeError, ValueError) as e:
+        raise ValueError("geometria AI incompleta o non numerica: %s" % e)
+    if min(W, T, L, web_mm, step_mm) <= 0:
+        raise ValueError("geometria AI non valida: quote non positive")
+
+    girth = 2.0 * (W + T)
+    checks = [
+        ("perimetro + falde (%.1f) contro nastro (%.1f)"
+         % (girth + 2 * side_fin, web_mm),
+         abs(girth + 2 * side_fin - web_mm), max(1.0, web_mm * 0.03)),
+        ("retro (%.1f) contro fronte (%.1f)" % (back_a + back_b, W),
+         abs(back_a + back_b - W), max(1.0, W * 0.03)),
+        ("corpo + pinne di testa (%.1f) contro passo (%.1f)"
+         % (L + 2 * end_fin, step_mm),
+         abs(L + 2 * end_fin - step_mm), max(1.0, step_mm * 0.03)),
+    ]
+    bad = [msg for msg, err, tol in checks if err > tol]
+    if bad:
+        raise ValueError("geometria AI incoerente: " + "; ".join(bad))
+
+    x0, y0 = x0_mm / PT2MM, y0_mm / PT2MM
+    sheet = (x0, y0, x0 + step_mm / PT2MM, y0 + web_mm / PT2MM)
+    girth_span = (sheet[1] + side_fin / PT2MM, sheet[3] - side_fin / PT2MM)
+    return Flowpack(W=W, T=T, L=L, end_fin=end_fin, side_fin=side_fin,
+                    back_a=back_a, back_b=back_b, web_mm=web_mm, step_mm=step_mm,
+                    sheet=sheet, girth_span=girth_span)
+
+
+def _flowpack_from_ai(pdf, teeth, soft):
+    if not AI_FALLBACK or not os.environ.get("ANTHROPIC_API_KEY"):
+        raise ValueError("impaginato non coperto dal solutore automatico")
+    import agent
+    par, _ = agent.analyse(pdf, "flowpack", {"teeth": teeth, "soft": soft},
+                           extra_system=FLOWPACK_FALLBACK_ISTRUZIONI)
+    fj = par.get("flowpack") if isinstance(par, dict) else None
+    if not fj:
+        raise ValueError("l'AI non ha prodotto una geometria flowpack utilizzabile")
+    return _flowpack_from_ai_json(fj)
+
+
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     par = GONFIORE.get(soft, GONFIORE["medio"])
     nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (150, 260, 200, 1700)
+    ai_used = False
     if case:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
@@ -199,7 +288,11 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
         try:
             fp = fpk.analyze_auto(pdf)
         except Exception:
-            fp = fpk.analyze(pdf)          # solutore storico come ripiego
+            try:
+                fp = fpk.analyze(pdf)          # solutore storico come ripiego
+            except Exception:
+                fp = _flowpack_from_ai(pdf, teeth, soft)   # ripiego AI, se abilitato
+                ai_used = True
         fin_open = 0.948 * fp.girth / 2.0
 
     _, dsec, SW = soft_section_fit(fp, par["soft_r"], par["soft_n"])
@@ -224,12 +317,16 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     n = _normals(Vm, Tm)
     i = np.argsort(-Vm[:, 2])[:300]
     base = fin_open / max(teeth, 1)
-    return ["flowpack %s" % soft,
+    meta = ["flowpack %s" % soft,
             "corpo %.1f mm, sezione %.1f x %.1f" % (fp.L, SW, fp.T),
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri (base %.2f, altezza %.2f mm)"
              % (teeth, base, base * math.sqrt(3) / 2)),
             "normale fronte %s" % np.round(n[i].mean(0), 2).tolist()]
+    if ai_used:
+        meta.append("geometria stimata dall'AI: impaginato non riconosciuto dai "
+                    "solutori automatici")
+    return meta
 
 
 def analyze_pdf(pdf, kind=None):
@@ -336,10 +433,15 @@ class Handler(BaseHTTPRequestHandler):
                                                "secondo")
                     out = os.path.join(td, "out.glb")
                     case = CASI.get(_sig(pdf))
-                    info = analyze_pdf(pdf, kind)
                     q = "alta" if str(opts.get("quality")) == "alta" else "web"
                     try:
-                        if info["kind"] == "carton":
+                        # se la tipologia e' gia' dichiarata non serve
+                        # ri-analizzare il PDF solo per classificarlo: eviterebbe
+                        # anche una seconda chiamata AI (lenta) quando kind e'
+                        # gia' noto e scatta il ripiego del flowpack
+                        pack_kind = kind if kind in ("carton", "flowpack") \
+                            else analyze_pdf(pdf, kind)["kind"]
+                        if pack_kind == "carton":
                             build_carton(pdf, out, q)
                         else:
                             build_flowpack(pdf, out, int(opts.get("teeth", 20)),
@@ -348,7 +450,6 @@ class Handler(BaseHTTPRequestHandler):
                         _slots.release()
                         raise
                     try:
-                        q = q
                         with open(out, "rb") as fh:
                             return self._send(200, fh.read(), "model/gltf-binary",
                                               filename="modello.glb")

@@ -117,6 +117,28 @@ Regole di forma, da applicare senza chiedere:
 - l'apertura della pinna va concentrata vicino alla saldatura (rampa di quinto
   grado): con una rampa corta il gonfiore invade il corpo e deforma i bollini.
 
+### Ripiego AI per impaginati non riconosciuti
+
+Quando ne' `analyze_auto` ne' il solutore storico riconoscono l'impaginato, e
+solo con `PACK3D_AI_FALLBACK=1`, l'ultimo tentativo passa da Claude
+(`server.py:_flowpack_from_ai`): stessi strumenti di misura gia' usati per
+`/api/analyze-ai` (`list_paths`, `measure_region`, `fit_sector`), ma con uno
+schema JSON fisso invece delle quote libere — il codice deve poter costruire
+un `Flowpack` dai campi restituiti, non un resoconto per l'utente.
+
+**Un numero tornato da un modello non e' una misura.** Prima di costruire
+viene verificato con le stesse tre coerenze fisiche di questa sezione
+(perimetro + falde = nastro, retro = fronte, corpo + pinne di testa = passo,
+`server.py:_flowpack_from_ai_json`) — qui pero' un conto che non torna
+**rifiuta la costruzione**, non si limita a un avviso come in
+`flowpack.analyze()`. Il modello risultante viene sempre segnalato nel
+resoconto come "geometria stimata dall'AI", per non confonderlo con uno
+misurato.
+
+Non sostituisce la calibrazione manuale del registro `CASI`: resta un
+ripiego per impaginati mai visti, disattivato di default perche' costa una
+chiamata di 20-60 secondi.
+
 ## Coppe e contenitori conici
 
 Lo steso e' un **settore anulare**. Il contorno va letto appiattendo le bezier
