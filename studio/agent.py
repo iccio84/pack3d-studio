@@ -13,7 +13,7 @@ import re
 
 from pack3d.tools import TOOLS, RUN
 
-MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-4-6")
+MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-5")
 MAX_STEPS = int(os.environ.get("PACK3D_MAX_STEPS", "16"))
 
 ISTRUZIONI = """
@@ -49,8 +49,12 @@ def _json_from(text):
         return json.loads(m.group(0)) if m else {"errore": "risposta non interpretabile"}
 
 
-def analyse(pdf_path, kind, answers=None, regole_path=None, client=None):
-    """Esegue il ciclo e restituisce (parametri, traccia delle chiamate)."""
+def analyse(pdf_path, kind, answers=None, regole_path=None, client=None, extra_system=""):
+    """Esegue il ciclo e restituisce (parametri, traccia delle chiamate).
+
+    `extra_system` aggiunge istruzioni in coda al system prompt senza toccare
+    quello standard: serve ai chiamanti che hanno bisogno di uno schema JSON
+    piu' rigido di quello generico (es. il ripiego AI del flowpack)."""
     if client is None:
         import anthropic
         client = anthropic.Anthropic()      # ANTHROPIC_API_KEY dall'ambiente
@@ -64,11 +68,12 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None):
              "Tipologia dichiarata dall'utente: %s.\nRisposte alle domande: %s.\n"
              "Ricava le quote e i parametri di costruzione." % (kind, json.dumps(answers or {}, ensure_ascii=False))}]
     traccia = []
+    system = ISTRUZIONI + "\n\n# Regole del progetto\n\n" + regole + "\n\n" + extra_system
 
     for _ in range(MAX_STEPS):
         r = client.messages.create(
             model=MODEL, max_tokens=4000,
-            system=ISTRUZIONI + "\n\n# Regole del progetto\n\n" + regole,
+            system=system,
             tools=TOOLS, messages=msgs)
         msgs.append({"role": "assistant", "content": r.content})
 
