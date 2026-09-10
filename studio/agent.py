@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 
 from pack3d.tools import TOOLS, RUN
 
@@ -17,9 +18,21 @@ MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-5")
 MAX_STEPS = int(os.environ.get("PACK3D_MAX_STEPS", "16"))
 # una conclusione con molte misure e avvisi articolati puo' superare i 4000
 # token di prima: con una cronologia lunga (analisi a fondo, piu' candidati
-# confrontati) il rischio e' un troncamento a meta' di presenta_risultato,
-# che lascia stop_reason diverso da "tool_use" e nessun testo utilizzabile
+# confrontati) il rischio e' un troncamento a meta' di presenta_risultato.
+# Alzare il tetto riduce il caso, non lo elimina: vedi MAX_TRONCAMENTI
 MAX_TOKENS = int(os.environ.get("PACK3D_MAX_TOKENS", "8000"))
+# un troncamento non deve costare l'intera analisi: si riprova chiedendo una
+# conclusione compatta. Due volte basta - se si tronca ancora il modello sta
+# girando a vuoto, e insistere costa solo un'altra chiamata da 20-60 secondi
+MAX_TRONCAMENTI = int(os.environ.get("PACK3D_MAX_TRONCAMENTI", "2"))
+
+RIPRESA = (
+    "La tua risposta precedente e' stata troncata perche' troppo lunga, quindi"
+    " e' andata perduta: non l'ho ricevuta. Concludi ORA chiamando"
+    " presenta_risultato con i dati che hai gia' misurato. Tieni \"avvisi\""
+    " a poche righe e non ripetere le misure nel testo: quello che conta sono"
+    " i campi numerici."
+)
 
 ISTRUZIONI = """
 Sei l'analista di pack3d: da un artwork PDF ricavi i parametri per costruire un
@@ -93,6 +106,22 @@ def _conclude_tool(require_flowpack):
     return t
 
 
+def _log_troncamento(r, traccia):
+    """Cosa c'era nel turno perduto.
+
+    Il testo grezzo da solo non basta: quando il troncamento arriva prima del
+    primo blocco completo e' vuoto, e nei log non resta niente da leggere. I
+    tipi di blocco e i token consumati dicono se il modello stava scrivendo
+    prosa o una chiamata, e se ha davvero speso tutto il budget."""
+    tipi = [getattr(b, "type", "?") for b in r.content] or ["nessuno"]
+    u = getattr(r, "usage", None)
+    sys.stderr.write(
+        "  risposta troncata (max_tokens): blocchi %s, token in/out %s/%s,"
+        " strumenti finora %s\n"
+        % (tipi, getattr(u, "input_tokens", "?"),
+           getattr(u, "output_tokens", "?"), [t["tool"] for t in traccia]))
+
+
 def _json_from(text):
     """Rete di sicurezza per quando il modello risponde in prosa nonostante
     tutto, invece di chiamare presenta_risultato: prova comunque a salvare un
@@ -135,6 +164,7 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None,
              "Tipologia dichiarata dall'utente: %s.\nRisposte alle domande: %s.\n"
              "Ricava le quote e i parametri di costruzione." % (kind, json.dumps(answers or {}, ensure_ascii=False))}]
     traccia = []
+    troncati = 0
     system = ISTRUZIONI + "\n\n# Regole del progetto\n\n" + regole + "\n\n" + extra_system
     all_tools = TOOLS + [_conclude_tool(require_flowpack)]
 
@@ -151,11 +181,31 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None,
             traccia.append({"tool": finale.name, "input": finale.input, "output": "conclusione"})
             return finale.input, traccia
 
+        if r.stop_reason == "max_tokens":
+            # Il turno troncato non si puo' rimandare indietro cosi' com'e':
+            # se contiene un tool_use senza il suo tool_result la richiesta
+            # dopo fallisce. Quindi si butta e si chiede la conclusione al
+            # giro seguente, aggiungendo la richiesta al turno utente che c'e'
+            # gia' - due turni utente di fila non sono una conversazione
+            # valida. Le misure fatte restano: sono nella cronologia.
+            _log_troncamento(r, traccia)
+            msgs.pop()
+            if troncati >= MAX_TRONCAMENTI:
+                return {"errore": "risposta troncata a ogni tentativo",
+                        "stop_reason": "max_tokens",
+                        "strumenti_chiamati": [t["tool"] for t in traccia]}, traccia
+            troncati += 1
+            coda = msgs[-1]["content"]          # dopo la pop e' sempre utente
+            if isinstance(coda, list):
+                coda.append({"type": "text", "text": RIPRESA})
+            else:
+                msgs[-1]["content"] = coda + "\n\n" + RIPRESA
+            continue
+
         if r.stop_reason != "tool_use":
-            # rete di sicurezza: il modello ha risposto in prosa (o e' stato
-            # troncato) invece di chiamare presenta_risultato. stop_reason
-            # distingue i due casi nei log: "max_tokens" e' un troncamento,
-            # "end_turn" e' davvero prosa.
+            # rete di sicurezza: il modello ha risposto in prosa invece di
+            # chiamare presenta_risultato. Qui stop_reason e' "end_turn": il
+            # troncamento e' gestito sopra e non arriva fino a questo punto.
             testo = "".join(b.text for b in r.content if getattr(b, "type", "") == "text")
             risultato = _json_from(testo)
             if isinstance(risultato, dict) and "errore" in risultato:

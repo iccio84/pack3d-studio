@@ -7,6 +7,7 @@ costruiti a mano, come il vero SDK. Serve a fissare la forma delle richieste
 comportamento nei casi limite, che sono quelli che in produzione sono costati
 i commit 12f6fcb, 3828d57 e 82ebd6b.
 """
+import io
 import types
 import unittest
 from unittest import mock
@@ -111,12 +112,6 @@ class ReteDiSicurezza(unittest.TestCase):
         par, _ = agent.analyse("finto.pdf", "carton", client=c)
         self.assertEqual(par["famiglia"], "carton")
 
-    def test_troncamento_riporta_stop_reason(self):
-        c = ClienteFinto(Risposta([testo("stavo misurando quando")], "max_tokens"))
-        par, _ = agent.analyse("finto.pdf", "carton", client=c)
-        self.assertIn("errore", par)
-        self.assertEqual(par["stop_reason"], "max_tokens")
-
     def test_giro_a_vuoto_si_ferma(self):
         vero = agent.MAX_STEPS
         agent.MAX_STEPS = 3
@@ -129,6 +124,97 @@ class ReteDiSicurezza(unittest.TestCase):
             self.assertEqual(len(c.richieste), 3)
         finally:
             agent.MAX_STEPS = vero
+
+
+class Troncamento(unittest.TestCase):
+    """Su Render un'analisi e' morta con stop_reason "max_tokens", nessun
+    testo e tre strumenti gia' chiamati: le misure c'erano, la conclusione no,
+    e l'intera chiamata da 20-60 secondi e' finita in un 500. Un troncamento
+    deve costare un giro, non l'analisi."""
+
+    def ruoli(self, richiesta):
+        return [m["role"] for m in richiesta["messages"]]
+
+    def test_riprova_e_conclude(self):
+        c = ClienteFinto(Risposta([], "max_tokens"),
+                         Risposta([chiamata("presenta_risultato", CONCLUSIONE)]))
+        par, _ = agent.analyse("finto.pdf", "flowpack", client=c)
+        self.assertEqual(par, CONCLUSIONE)
+        self.assertEqual(len(c.richieste), 2)
+
+    def test_il_turno_troncato_non_torna_al_modello(self):
+        # un tool_use senza il suo tool_result fa fallire la richiesta dopo:
+        # il turno troncato va buttato, non rimandato indietro
+        c = ClienteFinto(
+            Risposta([chiamata("list_paths", {"limit": 4}, id="mozzo")],
+                     "max_tokens"),
+            Risposta([chiamata("presenta_risultato", CONCLUSIONE, id="b")]))
+        with senza_strumenti_veri():
+            par, tr = agent.analyse("finto.pdf", "flowpack", client=c)
+        self.assertEqual(par, CONCLUSIONE)
+        inviati = c.richieste[1]["messages"]
+        self.assertNotIn("assistant", self.ruoli(c.richieste[1]))
+        self.assertNotIn("mozzo", repr(inviati))
+        # e la misura mozzata non entra nella traccia: non e' mai stata fatta
+        self.assertNotIn("list_paths", [t["tool"] for t in tr])
+
+    def test_le_misure_gia_fatte_restano(self):
+        c = ClienteFinto(
+            Risposta([chiamata("list_paths", {"limit": 4}, id="a")]),
+            Risposta([], "max_tokens"),
+            Risposta([chiamata("presenta_risultato", CONCLUSIONE, id="b")]))
+        with senza_strumenti_veri():
+            par, tr = agent.analyse("finto.pdf", "flowpack", client=c)
+        self.assertEqual(par, CONCLUSIONE)
+        inviati = c.richieste[2]["messages"]
+        # 415.0 e' la misura finta: se sparisse, il modello ricomincerebbe
+        self.assertIn("415.0", repr(inviati))
+        # i ruoli devono alternarsi: la richiesta di concludere si attacca al
+        # turno utente che c'e' gia', non ne apre un secondo di fila
+        self.assertEqual(self.ruoli(c.richieste[2]),
+                         ["user", "assistant", "user"])
+        coda = inviati[-1]["content"]
+        self.assertEqual(coda[0]["type"], "tool_result")
+        self.assertEqual(coda[-1]["text"], agent.RIPRESA)
+
+    def test_troncamento_al_primo_giro_non_rompe_i_ruoli(self):
+        # qui il turno utente in coda e' il primo, che ha contenuto testuale
+        # invece di una lista di blocchi
+        c = ClienteFinto(Risposta([], "max_tokens"),
+                         Risposta([chiamata("presenta_risultato", CONCLUSIONE)]))
+        agent.analyse("finto.pdf", "flowpack", client=c)
+        self.assertEqual(self.ruoli(c.richieste[1]), ["user"])
+        self.assertIn(agent.RIPRESA, c.richieste[1]["messages"][0]["content"])
+
+    def test_se_si_tronca_sempre_si_arrende(self):
+        vero = agent.MAX_TRONCAMENTI
+        agent.MAX_TRONCAMENTI = 2
+        try:
+            c = ClienteFinto(*[Risposta([], "max_tokens") for _ in range(4)])
+            par, _ = agent.analyse("finto.pdf", "flowpack", client=c)
+            self.assertIn("troncata", par["errore"])
+            self.assertEqual(par["stop_reason"], "max_tokens")
+            # tre chiamate: l'originale piu' i due tentativi, non MAX_STEPS
+            self.assertEqual(len(c.richieste), 3)
+        finally:
+            agent.MAX_TRONCAMENTI = vero
+
+    def test_il_log_dice_cosa_c_era_nel_turno_perduto(self):
+        # con testo_grezzo vuoto i log di Render non dicevano niente: i tipi
+        # di blocco e i token spesi distinguono la prosa dal giro a vuoto
+        r = Risposta([chiamata("list_paths", {}, id="a")], "max_tokens")
+        r.usage = types.SimpleNamespace(input_tokens=12000, output_tokens=8000)
+        with mock.patch.object(agent.sys, "stderr", io.StringIO()) as err:
+            agent._log_troncamento(r, [{"tool": "analyze_flowpack"}])
+        riga = err.getvalue()
+        self.assertIn("tool_use", riga)
+        self.assertIn("8000", riga)
+        self.assertIn("analyze_flowpack", riga)
+
+    def test_il_log_regge_una_risposta_senza_blocchi(self):
+        with mock.patch.object(agent.sys, "stderr", io.StringIO()) as err:
+            agent._log_troncamento(Risposta([], "max_tokens"), [])
+        self.assertIn("nessuno", err.getvalue())
 
 
 class FormaDellaRichiesta(unittest.TestCase):

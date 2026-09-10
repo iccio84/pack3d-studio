@@ -162,6 +162,15 @@ FULFIL (morbido), e va ritarato sul prossimo flowpack di prova.
   Milch-Schnitte. Gli artwork risolti a mano stanno nel registro `CASI` dentro
   `server.py`, riconosciuti dalla firma della pagina; ogni nuovo flowpack
   risolto va aggiunto li'.
+- Il ripiego AI concludeva con un errore se la risposta del modello veniva
+  troncata a meta': le misure erano fatte, la conclusione no, e la chiamata da
+  20-60 secondi era buttata. Ora si richiede una conclusione compatta, due
+  volte (`PACK3D_MAX_TRONCAMENTI`), prima di arrendersi. Il tetto sui token e'
+  `PACK3D_MAX_TOKENS`; nei log il troncamento stampa i tipi di blocco e i
+  token spesi, che dicono se il modello scriveva prosa o girava a vuoto.
+- La pagina servita da `/` chiama solo `/api/analyze`, quello deterministico,
+  quindi non passa mai la geometria a `/api/build`: il riuso dell'analisi
+  serve al frontend in `frontend/`, non a lei.
 - Una costruzione impegna un thread per 3-15 secondi. Per uso condiviso da piu'
   persone in contemporanea serve una coda, che oggi non c'e'.
 - Limite di caricamento 60 MB per PDF.
