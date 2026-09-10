@@ -128,7 +128,8 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None,
     regole = ""
     p = regole_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "REGOLE.md")
     if os.path.exists(p):
-        regole = open(p, encoding="utf-8").read()
+        with open(p, encoding="utf-8") as fh:
+            regole = fh.read()
 
     msgs = [{"role": "user", "content":
              "Tipologia dichiarata dall'utente: %s.\nRisposte alle domande: %s.\n"

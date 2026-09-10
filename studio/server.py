@@ -22,8 +22,6 @@ import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "pack3d"))
-sys.path.insert(0, os.path.join(HERE, "pack3d"))
 
 try:
     import numpy as np
@@ -193,14 +191,11 @@ def _flowpack_from_case(case):
 # ANTHROPIC_API_KEY, altrimenti il ripiego fallisce come se non ci fosse.
 AI_FALLBACK = os.environ.get("PACK3D_AI_FALLBACK") == "1"
 
-FLOWPACK_FALLBACK_ISTRUZIONI = """
-Il solutore automatico non ha riconosciuto l'impaginato di questo flowpack:
-tocca a te ricavare la geometria dagli strumenti di misura. E' normale che
-analyze_flowpack fallisca con lo stesso errore del solutore automatico, e'
-proprio per questo che sei stata interpellata: non ripeterlo piu' di una
-volta, usa invece list_paths, measure_region e fit_sector per misurare tu le
-fasce del nastro.
-
+# Descrive il campo "flowpack" di presenta_risultato e le coerenze che il
+# codice verifica comunque. Serve a ogni analisi che deve produrre una
+# geometria costruibile, non solo al ripiego: senza questa parte
+# /api/analyze-ai restituisce un resoconto che /api/build non sa usare.
+FLOWPACK_GEOMETRIA_ISTRUZIONI = """
 Lo strumento di chiusura presenta_risultato qui richiede anche il campo
 "flowpack": fronte, spessore, lunghezza del corpo, sporgenza e altezza delle
 pinne, i due tratti di retro, larghezza e passo del nastro, e l'origine di
@@ -218,12 +213,28 @@ restituisci sempre la tua misura migliore e usa "avvisi" per segnalare dove
 sei incerta, invece di lasciare un dubbio senza numeri.
 """
 
+# Preambolo del solo ripiego: qui i solutori automatici hanno gia' fallito e
+# il modello va avvertito che ritentarli non serve.
+FLOWPACK_FALLBACK_ISTRUZIONI = """
+Il solutore automatico non ha riconosciuto l'impaginato di questo flowpack:
+tocca a te ricavare la geometria dagli strumenti di misura. E' normale che
+analyze_flowpack fallisca con lo stesso errore del solutore automatico, e'
+proprio per questo che sei stata interpellata: non ripeterlo piu' di una
+volta, usa invece list_paths, measure_region e fit_sector per misurare tu le
+fasce del nastro.
+""" + FLOWPACK_GEOMETRIA_ISTRUZIONI
+
 
 def _flowpack_from_ai_json(j):
-    """Valida e converte la geometria proposta dall'AI in un Flowpack.
+    """Valida e converte in un Flowpack una geometria non misurata in-process.
 
     Le stesse coerenze che in flowpack.analyze() restano un avviso qui sono un
-    rigetto secco: un numero non misurato va verificato piu' severamente."""
+    rigetto secco: un numero non misurato va verificato piu' severamente.
+
+    Vale per la geometria che torna dall'AI e per quella che /api/build riceve
+    dal client: la seconda arriva dal browser, quindi e' input non fidato e
+    passa dallo stesso rifiuto, non viene creduta perche' "e' la nostra
+    analisi"."""
     req = ("W", "T", "L", "end_fin", "side_fin", "back_a", "back_b",
            "web_mm", "step_mm", "sheet_x0_mm", "sheet_y0_mm")
     try:
@@ -275,14 +286,21 @@ def _flowpack_from_ai(pdf, teeth, soft):
     return _flowpack_from_ai_json(fj)
 
 
-def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
+def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
+                   fp_client=None):
+    """`fp_client`: geometria gia' validata da _flowpack_from_ai_json.
+
+    Va provata prima del ripiego AI, che costa una chiamata di 20-60 secondi,
+    ma dopo i solutori automatici: quando quelli funzionano misurano, e una
+    misura batte sempre un numero arrivato dal client."""
     par = GONFIORE.get(soft, GONFIORE["medio"])
     nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (150, 260, 200, 1700)
-    ai_used = False
+    ai_used = client_geom = False
     if case:
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-        tmp.close()
-        clean = strip_separations(pdf, tmp.name, case["drop_seps"])
+        # il PDF pulito sta accanto al GLB, dentro la cartella temporanea della
+        # richiesta: con NamedTemporaryFile(delete=False) restava sul disco per
+        # sempre, uno per costruzione
+        clean = strip_separations(pdf, out_glb + ".clean.pdf", case["drop_seps"])
         fp = _flowpack_from_case(case)
         fin_open = case["fin_open"]
     else:
@@ -293,8 +311,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
             try:
                 fp = fpk.analyze(pdf)          # solutore storico come ripiego
             except Exception:
-                fp = _flowpack_from_ai(pdf, teeth, soft)   # ripiego AI, se abilitato
-                ai_used = True
+                if fp_client is not None:
+                    fp = fp_client             # gia' misurata da /api/analyze-ai
+                    client_geom = True
+                else:
+                    fp = _flowpack_from_ai(pdf, teeth, soft)  # se abilitato
+                    ai_used = True
         fin_open = 0.948 * fp.girth / 2.0
 
     _, dsec, SW = soft_section_fit(fp, par["soft_r"], par["soft_n"])
@@ -328,6 +350,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     if ai_used:
         meta.append("geometria stimata dall'AI: impaginato non riconosciuto dai "
                     "solutori automatici")
+    if client_geom:
+        meta.append("geometria dall'analisi AI, validata sulle coerenze "
+                    "fisiche: impaginato non riconosciuto dai solutori "
+                    "automatici")
     return meta
 
 
@@ -335,6 +361,12 @@ def analyze_pdf(pdf, kind=None):
     """`kind` arriva dall'utente: la tipologia si dichiara, non si indovina.
     Il riconoscimento automatico sbaglia (il solutore astuccio risolve anche
     certi flowpack) e sbagliare qui compromette tutto il resto."""
+    if kind == "cup":
+        # cup.py misura il settore anulare, ma un generatore di mesh conica non
+        # esiste ancora: senza questa guardia la richiesta scivola nei solutori
+        # flowpack e torna un modello di un'altra famiglia come se fosse buono
+        raise ValueError("Coppa conica: analisi disponibile, costruzione non "
+                         "ancora supportata")
     case = CASI.get(_sig(pdf))
     if case and kind in (None, "flowpack"):
         return dict(kind="flowpack", title=case["name"],
@@ -388,15 +420,26 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
+        # senza questo, cross-origin il browser non vede X-Pack3d-Meta: la
+        # whitelist predefinita della fetch non comprende gli header custom
+        self.send_header("Access-Control-Expose-Headers", "X-Pack3d-Meta")
         self.send_header("Access-Control-Max-Age", "86400")
 
-    def _send(self, code, body, ctype="application/json", filename=None):
+    def _send(self, code, body, ctype="application/json", filename=None,
+              meta=None):
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if meta:
+            # il corpo e' il GLB, quindi il resoconto della costruzione viaggia
+            # in un header. ensure_ascii non e' cosmetico: http.server codifica
+            # gli header in latin-1, quindi un carattere fuori da quel set
+            # (un'apostrofo tipografico, un trattino lungo) farebbe fallire la
+            # risposta, e un accento resterebbe ambiguo per il client.
+            self.send_header("X-Pack3d-Meta", json.dumps(meta, ensure_ascii=True))
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -428,7 +471,12 @@ class Handler(BaseHTTPRequestHandler):
             data = self.rfile.read(n)
             if not data.startswith(b"%PDF"):
                 return self._send(400, "Il file caricato non e' un PDF")
-            opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            try:
+                opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            except ValueError:
+                return self._send(400, "Header X-Pack3d: JSON non valido")
+            if not isinstance(opts, dict):
+                return self._send(400, "Header X-Pack3d: atteso un oggetto JSON")
             with tempfile.TemporaryDirectory() as td:
                 pdf = os.path.join(td, "in.pdf")
                 with open(pdf, "wb") as fh:
@@ -438,12 +486,37 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, "Tipologia non ancora supportata")
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
-                    par, tr = agent.analyse(pdf, kind, opts)
+                    # sui flowpack l'analisi deve chiudere con una geometria
+                    # costruibile, non con un resoconto: e' quella che
+                    # /api/build riusa invece di richiamare l'AI da capo
+                    want_fp = kind == "flowpack"
+                    par, tr = agent.analyse(
+                        pdf, kind, opts, require_flowpack=want_fp,
+                        extra_system=FLOWPACK_GEOMETRIA_ISTRUZIONI if want_fp else "")
+                    if not isinstance(par, dict):
+                        # la rete di sicurezza di _json_from puo' restituire
+                        # anche una lista: senza questo il 200 diventa un 500
+                        par = {"risposta": par}
                     par["_chiamate"] = [t["tool"] for t in tr]
                     return self._send(200, json.dumps(par, ensure_ascii=False))
                 if self.path.startswith("/api/analyze"):
                     return self._send(200, json.dumps(analyze_pdf(pdf, kind)))
                 if self.path.startswith("/api/build"):
+                    try:
+                        teeth = int(opts.get("teeth", 20))
+                    except (TypeError, ValueError):
+                        return self._send(400, "params: 'teeth' deve essere un "
+                                               "numero intero")
+                    # geometria proposta dal client (l'esito di /api/analyze-ai):
+                    # e' input non fidato, quindi passa dallo stesso gate che
+                    # rifiuta una geometria AI incoerente
+                    fp_client = None
+                    geom = opts.get("params")
+                    if isinstance(geom, dict) and isinstance(geom.get("flowpack"), dict):
+                        try:
+                            fp_client = _flowpack_from_ai_json(geom["flowpack"])
+                        except ValueError as e:
+                            return self._send(400, "params.flowpack: %s" % e)
                     if not _slots.acquire(blocking=False):
                         return self._send(503, "Server occupato: riprova fra qualche "
                                                "secondo")
@@ -458,23 +531,36 @@ class Handler(BaseHTTPRequestHandler):
                         pack_kind = kind if kind in ("carton", "flowpack") \
                             else analyze_pdf(pdf, kind)["kind"]
                         if pack_kind == "carton":
-                            build_carton(pdf, out, q)
+                            meta = build_carton(pdf, out, q)
                         else:
-                            build_flowpack(pdf, out, int(opts.get("teeth", 20)),
-                                           str(opts.get("soft", "medio")), case, q)
+                            meta = build_flowpack(pdf, out, teeth,
+                                                  str(opts.get("soft", "medio")),
+                                                  case, q, fp_client=fp_client)
                     except Exception:
                         _slots.release()
                         raise
                     try:
                         with open(out, "rb") as fh:
                             return self._send(200, fh.read(), "model/gltf-binary",
-                                              filename="modello.glb")
+                                              filename="modello.glb", meta=meta)
                     finally:
                         _slots.release()
             return self._send(404, "endpoint sconosciuto")
-        except Exception as e:
+        except ValueError as e:
+            # errori di dominio: sono messaggi scritti per l'utente
+            # ("impaginato non coperto", "pannelli non risolvibili"), quindi
+            # vanno restituiti come 400 e non come guasto del server. Una riga
+            # di log basta: non c'e' niente da diagnosticare in uno stack.
+            sys.stderr.write("  400 %s: %s\n" % (self.path, e))
+            return self._send(400, str(e) or "Richiesta non valida")
+        except Exception:
+            # tutto il resto e' un guasto: il dettaglio sta nel log, al client
+            # va solo il riferimento per ritrovarlo
+            rid = os.urandom(4).hex()
+            sys.stderr.write("  errore interno rif. %s\n" % rid)
             traceback.print_exc()
-            return self._send(500, "%s: %s" % (type(e).__name__, e))
+            return self._send(500, "Errore interno durante l'elaborazione "
+                                   "(rif. %s)" % rid)
 
 
 MAX_UPLOAD = 60 * 1024 * 1024
