@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { analyseAI, build, Kind, Soft, Analisi } from "./pack3d";
+import { analyseAI, avvisoAI, build, Kind, Soft, Analisi } from "./pack3d";
 
 export function Pannello({ onModel }: { onModel: (url: string) => void }) {
   const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
@@ -8,12 +8,13 @@ export function Pannello({ onModel }: { onModel: (url: string) => void }) {
   const [soft, setSoft] = useState<Soft>("medio");
   const [stato, setStato] = useState("");
   const [info, setInfo] = useState<Analisi | null>(null);
+  const [meta, setMeta] = useState<string[]>([]);
 
   async function scegli(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     setPdf(await f.arrayBuffer());
-    setKind(null); setInfo(null);
+    setKind(null); setInfo(null); setMeta([]);
     setStato("Indica il tipo di pack");        // prima domanda su ogni PDF
   }
 
@@ -29,9 +30,21 @@ export function Pannello({ onModel }: { onModel: (url: string) => void }) {
       setStato("Analisi in corso, 20-60 secondi…");
       const a = await analyseAI(pdf, opts.kind, opts);
       setInfo(a);
+      if (opts.kind === "cup") {
+        // il settore anulare si misura, ma il generatore di mesh conica non
+        // esiste ancora: meglio fermarsi con le quote che consegnare il
+        // modello di un'altra famiglia
+        setStato("Coppa conica: quote misurate, costruzione non ancora supportata");
+        return;
+      }
       setStato("Costruzione del modello…");
-      onModel(await build(pdf, { ...opts, params: a as object }));
-      setStato("Modello pronto");
+      // `params` porta la geometria gia' misurata: senza, il backend
+      // rifarebbe l'analisi da zero, con una seconda chiamata a pagamento
+      const m = await build(pdf, { ...opts, params: a });
+      setMeta(m.meta);
+      onModel(m.url);
+      // una geometria stimata non deve passare per una misurata
+      setStato(avvisoAI(m.meta) ?? "Modello pronto");
     } catch (err: any) {
       setStato(String(err.message ?? err).slice(0, 200));
     }
@@ -77,6 +90,16 @@ export function Pannello({ onModel }: { onModel: (url: string) => void }) {
           {info.pulizia && <p>Pulizia: livello {info.pulizia.livello} — {info.pulizia.metodo}</p>}
           {info.avvisi?.map((a, i) => <p key={i} className="text-amber-700">{a}</p>)}
         </div>
+      )}
+
+      {/* resoconto della costruzione: quote effettive, avvisi di coerenza e
+          l'avvertenza sulla geometria stimata */}
+      {meta.length > 0 && (
+        <ul className="text-sm space-y-1 opacity-80">
+          {meta.map((t, i) => (
+            <li key={i} className={/^geometria .*\bAI\b/.test(t) ? "text-amber-700" : ""}>{t}</li>
+          ))}
+        </ul>
       )}
     </div>
   );
