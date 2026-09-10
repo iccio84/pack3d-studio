@@ -267,8 +267,15 @@ const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagi
 
 function setStatus(text, cls){ statusEl.textContent = text; statusEl.className = cls || ''; }
 function setMeta(items){
-  document.getElementById('meta').innerHTML =
-    (items||[]).map(t => '<span>'+t+'</span>').join('');
+  // textContent e non innerHTML: il resoconto arriva dal backend e un giorno
+  // potra' contenere testo di provenienza non controllata
+  const box = document.getElementById('meta');
+  box.textContent = '';
+  for (const t of items || []){
+    const s = document.createElement('span');
+    s.textContent = t;
+    box.appendChild(s);
+  }
 }
 
 /* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in
@@ -319,10 +326,20 @@ async function analyze(buf, opts){
 
 async function build(buf, name, opts){
   setStatus('Costruzione del modello…','busy');
-  glbBlob = await (await post('/api/build', buf, opts)).blob();
+  const r = await post('/api/build', buf, opts);
+  /* Il corpo e' il GLB, quindi il resoconto della costruzione arriva in un
+     header: quote, avvisi di coerenza e — quando c'e' — l'avvertenza che la
+     geometria e' stimata e non misurata. Senza leggerlo, un modello stimato e
+     uno misurato sono indistinguibili. */
+  let meta = null;
+  try{ meta = JSON.parse(r.headers.get('X-Pack3d-Meta') || 'null'); }
+  catch(e){ /* header assente o illeggibile: il modello resta valido */ }
+  glbBlob = await r.blob();
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   show(await glbBlob.arrayBuffer());
   dlBtn.disabled = false;
+  if (Array.isArray(meta) && meta.length) setMeta(meta);
+  return meta;
 }
 
 async function handle(file){
@@ -343,6 +360,15 @@ async function handle(file){
   setStatus('Indica il tipo di pack','');
 }
 
+/* Una geometria stimata dall'AI non deve passare per una misurata: se il
+   resoconto la segnala, l'avvertenza va nello stato e non in una pastiglia
+   in mezzo alle altre. */
+function esito(meta, pronto){
+  const ai = (meta || []).find(t => /^geometria .*\bAI\b/.test(t));
+  if (ai) setStatus(ai, 'err');
+  else setStatus(pronto, '');
+}
+
 async function withKind(kind){
   packtype.classList.remove('on');
   if (kind === 'altro'){ setStatus('Tipologia non ancora supportata','err'); return; }
@@ -355,8 +381,8 @@ async function withKind(kind){
       setStatus('Flowpack: digita i dentini e scegli il gonfiore','');
       return;
     }
-    await build(pending.buf, pending.name, {kind});
-    setStatus(info.title || 'Modello pronto','');
+    esito(await build(pending.buf, pending.name, {kind}),
+          info.title || 'Modello pronto');
   }catch(err){
     const m = String(err.message || err);
     setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
@@ -377,10 +403,10 @@ document.getElementById('go').onclick = async () => {
   }
   params.classList.remove('on');
   try{
-    await build(pending.buf, pending.name,
-                {kind:'flowpack', teeth: document.getElementById('teeth').value,
-                 soft:  document.getElementById('soft').value});
-    setStatus('Modello pronto','');
+    esito(await build(pending.buf, pending.name,
+                      {kind:'flowpack', teeth: parseInt(t, 10),
+                       soft:  document.getElementById('soft').value}),
+          'Modello pronto');
   }catch(err){ setStatus(String(err.message||err).slice(0,200),'err'); }
 };
 dlBtn.onclick = () => {
