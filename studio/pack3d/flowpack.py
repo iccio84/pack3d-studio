@@ -545,15 +545,9 @@ def solve_bands(web_mm, folds_mm, tol=1.5):
     return best
 
 
-def analyze_auto(pdf_path, page_no: int = 0):
-    """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
-
-    Copre gli impaginati in cui il disegno tecnico traccia le cordonature; per
-    gli artwork che non rientrano resta il registro dei casi calibrati.
-    """
+def _cordonature(pdf_path, page_no: int = 0):
+    """Le cordonature del disegno tecnico: orizzontali e verticali, in punti."""
     import pdfplumber
-    import numpy as np
-    import pypdfium2 as pdfium
     from .dieline import _segments, _technical_pens, _cluster
 
     with pdfplumber.open(pdf_path) as pdf:
@@ -567,7 +561,40 @@ def analyze_auto(pdf_path, page_no: int = 0):
         vs = [c for c, w in _cluster(V, 3.0) if w > 250]
     if len(hs) < 4 or len(vs) < 2:
         raise ValueError("cordonature non riconosciute: impaginato non coperto")
+    return hs, vs
 
+
+def misura_nastro(pdf_path, page_no: int = 0):
+    """Nastro e passo dalle sole cordonature, senza risolvere le fasce.
+
+    E' la meta' deterministica di analyze_auto: due sottrazioni fra le
+    cordonature estreme, nessuna stima. Regge anche sugli impaginati che
+    analyze_auto non sa spezzare in fasce - ed e' li' che serve, perche'
+    resta l'unica misura certa contro cui confrontare una geometria proposta
+    dall'AI. Prima veniva calcolata, usata per comporre un messaggio d'errore
+    e buttata.
+
+    None quando le cordonature non si vedono: in quel caso non c'e' niente da
+    opporre, e la stima passa senza questo controllo.
+    """
+    try:
+        hs, vs = _cordonature(pdf_path, page_no)
+    except Exception:
+        return None
+    return {"nastro_mm": round((max(hs) - min(hs)) * PT2MM, 1),
+            "passo_mm": round((max(vs) - min(vs)) * PT2MM, 1)}
+
+
+def analyze_auto(pdf_path, page_no: int = 0):
+    """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
+
+    Copre gli impaginati in cui il disegno tecnico traccia le cordonature; per
+    gli artwork che non rientrano resta il registro dei casi calibrati.
+    """
+    import numpy as np
+    import pypdfium2 as pdfium
+
+    hs, vs = _cordonature(pdf_path, page_no)
     y0, y1 = min(hs), max(hs)
     x0, x1 = min(vs), max(vs)
     web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM

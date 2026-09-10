@@ -9,6 +9,7 @@ Qui **non** si verifica geometria: per quella servono i PDF di riferimento in
 finto serve solo a far passare il controllo `%PDF` e ad arrivare al punto che
 si vuole provare.
 """
+import io
 import json
 import threading
 import unittest
@@ -133,6 +134,100 @@ class ResocontoNegliHeader(unittest.TestCase):
     def test_nessun_header_senza_meta(self):
         h = self._headers_di(None)
         self.assertNotIn("X-Pack3d-Meta", h)
+
+
+KB_DARK_T2 = {"W": 17.4, "T": 6.1, "L": 57.6, "end_fin": 3.1,
+              "side_fin": 5.7, "back_a": 9.7, "back_b": 7.7,
+              "web_mm": 58.3, "step_mm": 63.8,
+              "sheet_x0_mm": 146.4, "sheet_y0_mm": 70.3}
+
+
+class ContrastoConLeCordonature(unittest.TestCase):
+    """Le tre coerenze guardano dentro la geometria proposta, e una
+    geometria inventata con cura le supera. Su KB_Dark_T2 l'AI ha risposto
+    nastro 58.3 mm con le somme che tornavano a un decimo mentre le
+    cordonature ne dicevano 250.6: e' uscito un GLB, con un 200, e la sola
+    avvertenza che la geometria era stimata. Il nastro misurato non e' una
+    stima - sono due cordonature sottratte - e dove esiste comanda lui."""
+
+    def verifica(self, fj, misura):
+        with mock.patch.object(server.fpk, "misura_nastro",
+                               return_value=misura):
+            server._verifica_contro_le_cordonature("finto.pdf", fj)
+
+    def test_il_caso_che_e_costato_un_modello_sbagliato(self):
+        with self.assertRaises(ValueError) as ctx:
+            self.verifica(KB_DARK_T2,
+                          {"nastro_mm": 250.6, "passo_mm": 148.0})
+        msg = str(ctx.exception)
+        self.assertIn("cordonature", msg)
+        self.assertIn("nastro", msg)
+        self.assertIn("58.3", msg)
+        self.assertIn("250.6", msg)
+
+    def test_una_stima_che_torna_passa(self):
+        self.verifica(GEOM_OK, {"nastro_mm": 141.0, "passo_mm": 142.0})
+
+    def test_la_tolleranza_e_la_stessa_del_gate(self):
+        # 141 -> 4,23 mm: 143 dentro, 148 fuori, come _flowpack_from_ai_json
+        self.verifica(GEOM_OK, {"nastro_mm": 143.0, "passo_mm": 142.0})
+        with self.assertRaises(ValueError):
+            self.verifica(GEOM_OK, {"nastro_mm": 148.0, "passo_mm": 142.0})
+
+    def test_il_passo_non_e_vincolato(self):
+        """Il passo che esce dalle stesse cordonature non e' verificato: su
+        KB_Dark_T2 vale 400.9 mm, che nessuna geometria plausibile di quel
+        pacco raggiunge. Vincolarci sopra scarterebbe geometrie buone, che e'
+        il danno che questo controllo esiste per evitare. Quando si capira'
+        cosa misura davvero, questa prova va girata."""
+        self.verifica(GEOM_OK, {"nastro_mm": 141.0, "passo_mm": 400.9})
+
+    def test_senza_cordonature_non_c_e_niente_da_opporre(self):
+        """Rifiutare ogni impaginato privo di disegno tecnico toglierebbe
+        al ripiego l'unico caso in cui serve davvero."""
+        self.verifica(KB_DARK_T2, None)
+
+
+class GeometriaStimataNelLog(unittest.TestCase):
+    """Quando il ripiego AI riesce, sul percorso di costruzione i suoi
+    numeri non arrivano da nessuna parte: al client va un GLB, e l'header
+    dice solo che la geometria e' stimata. E' gia' successo di doverli
+    sapere e di non poterli sapere se non ripagando la chiamata."""
+
+    def _ripiego(self, par):
+        import agent
+        cattura = io.StringIO()
+        with mock.patch.object(agent, "analyse",
+                               return_value=(par, [{"tool": "list_paths"}])), \
+                mock.patch.object(server, "AI_FALLBACK", True), \
+                mock.patch.dict(server.os.environ, {"ANTHROPIC_API_KEY": "x"}), \
+                mock.patch.object(server.sys, "stderr", cattura):
+            try:
+                server._flowpack_from_ai("finto.pdf", 20, "morbido")
+            except ValueError:
+                pass
+        return cattura.getvalue()
+
+    def test_i_numeri_stimati_finiscono_nel_log(self):
+        out = self._ripiego({"flowpack": dict(GEOM_OK)})
+        self.assertIn("geometria stimata", out)
+        for atteso in ("36.0", "19.5", "141.0", "list_paths"):
+            self.assertIn(atteso, out)
+
+    def test_il_log_mostra_il_margine_delle_coerenze(self):
+        """Non basta sapere che il gate e' passato: una geometria coerente
+        con se stessa puo' non essere quella dell'artwork, e il margine e'
+        l'unico indizio che resta."""
+        out = self._ripiego({"flowpack": dict(GEOM_OK)})
+        # 2*(36+19.5) = 111.0, piu 2*15 = 141.0, che e' il nastro
+        self.assertIn("perimetro 111.0 + falde 30.0 = 141.0 contro nastro 141.0",
+                      out)
+        self.assertIn("corpo 116.0 + pinne 26.0 = 142.0 contro passo 142.0", out)
+
+    def test_niente_log_se_il_ripiego_non_produce_geometria(self):
+        out = self._ripiego({"errore": "risposta troncata"})
+        self.assertNotIn("geometria stimata", out)
+        self.assertIn("senza 'flowpack' utilizzabile", out)
 
 
 class LivelloHttp(unittest.TestCase):
