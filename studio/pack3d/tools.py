@@ -115,7 +115,20 @@ def analyze_flowpack(pdf):
     try:
         fp = fpk.analyze_auto(pdf)
     except Exception as e:
-        return {"errore": str(e)[:160]}
+        # il nastro e il passo si misurano sulle sole cordonature e restano
+        # validi anche quando le fasce non si risolvono. Prima finivano dentro
+        # la frase dell'errore: su KB_Dark_T2 il modello ha letto "nastro
+        # 250.6 mm" e ha comunque risposto 58.3. Consegnarli come campi non
+        # garantisce che li usi - per quello c'e' il controllo in server.py -
+        # ma toglie l'alibi che fossero sepolti nella prosa
+        out = {"errore": str(e)[:160]}
+        m = fpk.misura_nastro(pdf)
+        if m:
+            out.update(m)
+            out["vincolo"] = ("nastro e passo qui sopra sono misurati sulle"
+                              " cordonature: la geometria che proponi deve"
+                              " tornare con questi, non con altri")
+        return out
     return dict(nastro_mm=fp.web_mm, passo_mm=fp.step_mm,
                 fronte=fp.W, spessore=fp.T, corpo=fp.L,
                 pinna_testa=fp.end_fin, falda_longitudinale=fp.side_fin,

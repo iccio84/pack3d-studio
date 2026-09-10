@@ -180,6 +180,20 @@ FULFIL (morbido), e va ritarato sul prossimo flowpack di prova.
   non arrivano da nessun'altra parte — al client va un GLB — e il margine con
   cui le coerenze passano e' l'unico indizio che quei numeri siano davvero
   quelli dell'artwork e non solo coerenti fra loro.
+- Le tre coerenze guardano dentro la geometria proposta, e una geometria
+  inventata con cura le supera: su KB_Dark_T2 l'AI ha risposto nastro 58,3 mm
+  con le somme che tornavano a un decimo, mentre le cordonature ne dicevano
+  250,6, ed e' uscito un GLB con un `200`. Ora `misura_nastro` ricava il
+  nastro dalle sole cordonature — due sottrazioni, nessuna stima — e una
+  geometria che lo contraddice oltre il 3% viene rifiutata con un `400`. Il
+  numero c'era gia': veniva calcolato, usato per comporre un messaggio
+  d'errore e buttato.
+- Il vincolo copre il nastro, non il passo. Il nastro e' verificato sugli
+  artwork veri: 250,6 su KB_Dark_T2, 144,0 su Milch-Schnitte, 415,0 su Kinder
+  Bueno Dark, cioe' le quote attese. Il passo che esce dalle stesse
+  cordonature no — su KB_Dark_T2 da' 400,9 mm, che nessuna geometria
+  plausibile di quel pacco raggiunge — quindi resta informativo finche' non si
+  capisce se fra le verticali estreme ci finisca piu' di una ripetizione.
 - La pagina servita da `/` chiama solo `/api/analyze`, quello deterministico,
   quindi non passa mai la geometria a `/api/build`: il riuso dell'analisi
   serve al frontend in `frontend/`, non a lei.

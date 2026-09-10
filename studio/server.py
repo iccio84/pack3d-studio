@@ -295,6 +295,43 @@ def _log_geometria_ai(fj, tr):
           file=sys.stderr)
 
 
+def _verifica_contro_le_cordonature(pdf, fj):
+    """La stima dell'AI contro l'unica misura certa che c'e'.
+
+    Le tre coerenze di _flowpack_from_ai_json guardano soltanto dentro la
+    geometria proposta, e una geometria inventata con cura le supera: su
+    KB_Dark_T2 l'AI ha risposto nastro 58.3 mm con le somme che tornavano a
+    un decimo di millimetro, mentre le cordonature ne dicevano 250.6, e il
+    modello sbagliato e' uscito con un 200. Il nastro misurato non e' una
+    stima: sono due cordonature sottratte. Dove esiste, comanda lui.
+
+    Senza cordonature riconoscibili non c'e' niente da opporre e la stima
+    passa: meglio di rifiutare tutti gli impaginati senza disegno tecnico.
+
+    Solo il nastro, non il passo. Il nastro e' verificato: 250.6 mm su
+    KB_Dark_T2, 144.0 su Milch-Schnitte e 415.0 su Kinder Bueno Dark, cioe'
+    esattamente le quote attese di quei tre artwork. Il passo che esce dalle
+    stesse cordonature no - su KB_Dark_T2 vale 400.9 mm, e nessuna geometria
+    plausibile di quel pacco ci arriva - probabilmente perche' fra le
+    cordonature verticali estreme finisce piu' di una ripetizione, o il
+    riquadro del disegno tecnico. Finche' non e' chiaro resta un dato
+    informativo: rifiutare su un numero che non si e' capito farebbe scartare
+    geometrie buone, che e' il danno che si sta cercando di evitare.
+    """
+    m = fpk.misura_nastro(pdf)
+    if not m:
+        return
+    misurato = m["nastro_mm"]
+    try:
+        stimato = float(fj.get("web_mm"))
+    except (TypeError, ValueError):
+        return
+    if abs(stimato - misurato) > max(1.0, misurato * 0.03):
+        raise ValueError(
+            "geometria AI in contrasto con le cordonature: nastro stimato"
+            " %.1f mm contro %.1f mm misurato" % (stimato, misurato))
+
+
 def _flowpack_from_ai(pdf, teeth, soft):
     if not AI_FALLBACK or not os.environ.get("ANTHROPIC_API_KEY"):
         raise ValueError("impaginato non coperto dal solutore automatico")
@@ -311,6 +348,7 @@ def _flowpack_from_ai(pdf, teeth, soft):
               file=sys.stderr)
         raise ValueError("l'AI non ha prodotto una geometria flowpack utilizzabile")
     _log_geometria_ai(fj, tr)
+    _verifica_contro_le_cordonature(pdf, fj)
     return _flowpack_from_ai_json(fj)
 
 

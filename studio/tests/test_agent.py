@@ -217,6 +217,33 @@ class Troncamento(unittest.TestCase):
         self.assertIn("nessuno", err.getvalue())
 
 
+class NastroConsegnatoAlModello(unittest.TestCase):
+    """analyze_flowpack falliva restituendo solo una frase. Il nastro c'era
+    dentro - "fasce non risolvibili: nastro 250.6 mm" - ma sepolto nella
+    prosa, e il modello ha risposto 58.3 lo stesso. Consegnarlo come campo
+    non garantisce che lo usi: garantisce che non possa non averlo visto."""
+
+    def strumento(self, misura):
+        from pack3d import tools
+        boom = ValueError("fasce non risolvibili: nastro 250.6 mm")
+        with mock.patch.object(tools.fpk, "analyze_auto", side_effect=boom), \
+                mock.patch.object(tools.fpk, "misura_nastro",
+                                  return_value=misura):
+            return tools.analyze_flowpack("finto.pdf")
+
+    def test_il_nastro_esce_come_campo_non_come_frase(self):
+        out = self.strumento({"nastro_mm": 250.6, "passo_mm": 148.0})
+        self.assertEqual(out["nastro_mm"], 250.6)
+        self.assertEqual(out["passo_mm"], 148.0)
+        self.assertIn("errore", out)
+        self.assertIn("cordonature", out["vincolo"])
+
+    def test_senza_cordonature_resta_solo_l_errore(self):
+        out = self.strumento(None)
+        self.assertIn("errore", out)
+        self.assertNotIn("nastro_mm", out)
+
+
 class FormaDellaRichiesta(unittest.TestCase):
     def test_il_budget_copre_ragionamento_e_risposta(self):
         """Il ragionamento e la risposta pescano dallo stesso max_tokens.
