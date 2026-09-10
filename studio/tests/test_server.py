@@ -15,6 +15,7 @@ import unittest
 import urllib.error
 import urllib.request
 from http.server import ThreadingHTTPServer
+from unittest import mock
 
 import server
 
@@ -152,7 +153,32 @@ class LivelloHttp(unittest.TestCase):
         with urllib.request.urlopen(
                 "http://127.0.0.1:%d/api/ping" % self.port) as r:
             self.assertEqual(r.status, 200)
-            self.assertTrue(json.loads(r.read())["ok"])
+            j = json.loads(r.read())
+        # `ok` e' quello su cui si basa l'auto-discovery: non deve cambiare
+        self.assertTrue(j["ok"])
+        # commit e branch dicono cosa sta servendo il processo: senza, un
+        # deploy dal branch sbagliato si confonde con una modifica rotta
+        self.assertIn("commit", j)
+        self.assertIn("branch", j)
+
+    def test_ping_riporta_il_commit_del_deploy(self):
+        with mock.patch.dict(server.os.environ,
+                             {"RENDER_GIT_COMMIT": "0e928ce9556cf9eb7961f65e",
+                              "RENDER_GIT_BRANCH": "claude/plumbing-gruppo-a"}):
+            with urllib.request.urlopen(
+                    "http://127.0.0.1:%d/api/ping" % self.port) as r:
+                j = json.loads(r.read())
+        # abbreviato: la firma intera non aggiunge nulla a un controllo a vista
+        self.assertEqual(j["commit"], "0e928ce9556c")
+        self.assertEqual(j["branch"], "claude/plumbing-gruppo-a")
+
+    def test_ping_senza_variabili_di_deploy(self):
+        with mock.patch.dict(server.os.environ, {}, clear=True):
+            with urllib.request.urlopen(
+                    "http://127.0.0.1:%d/api/ping" % self.port) as r:
+                j = json.loads(r.read())
+        self.assertEqual(j["commit"], "sconosciuto")
+        self.assertTrue(j["ok"])
 
     def test_interfaccia_servita(self):
         with urllib.request.urlopen("http://127.0.0.1:%d/" % self.port) as r:

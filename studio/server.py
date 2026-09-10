@@ -411,6 +411,19 @@ def analyze_pdf(pdf, kind=None):
 # --------------------------------------------------------------------------- #
 # http
 # --------------------------------------------------------------------------- #
+# Che cosa sta servendo questo processo. Senza, un deploy partito dal branch
+# sbagliato e' indistinguibile da una modifica che non funziona: si vede solo
+# la risposta vecchia. Render popola RENDER_GIT_*; altrove le due PACK3D_*
+# permettono di passarle a mano (`docker run -e PACK3D_COMMIT=$(git rev-parse HEAD)`).
+def _version():
+    commit = (os.environ.get("RENDER_GIT_COMMIT")
+              or os.environ.get("PACK3D_COMMIT") or "")
+    branch = (os.environ.get("RENDER_GIT_BRANCH")
+              or os.environ.get("PACK3D_BRANCH") or "")
+    return {"commit": commit[:12] or "sconosciuto",
+            "branch": branch or "sconosciuto"}
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         sys.stderr.write("  %s\n" % (fmt % a))
@@ -455,7 +468,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/api/ping"):
-            return self._send(200, json.dumps({"ok": True}))
+            # `ok` resta il primo campo e non cambia significato: e' quello su
+            # cui si basa l'auto-discovery del backend nell'interfaccia
+            return self._send(200, json.dumps(dict(ok=True, **_version())))
         path = os.path.join(HERE, "pack3d_studio.html")
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")

@@ -62,6 +62,31 @@ combinazione funziona.
 
 Si puo' anche trascinare un GLB gia' pronto per guardarlo senza backend.
 
+## Sapere cosa e' stato messo online
+
+```bash
+curl -s https://TUO-SERVIZIO.onrender.com/api/ping
+{"ok": true, "commit": "0e928ce9556c", "branch": "claude/plumbing-gruppo-a"}
+```
+
+`commit` e `branch` arrivano da `RENDER_GIT_COMMIT` e `RENDER_GIT_BRANCH`, che
+Render popola da solo. Altrove si passano a mano:
+
+```bash
+docker run -p 8000:8000 \
+  -e PACK3D_COMMIT=$(git rev-parse HEAD) \
+  -e PACK3D_BRANCH=$(git rev-parse --abbrev-ref HEAD) pack3d-studio
+```
+
+Senza, un deploy partito dal branch sbagliato e' indistinguibile da una
+modifica che non funziona: si vede solo la risposta vecchia. Il campo `ok`
+non cambia significato, e' quello su cui si basa l'auto-discovery
+dell'interfaccia.
+
+Il resto della configurazione (chiave API presente, ripiego AI attivo) **non**
+compare: l'endpoint e' pubblico, e dire a chi passa che le chiamate a
+pagamento sono attive e' un invito.
+
 ## Il resoconto della costruzione
 
 `POST /api/build` risponde col GLB nel corpo, quindi il resoconto viaggia
