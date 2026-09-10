@@ -16,11 +16,18 @@ from pack3d.tools import TOOLS, RUN
 
 MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-5")
 MAX_STEPS = int(os.environ.get("PACK3D_MAX_STEPS", "16"))
-# una conclusione con molte misure e avvisi articolati puo' superare i 4000
-# token di prima: con una cronologia lunga (analisi a fondo, piu' candidati
-# confrontati) il rischio e' un troncamento a meta' di presenta_risultato.
-# Alzare il tetto riduce il caso, non lo elimina: vedi MAX_TRONCAMENTI
-MAX_TOKENS = int(os.environ.get("PACK3D_MAX_TOKENS", "8000"))
+# max_tokens e' un budget solo, diviso fra ragionamento e risposta. Al primo
+# collaudo vero il log ha detto blocchi ['thinking'] con 8000/8000 token: il
+# modello aveva speso tutto a ragionare e non gliene restava per chiamare
+# presenta_risultato. Il ragionamento e' adattivo e attivo di default su
+# questo modello, quindi il tetto va tenuto sopra a quanto chiede da solo: se
+# il log torna a dire 'thinking' col budget esaurito, alzarlo ancora.
+# Alzarlo riduce il caso, non lo elimina: vedi MAX_TRONCAMENTI
+MAX_TOKENS = int(os.environ.get("PACK3D_MAX_TOKENS", "24000"))
+# con un tetto alto l'SDK rifiuta da solo una richiesta non-streaming che
+# stima possa sforare i dieci minuti. Un timeout esplicito disattiva quella
+# stima e lascia il limite vero: quanto il chiamante e' disposto ad aspettare
+TIMEOUT = float(os.environ.get("PACK3D_TIMEOUT", "600"))
 # un troncamento non deve costare l'intera analisi: si riprova chiedendo una
 # conclusione compatta. Due volte basta - se si tronca ancora il modello sta
 # girando a vuoto, e insistere costa solo un'altra chiamata da 20-60 secondi
@@ -170,7 +177,7 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None,
 
     for _ in range(MAX_STEPS):
         r = client.messages.create(
-            model=MODEL, max_tokens=MAX_TOKENS,
+            model=MODEL, max_tokens=MAX_TOKENS, timeout=TIMEOUT,
             system=system,
             tools=all_tools, messages=msgs)
         msgs.append({"role": "assistant", "content": r.content})

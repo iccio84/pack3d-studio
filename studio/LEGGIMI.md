@@ -165,9 +165,21 @@ FULFIL (morbido), e va ritarato sul prossimo flowpack di prova.
 - Il ripiego AI concludeva con un errore se la risposta del modello veniva
   troncata a meta': le misure erano fatte, la conclusione no, e la chiamata da
   20-60 secondi era buttata. Ora si richiede una conclusione compatta, due
-  volte (`PACK3D_MAX_TRONCAMENTI`), prima di arrendersi. Il tetto sui token e'
-  `PACK3D_MAX_TOKENS`; nei log il troncamento stampa i tipi di blocco e i
-  token spesi, che dicono se il modello scriveva prosa o girava a vuoto.
+  volte (`PACK3D_MAX_TRONCAMENTI`), prima di arrendersi. Sul campo il recupero
+  ha funzionato: due troncamenti, due modelli costruiti.
+- Il troncamento non veniva dalla risposta ma dal **ragionamento**. Il log ha
+  detto `blocchi ['thinking']` con 8000/8000 token spesi: `max_tokens` e' un
+  budget solo per ragionamento e risposta, e su questo modello il ragionamento
+  e' adattivo e attivo di default, quindi si era preso tutto. Il tetto
+  (`PACK3D_MAX_TOKENS`) e' ora 24000, con un timeout esplicito
+  (`PACK3D_TIMEOUT`) senza il quale l'SDK rifiuterebbe da solo una richiesta
+  non-streaming cosi' capiente. Il numero va verificato sul log, non dato per
+  buono: se torna a comparire `thinking` col budget esaurito, va alzato ancora.
+- Quando il ripiego riesce, i numeri stimati finiscono nel log del server
+  insieme alle due somme di controllo del gate. Sul percorso di costruzione
+  non arrivano da nessun'altra parte — al client va un GLB — e il margine con
+  cui le coerenze passano e' l'unico indizio che quei numeri siano davvero
+  quelli dell'artwork e non solo coerenti fra loro.
 - La pagina servita da `/` chiama solo `/api/analyze`, quello deterministico,
   quindi non passa mai la geometria a `/api/build`: il riuso dell'analisi
   serve al frontend in `frontend/`, non a lei.

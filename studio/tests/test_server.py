@@ -9,6 +9,7 @@ Qui **non** si verifica geometria: per quella servono i PDF di riferimento in
 finto serve solo a far passare il controllo `%PDF` e ad arrivare al punto che
 si vuole provare.
 """
+import io
 import json
 import threading
 import unittest
@@ -133,6 +134,48 @@ class ResocontoNegliHeader(unittest.TestCase):
     def test_nessun_header_senza_meta(self):
         h = self._headers_di(None)
         self.assertNotIn("X-Pack3d-Meta", h)
+
+
+class GeometriaStimataNelLog(unittest.TestCase):
+    """Quando il ripiego AI riesce, sul percorso di costruzione i suoi
+    numeri non arrivano da nessuna parte: al client va un GLB, e l'header
+    dice solo che la geometria e' stimata. E' gia' successo di doverli
+    sapere e di non poterli sapere se non ripagando la chiamata."""
+
+    def _ripiego(self, par):
+        import agent
+        cattura = io.StringIO()
+        with mock.patch.object(agent, "analyse",
+                               return_value=(par, [{"tool": "list_paths"}])), \
+                mock.patch.object(server, "AI_FALLBACK", True), \
+                mock.patch.dict(server.os.environ, {"ANTHROPIC_API_KEY": "x"}), \
+                mock.patch.object(server.sys, "stderr", cattura):
+            try:
+                server._flowpack_from_ai("finto.pdf", 20, "morbido")
+            except ValueError:
+                pass
+        return cattura.getvalue()
+
+    def test_i_numeri_stimati_finiscono_nel_log(self):
+        out = self._ripiego({"flowpack": dict(GEOM_OK)})
+        self.assertIn("geometria stimata", out)
+        for atteso in ("36.0", "19.5", "141.0", "list_paths"):
+            self.assertIn(atteso, out)
+
+    def test_il_log_mostra_il_margine_delle_coerenze(self):
+        """Non basta sapere che il gate e' passato: una geometria coerente
+        con se stessa puo' non essere quella dell'artwork, e il margine e'
+        l'unico indizio che resta."""
+        out = self._ripiego({"flowpack": dict(GEOM_OK)})
+        # 2*(36+19.5) = 111.0, piu 2*15 = 141.0, che e' il nastro
+        self.assertIn("perimetro 111.0 + falde 30.0 = 141.0 contro nastro 141.0",
+                      out)
+        self.assertIn("corpo 116.0 + pinne 26.0 = 142.0 contro passo 142.0", out)
+
+    def test_niente_log_se_il_ripiego_non_produce_geometria(self):
+        out = self._ripiego({"errore": "risposta troncata"})
+        self.assertNotIn("geometria stimata", out)
+        self.assertIn("senza 'flowpack' utilizzabile", out)
 
 
 class LivelloHttp(unittest.TestCase):

@@ -268,6 +268,33 @@ def _flowpack_from_ai_json(j):
                     sheet=sheet, girth_span=girth_span)
 
 
+def _log_geometria_ai(fj, tr):
+    """I numeri che l'AI ha misurato, quando il ripiego riesce.
+
+    Sul percorso di costruzione questo esito non arriva mai al client: esce
+    un GLB, e l'header dice soltanto che la geometria e' stimata. Senza
+    questa riga l'unico modo di sapere *quali* numeri fossero e' rifare la
+    chiamata a pagamento. Le due somme di controllo sono quelle del gate:
+    stampate dicono con che margine sono passate, non solo che sono passate
+    - una geometria coerente con se stessa puo' comunque non essere quella
+    dell'artwork."""
+    def q(k):
+        try:
+            return float(fj.get(k))
+        except (TypeError, ValueError):
+            return float("nan")
+    perim = 2.0 * (q("W") + q("T"))
+    corpo = q("L")
+    print("geometria stimata dall'AI: %r\n"
+          "  perimetro %.1f + falde %.1f = %.1f contro nastro %.1f\n"
+          "  corpo %.1f + pinne %.1f = %.1f contro passo %.1f\n"
+          "  strumenti chiamati: %r"
+          % (fj, perim, 2 * q("side_fin"), perim + 2 * q("side_fin"),
+             q("web_mm"), corpo, 2 * q("end_fin"), corpo + 2 * q("end_fin"),
+             q("step_mm"), [t["tool"] for t in tr]),
+          file=sys.stderr)
+
+
 def _flowpack_from_ai(pdf, teeth, soft):
     if not AI_FALLBACK or not os.environ.get("ANTHROPIC_API_KEY"):
         raise ValueError("impaginato non coperto dal solutore automatico")
@@ -283,6 +310,7 @@ def _flowpack_from_ai(pdf, teeth, soft):
               "  strumenti chiamati: %r" % (par, [t["tool"] for t in tr]),
               file=sys.stderr)
         raise ValueError("l'AI non ha prodotto una geometria flowpack utilizzabile")
+    _log_geometria_ai(fj, tr)
     return _flowpack_from_ai_json(fj)
 
 

@@ -218,6 +218,28 @@ class Troncamento(unittest.TestCase):
 
 
 class FormaDellaRichiesta(unittest.TestCase):
+    def test_il_budget_copre_ragionamento_e_risposta(self):
+        """Il ragionamento e la risposta pescano dallo stesso max_tokens.
+
+        Sul primo collaudo vero il log ha detto blocchi ['thinking'] con
+        8000/8000: tutto il budget speso a ragionare, niente per concludere.
+        Il tetto deve restare sopra a quello che il ragionamento chiede da
+        solo, altrimenti il ripiego si tronca ogni volta e il recupero
+        diventa la regola invece dell'eccezione."""
+        c = ClienteFinto(Risposta([chiamata("presenta_risultato", CONCLUSIONE)]))
+        agent.analyse("finto.pdf", "flowpack", client=c)
+        self.assertEqual(c.richieste[0]["max_tokens"], agent.MAX_TOKENS)
+        self.assertGreater(agent.MAX_TOKENS, 8000)
+
+    def test_timeout_esplicito(self):
+        """Con un tetto alto l'SDK rifiuta da solo la richiesta
+        non-streaming che stima possa sforare i dieci minuti. Passare un
+        timeout disattiva quella stima: senza, alzare MAX_TOKENS non
+        allunga l'analisi, la fa fallire prima di partire."""
+        c = ClienteFinto(Risposta([chiamata("presenta_risultato", CONCLUSIONE)]))
+        agent.analyse("finto.pdf", "flowpack", client=c)
+        self.assertEqual(c.richieste[0]["timeout"], agent.TIMEOUT)
+
     def test_regole_nel_system_prompt(self):
         c = ClienteFinto(Risposta([chiamata("presenta_risultato", CONCLUSIONE)]))
         agent.analyse("finto.pdf", "flowpack", client=c)
