@@ -62,6 +62,53 @@ combinazione funziona.
 
 Si puo' anche trascinare un GLB gia' pronto per guardarlo senza backend.
 
+## Il resoconto della costruzione
+
+`POST /api/build` risponde col GLB nel corpo, quindi il resoconto viaggia
+nell'header **`X-Pack3d-Meta`**: un array JSON con le quote effettive, gli
+avvisi di coerenza e — quando c'e' — l'avvertenza che la geometria e' stimata
+dall'AI invece di misurata. Il preflight lo dichiara in
+`Access-Control-Expose-Headers`, altrimenti cross-origin il browser non lo
+lascerebbe leggere.
+
+Vale la pena leggerlo sempre: senza, un modello costruito su una geometria
+stimata e uno misurato arrivano identici.
+
+## Riusare l'analisi invece di rifarla
+
+Passando a `/api/build` l'esito di `/api/analyze-ai` nel campo `params`, il
+backend riusa la geometria gia' misurata:
+
+```json
+{"kind":"flowpack","teeth":20,"soft":"morbido","params":{"flowpack":{...}}}
+```
+
+Senza, su un impaginato non riconosciuto la costruzione rifa' l'analisi da
+zero: una seconda chiamata a pagamento di 20-60 secondi per misurare quello
+che era gia' stato misurato.
+
+La geometria in `params` arriva dal browser, quindi e' input non fidato: passa
+dalle stesse tre coerenze fisiche che rifiutano una geometria AI incoerente
+(perimetro+falde=nastro, retro=fronte, corpo+pinne=passo) e un conto che non
+torna restituisce `400`, non un modello sbagliato. I solutori automatici
+restano prima: quando riconoscono l'impaginato misurano, e una misura batte
+sempre un numero arrivato da fuori.
+
+## Le prove
+
+```bash
+python -m unittest discover -s tests
+```
+
+Solo libreria standard, come il server: girano anche nel container. Coprono il
+livello di trasporto, il gate di validazione della geometria e il ciclo di
+tool use (con un client Anthropic finto: nessuna chiamata di rete, nessuna
+spesa).
+
+Non coprono la geometria: per quella servono gli artwork di riferimento, che
+non stanno nel repository. `tests/fixtures/LEGGIMI.md` dice quali sono e con
+che nome copiarli.
+
 ## Qualita'
 
 Di default i modelli escono in qualita' web: mesh e texture ridotte, per stare
