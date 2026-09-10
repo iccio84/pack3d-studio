@@ -113,9 +113,12 @@ zero: una seconda chiamata a pagamento di 20-60 secondi per misurare quello
 che era gia' stato misurato.
 
 La geometria in `params` arriva dal browser, quindi e' input non fidato: passa
-dalle stesse tre coerenze fisiche che rifiutano una geometria AI incoerente
-(perimetro+falde=nastro, retro=fronte, corpo+pinne=passo) e un conto che non
-torna restituisce `400`, non un modello sbagliato. I solutori automatici
+dagli stessi due controlli del ripiego AI — le tre coerenze fisiche
+(perimetro+falde=nastro, retro=fronte, corpo+pinne=passo) e il confronto con il
+nastro misurato sulle cordonature — e un conto che non torna restituisce `400`,
+non un modello sbagliato. Il secondo controllo non e' un doppione: le coerenze
+guardano soltanto dentro i numeri proposti, quindi da sole lasciavano rientrare
+da qui esattamente la geometria che sul ripiego AI non passa piu'. I solutori automatici
 restano prima: quando riconoscono l'impaginato misurano, e una misura batte
 sempre un numero arrivato da fuori.
 
@@ -187,7 +190,9 @@ FULFIL (morbido), e va ritarato sul prossimo flowpack di prova.
   nastro dalle sole cordonature — due sottrazioni, nessuna stima — e una
   geometria che lo contraddice oltre il 3% viene rifiutata con un `400`. Il
   numero c'era gia': veniva calcolato, usato per comporre un messaggio
-  d'errore e buttato.
+  d'errore e buttato. Il vincolo era stato messo prima sul solo ramo AI, e
+  provando il servizio online la stessa geometria e' rientrata da `params`:
+  vale su entrambe le strade, altrimenti non vale.
 - Il vincolo copre il nastro, non il passo. Il nastro e' verificato sugli
   artwork veri: 250,6 su KB_Dark_T2, 144,0 su Milch-Schnitte, 415,0 su Kinder
   Bueno Dark, cioe' le quote attese. Il passo che esce dalle stesse

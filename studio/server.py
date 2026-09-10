@@ -589,13 +589,18 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(400, "params: 'teeth' deve essere un "
                                                "numero intero")
                     # geometria proposta dal client (l'esito di /api/analyze-ai):
-                    # e' input non fidato, quindi passa dallo stesso gate che
-                    # rifiuta una geometria AI incoerente
+                    # e' input non fidato, quindi passa da entrambi i controlli
+                    # del ripiego AI e non solo dal gate. Il gate guarda dentro
+                    # i numeri, e su KB_Dark_T2 una geometria inventata lo ha
+                    # superato: rientrava da qui la stessa che il ripiego non
+                    # riesce piu' a far passare, e questa e' la strada
+                    # consigliata per riusare l'analisi invece di rifarla.
                     fp_client = None
                     geom = opts.get("params")
                     if isinstance(geom, dict) and isinstance(geom.get("flowpack"), dict):
                         try:
                             fp_client = _flowpack_from_ai_json(geom["flowpack"])
+                            _verifica_contro_le_cordonature(pdf, geom["flowpack"])
                         except ValueError as e:
                             return self._send(400, "params.flowpack: %s" % e)
                     if not _slots.acquire(blocking=False):
