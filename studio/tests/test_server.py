@@ -346,6 +346,22 @@ class LivelloHttp(unittest.TestCase):
         self.assertEqual(code, 400)
         self.assertIn("params.flowpack", body)
 
+    def test_geometria_dal_client_contro_le_cordonature_rifiutata(self):
+        # il buco trovato sul servizio online: la geometria che il ripiego AI
+        # non riesce piu' a far passare rientrava da params, perche' il gate
+        # guarda soltanto dentro i numeri. Passandola a mano insieme a
+        # KB_Dark_T2 e' uscito un 200 con lo stesso modello sbagliato,
+        # 3.119.204 byte, identico a quello di prima del vincolo.
+        opts = {"kind": "flowpack", "teeth": 20,
+                "params": {"flowpack": dict(GEOM_OK)}}
+        with mock.patch.object(server.fpk, "misura_nastro",
+                               return_value={"nastro_mm": 250.6,
+                                             "passo_mm": 400.9}):
+            code, body, _ = post(self.port, "/api/build", opts=opts)
+        self.assertEqual(code, 400)
+        self.assertIn("params.flowpack", body)
+        self.assertIn("cordonature", body)
+
     def test_endpoint_sconosciuto(self):
         code, _, _ = post(self.port, "/api/qualcosa")
         self.assertEqual(code, 404)
