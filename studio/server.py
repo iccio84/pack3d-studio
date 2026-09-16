@@ -278,7 +278,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     r = min(par["soft_r"], t_eff * 0.45)
     Ps, d, sw = soft_section_fit(fp, r, par["soft_n"])
     G = d[-1]
-    fin_open = 0.948 * G / 2.0
+    # Il bordo della pinna e' il tubo appiattito: il suo massimo geometrico e'
+    # meta' perimetro, oltre il quale il film dovrebbe allungarsi.
+    fin_open = FIN_OPEN_RATIO * G / 2.0
 
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, soft_r=r, soft_n=par["soft_n"], width_end=fin_open / sw,
@@ -296,18 +298,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     UV = fpk.remap_to_sheet(UV, fp)
 
     grid = V.reshape(-1, nv + 1, 3)
-    # (4) pinne aperte a farfalla, mai a filo del corpo
-    half = fp.L / 2.0
-    seg = np.sign(grid[grid.shape[0] // 2, :, 2])
-    seg[seg == 0] = 1.0
-    # l'apertura va legata allo SPESSORE del pack, non alla profondita' della
-    # pinna: e' il volume interno che spinge i lembi, e cosi' resta sensata
-    # quando le quote cambiano
-    apertura = 0.15 * t_eff
-    for i in range(grid.shape[0]):
-        e = abs(grid[i, 0, 0]) - half
-        if e > 0:
-            grid[i, :, 2] += seg * (apertura * (e / max(fp.end_fin, 1e-6)) ** 1.3)
+    # (4) le pinne restano saldate e piatte: nessuna manipolazione dei lembi.
+    # Quello che le rende "aperte" e' che il loro bordo e' PIU' ALTO della
+    # sezione del pack, e a questo pensa width_end.
     V = grid.reshape(-1, 3)
 
     V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0)
@@ -491,6 +484,9 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return self._send(500, "%s: %s" % (type(e).__name__, e))
 
+
+# quanto il bordo della pinna sfrutta meta' perimetro: 1.0 e' il massimo fisico
+FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
 
 MAX_UPLOAD = 60 * 1024 * 1024
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "2"))
