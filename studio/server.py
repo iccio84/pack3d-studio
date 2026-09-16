@@ -231,35 +231,91 @@ def printed_bbox(pdf):
 
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
+    """Costruisce il flowpack con le tecniche messe a punto sul campo.
+
+    Quattro cose che la versione base non faceva, e che senza si vedono subito:
+
+    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: lo spessore
+       cresce e la larghezza cala. Alzare solo lo spessore inventa film.
+    2. La grafica si mappa **per pannello**, usando gli spigoli della sezione
+       come nodi: con l'arco uniforme ogni fascia scivola.
+    3. Le pinne portano la **zigrinatura** a triangoli equilateri, contata sul
+       bordo della pinna.
+    4. Le pinne non restano **mai a filo**: si aprono a farfalla verso la punta.
+    """
+    import math
     par = gonfiore(soft)
-    nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (150, 260, 200, 1700)
+    nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (190, 260, 200, 1700)
     if case:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
         clean = strip_separations(pdf, tmp.name, case["drop_seps"])
-        fp = _flowpack_from_case(case)
-        fin_open = case["fin_open"]
+        fp0 = _flowpack_from_case(case)
+        box = None
     else:
         clean = pdf
+        box, _ = printed_bbox(pdf)
         try:
-            box, _ = printed_bbox(pdf)
-            fp = fpk.analyze_auto(pdf, bbox=box)
+            fp0 = fpk.analyze_auto(pdf, bbox=box)
         except Exception:
-            fp = fpk.analyze(pdf)          # solutore storico come ripiego
-        fin_open = 0.948 * fp.girth / 2.0
+            fp0 = fpk.analyze(pdf)
 
-    _, dsec, SW = soft_section_fit(fp, par["soft_r"], par["soft_n"])
+    # (1) la sezione si arrotonda a perimetro costante
+    liv = FASCE.get(str(soft).strip().lower(), None)
+    if liv is None:
+        try:
+            liv = float(soft)
+        except (TypeError, ValueError):
+            liv = 5.0
+    girth = fp0.girth
+    t_eff = fp0.T * (1 + 0.06 * (max(1.0, min(10.0, liv)) - 1))
+    w_eff = max(girth / 2 - t_eff, t_eff * 1.05)
+    fp = Flowpack(W=w_eff, T=t_eff, L=fp0.L, end_fin=fp0.end_fin,
+                  side_fin=fp0.side_fin, back_a=fp0.back_a, back_b=fp0.back_b,
+                  web_mm=fp0.web_mm, step_mm=fp0.step_mm,
+                  sheet=fp0.sheet, girth_span=fp0.girth_span)
+
+    r = min(par["soft_r"], t_eff * 0.45)
+    Ps, d, sw = soft_section_fit(fp, r, par["soft_n"])
+    G = d[-1]
+    fin_open = 0.948 * G / 2.0
+
     V, UV, T = fpk.build_mesh(
-        fp, nu=nu, nv=nv, soft_r=par["soft_r"], soft_n=par["soft_n"],
-        width_end=fin_open / SW, taper=par["taper"], flare_pow=5.0, soft=True,
-        serration=teeth > 0, serr_teeth=teeth,
-        fin_stations=60 if quality == "alta" else 26,
-        bulge=par["bulge"], crimp_period=1.25, crimp_mm=0.32,
+        fp, nu=nu, nv=nv, soft_r=r, soft_n=par["soft_n"], width_end=fin_open / sw,
+        taper=max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
+        serration=teeth > 0, serr_teeth=max(int(teeth), 1),
+        fin_stations=36 if quality == "alta" else 26,
+        bulge=par["bulge"], crimp_period=1.4, crimp_mm=0.32,
         wrinkle_mm=par["wrinkle_mm"])
+
+    # (2) mappatura per pannello: gli spigoli della sezione fanno da nodi
+    knots = _panel_knots(Ps, d, G, fp0)
+    if knots:
+        ks, kf = knots
+        UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
+
     grid = V.reshape(-1, nv + 1, 3)
-    V2, UV2, T2 = fin_on_surface(grid, fp, dsec[-1], nv, gap=0.55, fade=12.0)
-    Vm = np.vstack([V, V2]); UVm = np.vstack([UV, UV2]); Tm = np.vstack([T, T2 + len(V)])
+    # (4) pinne aperte a farfalla, mai a filo del corpo
+    half = fp.L / 2.0
+    seg = np.sign(grid[grid.shape[0] // 2, :, 2])
+    seg[seg == 0] = 1.0
+    # l'apertura va legata allo SPESSORE del pack, non alla profondita' della
+    # pinna: e' il volume interno che spinge i lembi, e cosi' resta sensata
+    # quando le quote cambiano
+    apertura = 0.15 * t_eff
+    for i in range(grid.shape[0]):
+        e = abs(grid[i, 0, 0]) - half
+        if e > 0:
+            grid[i, :, 2] += seg * (apertura * (e / max(fp.end_fin, 1e-6)) ** 1.3)
+    V = grid.reshape(-1, 3)
+
+    V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0)
+    Vm = np.vstack([V, V2])
+    UVm = np.vstack([UV, UV2])
+    Tm = np.vstack([T, T2 + len(V)])
+    if _normals(Vm, Tm)[int(np.argmax(Vm[:, 2]))][2] < 0:
+        Tm = Tm[:, [0, 2, 1]]
 
     sh = fp.sheet
     tex = folding.rasterize_panels(
@@ -267,15 +323,44 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
         dpi=dpi, inset_px=0, clean=(case is None))["film"]
     exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
 
-    n = _normals(Vm, Tm)
-    i = np.argsort(-Vm[:, 2])[:300]
-    base = fin_open / max(teeth, 1)
-    return ["flowpack %s" % soft,
-            "corpo %.1f mm, sezione %.1f x %.1f" % (fp.L, SW, fp.T),
+    base = fin_open / max(int(teeth), 1)
+    return ["flowpack, rigonfiamento %s" % soft,
+            "sezione %.1f x %.1f (perimetro %.1f invariato)" % (sw, t_eff, G),
+            "corpo %.1f mm, pinne %.1f" % (fp.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
-             "%d denti equilateri (base %.2f, altezza %.2f mm)"
+             "%d denti equilateri, base %.2f altezza %.2f mm"
              % (teeth, base, base * math.sqrt(3) / 2)),
-            "normale fronte %s" % np.round(n[i].mean(0), 2).tolist()]
+            "mappatura per pannello" if knots else "mappatura per arco"]
+
+
+def _panel_knots(Ps, d, G, fp):
+    """Spigoli della sezione, per far cadere ogni fascia sul suo pannello."""
+    try:
+        t = np.gradient(Ps, axis=0)
+        t /= np.maximum(np.linalg.norm(t, axis=1, keepdims=True), 1e-9)
+        cr = np.abs(np.arctan2(t[:-1, 0] * t[1:, 1] - t[:-1, 1] * t[1:, 0],
+                               (t[:-1] * t[1:]).sum(1))) / np.maximum(np.diff(d), 1e-9)
+        hot = cr > cr.max() * 0.25
+        groups, cur = [], []
+        for i, h in enumerate(hot):
+            if h:
+                cur.append(i)
+            elif cur:
+                groups.append(cur); cur = []
+        if cur:
+            groups.append(cur)
+        if len(groups) != 4:
+            return None
+        mid = sorted(float(np.average(d[g], weights=cr[g])) for g in groups)
+        ks = [0.0] + mid + [G]
+        kf = [0.0, fp.back_a, fp.back_a + fp.T, fp.back_a + fp.T + fp.W,
+              fp.back_a + 2 * fp.T + fp.W, fp.back_a + 2 * fp.T + fp.W + fp.back_b]
+        if kf[-1] <= 0:
+            return None
+        kf = [x * G / kf[-1] for x in kf]
+        return ks, kf
+    except Exception:
+        return None
 
 
 def analyze_pdf(pdf, kind=None):
