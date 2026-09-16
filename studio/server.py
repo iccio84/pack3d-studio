@@ -280,23 +280,24 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
             # "auto" o valore non riconosciuto: se l'agente ha gia' deciso usa
             # la sua scelta, altrimenti il centro scala
             liv = 5.0
-    girth = fp0.girth
-    t_eff = fp0.T * (1 + 0.06 * (max(1.0, min(10.0, liv)) - 1))
-    w_eff = max(girth / 2 - t_eff, t_eff * 1.05)
-    fp = Flowpack(W=w_eff, T=t_eff, L=fp0.L, end_fin=fp0.end_fin,
-                  side_fin=fp0.side_fin, back_a=fp0.back_a, back_b=fp0.back_b,
-                  web_mm=fp0.web_mm, step_mm=fp0.step_mm,
-                  sheet=fp0.sheet, girth_span=fp0.girth_span)
-
-    r = min(par["soft_r"], t_eff * 0.45)
-    Ps, d, sw = soft_section_fit(fp, r, par["soft_n"])
+    # Il rigonfiamento cambia la FORMA, non la taglia: dal rettangolo teso sul
+    # prodotto all'ellisse piena d'aria, tenendo fermi il rapporto
+    # larghezza/spessore e il perimetro del film. La scala che serve a tornare
+    # sul perimetro gonfia il pack in entrambe le direzioni, ed e' l'unico modo
+    # di gonfiarlo senza inventare pellicola che nello steso non c'e'.
+    liv = max(1.0, min(10.0, liv))
+    n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
+    fp = fp0
+    scala = fpk.sezione_rigonfiata(fp, n_sez)
+    Ps, d, sw = fpk.superellipse_section(fp, n_sez, thickness=scala * fp.T)
     G = d[-1]
     # Il bordo della pinna e' il tubo appiattito: il suo massimo geometrico e'
     # meta' perimetro, oltre il quale il film dovrebbe allungarsi.
     fin_open = FIN_OPEN_RATIO * G / 2.0
 
     V, UV, T = fpk.build_mesh(
-        fp, nu=nu, nv=nv, soft_r=r, soft_n=par["soft_n"], width_end=fin_open / sw,
+        fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
+        width_end=fin_open / sw,
         taper=max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
         serration=teeth > 0, serr_teeth=max(int(teeth), 1),
         fin_stations=36 if quality == "alta" else 26,
@@ -324,14 +325,25 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
         Tm = Tm[:, [0, 2, 1]]
 
     sh = fp.sheet
+    if fp.ruotato:
+        # lo steso e' stato analizzato trasposto: per ritagliarlo serve il
+        # rettangolo vero della pagina, e la texture va rimessa nello stesso
+        # telaio della UV, con il perimetro sulle righe
+        sh = (sh[1], sh[0], sh[3], sh[2])
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
         dpi=dpi, inset_px=0, clean=(case is None))["film"]
+    if fp.ruotato:
+        # rotazione, non trasposizione: trasporre e' una riflessione e
+        # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il
+        # perimetro crescente come lo intende girth_span.
+        tex = tex.transpose(Image.ROTATE_270)
     exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
 
     base = fin_open / max(int(teeth), 1)
     return ["flowpack, rigonfiamento %s" % soft,
-            "sezione %.1f x %.1f (perimetro %.1f invariato)" % (sw, t_eff, G),
+            "sezione %.1f x %.1f (perimetro %.1f invariato)"
+            % (scala * fp.W, scala * fp.T, G),
             "corpo %.1f mm, pinne %.1f" % (fp.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri, base %.2f altezza %.2f mm"
@@ -502,6 +514,11 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return self._send(500, "%s: %s" % (type(e).__name__, e))
 
+
+# esponente della superellisse ai due estremi della scala di rigonfiamento:
+# alto = rettangolo (film teso sul prodotto), 2 = ellisse (pack pieno d'aria)
+SEZ_RETTANGOLO = float(os.environ.get("PACK3D_SEZ_RIGIDO", "10"))
+SEZ_ELLISSE = float(os.environ.get("PACK3D_SEZ_MORBIDO", "2"))
 
 # quanto il bordo della pinna sfrutta meta' perimetro: 1.0 e' il massimo fisico
 FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))

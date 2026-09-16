@@ -35,6 +35,9 @@ class Flowpack:
     # riquadro dello steso, in punti PDF: (x0, y0, x1, y1)
     sheet: tuple = (0.0, 0.0, 0.0, 0.0)
     girth_span: tuple = (0.0, 0.0)   # y del perimetro utile, in punti
+    # steso analizzato trasposto, con il perimetro lungo la x della pagina:
+    # sheet e girth_span sono in quel telaio, la texture va trasposta anche lei
+    ruotato: bool = False
     warnings: list = field(default_factory=list)
 
     @property
@@ -223,6 +226,24 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     return P, d, a
 
 
+def sezione_rigonfiata(fp: Flowpack, n: float, npts: int = 1600):
+    """Sezione al livello di rigonfiamento `n`, a steso invariato.
+
+    Il rigonfiamento e' un cambio di forma, non di taglia: la sezione passa dal
+    rettangolo (n alto, pack teso sul prodotto) all'ellisse (n=2, pack pieno
+    d'aria) tenendo fermi il rapporto larghezza/spessore misurato e il
+    perimetro del film. A parita' di perimetro una forma tonda e' piu' grande
+    di una squadrata, quindi il pack si gonfia in entrambe le direzioni: e' la
+    scala che lo mette in conto, e il perimetro scala con lei.
+    """
+    t = np.linspace(0.0, 2.0 * np.pi, npts, endpoint=False)
+    ct, st = np.cos(t), np.sin(t)
+    P = np.stack([fp.W / 2.0 * np.sign(ct) * np.abs(ct) ** (2.0 / n),
+                  fp.T / 2.0 * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
+    per = float(np.sum(np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)))
+    return fp.girth / per
+
+
 def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                taper: float = 24.0, flat_end: float = 0.035, width_end: float = 0.93,
                section_w=None,
@@ -230,7 +251,7 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                serration: bool = True, serr_period: float = 0.85,
                serr_amp: float = 0.45, bulge: float = 0.0,
                serr_teeth: int = 0, fin_stations: int = 44,
-               sec_exp: float = 0.0, soft: bool = False,
+               sec_exp: float = 0.0, sec_thickness=None, soft: bool = False,
                soft_r: float = 0.0, soft_n: float = 3.0, flare_pow: float = 2.0,
                wrinkle_mm: float = 0.0, wrinkle_v: float = 3.0, wrinkle_u: float = 2.5):
     """Mesh del flowpack con UV riferite allo steso.
@@ -242,7 +263,7 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
     if soft_r > 0:
         P, d, section_w = soft_section_fit(fp, soft_r, soft_n)
     elif sec_exp > 0:
-        P, d, _a = superellipse_section(fp, sec_exp)
+        P, d, _a = superellipse_section(fp, sec_exp, thickness=sec_thickness)
     else:
         P, d = _section_path(fp, corner_r, section_w=section_w)
     G = d[-1]
@@ -581,6 +602,10 @@ def _solve_bands_symmetric(web_mm, folds_mm, tol=1.5):
     return best
 
 
+class _StesoNonRisolto(ValueError):
+    """Le fasce non chiudono su questo asse: forse lo steso e' ruotato."""
+
+
 def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
 
@@ -590,7 +615,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     import pdfplumber
     import numpy as np
     import pypdfium2 as pdfium
-    from .dieline import _segments, _technical_pens, _cluster
+    from .dieline import _segments, _technical_pens
 
     with pdfplumber.open(pdf_path) as pdf:
         page = pdf.pages[page_no]
@@ -606,12 +631,40 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
             segs = [sg for sg in segs if _in(sg)]
         pens = _technical_pens(segs, page.width, page.height)
         S = [s for s in segs if s[4] in pens]
-        H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > 150]
-        V = [(c, b - a) for k, c, a, b, st in S if k == "V" and b - a > 150]
-        hs = [c for c, w in _cluster(H, 3.0) if w > 250]
-        vs = [c for c, w in _cluster(V, 3.0) if w > 250]
+
+    sc = 150 / 72.0
+    im = pdfium.PdfDocument(pdf_path)[page_no].render(scale=sc).to_pil().convert("RGB")
+    raster = np.asarray(im).astype(int)
+
+    # Le pinne stanno in verticale o in orizzontale a seconda delle proporzioni,
+    # ma lo schema e' lo stesso ruotato di 90 gradi. Invece di insegnare
+    # l'orientamento al solutore si traspongono i suoi ingressi: i segmenti
+    # scambiando H con V, la rasterizzazione scambiando righe e colonne. Cosi'
+    # il solutore resta uno solo e lavora sempre nel verso che conosce. Si
+    # parte dall'orizzontale, che e' il piu' comune.
+    primo = None
+    for ruotato in (False, True):
+        if ruotato:
+            S = [("V" if k == "H" else "H", c, a0, b0, st) for k, c, a0, b0, st in S]
+            raster = raster.transpose(1, 0, 2)
+        try:
+            return _risolvi_steso(S, raster, sc, ruotato)
+        except _StesoNonRisolto as e:
+            primo = primo or e
+    raise primo
+
+
+def _risolvi_steso(S, raster, sc, ruotato):
+    """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
+    import numpy as np
+    from .dieline import _cluster
+
+    H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > 150]
+    V = [(c, b - a) for k, c, a, b, st in S if k == "V" and b - a > 150]
+    hs = [c for c, w in _cluster(H, 3.0) if w > 250]
+    vs = [c for c, w in _cluster(V, 3.0) if w > 250]
     if len(hs) < 4 or len(vs) < 2:
-        raise ValueError("cordonature non riconosciute: impaginato non coperto")
+        raise _StesoNonRisolto("cordonature non riconosciute: impaginato non coperto")
 
     y0, y1 = min(hs), max(hs)
     x0, x1 = min(vs), max(vs)
@@ -619,12 +672,10 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
     b = solve_bands(web, folds)
     if b is None:
-        raise ValueError("fasce non risolvibili: nastro %.1f mm" % web)
+        raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
 
     # pinne di testa: la zona non stampata e' quella che finisce nelle ganasce
-    sc = 150 / 72.0
-    im = pdfium.PdfDocument(pdf_path)[page_no].render(scale=sc).to_pil().convert("RGB")
-    a = np.asarray(im).astype(int)
+    a = raster
     fy0 = y0 + (b["side_fin"] + b["back_a"] + b["thick"]) / PT2MM
     fy1 = fy0 + b["front"] / PT2MM
     band = a[int(fy0 * sc):int(fy1 * sc), int(x0 * sc):int(x1 * sc)]
@@ -659,9 +710,13 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
             avvisi.append("rientri diversi (%.1f e %.1f mm) su un disegno "
                           "speculare: tengo il piu' stretto" % (sin, des))
 
+    if ruotato:
+        avvisi.append("steso ruotato di 90 gradi: le pinne corrono in verticale")
+    # sheet e girth_span restano nel telaio in cui ha lavorato il solutore: chi
+    # ritaglia la texture lo rimette dritto guardando `ruotato`.
     return Flowpack(W=b["front"], T=b["thick"], L=round(step - 2 * end_fin, 1),
                     end_fin=end_fin, side_fin=b["side_fin"], warnings=avvisi,
                     back_a=b["back_a"], back_b=b["back_b"],
                     web_mm=round(web, 1), step_mm=round(step, 1),
-                    sheet=(x0, y0, x1, y1),
+                    sheet=(x0, y0, x1, y1), ruotato=ruotato,
                     girth_span=(y0 + b["side_fin"] / PT2MM, y1 - b["side_fin"] / PT2MM))
