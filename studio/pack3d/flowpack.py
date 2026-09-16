@@ -632,6 +632,13 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     mm = np.arange(len(ch)) / sc * PT2MM
     idx = np.nonzero(ch > 25)[0]
     end_fin = round(float((mm[idx[0]] + (mm[-1] - mm[idx[-1]])) / 2.0), 1) if len(idx) else 0.0
+    # Un flowpack le pinne di testa ce le ha sempre: un margine nullo non e'
+    # una misura, e' l'euristica che non si applica — artwork al vivo, dove il
+    # fondo stampato copre anche la zona delle ganasce. Restituirlo darebbe
+    # L = step e una mesh con le pinne collassate sui due piani di testa.
+    if end_fin < 1.0:
+        raise ValueError("pinne di testa non misurabili: la fascia fronte non "
+                         "ha margine non stampato")
 
     return Flowpack(W=b["front"], T=b["thick"], L=round(step - 2 * end_fin, 1),
                     end_fin=end_fin, side_fin=b["side_fin"],

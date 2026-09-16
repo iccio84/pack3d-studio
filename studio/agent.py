@@ -50,6 +50,13 @@ Pulizia dell'artwork:
 - Se reconstruct_area non e' disponibile o fallisce, dichiaralo negli avvisi
   invece di lasciare il residuo senza spiegazione.
 
+Rigonfiamento:
+- Se fra le risposte il rigonfiamento e' "auto", sceglilo tu dalla natura del
+  prodotto seguendo le regole del progetto, e riportalo in
+  parametri_costruzione.rigonfiamento come intero da 1 a 10. Senza quel numero
+  la costruzione ripiega sul centro scala, quindi la tua scelta va persa.
+  Dichiara negli avvisi il livello e il perche'.
+
 Quando hai finito rispondi SOLO con un blocco ```json contenente:
 {"famiglia": "...", "quote": {...}, "pulizia": {"livello": n, "metodo": "..."},
  "parametri_costruzione": {...}, "avvisi": ["..."], "provenienza": {"quota": "come e' stata ricavata"}}
