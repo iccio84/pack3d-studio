@@ -13,7 +13,7 @@ import re
 
 from pack3d.tools import TOOLS, RUN
 
-MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-4-6")
+MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-5")
 MAX_STEPS = int(os.environ.get("PACK3D_MAX_STEPS", "16"))
 
 ISTRUZIONI = """
