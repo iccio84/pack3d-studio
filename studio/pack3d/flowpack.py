@@ -226,6 +226,24 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     return P, d, a
 
 
+def sezione_rigonfiata(fp: Flowpack, n: float, npts: int = 1600):
+    """Sezione al livello di rigonfiamento `n`, a steso invariato.
+
+    Il rigonfiamento e' un cambio di forma, non di taglia: la sezione passa dal
+    rettangolo (n alto, pack teso sul prodotto) all'ellisse (n=2, pack pieno
+    d'aria) tenendo fermi il rapporto larghezza/spessore misurato e il
+    perimetro del film. A parita' di perimetro una forma tonda e' piu' grande
+    di una squadrata, quindi il pack si gonfia in entrambe le direzioni: e' la
+    scala che lo mette in conto, e il perimetro scala con lei.
+    """
+    t = np.linspace(0.0, 2.0 * np.pi, npts, endpoint=False)
+    ct, st = np.cos(t), np.sin(t)
+    P = np.stack([fp.W / 2.0 * np.sign(ct) * np.abs(ct) ** (2.0 / n),
+                  fp.T / 2.0 * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
+    per = float(np.sum(np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)))
+    return fp.girth / per
+
+
 def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                taper: float = 24.0, flat_end: float = 0.035, width_end: float = 0.93,
                section_w=None,
@@ -233,7 +251,7 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                serration: bool = True, serr_period: float = 0.85,
                serr_amp: float = 0.45, bulge: float = 0.0,
                serr_teeth: int = 0, fin_stations: int = 44,
-               sec_exp: float = 0.0, soft: bool = False,
+               sec_exp: float = 0.0, sec_thickness=None, soft: bool = False,
                soft_r: float = 0.0, soft_n: float = 3.0, flare_pow: float = 2.0,
                wrinkle_mm: float = 0.0, wrinkle_v: float = 3.0, wrinkle_u: float = 2.5):
     """Mesh del flowpack con UV riferite allo steso.
@@ -245,7 +263,7 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
     if soft_r > 0:
         P, d, section_w = soft_section_fit(fp, soft_r, soft_n)
     elif sec_exp > 0:
-        P, d, _a = superellipse_section(fp, sec_exp)
+        P, d, _a = superellipse_section(fp, sec_exp, thickness=sec_thickness)
     else:
         P, d = _section_path(fp, corner_r, section_w=section_w)
     G = d[-1]
