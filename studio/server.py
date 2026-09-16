@@ -210,6 +210,17 @@ def _flowpack_from_case(case):
                     sheet=case["sheet"], girth_span=case["girth_span"])
 
 
+def livello_da_agente(params):
+    """Il livello 1-10 scelto dall'agente con "Scegli tu", se l'ha riportato."""
+    if not isinstance(params, dict):
+        return None
+    pc = params.get("parametri_costruzione")
+    try:
+        return max(1.0, min(10.0, float(pc.get("rigonfiamento"))))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def printed_bbox(pdf):
     """Riquadro del blocco stampato, in punti PDF.
 
@@ -469,8 +480,13 @@ class Handler(BaseHTTPRequestHandler):
                         if info["kind"] == "carton":
                             build_carton(pdf, out, q)
                         else:
+                            soft = opts.get("soft", "medio")
+                            if str(soft).strip().lower() == "auto":
+                                # "Scegli tu": il livello lo decide l'agente in
+                                # /api/analyze-ai e torna qui dentro params
+                                soft = livello_da_agente(opts.get("params")) or soft
                             build_flowpack(pdf, out, int(opts.get("teeth", 20)),
-                                           str(opts.get("soft", "medio")), case, q)
+                                           str(soft), case, q)
                     except Exception:
                         _slots.release()
                         raise
