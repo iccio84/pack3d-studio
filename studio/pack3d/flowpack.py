@@ -645,14 +645,19 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
                              "non ha margine non stampato e mancano le linee "
                              "di saldatura")
         sin, des = (xs[1] - xs[0]) * PT2MM, (xs[-1] - xs[-2]) * PT2MM
-        end_fin = round((sin + des) / 2.0, 1)
         avvisi.append("pinne ricavate dalle saldature: la grafica e' al vivo e "
                       "non lascia margine da misurare")
-        # stessa tolleranza del solutore storico: sotto mezzo millimetro il
-        # taglio si considera centrato sulla saldatura
-        if abs(sin - des) > 0.5:
-            avvisi.append("pinne asimmetriche: %.1f mm da un lato, %.1f "
-                          "dall'altro, uso la media %.1f" % (sin, des, end_fin))
+        # La saldatura c'e' da tutte e due le parti, quindi il disegno tecnico
+        # e' speculare e le due pinne sono uguali per costruzione. Entro la
+        # tolleranza del solutore storico la differenza e' rumore e si media;
+        # oltre, su un lato c'e' un segno in piu', e mediarlo lo spalmerebbe
+        # su ogni pack: si tiene il rientro piu' stretto.
+        if abs(sin - des) <= 0.5:
+            end_fin = round((sin + des) / 2.0, 1)
+        else:
+            end_fin = round(min(sin, des), 1)
+            avvisi.append("rientri diversi (%.1f e %.1f mm) su un disegno "
+                          "speculare: tengo il piu' stretto" % (sin, des))
 
     return Flowpack(W=b["front"], T=b["thick"], L=round(step - 2 * end_fin, 1),
                     end_fin=end_fin, side_fin=b["side_fin"], warnings=avvisi,
