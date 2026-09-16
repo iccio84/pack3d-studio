@@ -1,11 +1,16 @@
 import { useState } from "react";
-import { analyseAI, build, Kind, Soft, Analisi } from "./pack3d";
+import { analyseAI, build, Kind, Analisi } from "./pack3d";
+
+const FASCIA = (v: number) =>
+  v <= 3 ? "Rigido" : v <= 6 ? "Medio" : "Morbido";
 
 export function Pannello({ onModel }: { onModel: (url: string) => void }) {
   const [pdf, setPdf] = useState<ArrayBuffer | null>(null);
+  const [nome, setNome] = useState("");
   const [kind, setKind] = useState<Kind | null>(null);
   const [teeth, setTeeth] = useState("");
-  const [soft, setSoft] = useState<Soft>("medio");
+  const [liv, setLiv] = useState(5);          // scala 1-10, non tre gradini
+  const [auto, setAuto] = useState(false);    // "Scegli tu"
   const [stato, setStato] = useState("");
   const [info, setInfo] = useState<Analisi | null>(null);
 
@@ -13,17 +18,18 @@ export function Pannello({ onModel }: { onModel: (url: string) => void }) {
     const f = e.target.files?.[0];
     if (!f) return;
     setPdf(await f.arrayBuffer());
+    setNome(f.name);
     setKind(null); setInfo(null);
-    setStato("Indica il tipo di pack");        // prima domanda su ogni PDF
+    setStato("Indica il tipo di pack");       // prima domanda su ogni PDF
   }
 
-  async function vai(k: Kind) {
+  function vai(k: Kind) {
     setKind(k);
-    if (k === "flowpack") { setStato("Digita i dentini e scegli il gonfiore"); return; }
+    if (k === "flowpack") { setStato("Digita i dentini e scegli il rigonfiamento"); return; }
     esegui({ kind: k });
   }
 
-  async function esegui(opts: { kind: Kind; teeth?: number; soft?: Soft }) {
+  async function esegui(opts: { kind: Kind; teeth?: number; soft?: number | string }) {
     if (!pdf) return;
     try {
       setStato("Analisi in corso, 20-60 secondi…");
@@ -46,21 +52,43 @@ export function Pannello({ onModel }: { onModel: (url: string) => void }) {
           <button onClick={() => vai("carton")}>Cartotecnico</button>
           <button onClick={() => vai("flowpack")}>Flowpack</button>
           <button onClick={() => vai("cup")}>Coppa conica</button>
+          <button disabled title="Non ancora supportato">Altro</button>
         </div>
       )}
 
       {kind === "flowpack" && (
-        <div className="flex gap-2 items-end">
-          <input type="number" min={0} value={teeth}
-                 placeholder="dentini per lato"
-                 onChange={(e) => setTeeth(e.target.value)} />
-          <select value={soft} onChange={(e) => setSoft(e.target.value as Soft)}>
-            <option value="rigido">Rigido</option>
-            <option value="medio">Medio</option>
-            <option value="morbido">Morbido</option>
-          </select>
+        <div className="space-y-3">
+          <div className="flex gap-2 items-end">
+            <label className="flex flex-col text-sm">
+              Dentini zigrinatura per lato
+              <input type="number" min={0} value={teeth}
+                     placeholder="digita il numero"
+                     onChange={(e) => setTeeth(e.target.value)} />
+            </label>
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center gap-3 text-sm">
+              <span>Rigonfiamento</span>
+              <input type="range" min={1} max={10} step={1} value={liv}
+                     disabled={auto}
+                     onChange={(e) => setLiv(Number(e.target.value))}
+                     className="flex-1" />
+              <b>{auto ? "—" : `${FASCIA(liv)} ${liv}/10`}</b>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={auto}
+                     onChange={(e) => setAuto(e.target.checked)} />
+              Scegli tu — decide l&apos;AI in base al prodotto
+            </label>
+            <p className="text-xs opacity-60">
+              1-3 teso e aderente · 4-6 volume standard · 7-10 volumetrico e gonfio
+            </p>
+          </div>
+
           <button disabled={teeth === ""}
-                  onClick={() => esegui({ kind: "flowpack", teeth: Number(teeth), soft })}>
+                  onClick={() => esegui({ kind: "flowpack", teeth: Number(teeth),
+                                          soft: auto ? "auto" : liv })}>
             Costruisci
           </button>
         </div>

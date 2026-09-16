@@ -3,7 +3,8 @@
 const API = (import.meta.env.VITE_PACK3D_API as string || "").replace(/\/$/, "");
 
 export type Kind = "carton" | "flowpack" | "cup";
-export type Soft = "rigido" | "medio" | "morbido";
+/** Rigonfiamento: livello 1-10, oppure "auto" per farlo scegliere all'AI. */
+export type Soft = number | "auto";
 
 export interface Analisi {
   famiglia?: string;
