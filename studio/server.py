@@ -289,7 +289,11 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
     fp = fp0
     scala = fpk.sezione_rigonfiata(fp, n_sez)
-    Ps, d, sw = fpk.superellipse_section(fp, n_sez, thickness=scala * fp.T)
+    # superellipse_section torna il SEMIASSE, non la larghezza come faceva
+    # soft_section_fit: senza il raddoppio width_end esce doppio e le pinne si
+    # aprono fino al perimetro intero invece che a meta'
+    Ps, d, semiasse = fpk.superellipse_section(fp, n_sez, thickness=scala * fp.T)
+    sw = 2.0 * semiasse
     G = d[-1]
     # Il bordo della pinna e' il tubo appiattito: il suo massimo geometrico e'
     # meta' perimetro, oltre il quale il film dovrebbe allungarsi.

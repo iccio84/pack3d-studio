@@ -58,6 +58,8 @@
   #packtype.on{display:flex}
   #packtype .q{font-size:13px;color:var(--muted);margin-right:4px}
   .fld{display:flex;flex-direction:column;gap:5px}
+  .fld .auto{flex-direction:row;align-items:center;justify-content:center;gap:6px;font-size:12.5px;color:var(--muted)}
+  #soft{accent-color:var(--muted)}
   .fld label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
   .fld input,.fld select{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);
                          border-radius:8px;background:#fff;color:var(--ink)}
@@ -95,12 +97,10 @@
       <input id="teeth" type="number" min="0" max="400" step="1" placeholder="digita il numero">
     </div>
     <div class="fld">
-      <label for="soft">Tipo di gonfiore</label>
-      <select id="soft">
-        <option value="rigido">Rigido</option>
-        <option value="medio" selected>Medio</option>
-        <option value="morbido">Morbido</option>
-      </select>
+      <label for="soft">Rigonfiamento <b id="softval">Medio 5/10</b></label>
+      <input id="soft" type="range" min="1" max="10" step="1" value="5">
+      <label class="auto"><input id="softauto" type="checkbox"> Scegli tu — decide l’AI in base al prodotto</label>
+      <p class="note">1-3 teso e aderente · 4-6 volume standard · 7-10 volumetrico e gonfio. A steso invariato la sezione passa dal rettangolo all’ellisse: il perimetro del film resta quello, il pack si gonfia in entrambe le direzioni.</p>
     </div>
     <button id="go" class="primary">Costruisci</button>
     <p class="note">Il numero di dentini va digitato: non e’ deducibile dalla dimensione del pack. Con 0 le pinne restano lisce. I denti sono triangoli equilateri contati sul bordo della pinna.</p>
@@ -352,7 +352,7 @@ async function withKind(kind){
     if (kind === 'flowpack'){
       document.getElementById('teeth').value = '';
       params.classList.add('on');
-      setStatus('Flowpack: digita i dentini e scegli il gonfiore','');
+      setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
     }
     await build(pending.buf, pending.name, {kind});
@@ -379,7 +379,9 @@ document.getElementById('go').onclick = async () => {
   try{
     await build(pending.buf, pending.name,
                 {kind:'flowpack', teeth: document.getElementById('teeth').value,
-                 soft:  document.getElementById('soft').value});
+                 soft:  document.getElementById('softauto').checked
+                          ? 'auto'
+                          : Number(document.getElementById('soft').value)});
     setStatus('Modello pronto','');
   }catch(err){ setStatus(String(err.message||err).slice(0,200),'err'); }
 };
@@ -398,6 +400,26 @@ dlBtn.onclick = () => {
 addEventListener('drop', e => { handle(e.dataTransfer.files[0]); });
 
 resize();
+</script>
+
+<script>
+// Blocco separato di proposito: se three.js non si carica, lo script del
+// viewer muore alla prima riga che lo usa e si porta dietro tutto quello che
+// viene dopo. I comandi del pannello devono restare vivi lo stesso.
+(function () {
+  var slider = document.getElementById('soft');
+  var auto = document.getElementById('softauto');
+  var val = document.getElementById('softval');
+  function fascia(v) { return v <= 3 ? 'Rigido' : v <= 6 ? 'Medio' : 'Morbido'; }
+  function mostra() {
+    var v = Number(slider.value);
+    slider.disabled = auto.checked;
+    val.textContent = auto.checked ? 'la sceglie l’AI' : fascia(v) + ' ' + v + '/10';
+  }
+  slider.addEventListener('input', mostra);
+  auto.addEventListener('change', mostra);
+  mostra();
+})();
 </script>
 </body>
 </html>
