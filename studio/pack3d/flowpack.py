@@ -581,7 +581,7 @@ def _solve_bands_symmetric(web_mm, folds_mm, tol=1.5):
     return best
 
 
-def analyze_auto(pdf_path, page_no: int = 0):
+def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
 
     Copre gli impaginati in cui il disegno tecnico traccia le cordonature; per
@@ -595,6 +595,15 @@ def analyze_auto(pdf_path, page_no: int = 0):
     with pdfplumber.open(pdf_path) as pdf:
         page = pdf.pages[page_no]
         segs = _segments(page)
+        if bbox:
+            # una tavola contiene piu' viste: senza riquadro si misura il foglio
+            bx0, by0, bx1, by1 = bbox
+            def _in(sg):
+                k, c, a0, b0, _ = sg
+                if k == "H":
+                    return by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3 and b0 <= bx1 + 3
+                return bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3 and b0 <= by1 + 3
+            segs = [sg for sg in segs if _in(sg)]
         pens = _technical_pens(segs, page.width, page.height)
         S = [s for s in segs if s[4] in pens]
         H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > 150]
