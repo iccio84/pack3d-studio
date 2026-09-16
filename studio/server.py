@@ -210,6 +210,26 @@ def _flowpack_from_case(case):
                     sheet=case["sheet"], girth_span=case["girth_span"])
 
 
+def printed_bbox(pdf):
+    """Riquadro del blocco stampato, in punti PDF.
+
+    Senza questo si misura l'intera tavola, che contiene anche le viste
+    tecniche e i cartigli: da li' escono pack larghi quanto il foglio.
+    """
+    try:
+        from pack3d.tools import find_blocks
+        b = [x for x in find_blocks(pdf)["blocchi"] if x["tipo"] == "stampato"]
+        if not b:
+            return None, None
+        b = b[0]
+        mm = 1.0 / PT2MM
+        box = (b["x_mm"] * mm, b["y_mm"] * mm,
+               (b["x_mm"] + b["w_mm"]) * mm, (b["y_mm"] + b["h_mm"]) * mm)
+        return box, b.get("maschera_dt_x_mm")
+    except Exception:
+        return None, None
+
+
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     par = gonfiore(soft)
     nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (150, 260, 200, 1700)
@@ -222,7 +242,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     else:
         clean = pdf
         try:
-            fp = fpk.analyze_auto(pdf)
+            box, _ = printed_bbox(pdf)
+            fp = fpk.analyze_auto(pdf, bbox=box)
         except Exception:
             fp = fpk.analyze(pdf)          # solutore storico come ripiego
         fin_open = 0.948 * fp.girth / 2.0
@@ -278,7 +299,8 @@ def analyze_pdf(pdf, kind=None):
             if kind == "carton":
                 raise
     try:
-        fp = fpk.analyze_auto(pdf)
+        box, _ = printed_bbox(pdf)
+        fp = fpk.analyze_auto(pdf, bbox=box)
     except Exception:
         fp = fpk.analyze(pdf)      # se fallisce anche questo, l'errore va al client
     return dict(kind="flowpack", title="Flowpack",
