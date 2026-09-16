@@ -286,7 +286,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
     fp = Flowpack(W=w_eff, T=t_eff, L=fp0.L, end_fin=fp0.end_fin,
                   side_fin=fp0.side_fin, back_a=fp0.back_a, back_b=fp0.back_b,
                   web_mm=fp0.web_mm, step_mm=fp0.step_mm,
-                  sheet=fp0.sheet, girth_span=fp0.girth_span)
+                  sheet=fp0.sheet, girth_span=fp0.girth_span, ruotato=fp0.ruotato)
 
     r = min(par["soft_r"], t_eff * 0.45)
     Ps, d, sw = soft_section_fit(fp, r, par["soft_n"])
@@ -324,9 +324,19 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
         Tm = Tm[:, [0, 2, 1]]
 
     sh = fp.sheet
+    if fp.ruotato:
+        # lo steso e' stato analizzato trasposto: per ritagliarlo serve il
+        # rettangolo vero della pagina, e la texture va rimessa nello stesso
+        # telaio della UV, con il perimetro sulle righe
+        sh = (sh[1], sh[0], sh[3], sh[2])
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
         dpi=dpi, inset_px=0, clean=(case is None))["film"]
+    if fp.ruotato:
+        # rotazione, non trasposizione: trasporre e' una riflessione e
+        # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il
+        # perimetro crescente come lo intende girth_span.
+        tex = tex.transpose(Image.ROTATE_270)
     exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
 
     base = fin_open / max(int(teeth), 1)
