@@ -634,14 +634,28 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     end_fin = round(float((mm[idx[0]] + (mm[-1] - mm[idx[-1]])) / 2.0), 1) if len(idx) else 0.0
     # Un flowpack le pinne di testa ce le ha sempre: un margine nullo non e'
     # una misura, e' l'euristica che non si applica — artwork al vivo, dove il
-    # fondo stampato copre anche la zona delle ganasce. Restituirlo darebbe
-    # L = step e una mesh con le pinne collassate sui due piani di testa.
+    # fondo stampato copre anche la zona delle ganasce. La geometria pero'
+    # resta: fra i due tagli esterni stanno le due linee di saldatura, e il
+    # rientro dal taglio alla saldatura e' la pinna.
+    avvisi = []
     if end_fin < 1.0:
-        raise ValueError("pinne di testa non misurabili: la fascia fronte non "
-                         "ha margine non stampato")
+        xs = sorted(vs)
+        if len(xs) < 4:
+            raise ValueError("pinne di testa non misurabili: la fascia fronte "
+                             "non ha margine non stampato e mancano le linee "
+                             "di saldatura")
+        sin, des = (xs[1] - xs[0]) * PT2MM, (xs[-1] - xs[-2]) * PT2MM
+        end_fin = round((sin + des) / 2.0, 1)
+        avvisi.append("pinne ricavate dalle saldature: la grafica e' al vivo e "
+                      "non lascia margine da misurare")
+        # stessa tolleranza del solutore storico: sotto mezzo millimetro il
+        # taglio si considera centrato sulla saldatura
+        if abs(sin - des) > 0.5:
+            avvisi.append("pinne asimmetriche: %.1f mm da un lato, %.1f "
+                          "dall'altro, uso la media %.1f" % (sin, des, end_fin))
 
     return Flowpack(W=b["front"], T=b["thick"], L=round(step - 2 * end_fin, 1),
-                    end_fin=end_fin, side_fin=b["side_fin"],
+                    end_fin=end_fin, side_fin=b["side_fin"], warnings=avvisi,
                     back_a=b["back_a"], back_b=b["back_b"],
                     web_mm=round(web, 1), step_mm=round(step, 1),
                     sheet=(x0, y0, x1, y1),
