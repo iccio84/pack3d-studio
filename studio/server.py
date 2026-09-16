@@ -266,6 +266,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
         try:
             liv = float(soft)
         except (TypeError, ValueError):
+            # "auto" o valore non riconosciuto: se l'agente ha gia' deciso usa
+            # la sua scelta, altrimenti il centro scala
             liv = 5.0
     girth = fp0.girth
     t_eff = fp0.T * (1 + 0.06 * (max(1.0, min(10.0, liv)) - 1))
