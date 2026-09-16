@@ -13,7 +13,7 @@ import re
 
 from pack3d.tools import TOOLS, RUN
 
-MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-4-6")
+MODEL = os.environ.get("PACK3D_MODEL", "claude-sonnet-5")
 MAX_STEPS = int(os.environ.get("PACK3D_MAX_STEPS", "16"))
 
 ISTRUZIONI = """
@@ -21,6 +21,11 @@ Sei l'analista di pack3d: da un artwork PDF ricavi i parametri per costruire un
 modello 3D. Non disegni la mesh, decidi i numeri.
 
 Metodo:
+- Chiama find_blocks per PRIMA cosa. Una tavola contiene quasi sempre piu' viste
+  dello stesso pack: quella stampata, quella tecnica, le miniature, i cartigli.
+  Scegli il blocco stampato che porta l'artwork e lavora solo su quello: misurare
+  sull'intera pagina da' quote senza senso, tipo un pack largo quanto il foglio.
+  Il blocco tecnico di pari ingombro e' la maschera da passare a clean_artwork.
 - Non stimare mai una quota che puoi misurare con uno strumento.
 - Cerca sempre il disegno tecnico in miniatura con list_paths: sta fuori
   dall'ingombro dell'artwork ed e' piu' pulito del contorno sotto la grafica.

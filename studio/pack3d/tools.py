@@ -479,3 +479,69 @@ TOOLS.append(
                        "properties": {"prompt": {"type": "string"}}}))
 _RAW["reconstruct_area"] = reconstruct_area
 RUN = {k: (lambda f: lambda *a, **kw: _plain(f(*a, **kw)))(v) for k, v in _RAW.items()}
+
+
+def find_blocks(pdf, dpi=100, min_mm=60.0):
+    """Elenca i blocchi della tavola, distinguendo lo stampato dal tecnico.
+
+    Un disegno tecnico contiene quasi sempre piu' viste: la OUTSIDE VIEW con la
+    grafica, la INSIDE VIEW o le miniature con il solo tecnico, i cartigli.
+    Misurare sull'intera pagina da' quote senza senso, ed e' l'errore che fa
+    uscire un pack largo quanto il foglio.
+
+    Per ogni blocco riporta ingombro, quota di superficie colorata e quota di
+    tratto sottile: il primo distingue lo stampato, il secondo il tecnico.
+    """
+    import pypdfium2 as pdfium
+    from scipy.ndimage import label, binary_closing, find_objects
+    s = dpi / 72.0
+    im = pdfium.PdfDocument(pdf)[0].render(scale=s).to_pil().convert("RGB")
+    a = np.asarray(im).astype(int)
+    occupato = binary_closing(a.max(2) < 248, np.ones((7, 7)))
+    lab, n = label(occupato)
+    out = []
+    for i, sl in enumerate(find_objects(lab)):
+        if sl is None:
+            continue
+        h = (sl[0].stop - sl[0].start) / s * PT2MM
+        w = (sl[1].stop - sl[1].start) / s * PT2MM
+        if min(w, h) < min_mm:
+            continue
+        reg = a[sl]
+        m = (lab[sl] == i + 1)
+        chroma = (reg.max(2) - reg.min(2))
+        colore = float((chroma[m] > 30).mean()) if m.any() else 0.0
+        scuro = float((reg.max(2)[m] < 200).mean()) if m.any() else 0.0
+        out.append(dict(
+            x_mm=round(sl[1].start / s * PT2MM, 1), y_mm=round(sl[0].start / s * PT2MM, 1),
+            w_mm=round(w, 1), h_mm=round(h, 1),
+            colore_pct=round(100 * colore, 1), inchiostro_pct=round(100 * scuro, 1),
+            # 83% di superficie colorata sulla vista stampata contro 13% su
+            # quella tecnica: la soglia sta comoda in mezzo
+            tipo="stampato" if colore > 0.35 else "tecnico"))
+    out.sort(key=lambda b: -(b["w_mm"] * b["h_mm"]))
+    # blocchi di pari ingombro sono viste dello stesso pack: quella tecnica
+    # serve da maschera per quella stampata
+    for b in out:
+        gem = [c for c in out if c is not b
+               and abs(c["w_mm"] - b["w_mm"]) < 8 and abs(c["h_mm"] - b["h_mm"]) < 8]
+        if gem and b["tipo"] == "stampato" and any(c["tipo"] == "tecnico" for c in gem):
+            t = [c for c in gem if c["tipo"] == "tecnico"][0]
+            b["maschera_dt_x_mm"] = t["x_mm"]
+    return dict(blocchi=out[:12],
+                nota=("Scegli come area di lavoro il blocco 'stampato' che porta "
+                      "l'artwork, non l'intera pagina. I blocchi 'tecnico' con lo "
+                      "stesso ingombro sono viste del disegno da usare come "
+                      "maschera in clean_artwork."))
+
+
+TOOLS.insert(1, dict(
+    name="find_blocks",
+    description="Elenca i blocchi della tavola con ingombro in mm, distinguendo "
+                "quelli STAMPATI (con artwork) da quelli TECNICI (solo disegno). "
+                "Da chiamare per PRIMA cosa: una tavola contiene quasi sempre piu' "
+                "viste, e misurare sull'intera pagina da' quote senza senso. Il "
+                "blocco tecnico di pari ingombro e' la maschera per clean_artwork.",
+    input_schema={"type": "object", "properties": {}}))
+_RAW["find_blocks"] = find_blocks
+RUN = {k: (lambda f: lambda *a, **kw: _plain(f(*a, **kw)))(v) for k, v in _RAW.items()}

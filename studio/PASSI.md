@@ -47,7 +47,7 @@ Dashboard Render → il tuo servizio → **Environment** → aggiungi:
 ```
 ANTHROPIC_API_KEY  = sk-ant-...
 OPENAI_API_KEY     = sk-...        (solo per il piano B di ricostruzione)
-PACK3D_MODEL      = claude-sonnet-4-6      (opzionale)
+PACK3D_MODEL      = claude-sonnet-5        (opzionale)
 PACK3D_MAX_STEPS  = 16                     (opzionale)
 ```
 
