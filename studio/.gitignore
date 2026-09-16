@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+
+# gli artwork di riferimento sono file di clienti: restano in locale.
+# tests/fixtures/LEGGIMI.md dice quali servono e con che nome.
+tests/fixtures/*.pdf
+tests/fixtures/*.png
