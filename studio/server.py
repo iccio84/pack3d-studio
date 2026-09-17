@@ -16,6 +16,7 @@ import json
 import math
 import os
 import sys
+from urllib.parse import quote
 import tempfile
 import traceback
 import threading
@@ -312,15 +313,27 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         clean = strip_separations(pdf, tmp.name, case["drop_seps"])
         fp0 = _flowpack_from_case(case)
         box = None
+        ripiego = None
     else:
         clean = pdf
         box, _ = printed_bbox(pdf)
+        ripiego = None
         try:
             fp0 = fpk.analyze_auto(pdf, bbox=box)
-        except Exception:
+        except Exception as e:
+            # Il ripiego era muto, e un modello costruito da un'analisi
+            # peggiore non esce sbagliato: esce plausibile, che e' peggio. Su
+            # Milch-Schnitte T1 cambiava corpo e pinne, 136,5 e 8,0 invece di
+            # 138,7 e 6,9, e la grafica scivolava sul fronte senza che niente
+            # lo dicesse.
             fp0 = fpk.analyze(pdf)
+            ripiego = str(e)
 
     avvisi_sez = []
+    if ripiego is not None:
+        avvisi_sez.append("ANALISI AUTOMATICA FALLITA (%s): ripiego sul "
+                          "solutore vecchio, quote e grafica da verificare"
+                          % ripiego[:70])
     if sezione:
         # Dall'agente il RAPPORTO, dal film il PERIMETRO. Il perimetro la
         # fustella lo misura bene e non si tocca; e' il rapporto che non sa
@@ -556,15 +569,22 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
+        # senza questo il browser nasconde l'header alla pagina, su altra origine
+        self.send_header("Access-Control-Expose-Headers", "X-Pack3d-Meta")
         self.send_header("Access-Control-Max-Age", "86400")
 
-    def _send(self, code, body, ctype="application/json", filename=None):
+    def _send(self, code, body, ctype="application/json", filename=None,
+              meta=None):
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if meta:
+            # percent-encoded: un header HTTP e' latin-1 e non tollera accenti
+            self.send_header("X-Pack3d-Meta", quote(
+                json.dumps(meta, ensure_ascii=False)))
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -635,18 +655,23 @@ class Handler(BaseHTTPRequestHandler):
                             pinne = opts.get("pinne")
                             if pinne in (None, "", "auto"):
                                 pinne = pinne_da_agente(opts.get("params"))
-                            build_flowpack(pdf, out, int(opts.get("teeth", 20)),
-                                           str(soft), case, q,
-                                           sezione_da_agente(opts.get("params")),
-                                           scatola, pinne)
+                            avvisi = build_flowpack(
+                                pdf, out, int(opts.get("teeth", 20)),
+                                str(soft), case, q,
+                                sezione_da_agente(opts.get("params")),
+                                scatola, pinne)
                     except Exception:
                         _slots.release()
                         raise
                     try:
                         q = q
                         with open(out, "rb") as fh:
+                            # gli avvisi della costruzione viaggiano in un
+                            # header: il corpo e' il GLB. Finivano nel nulla,
+                            # e con loro ogni diagnostica.
                             return self._send(200, fh.read(), "model/gltf-binary",
-                                              filename="modello.glb")
+                                              filename="modello.glb",
+                                              meta=avvisi)
                     finally:
                         _slots.release()
             return self._send(404, "endpoint sconosciuto")

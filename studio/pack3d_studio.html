@@ -342,7 +342,13 @@ async function analyze(buf, opts){
 
 async function build(buf, name, opts){
   setStatus('Costruzione del modello…','busy');
-  glbBlob = await (await post('/api/build', buf, opts)).blob();
+  const r = await post('/api/build', buf, opts);
+  // gli avvisi della costruzione arrivano in un header: il corpo e' il GLB
+  try{
+    const m = r.headers.get('X-Pack3d-Meta');
+    if (m) setMeta(JSON.parse(decodeURIComponent(m)));
+  }catch(e){}
+  glbBlob = await r.blob();
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   show(await glbBlob.arrayBuffer());
   setFase('pronto');

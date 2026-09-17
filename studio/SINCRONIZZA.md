@@ -108,7 +108,7 @@ c'e' una verifica automatica, questa e' la lista da ripassare a mano.
 
 | caso | cosa tiene fermo |
 |---|---|
-| Milch-Schnitte T1 | l'impaginato di riferimento, nastro 144 = 43 + 15 x 2 + 14 x 2 |
+| Milch-Schnitte T1 | l'impaginato di riferimento, nastro 144 = 43 + 15 x 2 + 14 x 2; la soglia sulle cordonature non deve salire sopra la costante, o si perde la piega a 108,5 |
 | FULFIL | il caso calibrato a mano in `CASI`, riferimento del gonfio |
 | Kinder Bueno T2 | pinne ricavate dalle saldature su grafica al vivo; sezione 41 x 20 e non 50 x 11 a pari perimetro |
 | Kinder Pingui T1 | steso ruotato di 90 gradi; cucitura non centrata (16 + 18); fasce grinza 8 \| 10 \| 113 \| 10 \| 8 |

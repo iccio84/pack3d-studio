@@ -243,11 +243,32 @@ Il discrimine e' quanti colori distinti porta il blocco: 149 sull'artwork vero
 contro 14-26 sulle lastre e sui cartigli. `find_blocks` riporta
 `colori_distinti` e ordina per quello.
 
-**Niente soglie assolute sulla lunghezza delle linee.** Fra il nastro di K
-Tronky (83 mm) e quello di K Brioss (420 mm) c'e' un fattore cinque: una
-cordonatura che attraversa tutto il nastro del Tronky e' lunga 83 mm, sotto gli
-88,2 mm che `analyze_auto` pretendeva, e nessun pack piccolo poteva passare il
-cancello. Le soglie vanno prese in frazione del tratto piu' lungo.
+**Niente soglie assolute sulla lunghezza delle linee — ma la frazione puo'
+solo abbassarle, mai alzarle.** Fra il nastro di K Tronky (83 mm) e quello di K
+Brioss (420 mm) c'e' un fattore cinque: una cordonatura che attraversa tutto il
+nastro del Tronky e' lunga 83 mm, sotto gli 88,2 mm che `analyze_auto`
+pretendeva, e nessun pack piccolo poteva passare il cancello.
+
+Sostituire le costanti con una frazione pero' le **alza** sugli steso piu'
+lunghi del riferimento, ed e' un modo nuovo di rompere le cose vecchie: su
+Milch-Schnitte T1, passo 152,5 mm, la soglia saliva da 88,2 a 91,5 e si perdeva
+la cordonatura a 108,5 mm, il cui gruppo sta giusto in mezzo. Senza quella
+piega `solve_bands` non chiude, la costruzione ripiega sul solutore vecchio e
+la grafica scivola. Le costanti restano la taratura buona sugli impaginati gia'
+coperti: si prende il **minimo** fra costante e frazione.
+
+**Un ripiego non deve mai essere muto.** Se `analyze_auto` fallisce, la
+costruzione passa al solutore vecchio: il modello che ne esce non e' sbagliato
+in modo evidente, e' **plausibile**, che e' peggio. Su Milch-Schnitte T1
+cambiavano corpo e pinne — 136,5 e 8,0 invece di 138,7 e 6,9 — e la grafica
+scivolava sul fronte, senza che niente lo dicesse. Ogni ripiego va dichiarato
+negli avvisi della costruzione.
+
+**Gli avvisi della costruzione devono arrivare all'utente.** Viaggiano
+nell'header `X-Pack3d-Meta` della risposta di `/api/build`, perche' il corpo e'
+il GLB. Per un po' sono stati calcolati e buttati: il chiamante HTTP non
+raccoglieva il valore di ritorno, e con lui sparivano la verifica della
+mappatura, la sezione dall'agente e tutto il resto.
 
 **Il raster e il tracciato devono stare nello stesso telaio.** pdfplumber misura
 sul MediaBox, pdfium rende il CropBox. Quando i due riquadri non coincidono — su
@@ -434,6 +455,7 @@ Risolti dall'analisi automatica, con l'invariante che chiude:
 
 | | nastro | passo | fronte | spessore | falda |
 |---|---|---|---|---|---|
+| Milch-Schnitte T1 | 144,0 | 152,5 | 43,0 | 15,0 | 14,0 |
 | Kinder Country | 122,0 | 119,0 | 35,0 | 10,0 | 16,0 |
 | Kinder Paradiso T1 | 165,0 | 155,0 | 43,0 | 27,0 | 12,5 |
 | K Brioss Latte e Cacao T10 | 419,9 | 290,0 | 148,9 | 57,0 | 4,1 |
