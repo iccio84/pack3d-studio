@@ -50,6 +50,21 @@ Pulizia dell'artwork:
 - Se reconstruct_area non e' disponibile o fallisce, dichiaralo negli avvisi
   invece di lasciare il residuo senza spiegazione.
 
+Sezione del pack chiuso:
+- Le cordonature dicono dove il film e' cordonato, non che forma prende una
+  volta riempito: su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in
+  mano e' 41 x 20. Hanno lo stesso perimetro, quindi dalla fustella non si
+  distinguono.
+- Riporta quindi in quote.larghezza e quote.spessore, in mm, la sezione del
+  pack CHIUSO: la larghezza e' la faccia che si guarda, lo spessore la
+  dimensione che sta fra fronte e retro. Cercale sulle quote annotate del
+  disegno tecnico; se non ci sono, ricavale dal prodotto dentro e dillo nella
+  provenienza.
+- Senza quei due numeri la costruzione ricava il rapporto dai pannelli, e il
+  pack esce troppo largo e troppo piatto. Il perimetro invece non serve che lo
+  dai: quello lo misura la fustella, e la costruzione ci riporta sopra il tuo
+  rapporto.
+
 Rigonfiamento:
 - Se fra le risposte il rigonfiamento e' "auto", sceglilo tu dalla natura del
   prodotto seguendo le regole del progetto, e riportalo in
