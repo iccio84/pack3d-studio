@@ -272,8 +272,12 @@ Dal PDF non si vede: e' il prodotto a dirlo. Va riportato in
 - **La pinna e' corta, e la gola sta oltre la scatola.** Quello che la
   fustella misura oltre il corpo non e' tutto pinna: prima il tubo deve
   collassare, e la gola piegata sullo spigolo costa mezzo spessore. Su Kinder
-  Brioss i 37,5 mm oltre il corpo sono 28,5 di gola piu' 9,0 di pinna, e 9 mm
-  e' quanto si misura sulle foto del pack. Con una scatola dentro la gola non
+  Brioss i 37,6 mm oltre il corpo sono 22,8 di gola piu' 14,8 di pinna. Il
+  limite geometrico della gola e' mezzo spessore, la piega a 45 gradi sullo
+  spigolo; sul pack vero pero' parte di quel film si ripiega di lato come
+  orecchia invece di accorciare la pinna, quindi la frazione utile e' piu'
+  bassa. `GOLA_SU_SPESSORE` vale 0,40, tarato sulle foto di un pack solo e
+  regolabile con `PACK3D_GOLA`. Con una scatola dentro la gola non
   puo' mangiare il corpo, perche' la scatola tiene la sezione fino alla sua
   faccia: il pack resta squadrato fino in fondo e poi salda subito. Nel modello
   si sposta massa da `end_fin` a `L` tenendo ferma la somma `L/2 + end_fin`,

@@ -356,12 +356,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # spigolo costa mezzo spessore; quello che avanza e' la pinna vera. Con una
     # scatola dentro il collasso non puo' mangiare il corpo, perche' la scatola
     # tiene la sezione fino alla sua faccia: la gola sta tutta oltre. Sul
-    # Brioss: 37,5 = 28,5 di gola + 9,0 di pinna, e 9 mm e' quanto si misura
-    # sulle foto del pack. La somma L/2 + end_fin non cambia, quindi le UV
-    # restano quelle e la grafica non si sposta di un pixel.
+    # Brioss: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
+    # La somma L/2 + end_fin non cambia, quindi le UV restano quelle e la
+    # grafica non si sposta di un pixel.
     gola = 0.0
     if scatola:
-        gola = min(fp0.T / 2.0, max(fp0.end_fin - 2.0, 0.0))
+        gola = min(GOLA_SU_SPESSORE * fp0.T, max(fp0.end_fin - 2.0, 0.0))
         fp = replace(fp, L=round(fp0.L + 2.0 * gola, 2),
                      end_fin=round(fp0.end_fin - gola, 2))
         avvisi_sez.append("oltre la scatola %.1f mm: %.1f di gola piu' %.1f di "
@@ -619,6 +619,13 @@ SEZ_ELLISSE = float(os.environ.get("PACK3D_SEZ_MORBIDO", "2"))
 
 # quanto il bordo della pinna sfrutta meta' perimetro: 1.0 e' il massimo fisico
 FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
+# Quanto del film oltre il corpo se lo mangia la gola, in frazione di spessore.
+# Il limite geometrico e' 0,5: la gola piegata a 45 gradi sullo spigolo costa
+# mezzo spessore. Sul pack vero pero' una parte di quel film si ripiega di lato
+# come orecchia invece di accorciare la pinna, quindi la frazione utile e' piu'
+# bassa. 0,40 e' quella che riproduce le foto del Brioss: 37,6 = 22,8 di gola
+# piu' 14,8 di pinna. Tarata su un pack solo.
+GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 
 MAX_UPLOAD = 60 * 1024 * 1024
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "2"))
