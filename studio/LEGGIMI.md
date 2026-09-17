@@ -54,8 +54,9 @@ combinazione funziona.
 ## Cosa fa l'interfaccia
 
 1. **Carica PDF** accetta solo PDF. Se e' un astuccio il modello parte subito;
-   se e' un flowpack compaiono prima le due domande obbligatorie, zigrinatura e
-   tipo di gonfiore.
+   se e' un flowpack compaiono prima le domande obbligatorie: numero di
+   dentini, rigonfiamento, apertura delle pinne, e la casella per dire se il
+   film avvolge una scatola.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.
@@ -73,16 +74,47 @@ in pochi MB su una connessione qualsiasi. Con `{"quality":"alta"}` nell'header
 | Astuccio | ~0,9 MB | ~1,5 MB |
 | Flowpack | ~3,6 MB | ~12 MB |
 
-## Tipo di gonfiore
+## Rigonfiamento
 
-| | raccordo | esponente | grinza | pancia | rastremazione |
+Una scala da 1 a 10, non tre gradini. Nell'interfaccia e' un cursore, con la
+casella **Scegli tu** che passa la decisione all'AI in base al prodotto.
+
+Il livello cambia la **forma** della sezione, non la sua taglia: il perimetro e'
+fissato dal foglio stampato, quindi a parita' di steso un pack piu' morbido non
+e' piu' grande, e' piu' tondo. La sezione e' una superellisse il cui esponente
+scende da 10 (rettangolo) a 2 (ellisse), riscalata perche' il perimetro torni
+quello del film.
+
+Gli altri parametri si interpolano su tre ancore:
+
+| livello | raccordo | esponente | grinza | pancia | rastremazione |
 |---|---|---|---|---|---|
-| Rigido | 5,2 mm | 2,0 | – | 1,5% | 8 mm |
-| Medio | 7,5 mm | 2,4 | 0,35 mm | 3,0% | 16 mm |
-| Morbido | 9,5 mm | 2,6 | 0,60 mm | 4,5% | 26 mm |
+| 1 | 4,5 mm | 2,0 | – | 0,8% | 6 mm |
+| 5 | 7,5 mm | 2,4 | 0,35 mm | 3,0% | 16 mm |
+| 10 | 11,0 mm | 2,8 | 0,75 mm | 6,0% | 30 mm |
 
-Il livello "medio" e' interpolato fra i due estremi, Milch-Schnitte (rigido) e
-FULFIL (morbido), e va ritarato sul prossimo flowpack di prova.
+## Apertura pinne
+
+Da 1 a 3, ed e' una domanda separata dal rigonfiamento: dice come si comporta
+il film **alle ganasce**, non che forma prende il corpo.
+
+| | bordo della pinna |
+|---|---|
+| 3 | meta' perimetro, la pinna e' piu' alta del pack (Milch-Schnitte) |
+| 2 | in mezzo |
+| 1 | quanto la faccia del pack, senza svaso (Kinder Brioss) |
+
+La casella **"Il film avvolge una scatola"** propone rigonfiamento 1 e pinne 1,
+e in piu' tiene la sezione a quella della fustella invece di riscalarla, e
+sposta la gola del tubo oltre il corpo invece che dentro. Entrambi i valori
+restano modificabili.
+
+## Etichette
+
+Le etichette vecchie continuano a funzionare nell'API: `rigido` = 2,
+`medio` = 5, `morbido` = 8. Gli estremi vengono da Milch-Schnitte (teso) e
+FULFIL (gonfio); il centro scala e' interpolato e va ritarato sul prossimo
+flowpack di prova.
 
 ## Limiti noti
 

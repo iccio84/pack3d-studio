@@ -242,6 +242,33 @@ def livello_da_agente(params):
         return None
 
 
+def pinne_da_agente(params):
+    """Apertura delle pinne 1-3, se l'agente l'ha decisa."""
+    if not isinstance(params, dict):
+        return None
+    pc = params.get("parametri_costruzione")
+    try:
+        return max(1.0, min(3.0, float(pc.get("apertura_pinne"))))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def scatola_da_agente(params):
+    """Se il film avvolge un corpo rigido che arriva fino alla saldatura.
+
+    Non e' la stessa cosa del rigonfiamento: un pack puo' essere teso sul
+    prodotto senza contenere una scatola. Quello che cambia e' la pinna, e
+    cambia per un motivo meccanico: le ganasce appiattiscono un tubo solo se
+    dentro c'e' aria. Con una scatola dentro non c'e' niente da appiattire.
+    """
+    if not isinstance(params, dict):
+        return False
+    pc = params.get("parametri_costruzione")
+    if not isinstance(pc, dict):
+        return False
+    return bool(pc.get("avvolge_scatola"))
+
+
 def printed_bbox(pdf):
     """Riquadro del blocco stampato, in punti PDF.
 
@@ -262,7 +289,8 @@ def printed_bbox(pdf):
         return None, None
 
 
-def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=None):
+def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
+                   sezione=None, scatola=False, pinne=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -324,20 +352,61 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=
     n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
     fp = fp0
     scala = fpk.sezione_rigonfiata(fp, n_sez)
+    if scatola:
+        # Il riscalo a perimetro costante dice che una forma piu' tonda, con lo
+        # stesso film, e' piu' grande: vale quando dentro c'e' aria. Con una
+        # scatola la sezione la detta la scatola, e i pochi millimetri che la
+        # superellisse taglia agli spigoli se li prende la piega, non il pack.
+        # Senza questo il Brioss usciva 155,9 x 59,7 invece di 148,9 x 57,0.
+        scala = 1.0
     # superellipse_section torna il SEMIASSE, non la larghezza come faceva
     # soft_section_fit: senza il raddoppio width_end esce doppio e le pinne si
     # aprono fino al perimetro intero invece che a meta'
+    # Quanto misura la fustella oltre il corpo — 37,5 mm sul Brioss — non e'
+    # tutto pinna. Prima il tubo deve collassare, e la gola piegata sullo
+    # spigolo costa mezzo spessore; quello che avanza e' la pinna vera. Con una
+    # scatola dentro il collasso non puo' mangiare il corpo, perche' la scatola
+    # tiene la sezione fino alla sua faccia: la gola sta tutta oltre. Sul
+    # Brioss: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
+    # La somma L/2 + end_fin non cambia, quindi le UV restano quelle e la
+    # grafica non si sposta di un pixel.
+    gola = 0.0
+    if scatola:
+        gola = min(GOLA_SU_SPESSORE * fp0.T, max(fp0.end_fin - 2.0, 0.0))
+        fp = replace(fp, L=round(fp0.L + 2.0 * gola, 2),
+                     end_fin=round(fp0.end_fin - gola, 2))
+        avvisi_sez.append("oltre la scatola %.1f mm: %.1f di gola piu' %.1f di "
+                          "pinna" % (fp0.end_fin, gola, fp.end_fin))
+
     Ps, d, semiasse = fpk.superellipse_section(fp, n_sez, thickness=scala * fp.T)
     sw = 2.0 * semiasse
     G = d[-1]
-    # Il bordo della pinna e' il tubo appiattito: il suo massimo geometrico e'
-    # meta' perimetro, oltre il quale il film dovrebbe allungarsi.
-    fin_open = FIN_OPEN_RATIO * G / 2.0
+    # Quanto si apre la pinna, su una scala di tre.
+    #
+    # Un tubo si appiattisce perche' dentro c'e' aria, e appiattito misura meta'
+    # perimetro: quello e' il massimo geometrico, oltre il quale il film
+    # dovrebbe allungarsi. E' il caso di Milch-Schnitte, pinne aperte e piu'
+    # alte del pack, ed e' il 3. All'altro capo, quando il film avvolge una
+    # scatola che arriva fino alla saldatura, non c'e' niente da appiattire: la
+    # pellicola si ripiega sugli spigoli e la pinna esce larga esattamente
+    # quanto la faccia. E' Kinder Brioss, ed e' l'1. Il 2 sta in mezzo.
+    #
+    # Non e' deducibile dal rigonfiamento: dice come si comporta il film alle
+    # ganasce, non che forma prende il corpo.
+    ap = pinne if pinne is not None else (1.0 if scatola else 3.0)
+    ap = max(1.0, min(3.0, float(ap)))
+    fin_open = sw + (FIN_OPEN_RATIO * G / 2.0 - sw) * (ap - 1.0) / 2.0
+    if ap < 3.0:
+        avvisi_sez.append("apertura pinne %g/3: bordo %.1f mm contro i %.1f di "
+                          "meta' perimetro" % (ap, fin_open, G / 2.0))
+    if scatola and liv > 3:
+        avvisi_sez.append("rigonfiamento %g su un pack che avvolge una "
+                          "scatola: di norma e' 1" % liv)
 
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
         width_end=fin_open / sw,
-        taper=max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
+        taper=gola if scatola else max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
         serration=teeth > 0, serr_teeth=max(int(teeth), 1),
         fin_stations=36 if quality == "alta" else 26,
         bulge=par["bulge"], crimp_period=1.4, crimp_mm=0.32,
@@ -383,7 +452,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=
     return ["flowpack, rigonfiamento %s" % soft,
             "sezione %.1f x %.1f (perimetro %.1f invariato)"
             % (scala * fp.W, scala * fp.T, G),
-            "corpo %.1f mm, pinne %.1f" % (fp.L, fp.end_fin),
+            "corpo %.1f mm, pinne %.1f" % (fp0.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri, base %.2f altezza %.2f mm"
              % (teeth, base, base * math.sqrt(3) / 2)),
@@ -536,9 +605,17 @@ class Handler(BaseHTTPRequestHandler):
                                 # "Scegli tu": il livello lo decide l'agente in
                                 # /api/analyze-ai e torna qui dentro params
                                 soft = livello_da_agente(opts.get("params")) or soft
+                            # la scatola puo' dirla l'agente o la casella
+                            # dell'interfaccia: basta una delle due
+                            scatola = (bool(opts.get("scatola"))
+                                       or scatola_da_agente(opts.get("params")))
+                            pinne = opts.get("pinne")
+                            if pinne in (None, "", "auto"):
+                                pinne = pinne_da_agente(opts.get("params"))
                             build_flowpack(pdf, out, int(opts.get("teeth", 20)),
                                            str(soft), case, q,
-                                           sezione_da_agente(opts.get("params")))
+                                           sezione_da_agente(opts.get("params")),
+                                           scatola, pinne)
                     except Exception:
                         _slots.release()
                         raise
@@ -562,6 +639,13 @@ SEZ_ELLISSE = float(os.environ.get("PACK3D_SEZ_MORBIDO", "2"))
 
 # quanto il bordo della pinna sfrutta meta' perimetro: 1.0 e' il massimo fisico
 FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
+# Quanto del film oltre il corpo se lo mangia la gola, in frazione di spessore.
+# Il limite geometrico e' 0,5: la gola piegata a 45 gradi sullo spigolo costa
+# mezzo spessore. Sul pack vero pero' una parte di quel film si ripiega di lato
+# come orecchia invece di accorciare la pinna, quindi la frazione utile e' piu'
+# bassa. 0,40 e' quella che riproduce le foto del Brioss: 37,6 = 22,8 di gola
+# piu' 14,8 di pinna. Tarata su un pack solo.
+GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 
 MAX_UPLOAD = 60 * 1024 * 1024
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "2"))

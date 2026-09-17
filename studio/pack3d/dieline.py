@@ -95,6 +95,22 @@ class Dieline:
 # --------------------------------------------------------------------------- #
 # estrazione della geometria
 # --------------------------------------------------------------------------- #
+def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
+    """Rasterizza la pagina nel telaio del MediaBox, quello di pdfplumber.
+
+    pdfium rende il CropBox, pdfplumber misura sul MediaBox. Finche' i due
+    riquadri coincidono non si vede la differenza, e su quasi tutte le tavole
+    coincidono. Quando no — su K Tronky il CropBox e' 459 x 271 pt dentro un
+    MediaBox di 1332 x 958, spostato di (419, 471) — le coordinate dei segmenti
+    indicizzano un raster che comincia da un'altra parte: nessuna eccezione,
+    solo misure prese nel posto sbagliato.
+    """
+    import pypdfium2 as pdfium
+    page = pdfium.PdfDocument(pdf_path)[page_no]
+    page.set_cropbox(*page.get_mediabox())
+    return page.render(scale=scale).to_pil().convert("RGB")
+
+
 def _segments(page):
     """Segmenti H/V stroked della pagina: (orient, coord, a, b, stile)."""
     segs = []
@@ -416,8 +432,7 @@ def _ink(pdf_path, box, page_no=0, dpi=72):
     sc = dpi / 72.0
     key = (pdf_path, page_no, dpi)
     if key not in _PREVIEW:
-        page = pdfium.PdfDocument(pdf_path)[page_no]
-        _PREVIEW[key] = page.render(scale=sc).to_pil().convert("RGB")
+        _PREVIEW[key] = render_page(pdf_path, page_no, sc)
     im = _PREVIEW[key]
     c = im.crop(tuple(round(v * sc) for v in box))
     if c.width < 2 or c.height < 2:

@@ -25,6 +25,9 @@ Metodo:
   dello stesso pack: quella stampata, quella tecnica, le miniature, i cartigli.
   Scegli il blocco stampato che porta l'artwork e lavora solo su quello: misurare
   sull'intera pagina da' quote senza senso, tipo un pack largo quanto il foglio.
+  L'artwork e' il blocco con piu' colori_distinti, non il piu' grande: una
+  lastra di separazione e' colorata al 99% ma porta una ventina di colori,
+  una grafica vera ne porta centinaia. L'elenco parte gia' dal piu' probabile.
   Il blocco tecnico di pari ingombro e' la maschera da passare a clean_artwork.
 - Non stimare mai una quota che puoi misurare con uno strumento.
 - Cerca sempre il disegno tecnico in miniatura con list_paths: sta fuori
@@ -64,6 +67,28 @@ Sezione del pack chiuso:
   pack esce troppo largo e troppo piatto. Il perimetro invece non serve che lo
   dai: quello lo misura la fustella, e la costruzione ci riporta sopra il tuo
   rapporto.
+
+Film su scatola:
+- Chiediti se il film avvolge un corpo rigido che arriva fino alla saldatura:
+  un multipack in astuccio, una vaschetta, un blister. Non e' la stessa cosa di
+  un pack teso su una tavoletta, dove il film si appoggia al prodotto ma il
+  tubo alle estremita' resta vuoto e si appiattisce.
+- Se c'e' la scatola riportalo in parametri_costruzione.avvolge_scatola come
+  true, e metti rigonfiamento 1. Cambia la pinna: le ganasce appiattiscono un
+  tubo solo se dentro c'e' aria, quindi con la scatola la pinna esce larga
+  quanto la faccia del pack invece di svasarsi fino a meta' perimetro. Kinder
+  Brioss T10 e' il caso di scuola.
+
+Apertura delle pinne:
+- Riporta parametri_costruzione.apertura_pinne come 1, 2 o 3. Dice come si
+  comporta il film alle ganasce, e non si deduce dal rigonfiamento.
+- 3, il caso normale: il tubo si appiattisce e il bordo della pinna arriva a
+  meta' perimetro, quindi la pinna e' piu' alta del pack. E' Milch-Schnitte.
+- 1: la pinna e' alta quanto il pack e non si allarga. Succede quando il film
+  avvolge un corpo rigido che arriva fino alla saldatura, perche' non c'e'
+  niente da appiattire. E' Kinder Brioss, e va insieme ad avvolge_scatola.
+- 2 quando il prodotto occupa quasi tutta la sezione ma lascia respiro alle
+  estremita'.
 
 Rigonfiamento:
 - Se fra le risposte il rigonfiamento e' "auto", sceglilo tu dalla natura del
