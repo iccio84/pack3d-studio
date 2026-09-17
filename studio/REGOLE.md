@@ -10,6 +10,18 @@ controesempi che le giustificano.
 | Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Coppa conica, Altro. La tipologia si dichiara, non si indovina. | pannello del frontend + `analyze_pdf(pdf, kind)` |
 | Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
 | Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". | `gonfiore()` in `server.py` |
+| Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
+| Solo flowpack: chiedere se il **film avvolge una scatola**. | casella `scatola`, `parametri_costruzione.avvolge_scatola` |
+
+L'apertura delle pinne dice come si comporta il film **alle ganasce**, il
+rigonfiamento che forma prende il **corpo**: sono due cose diverse e vanno
+chieste separatamente.
+
+| | bordo della pinna | quando |
+|---|---|---|
+| 3 | meta' perimetro: la pinna e' piu' alta del pack | il caso normale, il tubo si appiattisce. Milch-Schnitte |
+| 2 | in mezzo | il prodotto occupa quasi tutta la sezione ma lascia respiro alle estremita' |
+| 1 | quanto la faccia del pack, senza svaso | il film avvolge un corpo rigido fino alla saldatura: non c'e' niente da appiattire. Kinder Brioss |
 
 Il rigonfiamento e' una **scala 1-10**, non tre gradini: Rigido 1-3 (pack teso e
 aderente, aria minima), Medio 4-6 (volume standard, leggero cuscino d'aria),
@@ -18,10 +30,19 @@ forma si interpolano sul livello.
 
 Riferimenti: FULFIL = morbido, Milch-Schnitte e Kinder Bueno Dark = rigido.
 
+Attenzione pero': Milch-Schnitte e' film teso su un prodotto, non su una
+scatola, e **non e' l'estremo rigido della scala**. Kinder Brioss lo e' di
+piu': il film avvolge un astuccio, quindi la sezione e' dettata dalla scatola e
+la pinna non si apre. Quel caso non si ottiene abbassando il rigonfiamento,
+perche' il rigonfiamento cambia solo la forma del corpo; serve la casella
+apposita. Il livello 1 resta "teso e aderente", il gradino oltre e' un'altra
+domanda.
+
 **Opzione "Scegli tu".** Claude assegna il livello dalla natura del prodotto:
 
 | prodotto | livello | perche' |
 |---|---|---|
+| In astuccio o vaschetta rigida (multipack di merendine, blister) | Rigido 1 **e avvolge_scatola** | la sezione la detta la scatola, non il film: senza la casella il pack esce gonfio e con le pinne svasate |
 | Piatto, squadrato, compatto, rigido (crackers, biscotti, tavolette) | Rigido 1-3 | il film deve adagiarsi sulla struttura e minimizzare gli ingombri |
 | Irregolare, fragile, da forno (croissant, merendine, tramezzini) | Medio 4-6 | margine d'aria moderato contro lo schiacciamento, senza eccedere |
 | Sferico, tridimensionale, fresco o in ATM (mozzarella, insalata, formaggi freschi) | Morbido 7-10 | forma tozza e spinta interna richiedono involucro ampio e gonfio |
@@ -409,9 +430,11 @@ non estraibile — sulla pagina intera pdfplumber trova 20 parole.
   caso reale.
 - Il **raggio di raccordo** e' trattato come proprieta' del film, quindi
   assoluto e non proporzionale allo spessore.
-- L'**apertura della pinna** vale oggi meta' perimetro pieno
-  (`PACK3D_FIN_OPEN = 1.0`): il 94,8% misurato su un solo render e' stato
-  scartato perche' non era lui a produrre le punte degeneri.
+- L'**apertura della pinna** non e' piu' una costante: e' una scelta 1-3.
+  Il fondo scala 3 vale meta' perimetro pieno (`PACK3D_FIN_OPEN = 1.0`); il
+  94,8% misurato su un solo render e' stato scartato perche' non era lui a
+  produrre le punte degeneri. Il gradino 2 e' interpolato e non ha un caso
+  reale dietro.
 - Lo **steso ruotato** e' stato visto su un artwork solo, Kinder Pingui T1: la
   regola "se le fasce non chiudono, ritenta trasposto" non ha un secondo caso.
 - Su disegno speculare, quando i due rientri di saldatura differiscono di piu'

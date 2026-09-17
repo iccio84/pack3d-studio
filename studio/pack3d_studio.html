@@ -103,6 +103,11 @@
       <p class="note">1-3 teso e aderente · 4-6 volume standard · 7-10 volumetrico e gonfio. A steso invariato la sezione passa dal rettangolo all’ellisse: il perimetro del film resta quello, il pack si gonfia in entrambe le direzioni.</p>
     </div>
     <div class="fld">
+      <label for="pinne">Apertura pinne <b id="pinneval">Aperte 3/3</b></label>
+      <input id="pinne" type="range" min="1" max="3" step="1" value="3">
+      <p class="note">3 = pinne aperte, piu’ alte del pack: il tubo si appiattisce e il bordo arriva a metà perimetro (Milch-Schnitte). 1 = pinne alte quanto il pack, senza svaso, tipico di quando il film avvolge un corpo rigido (Kinder Brioss). 2 sta in mezzo.</p>
+    </div>
+    <div class="fld">
       <label class="auto"><input id="scatola" type="checkbox"> Il film avvolge una scatola</label>
       <p class="note">Un multipack in astuccio, una vaschetta, un blister. Le ganasce appiattiscono un tubo solo se dentro c’è aria: con la scatola dentro la pinna resta larga quanto la faccia del pack invece di svasarsi.</p>
     </div>
@@ -384,6 +389,7 @@ document.getElementById('go').onclick = async () => {
     await build(pending.buf, pending.name,
                 {kind:'flowpack', teeth: document.getElementById('teeth').value,
                  scatola: document.getElementById('scatola').checked,
+                 pinne: Number(document.getElementById('pinne').value),
                  soft:  document.getElementById('softauto').checked
                           ? 'auto'
                           : Number(document.getElementById('soft').value)});
@@ -422,14 +428,25 @@ resize();
     val.textContent = auto.checked ? 'la sceglie l’AI' : fascia(v) + ' ' + v + '/10';
   }
   var box = document.getElementById('scatola');
+  var pin = document.getElementById('pinne');
+  var pinVal = document.getElementById('pinneval');
+  function mostraPinne() {
+    var v = Number(pin.value);
+    pinVal.textContent = (v === 1 ? 'Chiuse' : v === 2 ? 'Intermedie' : 'Aperte') + ' ' + v + '/3';
+  }
   slider.addEventListener('input', mostra);
   auto.addEventListener('change', mostra);
-  // un film su scatola e' rigido per costruzione: si propone 1, ma resta
-  // modificabile perche' la scatola puo' non riempire tutta la sezione
+  pin.addEventListener('input', mostraPinne);
+  // un film su scatola e' rigido per costruzione e non svasa: si propongono
+  // rigonfiamento 1 e pinne 1, ma restano modificabili perche' la scatola puo'
+  // non riempire tutta la sezione
   box.addEventListener('change', function () {
-    if (box.checked && !auto.checked) { slider.value = 1; mostra(); }
+    if (!box.checked) return;
+    if (!auto.checked) { slider.value = 1; mostra(); }
+    pin.value = 1; mostraPinne();
   });
   mostra();
+  mostraPinne();
 })();
 </script>
 </body>

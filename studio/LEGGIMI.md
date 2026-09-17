@@ -54,8 +54,9 @@ combinazione funziona.
 ## Cosa fa l'interfaccia
 
 1. **Carica PDF** accetta solo PDF. Se e' un astuccio il modello parte subito;
-   se e' un flowpack compaiono prima le due domande obbligatorie, numero di
-   dentini e rigonfiamento.
+   se e' un flowpack compaiono prima le domande obbligatorie: numero di
+   dentini, rigonfiamento, apertura delle pinne, e la casella per dire se il
+   film avvolge una scatola.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.
@@ -91,6 +92,24 @@ Gli altri parametri si interpolano su tre ancore:
 | 1 | 4,5 mm | 2,0 | – | 0,8% | 6 mm |
 | 5 | 7,5 mm | 2,4 | 0,35 mm | 3,0% | 16 mm |
 | 10 | 11,0 mm | 2,8 | 0,75 mm | 6,0% | 30 mm |
+
+## Apertura pinne
+
+Da 1 a 3, ed e' una domanda separata dal rigonfiamento: dice come si comporta
+il film **alle ganasce**, non che forma prende il corpo.
+
+| | bordo della pinna |
+|---|---|
+| 3 | meta' perimetro, la pinna e' piu' alta del pack (Milch-Schnitte) |
+| 2 | in mezzo |
+| 1 | quanto la faccia del pack, senza svaso (Kinder Brioss) |
+
+La casella **"Il film avvolge una scatola"** propone rigonfiamento 1 e pinne 1,
+e in piu' tiene la sezione a quella della fustella invece di riscalarla, e
+sposta la gola del tubo oltre il corpo invece che dentro. Entrambi i valori
+restano modificabili.
+
+## Etichette
 
 Le etichette vecchie continuano a funzionare nell'API: `rigido` = 2,
 `medio` = 5, `morbido` = 8. Gli estremi vengono da Milch-Schnitte (teso) e

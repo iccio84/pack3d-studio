@@ -79,6 +79,17 @@ Film su scatola:
   quanto la faccia del pack invece di svasarsi fino a meta' perimetro. Kinder
   Brioss T10 e' il caso di scuola.
 
+Apertura delle pinne:
+- Riporta parametri_costruzione.apertura_pinne come 1, 2 o 3. Dice come si
+  comporta il film alle ganasce, e non si deduce dal rigonfiamento.
+- 3, il caso normale: il tubo si appiattisce e il bordo della pinna arriva a
+  meta' perimetro, quindi la pinna e' piu' alta del pack. E' Milch-Schnitte.
+- 1: la pinna e' alta quanto il pack e non si allarga. Succede quando il film
+  avvolge un corpo rigido che arriva fino alla saldatura, perche' non c'e'
+  niente da appiattire. E' Kinder Brioss, e va insieme ad avvolge_scatola.
+- 2 quando il prodotto occupa quasi tutta la sezione ma lascia respiro alle
+  estremita'.
+
 Rigonfiamento:
 - Se fra le risposte il rigonfiamento e' "auto", sceglilo tu dalla natura del
   prodotto seguendo le regole del progetto, e riportalo in

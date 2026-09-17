@@ -242,6 +242,17 @@ def livello_da_agente(params):
         return None
 
 
+def pinne_da_agente(params):
+    """Apertura delle pinne 1-3, se l'agente l'ha decisa."""
+    if not isinstance(params, dict):
+        return None
+    pc = params.get("parametri_costruzione")
+    try:
+        return max(1.0, min(3.0, float(pc.get("apertura_pinne"))))
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
 def scatola_da_agente(params):
     """Se il film avvolge un corpo rigido che arriva fino alla saldatura.
 
@@ -279,7 +290,7 @@ def printed_bbox(pdf):
 
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
-                   sezione=None, scatola=False):
+                   sezione=None, scatola=False, pinne=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -370,21 +381,27 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     Ps, d, semiasse = fpk.superellipse_section(fp, n_sez, thickness=scala * fp.T)
     sw = 2.0 * semiasse
     G = d[-1]
-    # Il bordo della pinna e' il tubo appiattito: il suo massimo geometrico e'
-    # meta' perimetro, oltre il quale il film dovrebbe allungarsi.
-    fin_open = FIN_OPEN_RATIO * G / 2.0
-    if scatola:
-        # Un tubo si appiattisce perche' dentro c'e' aria. Quando il film
-        # avvolge una scatola che arriva fino alla saldatura non c'e' niente da
-        # appiattire: la pellicola si ripiega sugli spigoli, e la pinna esce
-        # larga esattamente quanto la faccia, senza svaso. Kinder Brioss T10 e'
-        # cosi', ed e' il caso raro in cui la pinna non si allarga.
-        fin_open = sw
-        avvisi_sez.append("film su scatola: pinna larga quanto la sezione, "
-                          "senza svaso")
-        if liv > 3:
-            avvisi_sez.append("rigonfiamento %g su un pack che avvolge una "
-                              "scatola: di norma e' 1" % liv)
+    # Quanto si apre la pinna, su una scala di tre.
+    #
+    # Un tubo si appiattisce perche' dentro c'e' aria, e appiattito misura meta'
+    # perimetro: quello e' il massimo geometrico, oltre il quale il film
+    # dovrebbe allungarsi. E' il caso di Milch-Schnitte, pinne aperte e piu'
+    # alte del pack, ed e' il 3. All'altro capo, quando il film avvolge una
+    # scatola che arriva fino alla saldatura, non c'e' niente da appiattire: la
+    # pellicola si ripiega sugli spigoli e la pinna esce larga esattamente
+    # quanto la faccia. E' Kinder Brioss, ed e' l'1. Il 2 sta in mezzo.
+    #
+    # Non e' deducibile dal rigonfiamento: dice come si comporta il film alle
+    # ganasce, non che forma prende il corpo.
+    ap = pinne if pinne is not None else (1.0 if scatola else 3.0)
+    ap = max(1.0, min(3.0, float(ap)))
+    fin_open = sw + (FIN_OPEN_RATIO * G / 2.0 - sw) * (ap - 1.0) / 2.0
+    if ap < 3.0:
+        avvisi_sez.append("apertura pinne %g/3: bordo %.1f mm contro i %.1f di "
+                          "meta' perimetro" % (ap, fin_open, G / 2.0))
+    if scatola and liv > 3:
+        avvisi_sez.append("rigonfiamento %g su un pack che avvolge una "
+                          "scatola: di norma e' 1" % liv)
 
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
@@ -592,10 +609,13 @@ class Handler(BaseHTTPRequestHandler):
                             # dell'interfaccia: basta una delle due
                             scatola = (bool(opts.get("scatola"))
                                        or scatola_da_agente(opts.get("params")))
+                            pinne = opts.get("pinne")
+                            if pinne in (None, "", "auto"):
+                                pinne = pinne_da_agente(opts.get("params"))
                             build_flowpack(pdf, out, int(opts.get("teeth", 20)),
                                            str(soft), case, q,
                                            sezione_da_agente(opts.get("params")),
-                                           scatola)
+                                           scatola, pinne)
                     except Exception:
                         _slots.release()
                         raise
