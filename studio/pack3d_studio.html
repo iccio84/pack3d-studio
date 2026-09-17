@@ -3,94 +3,159 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>pack3d studio</title>
+<title>glamlab PDFto3D</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root{
-    --ink:#1b1917; --muted:#7a736c; --line:#e4dfd8; --bg:#f4f2ef;
-    --accent:#1b1917; --warn:#a8442a;
+    /* Dal viewer glamlab: verde della barra, verde dei titoli, e un verde
+       chiarissimo per gli stati scelti. I bordi sono grigi neutri, non
+       virati: sul verde il grigio caldo ingiallisce. */
+    --verde:#b5d65a; --verde-scuro:#7ba32c; --verde-chiaro:#f3f8e6;
+    --ink:#2b2e26; --muted:#9b9b93; --line:#ececec; --bg:#fbfbfa;
+    --warn:#b4472a;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
   body{margin:0;background:var(--bg);color:var(--ink);
-       font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
+       font:14px/1.55 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;
        display:flex;flex-direction:column}
 
-  header{padding:16px 24px;border-bottom:1px solid var(--line);background:#fff;
-         display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-  .brand{font-size:17px;font-weight:650;letter-spacing:-.015em}
-  .brand span{color:var(--muted);font-weight:400}
-  #status{margin-left:auto;font-size:13px;color:var(--muted)}
-  #status.busy{color:var(--ink)}
-  #status.err{color:var(--warn)}
+  /* maiuscoletto spaziato: e' la voce dell'interfaccia di riferimento */
+  .tit{font-size:11px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+       color:var(--verde-scuro)}
+  .cap{font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+       color:var(--muted)}
 
-  #stage{flex:1;position:relative;min-height:320px;
-         background:radial-gradient(120% 90% at 50% 12%,#ffffff 0%,#eae6e1 100%)}
+  header{background:var(--verde);padding:14px 20px;display:flex;align-items:center;
+         gap:14px;position:relative}
+  .brand{margin:0 auto;color:#fff;font-size:22px;line-height:1;font-weight:800;
+         letter-spacing:-.02em;display:inline-flex;align-items:baseline;gap:.32em}
+  .brand span{font-weight:300;letter-spacing:0}
+
+  /* la scena e' una carta arrotondata che respira, come il pannello centrale */
+  #stage{flex:1;position:relative;min-height:340px;margin:16px;border-radius:16px;
+         border:1px solid var(--line);background:#fff;overflow:hidden}
   canvas{display:block;width:100%;height:100%}
+  #titolo{position:absolute;left:18px;top:14px;z-index:2}
+  #status{position:absolute;left:0;right:0;bottom:14px;text-align:center;z-index:2;
+          font-size:11px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;
+          color:var(--muted);pointer-events:none;padding:0 20px}
+  #status.err{color:var(--warn);letter-spacing:.04em;text-transform:none;font-size:12.5px}
   #empty{position:absolute;inset:0;display:flex;flex-direction:column;
          align-items:center;justify-content:center;gap:6px;color:var(--muted);
          text-align:center;padding:24px;pointer-events:none}
-  #empty strong{color:var(--ink);font-weight:600}
-  #drop{position:absolute;inset:12px;border:2px dashed transparent;border-radius:14px;
+  #empty strong{color:var(--ink);font-weight:650;font-size:15px}
+
+  /* Cursore sottile con la parte percorsa in verde. accent-color da solo
+     lascia il binario nero di sistema: la parte piena la disegna un
+     gradiente, e --p la aggiorna il JS. */
+  input[type=range]{-webkit-appearance:none;appearance:none;background:transparent;
+                    width:100%;max-width:320px;height:16px;margin:0;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{
+    height:4px;border-radius:999px;
+    background:linear-gradient(var(--verde-scuro),var(--verde-scuro))
+               0/var(--p,50%) 100% no-repeat, var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:13px;height:13px;border-radius:50%;background:var(--verde-scuro);
+    border:2px solid #fff;box-shadow:0 0 0 1px var(--verde-scuro);margin-top:-4.5px}
+  input[type=range]::-moz-range-track{height:4px;border-radius:999px;background:var(--line)}
+  input[type=range]::-moz-range-progress{height:4px;border-radius:999px;
+    background:var(--verde-scuro)}
+  input[type=range]::-moz-range-thumb{width:13px;height:13px;border:2px solid #fff;
+    border-radius:50%;background:var(--verde-scuro);box-shadow:0 0 0 1px var(--verde-scuro)}
+  input[type=range]:disabled{opacity:.45}
+  input[type=checkbox]{accent-color:var(--verde-scuro);width:15px;height:15px}
+  :focus-visible{outline:2px solid var(--verde-scuro);outline-offset:2px}
+
+  /* Barra indeterminata: /api/build risponde una volta sola e non manda
+     avanzamento, quindi una percentuale sarebbe inventata. */
+  #prog{position:absolute;left:0;right:0;top:0;height:3px;overflow:hidden;
+        background:rgba(43,46,38,.06);display:none;z-index:3}
+  #prog.on{display:block}
+  #prog i{position:absolute;top:0;bottom:0;width:40%;background:var(--verde);
+          border-radius:3px;animation:scorre 1.15s ease-in-out infinite}
+  @keyframes scorre{ 0%{left:-40%} 100%{left:100%} }
+  @media (prefers-reduced-motion:reduce){
+    #prog i{animation:none;left:0;width:100%;opacity:.4}
+  }
+
+  #drop{position:absolute;inset:10px;border:2px dashed transparent;border-radius:12px;
         transition:border-color .15s,background .15s}
-  body.dragging #drop{border-color:var(--ink);background:rgba(27,25,23,.04)}
+  body.dragging #drop{border-color:var(--verde);background:rgba(181,214,90,.12)}
 
-  #meta{position:absolute;left:18px;bottom:16px;display:flex;gap:8px;flex-wrap:wrap;
-        font-size:12px;color:var(--muted)}
-  #meta span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:4px 10px}
+  #meta{position:absolute;left:18px;bottom:40px;right:18px;display:flex;gap:7px;
+        flex-wrap:wrap;font-size:11px;color:var(--muted);z-index:2}
+  #meta span{background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 10px}
 
-  footer{border-top:1px solid var(--line);background:#fff;padding:16px 24px 22px}
-  .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}
-  button{font:inherit;font-size:14px;padding:11px 20px;border-radius:10px;cursor:pointer;
-         border:1px solid var(--line);background:#fff;color:var(--ink)}
-  button:hover:not(:disabled){background:#faf8f6}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  button.primary:hover:not(:disabled){opacity:.9}
+  footer{padding:0 16px 18px}
+
+  button{font:inherit;font-size:12px;font-weight:600;letter-spacing:.08em;
+         text-transform:uppercase;padding:10px 18px;border-radius:10px;cursor:pointer;
+         border:1px solid var(--line);background:#fff;color:var(--ink);
+         transition:background .15s,border-color .15s}
+  button:hover:not(:disabled){border-color:#dcdcdc;background:#fafafa}
+  button.primary{background:var(--verde-chiaro);border-color:var(--verde);
+                 color:var(--verde-scuro)}
+  button.primary:hover:not(:disabled){background:#ebf4d8;border-color:var(--verde-scuro)}
   button:disabled{opacity:.4;cursor:not-allowed}
 
-  #params{max-width:720px;margin:0 auto 14px;display:none;gap:16px;
-          align-items:flex-end;justify-content:center;flex-wrap:wrap;
-          border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fdfcfb}
-  #params.on{display:flex}
-  #packtype{max-width:720px;margin:0 auto 14px;display:none;gap:10px;
-            align-items:center;justify-content:center;flex-wrap:wrap;
-            border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fdfcfb}
-  #packtype.on{display:flex}
-  #packtype .q{font-size:13px;color:var(--muted);margin-right:4px}
-  .fld{display:flex;flex-direction:column;gap:5px}
-  .fld .auto{flex-direction:row;align-items:center;justify-content:center;gap:6px;font-size:12.5px;color:var(--muted)}
-  #soft{accent-color:var(--muted)}
-  .fld label{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
-  .fld input,.fld select{font:inherit;font-size:14px;padding:8px 10px;border:1px solid var(--line);
-                         border-radius:8px;background:#fff;color:var(--ink)}
-  .fld input{width:110px}
-  #params .note{flex-basis:100%;font-size:12.5px;color:var(--muted);margin:0}
-  .hint{max-width:720px;margin:12px auto 0;text-align:center;font-size:12.5px;color:var(--muted)}
+  /* i comandi vivono in una pillola flottante, come STRUMENTI 3D */
+  .row{display:flex;gap:10px;justify-content:center;align-items:center;flex-wrap:wrap;
+       margin:0 auto;width:fit-content;background:#fff;border:1px solid var(--line);
+       border-radius:999px;padding:9px 14px;box-shadow:0 6px 22px rgba(43,46,38,.07)}
+
+  .pannello{max-width:760px;margin:0 auto 14px;border:1px solid var(--line);
+            border-radius:16px;padding:16px 18px 18px;background:#fff;display:none}
+  .pannello.on{display:block}
+  .pannello > .tit{display:block;margin-bottom:12px}
+
+  #packtype .scelte{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+
+  #params .griglia{display:grid;gap:16px}
+  .fld{display:flex;flex-direction:column;gap:7px}
+  .fld > label{font-size:11px;font-weight:600;letter-spacing:.14em;
+               text-transform:uppercase;color:var(--muted)}
+  .fld > label b{color:var(--verde-scuro);letter-spacing:.1em}
+  .fld input[type=number]{font:inherit;padding:9px 12px;border:1px solid var(--line);
+                          border-radius:10px;background:#fff;color:var(--ink);max-width:220px}
+  label.auto{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;
+             letter-spacing:.1em;text-transform:uppercase;color:var(--muted);cursor:pointer}
+  .note{margin:0;font-size:12px;line-height:1.5;color:var(--muted);letter-spacing:0;
+        text-transform:none}
+  #go{width:100%;max-width:280px;margin:4px auto 0;display:block}
+  .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:11.5px;
+        color:var(--muted)}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">pack3d <span>studio</span></div>
-  <div id="status">Nessun modello caricato</div>
+  <div class="brand">glamlab<span>PDFto3D</span></div>
 </header>
 
 <div id="stage">
+  <div id="prog"><i></i></div>
   <div id="drop"></div>
+  <div id="titolo" class="tit"></div>
   <div id="empty">
     <strong>Carica un artwork PDF</strong>
     <div>Il modello 3D comparirà qui. Puoi anche trascinare il file.</div>
   </div>
   <div id="meta"></div>
+  <div id="status">Nessun modello caricato</div>
 </div>
 
 <footer>
-  <div id="packtype">
-    <span class="q">Che tipo di pack &egrave;?</span>
-    <button data-k="carton">Cartotecnico</button>
-    <button data-k="flowpack">Flowpack</button>
+  <div id="packtype" class="pannello">
+    <span class="tit">Che tipo di pack &egrave;</span>
+    <div class="scelte">
+      <button data-k="carton">Cartotecnico</button>
+      <button data-k="flowpack">Flowpack</button>
+    </div>
   </div>
 
-  <div id="params">
+  <div id="params" class="pannello">
+    <span class="tit">Parametri di costruzione</span>
+    <div class="griglia">
     <div class="fld">
       <label for="teeth">Dentini zigrinatura per lato</label>
       <input id="teeth" type="number" min="0" max="400" step="1" placeholder="digita il numero">
@@ -110,11 +175,13 @@
       <label class="auto"><input id="scatola" type="checkbox"> Il film avvolge una scatola</label>
       <p class="note">Un multipack in astuccio, una vaschetta, un blister. Le ganasce appiattiscono un tubo solo se dentro c’è aria: con la scatola dentro la pinna resta larga quanto la faccia del pack invece di svasarsi.</p>
     </div>
+    </div>
     <button id="go" class="primary">Costruisci</button>
     <p class="note">Il numero di dentini va digitato: non e’ deducibile dalla dimensione del pack. Con 0 le pinne restano lisce. I denti sono triangoli equilateri contati sul bordo della pinna.</p>
   </div>
 
   <div class="row">
+    <span class="tit">Strumenti</span>
     <input id="file" type="file" accept="application/pdf,.pdf" hidden>
     <button id="upload" class="primary">Carica PDF</button>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
@@ -288,7 +355,16 @@ const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagi
   }
 })();
 
-function setStatus(text, cls){ statusEl.textContent = text; statusEl.className = cls || ''; }
+function setStatus(text, cls){
+  statusEl.textContent = text; statusEl.className = cls || '';
+  // la barra segue lo stato: 'busy' e' gia' il segnale che c'e' lavoro in corso
+  const b = document.getElementById('prog');
+  if (b) b.classList.toggle('on', cls === 'busy');
+}
+function setTitolo(s){
+  const el = document.getElementById('titolo');
+  if (el) el.textContent = s ? s.replace(/\.pdf$/i,'').toUpperCase() : '';
+}
 function setMeta(items){
   document.getElementById('meta').innerHTML =
     (items||[]).map(t => '<span>'+t+'</span>').join('');
@@ -358,7 +434,7 @@ async function handle(file){
   if (!file) return;
   if (/\.glb$/i.test(file.name)){          // comodo per guardare un GLB gia' pronto
     glbBlob = file; glbName = file.name;
-    show(await file.arrayBuffer()); setFase('pronto');
+    show(await file.arrayBuffer()); setFase('pronto'); setTitolo(file.name);
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
@@ -367,6 +443,7 @@ async function handle(file){
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
   // prima domanda obbligatoria su ogni PDF: la tipologia la dichiara l'utente
   pending = {buf: await file.arrayBuffer(), name: file.name};
+  setTitolo(file.name);
   params.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
   setFase('lavoro');
@@ -397,15 +474,27 @@ function annulla(){
   pending = null; glbBlob = null;
   params.classList.remove('on');
   packtype.classList.remove('on');
-  setMeta([]);
+  setMeta([]); setTitolo('');
   // il viewer sta dietro a three.js: se non si e' caricato i tasti devono
   // tornare a posto lo stesso, quindi la parte 3D va protetta
   try{
     if (model){
       scene.remove(model);
-      model.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      model.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        // la texture e' il pezzo grosso: senza dispose resta in memoria GPU
+        const m = o.material;
+        for (const mm of (Array.isArray(m) ? m : m ? [m] : [])){
+          if (mm.map) mm.map.dispose();
+          mm.dispose();
+        }
+      });
       model = null;
     }
+    // il viewer disegna SU RICHIESTA: togliere il modello dalla scena non
+    // svuota la tela, perche' nessuno ridisegna. Senza questa riga il pack
+    // restava li' anche dopo Annulla, con il messaggio sopra.
+    render();
     document.getElementById('empty').style.display = '';
   }catch(e){}
   setStatus(backendUp ? (API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale')
@@ -470,14 +559,21 @@ resize();
   function fascia(v) { return v <= 3 ? 'Rigido' : v <= 6 ? 'Medio' : 'Morbido'; }
   function mostra() {
     var v = Number(slider.value);
+    riempi(slider);
     slider.disabled = auto.checked;
     val.textContent = auto.checked ? 'la sceglie l’AI' : fascia(v) + ' ' + v + '/10';
   }
   var box = document.getElementById('scatola');
   var pin = document.getElementById('pinne');
   var pinVal = document.getElementById('pinneval');
+  function riempi(el) {
+    var min = Number(el.min || 0), max = Number(el.max || 100);
+    var f = max > min ? (Number(el.value) - min) / (max - min) : 0;
+    el.style.setProperty('--p', (f * 100).toFixed(1) + '%');
+  }
   function mostraPinne() {
     var v = Number(pin.value);
+    riempi(pin);
     pinVal.textContent = (v === 1 ? 'Chiuse' : v === 2 ? 'Intermedie' : 'Aperte') + ' ' + v + '/3';
   }
   slider.addEventListener('input', mostra);
