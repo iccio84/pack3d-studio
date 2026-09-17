@@ -123,7 +123,7 @@ def measure_region(pdf, x_mm, y_mm, w_mm, h_mm, dpi: int = 200):
     """
     import pypdfium2 as pdfium
     s = dpi / 72.0
-    im = pdfium.PdfDocument(pdf)[0].render(scale=s).to_pil().convert("RGB")
+    im = dl.render_page(pdf, 0, s)
     a = np.asarray(im).astype(int)
     x0, y0 = int(x_mm / PT2MM * s), int(y_mm / PT2MM * s)
     x1, y1 = int((x_mm + w_mm) / PT2MM * s), int((y_mm + h_mm) / PT2MM * s)
@@ -219,7 +219,7 @@ def clean_artwork(pdf, x_mm, y_mm, w_mm, h_mm, dt_x_mm=None, dt_y_mm=None,
     from scipy.ndimage import binary_dilation, distance_transform_edt, label, uniform_filter
     from . import techink
     s = dpi / 72.0
-    page = pdfium.PdfDocument(pdf)[0].render(scale=s).to_pil().convert("RGB")
+    page = dl.render_page(pdf, 0, s)
     A = np.asarray(page).astype(int)
 
     def cut(x, y, w, h):
@@ -244,8 +244,7 @@ def clean_artwork(pdf, x_mm, y_mm, w_mm, h_mm, dt_x_mm=None, dt_y_mm=None,
         import tempfile, os as _os
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False); tmp.close()
         _strip(pdf, tmp.name, drop)
-        B = np.asarray(pdfium.PdfDocument(tmp.name)[0].render(scale=s).to_pil()
-                       .convert("RGB")).astype(int)
+        B = np.asarray(dl.render_page(tmp.name, 0, s)).astype(int)
         strip = B[round(y_mm / PT2MM * s):round(y_mm / PT2MM * s) + H,
                   round(x_mm / PT2MM * s):round(x_mm / PT2MM * s) + W]
         perso = np.abs(out - strip).max(2) > 25
@@ -495,7 +494,7 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
     import pypdfium2 as pdfium
     from scipy.ndimage import label, binary_closing, find_objects
     s = dpi / 72.0
-    im = pdfium.PdfDocument(pdf)[0].render(scale=s).to_pil().convert("RGB")
+    im = dl.render_page(pdf, 0, s)
     a = np.asarray(im).astype(int)
     occupato = binary_closing(a.max(2) < 248, np.ones((7, 7)))
     lab, n = label(occupato)
@@ -512,14 +511,25 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
         chroma = (reg.max(2) - reg.min(2))
         colore = float((chroma[m] > 30).mean()) if m.any() else 0.0
         scuro = float((reg.max(2)[m] < 200).mean()) if m.any() else 0.0
+        # Quanti colori distinti porta il blocco, quantizzati a 32 livelli per
+        # canale. Serve a non scambiare una lastra di separazione per
+        # l'artwork: una campitura piatta di tinta e' colorata al 99% ma ha una
+        # ventina di colori, mentre una grafica vera ne ha centinaia.
+        q = reg[m] // 32 if m.any() else np.zeros((1, 3), int)
+        colori = int(len(np.unique(q[:, 0] * 1024 + q[:, 1] * 32 + q[:, 2])))
         out.append(dict(
             x_mm=round(sl[1].start / s * PT2MM, 1), y_mm=round(sl[0].start / s * PT2MM, 1),
             w_mm=round(w, 1), h_mm=round(h, 1),
             colore_pct=round(100 * colore, 1), inchiostro_pct=round(100 * scuro, 1),
+            colori_distinti=colori,
             # 83% di superficie colorata sulla vista stampata contro 13% su
             # quella tecnica: la soglia sta comoda in mezzo
             tipo="stampato" if colore > 0.35 else "tecnico"))
-    out.sort(key=lambda b: -(b["w_mm"] * b["h_mm"]))
+    # L'artwork e' il blocco piu' vario, non il piu' grande: su Kinder Country
+    # le tre lastre di separazione sono piu' larghe della OUTSIDE VIEW e la
+    # scaletta per ingombro metteva davanti la lastra del bianco.
+    out.sort(key=lambda b: (b["tipo"] == "stampato", b["colori_distinti"],
+                            b["w_mm"] * b["h_mm"]), reverse=True)
     # blocchi di pari ingombro sono viste dello stesso pack: quella tecnica
     # serve da maschera per quella stampata
     for b in out:
@@ -530,7 +540,11 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
             b["maschera_dt_x_mm"] = t["x_mm"]
     return dict(blocchi=out[:12],
                 nota=("Scegli come area di lavoro il blocco 'stampato' che porta "
-                      "l'artwork, non l'intera pagina. I blocchi 'tecnico' con lo "
+                      "l'artwork, non l'intera pagina. L'elenco parte da quello "
+                      "piu' probabile: i blocchi stampati vengono per primi, "
+                      "ordinati per colori_distinti, perche' una lastra di "
+                      "separazione o un cartiglio sono colorati quanto una "
+                      "grafica ma con pochi colori. I blocchi 'tecnico' con lo "
                       "stesso ingombro sono viste del disegno da usare come "
                       "maschera in clean_artwork."))
 

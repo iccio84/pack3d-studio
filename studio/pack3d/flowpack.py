@@ -615,7 +615,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     import pdfplumber
     import numpy as np
     import pypdfium2 as pdfium
-    from .dieline import _segments, _technical_pens
+    from .dieline import _segments, _technical_pens, render_page
 
     with pdfplumber.open(pdf_path) as pdf:
         page = pdf.pages[page_no]
@@ -633,7 +633,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
         S = [s for s in segs if s[4] in pens]
 
     sc = 150 / 72.0
-    im = pdfium.PdfDocument(pdf_path)[page_no].render(scale=sc).to_pil().convert("RGB")
+    im = render_page(pdf_path, page_no, sc)
     raster = np.asarray(im).astype(int)
 
     # Le pinne stanno in verticale o in orizzontale a seconda delle proporzioni,
@@ -659,10 +659,20 @@ def _risolvi_steso(S, raster, sc, ruotato):
     import numpy as np
     from .dieline import _cluster
 
-    H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > 150]
-    V = [(c, b - a) for k, c, a, b, st in S if k == "V" and b - a > 150]
-    hs = [c for c, w in _cluster(H, 3.0) if w > 250]
-    vs = [c for c, w in _cluster(V, 3.0) if w > 250]
+    # Le soglie erano assolute, 150 e 250 punti, e non possono esserlo: fra il
+    # nastro di K Tronky (83 mm) e quello di K Brioss (420 mm) c'e' un fattore
+    # cinque. Una linea che attraversa TUTTO il nastro del Tronky e' lunga 83
+    # mm, sotto gli 88,2 mm che servivano per essere presa sul serio, quindi
+    # nessuna cordonatura verticale passava e lo steso risultava non coperto.
+    # Si misura invece in frazione del tratto piu' lungo, che e' il contorno
+    # dello steso: sui formati gia' coperti le due frazioni valgono quanto le
+    # vecchie costanti.
+    ext_h = max((b - a for k, c, a, b, st in S if k == "H"), default=0.0)
+    ext_v = max((b - a for k, c, a, b, st in S if k == "V"), default=0.0)
+    H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > 0.35 * ext_h]
+    V = [(c, b - a) for k, c, a, b, st in S if k == "V" and b - a > 0.35 * ext_v]
+    hs = [c for c, w in _cluster(H, 3.0) if w > 0.60 * ext_h]
+    vs = [c for c, w in _cluster(V, 3.0) if w > 0.60 * ext_v]
     if len(hs) < 4 or len(vs) < 2:
         raise _StesoNonRisolto("cordonature non riconosciute: impaginato non coperto")
 

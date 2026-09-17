@@ -213,6 +213,29 @@ Su Kinder Bueno T2 la fascia marcata da 50 mm ha fatto uscire fianchi uguali
 (11,01 e 11,01) e cucitura centrata sul retro, dove la mia deduzione dava 46,4
 con fianchi diversi.
 
+**L'artwork e' il blocco piu' vario, non il piu' grande.** Una tavola porta
+spesso le lastre di separazione a fianco della vista stampata, e una campitura
+piatta di tinta e' colorata al 99% pur essendo una lastra: su Kinder Country le
+tre lastre (Aluminium, Transparent Support, White Plate) sono piu' larghe della
+OUTSIDE VIEW e la scaletta per ingombro metteva davanti quella del bianco.
+Il discrimine e' quanti colori distinti porta il blocco: 149 sull'artwork vero
+contro 14-26 sulle lastre e sui cartigli. `find_blocks` riporta
+`colori_distinti` e ordina per quello.
+
+**Niente soglie assolute sulla lunghezza delle linee.** Fra il nastro di K
+Tronky (83 mm) e quello di K Brioss (420 mm) c'e' un fattore cinque: una
+cordonatura che attraversa tutto il nastro del Tronky e' lunga 83 mm, sotto gli
+88,2 mm che `analyze_auto` pretendeva, e nessun pack piccolo poteva passare il
+cancello. Le soglie vanno prese in frazione del tratto piu' lungo.
+
+**Il raster e il tracciato devono stare nello stesso telaio.** pdfplumber misura
+sul MediaBox, pdfium rende il CropBox. Quando i due riquadri non coincidono — su
+K Tronky il CropBox e' 459 x 271 pt dentro un MediaBox di 1332 x 958, spostato di
+(419, 471) — le coordinate dei segmenti indicizzano un'immagine che comincia da
+un'altra parte: nessuna eccezione, solo misure prese nel posto sbagliato, e
+intere viste tecniche che restano fuori dalla resa. Si rasterizza sempre con
+`dieline.render_page`, mai con `pdfium.PdfDocument(...).render()` diretto.
+
 **I pannelli della fustella non sono la sezione del pack chiuso.** Le
 cordonature dicono dove il film e' cordonato, non che forma prende una volta
 riempito. Su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in mano e'
@@ -322,6 +345,22 @@ apotema = R2 - R1              altezza = radice(apotema^2 - (r_bocca - r_fondo)^
 Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel
 registro `CASI` in `server.py`, riconosciuti dalla firma della pagina. Oggi
 contiene FULFIL Chocolate Hazelnut Whip.
+
+Risolti dall'analisi automatica, con l'invariante che chiude:
+
+| | nastro | passo | fronte | spessore | falda |
+|---|---|---|---|---|---|
+| Kinder Country | 122,0 | 119,0 | 35,0 | 10,0 | 16,0 |
+| Kinder Paradiso T1 | 165,0 | 155,0 | 43,0 | 27,0 | 12,5 |
+| K Brioss Latte e Cacao T10 | 419,9 | 290,0 | 148,9 | 57,0 | 4,1 |
+
+**K Tronky T1 non e' coperto.** Nastro e passo si leggono giusti — 83,0 e 144,0,
+gli stessi numeri che il cartiglio della miniatura scrive come WEB WIDTH e STEP —
+ma la fasciatura non chiude: le fasce lette sono 8,5 | 14,5 | 36 | 7 | 5 | 3,5 |
+8,5 e nessuna quaterna soddisfa l'invariante. Le tre fasce strette in fondo sono
+probabilmente zona di saldatura e eyemark, non cordonature, ma senza il pack in
+mano e' una congettura. Nota: le quote del cartiglio sono testo vettorializzato,
+non estraibile — sulla pagina intera pdfplumber trova 20 parole.
 
 ## Assunzioni non verificate
 

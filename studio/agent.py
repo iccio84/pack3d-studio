@@ -25,6 +25,9 @@ Metodo:
   dello stesso pack: quella stampata, quella tecnica, le miniature, i cartigli.
   Scegli il blocco stampato che porta l'artwork e lavora solo su quello: misurare
   sull'intera pagina da' quote senza senso, tipo un pack largo quanto il foglio.
+  L'artwork e' il blocco con piu' colori_distinti, non il piu' grande: una
+  lastra di separazione e' colorata al 99% ma porta una ventina di colori,
+  una grafica vera ne porta centinaia. L'elenco parte gia' dal piu' probabile.
   Il blocco tecnico di pari ingombro e' la maschera da passare a clean_artwork.
 - Non stimare mai una quota che puoi misurare con uno strumento.
 - Cerca sempre il disegno tecnico in miniatura con list_paths: sta fuori

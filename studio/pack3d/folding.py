@@ -13,7 +13,7 @@ import pdfplumber
 from PIL import Image, ImageDraw
 import pypdfium2 as pdfium
 
-from .dieline import _segments, _technical_pens
+from .dieline import _segments, _technical_pens, render_page
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -167,7 +167,7 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
     risoluzione. Con `clean` il disegno tecnico viene tolto dalla texture:
     sul modello 3D deve restare solo la grafica di stampa."""
     scale = dpi / 72.0
-    sheet = pdfium.PdfDocument(pdf_path)[page_no].render(scale=scale).to_pil().convert("RGB")
+    sheet = render_page(pdf_path, page_no, scale)
 
     pens, palette = set(), set()
     page = None
