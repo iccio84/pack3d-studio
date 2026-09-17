@@ -213,6 +213,24 @@ Su Kinder Bueno T2 la fascia marcata da 50 mm ha fatto uscire fianchi uguali
 (11,01 e 11,01) e cucitura centrata sul retro, dove la mia deduzione dava 46,4
 con fianchi diversi.
 
+**I pannelli della fustella non sono la sezione del pack chiuso.** Le
+cordonature dicono dove il film e' cordonato, non che forma prende una volta
+riempito. Su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in mano e'
+41 x 20: **stesso perimetro**, 122 mm, quindi dall'artwork i due non si
+distinguono e il solutore non sbaglia — gli manca proprio il dato. Il rapporto
+larghezza/spessore va cercato sulle quote annotate del disegno tecnico e
+riportato in `quote.larghezza` e `quote.spessore`; la costruzione lo riporta poi
+sul perimetro misurato dalla fustella, che resta l'autorita' sulla taglia.
+Senza quei due numeri il pack esce largo e piatto, con l'aria giusta ma la
+forma sbagliata.
+
+**Il rigonfiamento cambia la forma, non la taglia.** Il perimetro e' fissato dal
+foglio stampato: a parita' di steso un pack piu' morbido non e' piu' grande, e'
+piu' tondo. La sezione e' una superellisse `|y/a|^n + |z/b|^n = 1` con n che
+scende da 10 (rettangolo, livello 1) a 2 (ellisse, livello 10), riscalata in
+modo che il perimetro torni quello del film. Gonfiare aumentando le dimensioni
+e' il modo sbagliato: fa crescere il perimetro e la grafica non torna piu'.
+
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi
@@ -229,10 +247,12 @@ prima di finalizzare. Non basta controllare che la grafica sia diritta.
 
 **La cucitura non e' sempre centrata sul retro** (Kinder Pingui: 16 + 18), e
 **lo steso puo' essere ruotato di 90 gradi** rispetto alla convenzione della
-pipeline. Entrambi i casi mandano in errore `solve_bands`, che cerca coppie
-simmetriche: va sostituita la ricerca con un'enumerazione di tutte le quaterne
-di pieghe, tenendo quella dove il retro somma al fronte e i fianchi coincidono.
-La formula finale, invece, non richiede simmetria.
+pipeline. Entrambi i casi mandavano in errore `solve_bands`, che cercava coppie
+simmetriche. Oggi `solve_bands_any` enumera tutte le quaterne di pieghe e tiene
+quella dove il retro somma al fronte e i fianchi coincidono; se su quell'asse le
+fasce non chiudono, `analyze_auto` ritenta con lo steso trasposto e segna
+`ruotato`, che a valle ruota anche la texture. La formula finale non richiede
+simmetria.
 
 `flowpack.analyze_auto`:
 
@@ -242,7 +262,13 @@ La formula finale, invece, non richiede simmetria.
    pieghe stanno a coppie speculari: la coppia esterna separa retro e fianco,
    quella interna fianco e fronte;
 3. le pinne di testa si misurano dal **margine non stampato**, non dalle linee
-   di quota.
+   di quota — ma solo se quel margine esiste. Su artwork **al vivo** non c'e':
+   su Kinder Bueno T2 la grafica copre 923 colonne su 1010 da bordo a bordo, la
+   misura per margine dava `end_fin = 0` e il modello usciva con il 21% di
+   triangoli degeneri, tutti collassati sulla punta della pinna. Sotto 1 mm la
+   misura non e' piccola, e' assente: `analyze_auto` la ricava allora dalle
+   **coppie di linee di taglio e saldatura**, cioe' dal rientro fra le due
+   linee piu' esterne di ciascun lato.
 
 Verifica: perimetro + 2 falde deve dare la larghezza del nastro.
 
@@ -303,8 +329,17 @@ contiene FULFIL Chocolate Hazelnut Whip.
   caso reale.
 - Il **raggio di raccordo** e' trattato come proprieta' del film, quindi
   assoluto e non proporzionale allo spessore.
-- L'**apertura della pinna** e' fissata al 94,8% di meta' perimetro, misurato su
-  un solo render.
+- L'**apertura della pinna** vale oggi meta' perimetro pieno
+  (`PACK3D_FIN_OPEN = 1.0`): il 94,8% misurato su un solo render e' stato
+  scartato perche' non era lui a produrre le punte degeneri.
+- Lo **steso ruotato** e' stato visto su un artwork solo, Kinder Pingui T1: la
+  regola "se le fasce non chiudono, ritenta trasposto" non ha un secondo caso.
+- Su disegno speculare, quando i due rientri di saldatura differiscono di piu'
+  di 0,5 mm si tiene **il piu' stretto**. Anche questa viene da un campione
+  solo, e la scelta opposta sarebbe altrettanto difendibile.
+- Il canale `quote.larghezza` / `quote.spessore` dall'analisi AI alla
+  costruzione **non e' mai stato percorso con una chiave API vera**: e'
+  verificato end-to-end con l'agente simulato, non con l'agente.
 - Il **profilo del tappo** della coppa (cordonatura, arrotolatura, rientranza)
   e' stimato dal render: nessun documento lo riporta.
 - Un'eventuale **sovrapposizione incollata** dello sleeve non e' misurabile dal
