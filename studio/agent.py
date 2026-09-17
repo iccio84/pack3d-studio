@@ -68,6 +68,17 @@ Sezione del pack chiuso:
   dai: quello lo misura la fustella, e la costruzione ci riporta sopra il tuo
   rapporto.
 
+Film su scatola:
+- Chiediti se il film avvolge un corpo rigido che arriva fino alla saldatura:
+  un multipack in astuccio, una vaschetta, un blister. Non e' la stessa cosa di
+  un pack teso su una tavoletta, dove il film si appoggia al prodotto ma il
+  tubo alle estremita' resta vuoto e si appiattisce.
+- Se c'e' la scatola riportalo in parametri_costruzione.avvolge_scatola come
+  true, e metti rigonfiamento 1. Cambia la pinna: le ganasce appiattiscono un
+  tubo solo se dentro c'e' aria, quindi con la scatola la pinna esce larga
+  quanto la faccia del pack invece di svasarsi fino a meta' perimetro. Kinder
+  Brioss T10 e' il caso di scuola.
+
 Rigonfiamento:
 - Se fra le risposte il rigonfiamento e' "auto", sceglilo tu dalla natura del
   prodotto seguendo le regole del progetto, e riportalo in

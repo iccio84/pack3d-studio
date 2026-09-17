@@ -242,6 +242,22 @@ def livello_da_agente(params):
         return None
 
 
+def scatola_da_agente(params):
+    """Se il film avvolge un corpo rigido che arriva fino alla saldatura.
+
+    Non e' la stessa cosa del rigonfiamento: un pack puo' essere teso sul
+    prodotto senza contenere una scatola. Quello che cambia e' la pinna, e
+    cambia per un motivo meccanico: le ganasce appiattiscono un tubo solo se
+    dentro c'e' aria. Con una scatola dentro non c'e' niente da appiattire.
+    """
+    if not isinstance(params, dict):
+        return False
+    pc = params.get("parametri_costruzione")
+    if not isinstance(pc, dict):
+        return False
+    return bool(pc.get("avvolge_scatola"))
+
+
 def printed_bbox(pdf):
     """Riquadro del blocco stampato, in punti PDF.
 
@@ -262,7 +278,8 @@ def printed_bbox(pdf):
         return None, None
 
 
-def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=None):
+def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
+                   sezione=None, scatola=False):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -324,6 +341,13 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=
     n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
     fp = fp0
     scala = fpk.sezione_rigonfiata(fp, n_sez)
+    if scatola:
+        # Il riscalo a perimetro costante dice che una forma piu' tonda, con lo
+        # stesso film, e' piu' grande: vale quando dentro c'e' aria. Con una
+        # scatola la sezione la detta la scatola, e i pochi millimetri che la
+        # superellisse taglia agli spigoli se li prende la piega, non il pack.
+        # Senza questo il Brioss usciva 155,9 x 59,7 invece di 148,9 x 57,0.
+        scala = 1.0
     # superellipse_section torna il SEMIASSE, non la larghezza come faceva
     # soft_section_fit: senza il raddoppio width_end esce doppio e le pinne si
     # aprono fino al perimetro intero invece che a meta'
@@ -333,6 +357,18 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=
     # Il bordo della pinna e' il tubo appiattito: il suo massimo geometrico e'
     # meta' perimetro, oltre il quale il film dovrebbe allungarsi.
     fin_open = FIN_OPEN_RATIO * G / 2.0
+    if scatola:
+        # Un tubo si appiattisce perche' dentro c'e' aria. Quando il film
+        # avvolge una scatola che arriva fino alla saldatura non c'e' niente da
+        # appiattire: la pellicola si ripiega sugli spigoli, e la pinna esce
+        # larga esattamente quanto la faccia, senza svaso. Kinder Brioss T10 e'
+        # cosi', ed e' il caso raro in cui la pinna non si allarga.
+        fin_open = sw
+        avvisi_sez.append("film su scatola: pinna larga quanto la sezione, "
+                          "senza svaso")
+        if liv > 3:
+            avvisi_sez.append("rigonfiamento %g su un pack che avvolge una "
+                              "scatola: di norma e' 1" % liv)
 
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
@@ -536,9 +572,14 @@ class Handler(BaseHTTPRequestHandler):
                                 # "Scegli tu": il livello lo decide l'agente in
                                 # /api/analyze-ai e torna qui dentro params
                                 soft = livello_da_agente(opts.get("params")) or soft
+                            # la scatola puo' dirla l'agente o la casella
+                            # dell'interfaccia: basta una delle due
+                            scatola = (bool(opts.get("scatola"))
+                                       or scatola_da_agente(opts.get("params")))
                             build_flowpack(pdf, out, int(opts.get("teeth", 20)),
                                            str(soft), case, q,
-                                           sezione_da_agente(opts.get("params")))
+                                           sezione_da_agente(opts.get("params")),
+                                           scatola)
                     except Exception:
                         _slots.release()
                         raise

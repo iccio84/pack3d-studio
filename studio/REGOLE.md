@@ -247,6 +247,33 @@ sul perimetro misurato dalla fustella, che resta l'autorita' sulla taglia.
 Senza quei due numeri il pack esce largo e piatto, con l'aria giusta ma la
 forma sbagliata.
 
+**Il film su scatola e' un caso a parte, e non basta il rigonfiamento a
+dirlo.** Un pack puo' essere teso sul prodotto senza contenere niente di
+rigido: il film si appoggia alla tavoletta, ma alle estremita' il tubo resta
+vuoto e le ganasce lo appiattiscono. Quando invece il film avvolge un corpo
+rigido che arriva fino alla saldatura — un multipack in astuccio, una
+vaschetta, un blister — cambiano due cose:
+
+- **La pinna non si allarga.** Un tubo si appiattisce perche' dentro c'e'
+  aria; con la scatola non c'e' niente da appiattire, la pellicola si ripiega
+  sugli spigoli e la pinna esce larga esattamente quanto la faccia del pack.
+  Su Kinder Brioss T10 lo svaso passa da +25% a zero. E' il caso raro in cui
+  la regola dello svaso a meta' perimetro non vale.
+- **La sezione la detta la scatola.** Il riscalo a perimetro costante dice che
+  una forma piu' tonda, a parita' di film, e' piu' grande: vale quando dentro
+  c'e' aria. Con la scatola i pochi millimetri che la superellisse taglia agli
+  spigoli se li prende la piega, non il pack. Senza questa eccezione il Brioss
+  usciva 155,9 x 59,7 invece dei 148,9 x 57,0 della fustella.
+
+Dal PDF non si vede: e' il prodotto a dirlo. Va riportato in
+`parametri_costruzione.avvolge_scatola`, e nell'interfaccia c'e' la casella
+"Il film avvolge una scatola". Un pack cosi' e' rigonfiamento 1.
+
+Resta fuori dal modello il fatto che su questi pack la pinna, oltre a non
+allargarsi, viene **ripiegata sulla testata** invece di sporgere: nelle foto
+del Brioss si vede piegata, nel modello sporge dritta. Piegarla e' geometria
+nuova, non un parametro.
+
 **Il rigonfiamento cambia la forma, non la taglia.** Il perimetro e' fissato dal
 foglio stampato: a parita' di steso un pack piu' morbido non e' piu' grande, e'
 piu' tondo. La sezione e' una superellisse `|y/a|^n + |z/b|^n = 1` con n che
