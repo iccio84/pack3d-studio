@@ -31,6 +31,20 @@
          align-items:center;justify-content:center;gap:6px;color:var(--muted);
          text-align:center;padding:24px;pointer-events:none}
   #empty strong{color:var(--ink);font-weight:600}
+  /* Barra indeterminata: /api/build risponde una volta sola e non manda
+     avanzamento, quindi una percentuale sarebbe inventata. Questa dice che
+     il lavoro e' in corso, che e' l'unica cosa vera che si puo' dire. */
+  #prog{position:absolute;left:0;right:0;top:0;height:3px;overflow:hidden;
+        background:rgba(27,25,23,.07);display:none}
+  #prog.on{display:block}
+  #prog i{position:absolute;top:0;bottom:0;width:40%;background:var(--ink);
+          border-radius:3px;animation:scorre 1.15s ease-in-out infinite}
+  @keyframes scorre{
+    0%{left:-40%} 100%{left:100%}
+  }
+  @media (prefers-reduced-motion:reduce){
+    #prog i{animation:none;left:0;width:100%;opacity:.35}
+  }
   #drop{position:absolute;inset:12px;border:2px dashed transparent;border-radius:14px;
         transition:border-color .15s,background .15s}
   body.dragging #drop{border-color:var(--ink);background:rgba(27,25,23,.04)}
@@ -75,6 +89,7 @@
 </header>
 
 <div id="stage">
+  <div id="prog"><i></i></div>
   <div id="drop"></div>
   <div id="empty">
     <strong>Carica un artwork PDF</strong>
@@ -288,7 +303,12 @@ const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagi
   }
 })();
 
-function setStatus(text, cls){ statusEl.textContent = text; statusEl.className = cls || ''; }
+function setStatus(text, cls){
+  statusEl.textContent = text; statusEl.className = cls || '';
+  // la barra segue lo stato: 'busy' e' gia' il segnale che c'e' lavoro in corso
+  const b = document.getElementById('prog');
+  if (b) b.classList.toggle('on', cls === 'busy');
+}
 function setMeta(items){
   document.getElementById('meta').innerHTML =
     (items||[]).map(t => '<span>'+t+'</span>').join('');
@@ -403,9 +423,21 @@ function annulla(){
   try{
     if (model){
       scene.remove(model);
-      model.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      model.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        // la texture e' il pezzo grosso: senza dispose resta in memoria GPU
+        const m = o.material;
+        for (const mm of (Array.isArray(m) ? m : m ? [m] : [])){
+          if (mm.map) mm.map.dispose();
+          mm.dispose();
+        }
+      });
       model = null;
     }
+    // il viewer disegna SU RICHIESTA: togliere il modello dalla scena non
+    // svuota la tela, perche' nessuno ridisegna. Senza questa riga il pack
+    // restava li' anche dopo Annulla, con il messaggio sopra.
+    render();
     document.getElementById('empty').style.display = '';
   }catch(e){}
   setStatus(backendUp ? (API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale')
