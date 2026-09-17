@@ -212,12 +212,24 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     P = np.stack([a * uy, b * uz], 1)
     # L'origine di v deve cadere sulla cucitura, come nel profilo raccordato:
     # altrimenti la grafica ruota attorno al tubo e il fronte non guarda piu'
-    # davanti. La cucitura sta a `back_a` di arco prima dello spigolo +y.
+    # davanti. La cucitura sta a `back_a` di arco prima dello SPIGOLO (+y, -z),
+    # quello da cui _section_path fa partire il cammino.
+    #
+    # Ancorare al punto di y massima, come si faceva qui, prende il CENTRO
+    # della faccia laterale e non lo spigolo: sono mezzo spessore di distanza,
+    # e la grafica gira attorno al tubo di altrettanto. Misurato fascia per
+    # fascia: 4,2 mm su Kinder Country (T 10), 12,9 su Paradiso (T 27), 25,7
+    # su Brioss (T 57).
+    #
+    # Nella parametrizzazione lo spigolo e' il punto a 45 gradi, dove
+    # |uy| = |uz|, cioe' t = 7/4 pi: per n grande tende allo spigolo vero del
+    # rettangolo, per n = 2 e' il punto a 45 gradi dell'ellisse, che e' la
+    # stessa cosa nel senso che serve qui.
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
-    imax = int(np.argmax(P[:, 0]))
-    s0 = (cum[imax] - fp.back_a) % per
+    i_sp = int(round(npts * 7.0 / 8.0)) % npts
+    s0 = (cum[i_sp] - fp.back_a) % per
     i0 = int(np.searchsorted(cum, s0)) % len(P)
     P = np.roll(P, -i0, axis=0)
     P = np.vstack([P, P[:1]])           # contorno chiuso
@@ -667,12 +679,25 @@ def _risolvi_steso(S, raster, sc, ruotato):
     # Si misura invece in frazione del tratto piu' lungo, che e' il contorno
     # dello steso: sui formati gia' coperti le due frazioni valgono quanto le
     # vecchie costanti.
+    # La frazione puo' solo ABBASSARE la soglia, mai alzarla: `min` con la
+    # costante vecchia. Renderla relativa e basta l'aveva alzata sugli steso
+    # piu' lunghi del riferimento, e su Milch-Schnitte T1 si perdeva la
+    # cordonatura a 108,5 mm - il cui gruppo misura fra gli 88,2 mm della
+    # vecchia soglia e i 91,5 della nuova. Senza quella piega solve_bands non
+    # chiude piu', ed e' esattamente il difetto che le regole descrivono per
+    # Kinder Bueno T2: un filtro troppo stretto in ingresso e nessun solutore
+    # a valle puo' rimediare. Le costanti restano la taratura buona sugli
+    # impaginati gia' coperti; la frazione serve solo a non escludere gli
+    # steso piccoli, dove una linea che attraversa tutto il nastro e' comunque
+    # piu' corta della costante (K Tronky, nastro 83 mm).
     ext_h = max((b - a for k, c, a, b, st in S if k == "H"), default=0.0)
     ext_v = max((b - a for k, c, a, b, st in S if k == "V"), default=0.0)
-    H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > 0.35 * ext_h]
-    V = [(c, b - a) for k, c, a, b, st in S if k == "V" and b - a > 0.35 * ext_v]
-    hs = [c for c, w in _cluster(H, 3.0) if w > 0.60 * ext_h]
-    vs = [c for c, w in _cluster(V, 3.0) if w > 0.60 * ext_v]
+    seg_h, seg_v = min(150.0, 0.35 * ext_h), min(150.0, 0.35 * ext_v)
+    grp_h, grp_v = min(250.0, 0.60 * ext_h), min(250.0, 0.60 * ext_v)
+    H = [(c, b - a) for k, c, a, b, st in S if k == "H" and b - a > seg_h]
+    V = [(c, b - a) for k, c, a, b, st in S if k == "V" and b - a > seg_v]
+    hs = [c for c, w in _cluster(H, 3.0) if w > grp_h]
+    vs = [c for c, w in _cluster(V, 3.0) if w > grp_v]
     if len(hs) < 4 or len(vs) < 2:
         raise _StesoNonRisolto("cordonature non riconosciute: impaginato non coperto")
 

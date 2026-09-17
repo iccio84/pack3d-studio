@@ -108,7 +108,7 @@ c'e' una verifica automatica, questa e' la lista da ripassare a mano.
 
 | caso | cosa tiene fermo |
 |---|---|
-| Milch-Schnitte T1 | l'impaginato di riferimento, nastro 144 = 43 + 15 x 2 + 14 x 2 |
+| Milch-Schnitte T1 | l'impaginato di riferimento, nastro 144 = 43 + 15 x 2 + 14 x 2; la soglia sulle cordonature non deve salire sopra la costante, o si perde la piega a 108,5 |
 | FULFIL | il caso calibrato a mano in `CASI`, riferimento del gonfio |
 | Kinder Bueno T2 | pinne ricavate dalle saldature su grafica al vivo; sezione 41 x 20 e non 50 x 11 a pari perimetro |
 | Kinder Pingui T1 | steso ruotato di 90 gradi; cucitura non centrata (16 + 18); fasce grinza 8 \| 10 \| 113 \| 10 \| 8 |
@@ -117,8 +117,13 @@ c'e' una verifica automatica, questa e' la lista da ripassare a mano.
 | K Brioss T10 | steso grande (420 x 290): soglie relative; film su scatola, pinna senza svaso, corta (9,0 e non 37,5) e sezione 148,9 x 57,0 non riscalata |
 | K Tronky T1 | **non coperto**: nastro 83 e passo 144 giusti, fasciatura che non chiude |
 
-Il controllo minimo su ognuno: perimetro + 2 falde = nastro, e un'occhiata al
-render. Le due cose insieme prendono quasi tutto.
+Il controllo minimo su ognuno: perimetro + 2 falde = nastro, la riga
+"mappatura verificata" negli avvisi della costruzione, e un'occhiata al render.
+Le tre cose insieme prendono quasi tutto.
+
+La riga sulla mappatura e' l'unico controllo che oggi si fa da solo: misura la
+rotazione della grafica attorno al tubo e grida sopra l'1% del giro. E' nata
+da un difetto che nessuno aveva visto per settimane.
 
 ## Quello che resta appeso
 

@@ -88,7 +88,6 @@
     <span class="q">Che tipo di pack &egrave;?</span>
     <button data-k="carton">Cartotecnico</button>
     <button data-k="flowpack">Flowpack</button>
-    <button data-k="altro">Altro</button>
   </div>
 
   <div id="params">
@@ -118,7 +117,8 @@
   <div class="row">
     <input id="file" type="file" accept="application/pdf,.pdf" hidden>
     <button id="upload" class="primary">Carica PDF</button>
-    <button id="download" disabled>Scarica GLB</button>
+    <button id="download" class="primary" style="display:none">Scarica GLB</button>
+    <button id="annulla" style="display:none">Annulla</button>
   </div>
   <p class="hint">Trascina per ruotare, rotella o pizzico per lo zoom. Il viewer scarta le facce posteriori, quindi un modello con le normali girate si vede subito.</p>
 </footer>
@@ -258,6 +258,20 @@ const statusEl = document.getElementById('status');
 const params = document.getElementById('params');
 const packtype = document.getElementById('packtype');
 const dlBtn = document.getElementById('download');
+const upBtn = document.getElementById('upload');
+const annBtn = document.getElementById('annulla');
+
+/* Tre fasi, e ognuna mostra solo i tasti che in quel momento hanno senso.
+   vuoto  - Carica PDF, e basta: scaricare un GLB che non esiste non serve.
+   lavoro - solo Annulla: mentre si sceglie e si costruisce l'unica altra
+            cosa sensata e' tornare indietro.
+   pronto - Scarica GLB e Annulla; premendo uno qualsiasi dei due si
+            ricomincia da capo. */
+function setFase(f){
+  upBtn.style.display  = f === 'vuoto'  ? '' : 'none';
+  dlBtn.style.display  = f === 'pronto' ? '' : 'none';
+  annBtn.style.display = f === 'vuoto'  ? 'none' : '';
+}
 let glbBlob = null, glbName = 'modello.glb', pending = null;
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
@@ -328,17 +342,23 @@ async function analyze(buf, opts){
 
 async function build(buf, name, opts){
   setStatus('Costruzione del modello…','busy');
-  glbBlob = await (await post('/api/build', buf, opts)).blob();
+  const r = await post('/api/build', buf, opts);
+  // gli avvisi della costruzione arrivano in un header: il corpo e' il GLB
+  try{
+    const m = r.headers.get('X-Pack3d-Meta');
+    if (m) setMeta(JSON.parse(decodeURIComponent(m)));
+  }catch(e){}
+  glbBlob = await r.blob();
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   show(await glbBlob.arrayBuffer());
-  dlBtn.disabled = false;
+  setFase('pronto');
 }
 
 async function handle(file){
   if (!file) return;
   if (/\.glb$/i.test(file.name)){          // comodo per guardare un GLB gia' pronto
     glbBlob = file; glbName = file.name;
-    show(await file.arrayBuffer()); dlBtn.disabled = false;
+    show(await file.arrayBuffer()); setFase('pronto');
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
@@ -349,12 +369,12 @@ async function handle(file){
   pending = {buf: await file.arrayBuffer(), name: file.name};
   params.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
+  setFase('lavoro');
   setStatus('Indica il tipo di pack','');
 }
 
 async function withKind(kind){
   packtype.classList.remove('on');
-  if (kind === 'altro'){ setStatus('Tipologia non ancora supportata','err'); return; }
   try{
     const info = await analyze(pending.buf, {kind});
     setMeta(info.meta || []);
@@ -373,6 +393,29 @@ async function withKind(kind){
   }
 }
 
+function annulla(){
+  pending = null; glbBlob = null;
+  params.classList.remove('on');
+  packtype.classList.remove('on');
+  setMeta([]);
+  // il viewer sta dietro a three.js: se non si e' caricato i tasti devono
+  // tornare a posto lo stesso, quindi la parte 3D va protetta
+  try{
+    if (model){
+      scene.remove(model);
+      model.traverse(o => { if (o.geometry) o.geometry.dispose(); });
+      model = null;
+    }
+    document.getElementById('empty').style.display = '';
+  }catch(e){}
+  setStatus(backendUp ? (API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale')
+                      : OFFLINE,
+            backendUp ? '' : 'err');
+  setFase('vuoto');
+}
+
+annBtn.onclick = annulla;
+setFase('vuoto');
 document.getElementById('upload').onclick = () => document.getElementById('file').click();
 document.getElementById('file').onchange = e => { handle(e.target.files[0]); e.target.value=''; };
 document.querySelectorAll('#packtype button').forEach(b => {
@@ -400,7 +443,10 @@ dlBtn.onclick = () => {
   if (!glbBlob) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(glbBlob); a.download = glbName; a.click();
+  // l'object URL tiene il suo riferimento al blob, quindi azzerarlo subito
+  // non interrompe il salvataggio: si puo' gia' tornare alla schermata vuota
   setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+  annulla();
 };
 
 ['dragenter','dragover'].forEach(ev => addEventListener(ev, e => {
