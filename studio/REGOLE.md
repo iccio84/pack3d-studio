@@ -330,6 +330,28 @@ piega a 102,40 mm veniva scartata da un taglio `peso > 300`.
 **Verificare il modello mappato contro l'AW con una misura**, fascia per fascia,
 prima di finalizzare. Non basta controllare che la grafica sia diritta.
 
+Adesso la misura la fa la costruzione da sola e finisce negli avvisi: per ogni
+spigolo della sezione, lo scarto fra dove cade e dove lo vuole la fasciatura
+dello steso. Dentro ci stanno due cose diverse, e vanno lette separate.
+
+- **Scarti a segni alterni** sono la superellisse che taglia gli spigoli: il
+  film sopra l'arrotondamento appartiene un po' al fianco e un po' al retro.
+  E' fisiologico, e l'interpolazione per pannello lo sistema.
+- **Scarti tutti dallo stesso lato** sono una **rotazione dell'origine**:
+  grafica che scivola attorno al tubo. Quella l'interpolazione non la puo'
+  correggere, perche' le si spostano anche i riferimenti. La media degli
+  scarti distingue i due casi, e sopra l'1% del giro la costruzione lo grida.
+
+**L'origine del giro sta sulla cucitura, `back_a` prima dello SPIGOLO.** Non
+prima del punto di larghezza massima: quello e' il centro della faccia
+laterale, e fra i due c'e' mezzo spessore. `superellipse_section` ancorava li',
+e la grafica girava di altrettanto — 4,2 mm su Kinder Country, 12,9 su Kinder
+Paradiso, 25,7 su K Brioss. Il difetto stava nel codice da prima ma era
+dormiente: la costruzione passava per `soft_section_fit`, che parte esplicito
+da `(W/2 - back_a, -T/2)`. E' stato il passaggio alla superellisse ad
+accenderlo, e nessuno se n'e' accorto perche' la misura fascia per fascia non
+esisteva.
+
 **La cucitura non e' sempre centrata sul retro** (Kinder Pingui: 16 + 18), e
 **lo steso puo' essere ruotato di 90 gradi** rispetto alla convenzione della
 pipeline. Entrambi i casi mandavano in errore `solve_bands`, che cercava coppie

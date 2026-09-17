@@ -212,12 +212,24 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     P = np.stack([a * uy, b * uz], 1)
     # L'origine di v deve cadere sulla cucitura, come nel profilo raccordato:
     # altrimenti la grafica ruota attorno al tubo e il fronte non guarda piu'
-    # davanti. La cucitura sta a `back_a` di arco prima dello spigolo +y.
+    # davanti. La cucitura sta a `back_a` di arco prima dello SPIGOLO (+y, -z),
+    # quello da cui _section_path fa partire il cammino.
+    #
+    # Ancorare al punto di y massima, come si faceva qui, prende il CENTRO
+    # della faccia laterale e non lo spigolo: sono mezzo spessore di distanza,
+    # e la grafica gira attorno al tubo di altrettanto. Misurato fascia per
+    # fascia: 4,2 mm su Kinder Country (T 10), 12,9 su Paradiso (T 27), 25,7
+    # su Brioss (T 57).
+    #
+    # Nella parametrizzazione lo spigolo e' il punto a 45 gradi, dove
+    # |uy| = |uz|, cioe' t = 7/4 pi: per n grande tende allo spigolo vero del
+    # rettangolo, per n = 2 e' il punto a 45 gradi dell'ellisse, che e' la
+    # stessa cosa nel senso che serve qui.
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
-    imax = int(np.argmax(P[:, 0]))
-    s0 = (cum[imax] - fp.back_a) % per
+    i_sp = int(round(npts * 7.0 / 8.0)) % npts
+    s0 = (cum[i_sp] - fp.back_a) % per
     i0 = int(np.searchsorted(cum, s0)) % len(P)
     P = np.roll(P, -i0, axis=0)
     P = np.vstack([P, P[:1]])           # contorno chiuso

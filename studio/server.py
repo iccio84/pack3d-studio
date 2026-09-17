@@ -416,6 +416,29 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     knots = _panel_knots(Ps, d, G, fp0)
     if knots:
         ks, kf = knots
+        # La regola dice di verificare il modello mappato contro l'AW con una
+        # misura, fascia per fascia, prima di finalizzare. Qui si puo' fare da
+        # soli: lo scarto fra dove cade lo spigolo sulla sezione e dove lo
+        # vuole la fasciatura dello steso. Simmetrico e piccolo e' la
+        # superellisse che taglia lo spigolo, ed e' fisiologico; sbilanciato o
+        # grande vuol dire grafica che scivola attorno al tubo.
+        # Due cose diverse dentro gli stessi numeri. Gli scarti a segni
+        # alterni sono la superellisse che taglia gli spigoli: il film sopra
+        # l'arrotondamento appartiene un po' al fianco e un po' al retro, e
+        # l'interpolazione qui sotto lo sistema. Uno scarto tutto dallo stesso
+        # lato invece e' una ROTAZIONE dell'origine, cioe' grafica che scivola
+        # attorno al tubo, e l'interpolazione non la puo' correggere perche'
+        # le sposta anche i riferimenti. La media distingue i due casi.
+        scarti = [a - b for a, b in zip(ks, kf)]
+        rotazione = abs(sum(scarti) / len(scarti))
+        peggio = max(abs(s) for s in scarti)
+        if rotazione > 0.01 * G:
+            avvisi_sez.append("GRAFICA RUOTATA di %.1f mm sul giro di %.1f: "
+                              "controlla la cucitura" % (rotazione, G))
+        else:
+            avvisi_sez.append("mappatura verificata: rotazione %.1f mm, spigoli "
+                              "entro %.1f mm su un giro di %.1f"
+                              % (rotazione, peggio, G))
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
 
