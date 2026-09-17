@@ -269,6 +269,16 @@ Dal PDF non si vede: e' il prodotto a dirlo. Va riportato in
 `parametri_costruzione.avvolge_scatola`, e nell'interfaccia c'e' la casella
 "Il film avvolge una scatola". Un pack cosi' e' rigonfiamento 1.
 
+- **La pinna e' corta, e la gola sta oltre la scatola.** Quello che la
+  fustella misura oltre il corpo non e' tutto pinna: prima il tubo deve
+  collassare, e la gola piegata sullo spigolo costa mezzo spessore. Su Kinder
+  Brioss i 37,5 mm oltre il corpo sono 28,5 di gola piu' 9,0 di pinna, e 9 mm
+  e' quanto si misura sulle foto del pack. Con una scatola dentro la gola non
+  puo' mangiare il corpo, perche' la scatola tiene la sezione fino alla sua
+  faccia: il pack resta squadrato fino in fondo e poi salda subito. Nel modello
+  si sposta massa da `end_fin` a `L` tenendo ferma la somma `L/2 + end_fin`,
+  cosi' le UV non cambiano e la grafica non si muove.
+
 Resta fuori dal modello il fatto che su questi pack la pinna, oltre a non
 allargarsi, viene **ripiegata sulla testata** invece di sporgere: nelle foto
 del Brioss si vede piegata, nel modello sporge dritta. Piegarla e' geometria

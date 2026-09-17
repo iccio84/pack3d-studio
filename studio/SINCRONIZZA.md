@@ -114,7 +114,7 @@ c'e' una verifica automatica, questa e' la lista da ripassare a mano.
 | Kinder Pingui T1 | steso ruotato di 90 gradi; cucitura non centrata (16 + 18); fasce grinza 8 \| 10 \| 113 \| 10 \| 8 |
 | Kinder Country | l'artwork e' il blocco piu' vario, non il piu' grande: le lastre di separazione lo superano in ingombro |
 | Kinder Paradiso T1 | nastro 165 x passo 155, sezione 43 x 27 |
-| K Brioss T10 | steso grande (420 x 290): soglie relative; film su scatola, pinna senza svaso e sezione 148,9 x 57,0 non riscalata |
+| K Brioss T10 | steso grande (420 x 290): soglie relative; film su scatola, pinna senza svaso, corta (9,0 e non 37,5) e sezione 148,9 x 57,0 non riscalata |
 | K Tronky T1 | **non coperto**: nastro 83 e passo 144 giusti, fasciatura che non chiude |
 
 Il controllo minimo su ognuno: perimetro + 2 falde = nastro, e un'occhiata al

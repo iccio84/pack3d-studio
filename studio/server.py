@@ -351,6 +351,22 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # superellipse_section torna il SEMIASSE, non la larghezza come faceva
     # soft_section_fit: senza il raddoppio width_end esce doppio e le pinne si
     # aprono fino al perimetro intero invece che a meta'
+    # Quanto misura la fustella oltre il corpo — 37,5 mm sul Brioss — non e'
+    # tutto pinna. Prima il tubo deve collassare, e la gola piegata sullo
+    # spigolo costa mezzo spessore; quello che avanza e' la pinna vera. Con una
+    # scatola dentro il collasso non puo' mangiare il corpo, perche' la scatola
+    # tiene la sezione fino alla sua faccia: la gola sta tutta oltre. Sul
+    # Brioss: 37,5 = 28,5 di gola + 9,0 di pinna, e 9 mm e' quanto si misura
+    # sulle foto del pack. La somma L/2 + end_fin non cambia, quindi le UV
+    # restano quelle e la grafica non si sposta di un pixel.
+    gola = 0.0
+    if scatola:
+        gola = min(fp0.T / 2.0, max(fp0.end_fin - 2.0, 0.0))
+        fp = replace(fp, L=round(fp0.L + 2.0 * gola, 2),
+                     end_fin=round(fp0.end_fin - gola, 2))
+        avvisi_sez.append("oltre la scatola %.1f mm: %.1f di gola piu' %.1f di "
+                          "pinna" % (fp0.end_fin, gola, fp.end_fin))
+
     Ps, d, semiasse = fpk.superellipse_section(fp, n_sez, thickness=scala * fp.T)
     sw = 2.0 * semiasse
     G = d[-1]
@@ -373,7 +389,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
         width_end=fin_open / sw,
-        taper=max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
+        taper=gola if scatola else max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
         serration=teeth > 0, serr_teeth=max(int(teeth), 1),
         fin_stations=36 if quality == "alta" else 26,
         bulge=par["bulge"], crimp_period=1.4, crimp_mm=0.32,
@@ -419,7 +435,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     return ["flowpack, rigonfiamento %s" % soft,
             "sezione %.1f x %.1f (perimetro %.1f invariato)"
             % (scala * fp.W, scala * fp.T, G),
-            "corpo %.1f mm, pinne %.1f" % (fp.L, fp.end_fin),
+            "corpo %.1f mm, pinne %.1f" % (fp0.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri, base %.2f altezza %.2f mm"
              % (teeth, base, base * math.sqrt(3) / 2)),
