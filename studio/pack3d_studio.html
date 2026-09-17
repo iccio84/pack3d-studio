@@ -3,12 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>pack3d studio</title>
+<title>glamlab PDFto3D</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   :root{
-    --ink:#1b1917; --muted:#7a736c; --line:#e4dfd8; --bg:#f4f2ef;
-    --accent:#1b1917; --warn:#a8442a;
+    /* Il verde viene dal logo glamlab. Su bianco e' troppo chiaro per il
+       testo, quindi resta un colore di superficie: ci sopra va inchiostro
+       scuro, non bianco, tranne nel marchio dove il bianco e' il marchio. */
+    --brand:#b8d45c; --brand-scuro:#8aa83c;
+    --ink:#1a1d16; --muted:#6f7568; --line:#e2e6da; --bg:#f4f6f0;
+    --accent:var(--brand); --warn:#b4472a;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
@@ -18,14 +22,17 @@
 
   header{padding:16px 24px;border-bottom:1px solid var(--line);background:#fff;
          display:flex;align-items:baseline;gap:14px;flex-wrap:wrap}
-  .brand{font-size:17px;font-weight:650;letter-spacing:-.015em}
-  .brand span{color:var(--muted);font-weight:400}
+  .brand{display:inline-flex;align-items:baseline;gap:.34em;
+         background:var(--brand);color:#fff;border-radius:9px;
+         padding:7px 13px 8px;font-size:17px;line-height:1;
+         letter-spacing:-.02em;font-weight:800}
+  .brand span{font-weight:300;letter-spacing:0}
   #status{margin-left:auto;font-size:13px;color:var(--muted)}
   #status.busy{color:var(--ink)}
   #status.err{color:var(--warn)}
 
   #stage{flex:1;position:relative;min-height:320px;
-         background:radial-gradient(120% 90% at 50% 12%,#ffffff 0%,#eae6e1 100%)}
+         background:radial-gradient(120% 90% at 50% 12%,#ffffff 0%,#e8ece0 100%)}
   canvas{display:block;width:100%;height:100%}
   #empty{position:absolute;inset:0;display:flex;flex-direction:column;
          align-items:center;justify-content:center;gap:6px;color:var(--muted);
@@ -34,10 +41,14 @@
   /* Barra indeterminata: /api/build risponde una volta sola e non manda
      avanzamento, quindi una percentuale sarebbe inventata. Questa dice che
      il lavoro e' in corso, che e' l'unica cosa vera che si puo' dire. */
+  input[type=range]{accent-color:var(--brand-scuro)}
+  input[type=checkbox]{accent-color:var(--brand-scuro)}
+  input[type=number]:focus-visible,input[type=range]:focus-visible{
+    outline:2px solid var(--brand-scuro);outline-offset:2px}
   #prog{position:absolute;left:0;right:0;top:0;height:3px;overflow:hidden;
-        background:rgba(27,25,23,.07);display:none}
+        background:rgba(26,29,22,.07);display:none}
   #prog.on{display:block}
-  #prog i{position:absolute;top:0;bottom:0;width:40%;background:var(--ink);
+  #prog i{position:absolute;top:0;bottom:0;width:40%;background:var(--brand-scuro);
           border-radius:3px;animation:scorre 1.15s ease-in-out infinite}
   @keyframes scorre{
     0%{left:-40%} 100%{left:100%}
@@ -47,7 +58,7 @@
   }
   #drop{position:absolute;inset:12px;border:2px dashed transparent;border-radius:14px;
         transition:border-color .15s,background .15s}
-  body.dragging #drop{border-color:var(--ink);background:rgba(27,25,23,.04)}
+  body.dragging #drop{border-color:var(--brand-scuro);background:rgba(184,212,92,.14)}
 
   #meta{position:absolute;left:18px;bottom:16px;display:flex;gap:8px;flex-wrap:wrap;
         font-size:12px;color:var(--muted)}
@@ -58,17 +69,19 @@
   button{font:inherit;font-size:14px;padding:11px 20px;border-radius:10px;cursor:pointer;
          border:1px solid var(--line);background:#fff;color:var(--ink)}
   button:hover:not(:disabled){background:#faf8f6}
-  button.primary{background:var(--accent);color:#fff;border-color:var(--accent)}
-  button.primary:hover:not(:disabled){opacity:.9}
+  button.primary{background:var(--brand);color:var(--ink);border-color:var(--brand);
+                 font-weight:600}
+  button.primary:hover:not(:disabled){background:#c3dc72;border-color:#c3dc72}
+  button:focus-visible{outline:2px solid var(--brand-scuro);outline-offset:2px}
   button:disabled{opacity:.4;cursor:not-allowed}
 
   #params{max-width:720px;margin:0 auto 14px;display:none;gap:16px;
           align-items:flex-end;justify-content:center;flex-wrap:wrap;
-          border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fdfcfb}
+          border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcf8}
   #params.on{display:flex}
   #packtype{max-width:720px;margin:0 auto 14px;display:none;gap:10px;
             align-items:center;justify-content:center;flex-wrap:wrap;
-            border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fdfcfb}
+            border:1px solid var(--line);border-radius:12px;padding:14px 16px;background:#fbfcf8}
   #packtype.on{display:flex}
   #packtype .q{font-size:13px;color:var(--muted);margin-right:4px}
   .fld{display:flex;flex-direction:column;gap:5px}
@@ -84,7 +97,7 @@
 </head>
 <body>
 <header>
-  <div class="brand">pack3d <span>studio</span></div>
+  <div class="brand">glamlab<span>PDFto3D</span></div>
   <div id="status">Nessun modello caricato</div>
 </header>
 
