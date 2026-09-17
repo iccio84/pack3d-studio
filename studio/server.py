@@ -525,10 +525,27 @@ def _panel_knots(Ps, d, G, fp):
         return None
 
 
+# Il viewer glamlab chiama questa API con le sue etichette: il suo
+# BuildFromPdfPanel manda kind "cartotecnico", non "carton". Senza sinonimo
+# quel valore non entrava in nessun ramo e ogni astuccio finiva dal solutore
+# flowpack, che e' esattamente l'errore contro cui le regole mettono in
+# guardia: la tipologia si dichiara, e se la dichiarazione non viene
+# riconosciuta e' come non averla.
+SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
+                 "carton": "carton", "flowpack": "flowpack"}
+
+
+def normalizza_kind(kind):
+    if kind is None:
+        return None
+    return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
+
+
 def analyze_pdf(pdf, kind=None):
     """`kind` arriva dall'utente: la tipologia si dichiara, non si indovina.
     Il riconoscimento automatico sbaglia (il solutore astuccio risolve anche
     certi flowpack) e sbagliare qui compromette tutto il resto."""
+    kind = normalizza_kind(kind)
     case = CASI.get(_sig(pdf))
     if case and kind in (None, "flowpack"):
         return dict(kind="flowpack", title=case["name"],
@@ -621,7 +638,7 @@ class Handler(BaseHTTPRequestHandler):
                 pdf = os.path.join(td, "in.pdf")
                 with open(pdf, "wb") as fh:
                     fh.write(data)
-                kind = opts.get("kind") or None
+                kind = normalizza_kind(opts.get("kind") or None)
                 if kind == "altro":
                     return self._send(400, "Tipologia non ancora supportata")
                 if self.path.startswith("/api/analyze-ai"):
