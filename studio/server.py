@@ -329,7 +329,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
             fp0 = fpk.analyze(pdf)
             ripiego = str(e)
 
-    avvisi_sez = []
+    avvisi = avvisi_sez = []
     if ripiego is not None:
         avvisi_sez.append("ANALISI AUTOMATICA FALLITA (%s): ripiego sul "
                           "solutore vecchio, quote e grafica da verificare"
