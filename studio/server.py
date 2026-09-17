@@ -19,6 +19,7 @@ import sys
 import tempfile
 import traceback
 import threading
+from dataclasses import replace
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -210,6 +211,26 @@ def _flowpack_from_case(case):
                     sheet=case["sheet"], girth_span=case["girth_span"])
 
 
+def sezione_da_agente(params):
+    """Larghezza e spessore del pack CHIUSO, se l'agente li ha misurati.
+
+    Le cordonature dicono dove il film e' cordonato, non che forma prende una
+    volta riempito: su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in
+    mano e' 41 x 20. Hanno lo stesso perimetro, quindi dalla fustella non si
+    distinguono: il rapporto puo' arrivare solo da chi guarda il prodotto.
+    """
+    if not isinstance(params, dict):
+        return None
+    q = params.get("quote")
+    if not isinstance(q, dict):
+        return None
+    try:
+        w, t = float(q.get("larghezza")), float(q.get("spessore"))
+    except (TypeError, ValueError):
+        return None
+    return (w, t) if w > 0 and t > 0 else None
+
+
 def livello_da_agente(params):
     """Il livello 1-10 scelto dall'agente con "Scegli tu", se l'ha riportato."""
     if not isinstance(params, dict):
@@ -241,7 +262,7 @@ def printed_bbox(pdf):
         return None, None
 
 
-def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
+def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web", sezione=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -270,6 +291,20 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
             fp0 = fpk.analyze_auto(pdf, bbox=box)
         except Exception:
             fp0 = fpk.analyze(pdf)
+
+    avvisi_sez = []
+    if sezione:
+        # Dall'agente il RAPPORTO, dal film il PERIMETRO. Il perimetro la
+        # fustella lo misura bene e non si tocca; e' il rapporto che non sa
+        # dare, perche' 50 x 11 e 41 x 20 hanno lo stesso perimetro e la
+        # differenza sta nel prodotto dentro, non nel disegno.
+        w_a, t_a = sezione
+        t_n = fp0.girth / (2.0 * (1.0 + w_a / t_a))
+        w_n = fp0.girth / 2.0 - t_n
+        avvisi_sez.append("sezione dall'analisi AI: %.1f x %.1f, riportata sul "
+                          "perimetro del film come %.1f x %.1f"
+                          % (w_a, t_a, w_n, t_n))
+        fp0 = replace(fp0, W=round(w_n, 2), T=round(t_n, 2))
 
     # (1) la sezione si arrotonda a perimetro costante
     liv = FASCE.get(str(soft).strip().lower(), None)
@@ -352,7 +387,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web"):
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri, base %.2f altezza %.2f mm"
              % (teeth, base, base * math.sqrt(3) / 2)),
-            "mappatura per pannello" if knots else "mappatura per arco"]
+            "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
 
 
 def _panel_knots(Ps, d, G, fp):
@@ -502,7 +537,8 @@ class Handler(BaseHTTPRequestHandler):
                                 # /api/analyze-ai e torna qui dentro params
                                 soft = livello_da_agente(opts.get("params")) or soft
                             build_flowpack(pdf, out, int(opts.get("teeth", 20)),
-                                           str(soft), case, q)
+                                           str(soft), case, q,
+                                           sezione_da_agente(opts.get("params")))
                     except Exception:
                         _slots.release()
                         raise
