@@ -157,7 +157,12 @@ def _inpaint(rgb, mask):
     from scipy.ndimage import distance_transform_edt
     if not mask.any():
         return rgb
-    _, idx = distance_transform_edt(mask, return_indices=True)
+    # Le distanze non ci servono, servono solo gli indici del pixel valido
+    # piu' vicino. Chiederle comunque costa un array float64 grande quanto
+    # l'immagine: su un foglio come quello del Brioss sono decine di MB
+    # calcolati e buttati.
+    idx = distance_transform_edt(mask, return_distances=False,
+                                 return_indices=True)
     return rgb[idx[0], idx[1]]
 
 

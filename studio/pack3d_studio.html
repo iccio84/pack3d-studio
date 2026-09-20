@@ -548,8 +548,26 @@ async function findBackend(){
 async function post(p, buf, opts){
   const r = await fetch(url(p), {method:'POST', body:buf,
     headers:{'Content-Type':'application/pdf','X-Pack3d':JSON.stringify(opts||{})}});
-  if (!r.ok) throw new Error((await r.text()).slice(0,300));
+  if (!r.ok){
+    const t = (await r.text()).slice(0,300).trim();
+    // Un corpo vuoto da noi non esce: _send un corpo lo scrive sempre. Se
+    // arriva vuoto la risposta l'ha confezionata il proxy davanti al server,
+    // di solito perche' il processo e' morto durante la costruzione. Prima
+    // qui nasceva new Error(''), e la pagina scriveva la parola "Error" e
+    // basta: il massimo dell'inutile proprio quando serve capire.
+    throw new Error(t || ('il server ha chiuso senza rispondere (HTTP ' + r.status
+      + '). Di solito la costruzione ha esaurito la memoria dell\'istanza: '
+      + 'prova un artwork piu\' piccolo, o alza la RAM del servizio'));
+  }
   return r;
+}
+
+/** Il testo di un errore, mai vuoto: "Error" nudo non dice niente a nessuno. */
+function testoErrore(err){
+  const m = String((err && err.message) || '').trim();
+  if (m) return m;
+  const n = String((err && err.name) || err || '').trim();
+  return n && n !== 'Error' ? n : 'errore senza descrizione (guarda la console del browser)';
 }
 
 async function analyze(buf, opts){
@@ -606,7 +624,7 @@ async function withKind(kind){
     await build(pending.buf, pending.name, {kind});
     setStatus(info.title || 'Modello pronto','');
   }catch(err){
-    const m = String(err.message || err);
+    const m = testoErrore(err);
     setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
                                      : m.slice(0,200), 'err');
   }
@@ -670,7 +688,7 @@ document.getElementById('go').onclick = async () => {
                           ? 'auto'
                           : Number(document.getElementById('soft').value)});
     setStatus('Modello pronto','');
-  }catch(err){ setStatus(String(err.message||err).slice(0,200),'err'); }
+  }catch(err){ setStatus(testoErrore(err).slice(0,200),'err'); }
 };
 dlBtn.onclick = () => {
   if (!glbBlob) return;
