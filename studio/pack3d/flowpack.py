@@ -526,55 +526,63 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
 
 
 def _collapse_guides(vals, max_gap=8.0, tol=0.6):
-    """Le cordonature sono spesso tracciate con due guide equidistanti: tre
-    linee ravvicinate e ugualmente spaziate sono una piega sola, quella di
-    mezzo. Senza questo passaggio le fasce escono assurde (5 | 63 | 5).
+    """Le due letture possibili di un disegno con guide ravvicinate.
 
-    Ma si fonde solo se si fonde anche la terna SPECULARE. Uno steso di
-    flowpack e' simmetrico rispetto alla mezzeria del nastro - le due falde
-    sono la stessa falda - quindi una terna che e' guide da una parte lo e'
-    anche dall'altra. Su K Brioss STD le tre linee a 341,31 / 344,81 / 348,31
-    hanno passi 3,50 e 3,50, differenza 0,00, e venivano fuse; le loro
-    specularI a 71,5 / 74,4 / 78,5 hanno passi 2,9 e 4,1, differenza 1,2, e
-    restavano tre. Fondere da una parte sola toglieva dal mazzo la piega a
-    341,3, cioe' proprio quella che serve alla quaterna giusta, e il pack
-    usciva spesso 7 mm invece di 57. Sul Promo la stessa terna misura 0,68 e
-    si salvava per otto centesimi di millimetro: la differenza fra un pack
-    giusto e uno piatto non puo' stare li'.
+    Tre linee ravvicinate ed equidistanti *possono* essere una piega sola
+    disegnata con due guide ai lati - senza fonderle le fasce escono assurde
+    (5 | 63 | 5). Ma possono anche essere tre pieghe vere, e il disegno non
+    lo dice.
+
+    Questa funzione non decide piu'. Restituisce ENTRAMBE le letture, fuse e
+    intere, e lascia che a scegliere sia la credibilita' della soluzione -
+    cioe' la falda, che e' una quantita' fisica.
+
+    Il motivo e' misurato. La soglia di 0,6 mm sullo scarto fra i due passi
+    decideva tutto, e i disegni ci stanno sopra a cavallo:
+
+        K Brioss STD    341,31 344,81 348,31   scarto 0,00  -> fuse
+        K Brioss Promo  341,31 345,15 348,31   scarto 0,67  -> intere
+
+    Stesso pack, stesso disegno tecnico, stesse quote a cartiglio. Fuse, la
+    piega a 341,3 sparisce e con lei la quaterna giusta: il pack usciva
+    spesso 7 mm invece di 57. Il Promo funzionava per SETTE CENTESIMI di
+    millimetro. Mezzo millimetro di differenza fra due disegni simili non
+    puo' produrre due pack diversi.
     """
     v = sorted(vals)
-
-    def terna(i):
-        """i e' l'inizio di tre linee ravvicinate ed equidistanti?"""
-        return (i + 2 < len(v) and v[i + 1] - v[i] <= max_gap
-                and abs((v[i + 2] - v[i + 1]) - (v[i + 1] - v[i])) <= tol)
-
-    def speculare_e_terna(i):
-        """La terna rispecchiata sulla mezzeria e' anch'essa una terna?"""
-        if not v:
-            return False
-        centro = (v[0] + v[-1])
-        bersagli = sorted(centro - x for x in v[i:i + 3])
-        vicini = []
-        for b in bersagli:
-            j = min(range(len(v)), key=lambda k: abs(v[k] - b))
-            if abs(v[j] - b) > max_gap:
-                return False
-            vicini.append(j)
-        j0 = min(vicini)
-        return sorted(vicini) == [j0, j0 + 1, j0 + 2] and terna(j0)
-
-    out, i = [], 0
+    fuse, i = [], 0
     while i < len(v):
-        if terna(i) and speculare_e_terna(i):
-            out.append(v[i + 1]); i += 3
+        if (i + 2 < len(v) and v[i + 1] - v[i] <= max_gap
+                and abs((v[i + 2] - v[i + 1]) - (v[i + 1] - v[i])) <= tol):
+            fuse.append(v[i + 1]); i += 3
         else:
-            out.append(v[i]); i += 1
-    return out
+            fuse.append(v[i]); i += 1
+    # l'ordine conta solo a parita' di merito: prima la lettura intera, che
+    # e' quella che non butta via informazione
+    return [v, fuse] if fuse != v else [v]
+
+
+def merito(b):
+    """Quanto e' credibile una soluzione. Piu' piccolo, meglio e'.
+
+    Prima la falda: una falda fuori scala non e' una falda, e nessuno scarto
+    numerico puo' valere quanto quella. Poi la simmetria, poi il fronte piu'
+    largo.
+    """
+    return (b["side_fin"] > FALDA_LIMITE, b["simmetria"], -b["front"])
 
 
 def solve_bands(web_mm, folds_mm, tol=1.5):
-    """Vedi solve_bands_any: la simmetria non vale su tutti i pack."""
+    """Vedi solve_bands_any: la simmetria non vale su tutti i pack.
+
+    `folds_mm` puo' essere una lista di pieghe o piu' LETTURE alternative
+    dello stesso disegno (una lista di liste): si risolvono tutte e vince la
+    piu' credibile. Serve a non far decidere a un decimo di millimetro quale
+    lettura e' giusta - vedi _collapse_guides.
+    """
+    if folds_mm and isinstance(folds_mm[0], (list, tuple)):
+        sol = [b for b in (solve_bands_any(web_mm, f, tol) for f in folds_mm) if b]
+        return min(sol, key=merito) if sol else None
     return solve_bands_any(web_mm, folds_mm, tol)
 
 
@@ -621,9 +629,7 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0):
         # e vinceva la prima per mezzo millimetro di simmetria. A questa scala
         # mezzo millimetro e' rumore del disegno; una falda da 68 mm no. Il
         # pack usciva spesso 7 mm, cioe' piatto, con nastro e passo giusti.
-        chiave = (cand["side_fin"] > FALDA_LIMITE, cand["simmetria"], -cand["front"])
-        if best is None or chiave < (best["side_fin"] > FALDA_LIMITE,
-                                     best["simmetria"], -best["front"]):
+        if best is None or merito(cand) < merito(best):
             best = cand
     return best
 

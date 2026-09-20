@@ -84,6 +84,42 @@ Fattore 3,3 a parita' di conteggio. Ogni tentativo di calcolarli e' sbagliato.
   contorno sotto la grafica. Attenzione: e' in scala ridotta, quindi **forma e
   proporzioni dalla miniatura, scala dal disegno grande o dalle quote**.
 
+### Mezzo millimetro non puo' cambiare il pack
+
+**Due disegni tecnici simili devono dare pack simili.** Se due AW dello stesso
+formato differiscono di qualche decimo di millimetro su una linea, il modello
+che ne esce deve essere lo stesso: quei decimi sono il rumore con cui e'
+disegnato un file, non una scelta di chi ha progettato il pack.
+
+E' successo il contrario, misurato:
+
+| | terna di linee | scarto fra i passi | esito |
+|---|---|---|---|
+| K Brioss **Promo** | 341,31 / 345,15 / 348,31 | 0,67 mm | tre pieghe |
+| K Brioss **STD** | 341,31 / 344,81 / 348,31 | 0,00 mm | fuse in una |
+
+Stesso pack, stesso disegno tecnico, stesse quote a cartiglio. La soglia stava
+a 0,60 mm: il Promo passava per **sette centesimi di millimetro**, lo STD no.
+E fuse, quella piega spariva e il pack usciva spesso **7 mm invece di 57** -
+piatto - con nastro, passo e corpo tutti giusti.
+
+Da qui tre regole, in ordine di forza:
+
+1. **Nessuna soglia numerica puo' essere l'unica cosa che decide.** Se una
+   scelta dipende da uno scarto vicino alla soglia, la soglia e' sbagliata
+   comunque la si tari: il problema non e' il valore, e' che ci sia un
+   precipizio.
+2. **Quando una lettura e' ambigua, si tengono tutte le letture** e si
+   risolvono tutte. A scegliere e' la credibilita' del risultato, non un
+   confronto fatto prima di sapere dove porta.
+3. **A decidere dev'essere una quantita' fisica.** Fra due soluzioni entrambe
+   coerenti con l'invariante, vince quella con la quota plausibile - non
+   quella che vince per un decimo di millimetro su uno scarto numerico.
+
+Un invariante soddisfatto **per costruzione** da tutte le candidate, come
+`perimetro + 2 falde = nastro`, non distingue niente e non puo' fare da
+controllo: torna sempre, anche sulla soluzione sbagliata.
+
 ## Togliere il disegno tecnico: cinque livelli
 
 Dal certo allo stimato. I primi tre portano **l'intenzione dichiarata dal file**,
@@ -439,32 +475,29 @@ non e' una falda: e' il segno che il solutore ha preso la quaterna di pieghe
 sbagliata.** Nastro, passo e corpo restano giusti anche cosi', quindi la
 soluzione sembra buona e il pack esce piatto.
 
-Due difetti trovati su K Brioss STD, tutti e due gia' corretti, tutti e due
-di questa famiglia:
+E' l'unica quantita' fisica che distingue due soluzioni entrambe coerenti, ed
+e' per questo che viene **prima della simmetria** nella scelta della quaterna.
+Su K Brioss STD erano in gara:
 
-1. **La classifica delle quaterne.** Erano in gara `W 134,93 T 7,00 falda
-   68,02` (simmetria 0,12) e `W 134,93 T 67,73 falda 7,29` (simmetria 0,65), e
-   vinceva la prima per mezzo millimetro di simmetria. A questa scala mezzo
-   millimetro e' rumore del disegno; una falda da 68 mm no. La plausibilita'
-   della falda viene prima della simmetria.
+    W 134,93   T  7,00   falda 68,02   simmetria 0,12
+    W 134,93   T 67,73   falda  7,29   simmetria 0,65
 
-2. **La fusione delle guide.** Tre linee ravvicinate ed equidistanti si
-   fondono nella sola di mezzo, perche' spesso una piega e' disegnata con due
-   guide ai lati. Su K Brioss STD le tre a 341,31 / 344,81 / 348,31 hanno
-   passi 3,50 e 3,50, differenza 0,00, e venivano fuse; le loro speculari a
-   71,5 / 74,4 / 78,5 hanno differenza 1,2 e restavano tre. Fondere da una
-   parte sola toglieva dal mazzo la piega che serve alla quaterna giusta.
-   Sul Promo la stessa terna misura 0,68 contro una soglia di 0,6 e si
-   salvava per otto centesimi di millimetro.
+e vinceva la prima, per mezzo millimetro di simmetria fra le due meta' del
+retro. A quella scala mezzo millimetro e' rumore del disegno; una falda da 68
+mm no.
 
-   Ora si fonde solo se si fonde anche la terna **speculare**: uno steso di
-   flowpack e' simmetrico rispetto alla mezzeria del nastro, quindi una terna
-   che e' guide da una parte lo e' anche dall'altra.
+### Le guide ravvicinate: due letture, non una scelta
 
-La lezione, che vale oltre questi due: **quando due soluzioni sono entrambe
-coerenti con l'invariante, a decidere dev'essere una quantita' fisica, non uno
-scarto numerico.** L'invariante `perimetro + 2 falde = nastro` e' soddisfatto
-per costruzione da tutte le candidate, quindi non distingue niente.
+Tre linee ravvicinate ed equidistanti **possono** essere una piega sola
+disegnata con due guide ai lati - senza fonderle le fasce escono assurde
+(5 | 63 | 5) - ma possono anche essere tre pieghe vere, e il disegno non lo
+dice. Decidere con una soglia sullo scarto fra i passi e' quello che ha reso
+piatto il K Brioss STD (vedi "Mezzo millimetro non puo' cambiare il pack").
+
+Quindi non si decide: si tengono **tutte e due le letture**, fusa e intera, si
+risolvono entrambe e vince quella con la falda plausibile. Verificato
+spostando la linea di mezzo attraverso la vecchia soglia, da 0,00 a 1,80 mm di
+scarto: il pack non cambia mai.
 
 ## Coppe e contenitori conici
 
