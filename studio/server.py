@@ -755,7 +755,9 @@ FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
 GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 
 MAX_UPLOAD = 60 * 1024 * 1024
-MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "2"))
+# Uno, non due: una costruzione misurata arriva a 400 MB di picco e le
+# istanze piccole hanno 512 MB di RAM. Vedi DEPLOY.md per i numeri.
+MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "1"))
 _slots = threading.Semaphore(MAX_JOBS)
 
 if __name__ == "__main__":

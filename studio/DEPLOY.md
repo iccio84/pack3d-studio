@@ -59,8 +59,21 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
 
 ## Limiti
 
-- Due costruzioni in parallelo (`PACK3D_MAX_JOBS`), la terza riceve 503 con
-  invito a riprovare. Meglio respingere che far cadere il servizio.
+- **Una** costruzione alla volta (`PACK3D_MAX_JOBS`), la seconda riceve 503
+  con invito a riprovare. Meglio respingere che far cadere il servizio.
+
+  Il numero viene dalla memoria, non dalla CPU. Picchi misurati, qualita' web:
+
+  | pack | foglio | picco |
+  |---|---|---|
+  | K Brioss | 420 x 290 mm | 400 MB |
+  | K Country | 122 x 119 mm | 271 MB |
+  | K Paradiso | 165 x 155 mm | 249 MB |
+
+  Le istanze Free e Starter di Render hanno 512 MB. Due costruzioni insieme
+  non ci stanno: il kernel uccide il processo a meta' e chi aspettava riceve
+  una risposta senza corpo, che nel browser diventa un errore senza testo. Su
+  una macchina con piu' RAM si alza dall'ambiente.
 - PDF fino a 60 MB.
 - Nessuno stato conservato: i PDF finiscono in una cartella temporanea e
   vengono cancellati.

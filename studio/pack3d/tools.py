@@ -495,7 +495,10 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
     from scipy.ndimage import label, binary_closing, find_objects
     s = dpi / 72.0
     im = dl.render_page(pdf, 0, s)
-    a = np.asarray(im).astype(int)
+    # int16 e non int: qui si fanno solo max, min e differenze su canali
+    # 0-255, e il //32 piu' sotto tiene i valori sotto 7168. int e' int64 e
+    # moltiplicava per otto la rasterizzazione di un foglio grande.
+    a = np.asarray(im).astype(np.int16)
     occupato = binary_closing(a.max(2) < 248, np.ones((7, 7)))
     lab, n = label(occupato)
     out = []

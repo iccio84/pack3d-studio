@@ -646,7 +646,12 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
 
     sc = 150 / 72.0
     im = render_page(pdf_path, page_no, sc)
-    raster = np.asarray(im).astype(int)
+    # int16, non int: su un foglio come quello del Brioss la rasterizzazione a
+    # 150 dpi e' una ventina di MB in uint8, e .astype(int) li moltiplica per
+    # otto perche' int e' int64. Del raster qui serve solo max(2)-min(2) su
+    # canali 0-255: int16 basta e avanza. Misurato: il picco della sola
+    # analisi passa da 501 a 205 MB.
+    raster = np.asarray(im).astype(np.int16)
 
     # Le pinne stanno in verticale o in orizzontale a seconda delle proporzioni,
     # ma lo schema e' lo stesso ruotato di 90 gradi. Invece di insegnare
