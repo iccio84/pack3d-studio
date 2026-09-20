@@ -329,7 +329,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
             fp0 = fpk.analyze(pdf)
             ripiego = str(e)
 
-    avvisi = avvisi_sez = []
+    # NB: l'UnboundLocalError su 'avvisi' non nasceva qui. Nasceva in
+    # do_POST, che quel nome lo assegnava solo sul ramo flowpack e lo
+    # leggeva su tutti e due. Legare 'avvisi' dentro questa funzione non
+    # tocca l'altra: sono due scope diversi, e qui il nome non si rilegge
+    # mai. La correzione vera sta nel chiamante.
+    avvisi_sez = []
     if ripiego is not None:
         avvisi_sez.append("ANALISI AUTOMATICA FALLITA (%s): ripiego sul "
                           "solutore vecchio, quote e grafica da verificare"
@@ -652,19 +657,45 @@ class Handler(BaseHTTPRequestHandler):
                     if not _slots.acquire(blocking=False):
                         return self._send(503, "Server occupato: riprova fra qualche "
                                                "secondo")
-                    out = os.path.join(td, "out.glb")
-                    case = CASI.get(_sig(pdf))
-                    info = analyze_pdf(pdf, kind)
-                    q = "alta" if str(opts.get("quality")) == "alta" else "web"
+                    # Da qui in giu' il posto e' preso e va restituito comunque
+                    # vada. Prima analyze_pdf stava FUORI da qualsiasi
+                    # protezione: su un PDF che non sa risolvere (K Tronky,
+                    # "saldature di testa non riconosciute") lanciava, il posto
+                    # non tornava indietro, e dopo MAX_JOBS tentativi il server
+                    # rispondeva 503 a chiunque fino al riavvio.
                     try:
+                        out = os.path.join(td, "out.glb")
+                        case = CASI.get(_sig(pdf))
+                        info = analyze_pdf(pdf, kind)
+                        q = "alta" if str(opts.get("quality")) == "alta" else "web"
+                        # Su TUTTI i rami: e' proprio sul ramo che se ne
+                        # dimenticava che nasceva l'UnboundLocalError.
+                        avvisi_ingresso = []
                         if info["kind"] == "carton":
-                            build_carton(pdf, out, q)
+                            # build_carton i suoi avvisi li restituiva gia', ed
+                            # era il chiamante a buttarli e poi a leggere una
+                            # variabile che su questo ramo non esisteva.
+                            avvisi = build_carton(pdf, out, q)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":
                                 # "Scegli tu": il livello lo decide l'agente in
                                 # /api/analyze-ai e torna qui dentro params
-                                soft = livello_da_agente(opts.get("params")) or soft
+                                scelto = livello_da_agente(opts.get("params"))
+                                if scelto is None:
+                                    # Nessuna analisi allegata: gonfiore() cade
+                                    # su 5 in silenzio mentre l'interfaccia ha
+                                    # appena promesso che sceglieva l'AI. Un
+                                    # ripiego muto che produce un modello
+                                    # plausibile e' il difetto peggiore che
+                                    # questo progetto possa avere.
+                                    avvisi_ingresso.append(
+                                        "RIGONFIAMENTO NON SCELTO DA NESSUNO: "
+                                        "nessuna analisi AI allegata alla "
+                                        "richiesta, uso il livello medio 5")
+                                    soft = 5
+                                else:
+                                    soft = scelto
                             # la scatola puo' dirla l'agente o la casella
                             # dell'interfaccia: basta una delle due
                             scatola = (bool(opts.get("scatola"))
@@ -677,18 +708,13 @@ class Handler(BaseHTTPRequestHandler):
                                 str(soft), case, q,
                                 sezione_da_agente(opts.get("params")),
                                 scatola, pinne)
-                    except Exception:
-                        _slots.release()
-                        raise
-                    try:
-                        q = q
                         with open(out, "rb") as fh:
                             # gli avvisi della costruzione viaggiano in un
                             # header: il corpo e' il GLB. Finivano nel nulla,
                             # e con loro ogni diagnostica.
                             return self._send(200, fh.read(), "model/gltf-binary",
                                               filename="modello.glb",
-                                              meta=avvisi)
+                                              meta=avvisi_ingresso + list(avvisi))
                     finally:
                         _slots.release()
             return self._send(404, "endpoint sconosciuto")

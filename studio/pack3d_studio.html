@@ -60,8 +60,10 @@
   #stage{flex:1;position:relative;min-height:340px;margin:16px;
          border-radius:var(--radius-xl);border:1px solid var(--glass-border);
          background:var(--surface);box-shadow:var(--shadow-soft);overflow:hidden}
-  canvas{display:block;width:100%;height:100%}
-  #titolo{position:absolute;left:18px;top:15px;z-index:2}
+  canvas{display:block;width:100%;height:100%;cursor:default}
+  #stage.vivo canvas{cursor:grab}
+  #stage.vivo.presa canvas{cursor:grabbing}
+  #titolo{position:absolute;left:18px;top:15px;z-index:2;pointer-events:none}
   #status{position:absolute;left:0;right:0;bottom:15px;text-align:center;z-index:2;
           font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;
           color:var(--muted-foreground);pointer-events:none;padding:0 20px}
@@ -73,7 +75,7 @@
   #empty strong{color:var(--foreground);font-weight:600;font-size:15px}
 
   #prog{position:absolute;left:0;right:0;top:0;height:3px;overflow:hidden;
-        background:var(--secondary);display:none;z-index:3}
+        background:var(--secondary);display:none;z-index:3;pointer-events:none}
   #prog.on{display:block}
   #prog i{position:absolute;top:0;bottom:0;width:40%;background:var(--primary);
           border-radius:3px;animation:scorre 1.15s ease-in-out infinite}
@@ -82,13 +84,19 @@
     #prog i{animation:none;left:0;width:100%;opacity:.5}
   }
 
-  #drop{position:absolute;inset:10px;border:2px dashed transparent;
+  /* Cornice del trascinamento file: e' solo un segnale visivo, i gestori
+     stanno sulla finestra. Senza pointer-events:none copre tutto il palco
+     e si mangia trascinamento e rotella: il pack si vedeva ma non si
+     poteva girare, cioe' era un'immagine. Vale per tutti i riquadri qui
+     sopra: la tela e' l'unico elemento del palco che riceve il puntatore. */
+  #drop{position:absolute;inset:10px;border:2px dashed transparent;pointer-events:none;
         border-radius:var(--radius);transition:border-color .15s,background .15s}
   body.dragging #drop{border-color:var(--primary);
     background:color-mix(in oklab,var(--primary) 12%,transparent)}
 
   #meta{position:absolute;left:18px;bottom:40px;right:18px;display:flex;gap:7px;
-        flex-wrap:wrap;font-size:10px;color:var(--muted-foreground);z-index:2}
+        flex-wrap:wrap;font-size:10px;color:var(--muted-foreground);z-index:2;
+        pointer-events:none}
   #meta span{background:var(--surface);border:1px solid var(--border);
              border-radius:999px;padding:3px 10px}
 
@@ -218,7 +226,7 @@
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="annulla" style="display:none">Annulla</button>
   </div>
-  <p class="hint">Trascina per ruotare, rotella o pizzico per lo zoom. Il viewer scarta le facce posteriori, quindi un modello con le normali girate si vede subito.</p>
+  <p class="hint">Trascina per ruotare, rotella o pizzico per lo zoom, doppio clic per rimettere l&rsquo;inquadratura. Il viewer scarta le facce posteriori, quindi un modello con le normali girate si vede subito.</p>
 </footer>
 
 <script>
@@ -310,14 +318,20 @@ scene.add(new THREE.AmbientLight(0xffffff,0.80));
 const key = new THREE.DirectionalLight(0xffffff,0.46); key.position.set(-0.35,0.62,0.75); scene.add(key);
 const fill = new THREE.DirectionalLight(0xffffff,0.18); fill.position.set(0.7,0.2,-0.5); scene.add(fill);
 
+const YAW0 = -0.52, PITCH0 = 0.22;
 let model = null, radius = 100, centre = new THREE.Vector3();
-let yaw = -0.52, pitch = 0.22, dist = 400, drag = false, px=0, py=0;
+let yaw = YAW0, pitch = PITCH0, dist = 400;
 
 function frame(){
   const box = new THREE.Box3().setFromObject(model);
   box.getCenter(centre);
   radius = box.getSize(new THREE.Vector3()).length()/2 || 100;
   dist = radius / Math.tan(THREE.MathUtils.degToRad(14)) * 0.95;
+  // I piani di taglio seguono la taglia del modello, che non conosciamo in
+  // anticipo: un GLB puo' arrivare in metri o in millimetri e con un near
+  // fisso lo zoom ravvicinato affetta il pack.
+  camera.near = Math.max(radius * 0.1, 1e-5);
+  camera.far  = radius * 20;
 }
 function resize(){
   const w = stage.clientWidth, h = stage.clientHeight;
@@ -333,21 +347,71 @@ function render(){
 }
 addEventListener('resize', resize);
 
+/* Orbita. Teniamo noi la mappa dei puntatori perche' con due dita sullo
+   schermo il singolo pointermove non basta a distinguere la rotazione dal
+   pizzico, e su un tablet il pizzico e' l'unico zoom che esista. */
 const el = renderer.domElement;
 el.style.touchAction = 'none';
-el.addEventListener('pointerdown', e => {drag=true; px=e.clientX; py=e.clientY; el.setPointerCapture(e.pointerId);});
-el.addEventListener('pointermove', e => { if(!drag||!model) return;
-  yaw -= (e.clientX-px)*0.008; pitch += (e.clientY-py)*0.006;
-  pitch = Math.max(-1.4, Math.min(1.4, pitch)); px=e.clientX; py=e.clientY; render(); });
-el.addEventListener('pointerup', () => drag=false);
+const dita = new Map();
+let pizzico = 0;
+
+function fraLeDita(){
+  const [a, b] = [...dita.values()];
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+function zooma(f){
+  dist = Math.max(radius*1.2, Math.min(radius*14, dist*f));
+  render();
+}
+
+el.addEventListener('pointerdown', e => {
+  if (!model) return;
+  el.setPointerCapture(e.pointerId);
+  dita.set(e.pointerId, {x:e.clientX, y:e.clientY});
+  if (dita.size === 2) pizzico = fraLeDita();
+  stage.classList.add('presa');
+});
+
+el.addEventListener('pointermove', e => {
+  const p = dita.get(e.pointerId);
+  if (!p) return;
+  const dx = e.clientX - p.x, dy = e.clientY - p.y;
+  p.x = e.clientX; p.y = e.clientY;
+  if (!model) return;
+  if (dita.size >= 2){
+    // due dita: comanda il pizzico, la rotazione sta ferma
+    const d = fraLeDita();
+    if (pizzico > 0 && d > 0) zooma(pizzico / d);
+    pizzico = d;
+    return;
+  }
+  yaw -= dx*0.008;
+  pitch = Math.max(-1.4, Math.min(1.4, pitch + dy*0.006));
+  render();
+});
+
+function lascia(e){
+  dita.delete(e.pointerId);
+  if (dita.size < 2) pizzico = 0;
+  if (!dita.size) stage.classList.remove('presa');
+}
+el.addEventListener('pointerup', lascia);
+el.addEventListener('pointercancel', lascia);
+el.addEventListener('lostpointercapture', lascia);
+
 el.addEventListener('wheel', e => { if(!model) return; e.preventDefault();
-  dist = Math.max(radius*1.2, Math.min(radius*14, dist*(1+e.deltaY*0.0012))); render(); }, {passive:false});
+  zooma(1 + e.deltaY*0.0012); }, {passive:false});
+
+// doppio clic: si torna all'inquadratura di partenza senza ricaricare
+el.addEventListener('dblclick', () => { if(!model) return;
+  yaw = YAW0; pitch = PITCH0; frame(); resize(); });
 
 function show(buf){
   if (model){ scene.remove(model); model.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
   model = buildScene(parseGLB(buf));
   scene.add(model);
   document.getElementById('empty').style.display = 'none';
+  stage.classList.add('vivo');
   frame(); resize();
 }
 
@@ -371,6 +435,7 @@ function setFase(f){
   annBtn.style.display = f === 'vuoto'  ? 'none' : '';
 }
 let glbBlob = null, glbName = 'modello.glb', pending = null;
+let avvisi = [];
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
 
@@ -397,8 +462,53 @@ function setTitolo(s){
   if (el) el.textContent = s ? s.replace(/\.pdf$/i,'').toUpperCase() : '';
 }
 function setMeta(items){
+  avvisi = items || [];
   document.getElementById('meta').innerHTML =
-    (items||[]).map(t => '<span>'+t+'</span>').join('');
+    avvisi.map(t => '<span>'+t+'</span>').join('');
+}
+
+/* ------------------- consegna alla viewport che ci ospita -----------------
+ * Dentro il viewer glamlab questa pagina vive in un iframe. Appena il modello
+ * e' pronto glielo passiamo di mano: il pannello si chiude e il pack e' gia'
+ * in viewport, senza il giro dal disco (scarica il GLB, ritrovalo, ricaricalo).
+ *
+ * La stretta di mano c'e' per non spedire mai un file a "*". Chi ci ospita si
+ * presenta, noi ci segniamo la sua origine, e da li' in poi parliamo con
+ * quella soltanto. Chi arriva primo non conta: l'annuncio va in tutte e due
+ * le direzioni e il primo dei due che va a segno basta.
+ * -------------------------------------------------------------------------- */
+let ospite = null;                    // {finestra, origine} di chi ci incornicia
+
+addEventListener('message', e => {
+  if (!e.data || e.data.tipo !== 'pack3d:ospite') return;
+  const nuovo = !ospite || ospite.finestra !== e.source || ospite.origine !== e.origin;
+  ospite = {finestra: e.source, origine: e.origin};
+  // Solo la prima volta. Rispondere a ogni presentazione innesca un rimpallo
+  // infinito, perche' chi ci ospita si ripresenta a ogni "pronto" che riceve:
+  // visto succedere, non ipotizzato.
+  if (nuovo) try{ e.source.postMessage({tipo:'pack3d:pronto'}, e.origin); }catch(err){}
+});
+
+function annunciati(){
+  if (window.self === window.top) return;
+  // annuncio senza dati: "*" qui non espone niente, serve solo a farci trovare
+  try{ parent.postMessage({tipo:'pack3d:pronto'}, '*'); }catch(e){}
+}
+
+function consegna(){
+  if (!ospite || !glbBlob) return false;
+  try{
+    ospite.finestra.postMessage({
+      tipo: 'pack3d:modello',
+      nome: glbName.replace(/\.glb$/i, ''),
+      glb: glbBlob,
+      // gli avvisi viaggiano con il modello: chiudendosi il pannello, i
+      // cartellini qui sotto sparirebbero, e un "GRAFICA RUOTATA" non e' una
+      // cosa che l'utente puo' permettersi di non leggere
+      avvisi: avvisi,
+    }, ospite.origine);
+    return true;
+  }catch(e){ return false; }
 }
 
 /* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in
@@ -459,6 +569,7 @@ async function build(buf, name, opts){
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   show(await glbBlob.arrayBuffer());
   setFase('pronto');
+  if (consegna()) setStatus('Modello passato alla viewport','');
 }
 
 async function handle(file){
@@ -526,6 +637,8 @@ function annulla(){
     // svuota la tela, perche' nessuno ridisegna. Senza questa riga il pack
     // restava li' anche dopo Annulla, con il messaggio sopra.
     render();
+    dita.clear(); pizzico = 0;
+    stage.classList.remove('vivo', 'presa');
     document.getElementById('empty').style.display = '';
   }catch(e){}
   setStatus(backendUp ? (API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale')
@@ -576,6 +689,7 @@ dlBtn.onclick = () => {
     document.body.classList.remove('dragging'); }));
 addEventListener('drop', e => { handle(e.dataTransfer.files[0]); });
 
+annunciati();
 resize();
 </script>
 
