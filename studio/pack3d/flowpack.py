@@ -526,23 +526,73 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
 
 
 def _collapse_guides(vals, max_gap=8.0, tol=0.6):
-    """Le cordonature sono spesso tracciate con due guide equidistanti: tre
-    linee ravvicinate e ugualmente spaziate sono una piega sola, quella di
-    mezzo. Senza questo passaggio le fasce escono assurde (5 | 63 | 5)."""
-    out, i = [], 0
+    """Le due letture possibili di un disegno con guide ravvicinate.
+
+    Tre linee ravvicinate ed equidistanti *possono* essere una piega sola
+    disegnata con due guide ai lati - senza fonderle le fasce escono assurde
+    (5 | 63 | 5). Ma possono anche essere tre pieghe vere, e il disegno non
+    lo dice.
+
+    Questa funzione non decide piu'. Restituisce ENTRAMBE le letture, fuse e
+    intere, e lascia che a scegliere sia la credibilita' della soluzione -
+    cioe' la falda, che e' una quantita' fisica.
+
+    Il motivo e' misurato. La soglia di 0,6 mm sullo scarto fra i due passi
+    decideva tutto, e i disegni ci stanno sopra a cavallo:
+
+        K Brioss STD    341,31 344,81 348,31   scarto 0,00  -> fuse
+        K Brioss Promo  341,31 345,15 348,31   scarto 0,67  -> intere
+
+    Stesso pack, stesso disegno tecnico, stesse quote a cartiglio. Fuse, la
+    piega a 341,3 sparisce e con lei la quaterna giusta: il pack usciva
+    spesso 7 mm invece di 57. Il Promo funzionava per SETTE CENTESIMI di
+    millimetro. Mezzo millimetro di differenza fra due disegni simili non
+    puo' produrre due pack diversi.
+    """
     v = sorted(vals)
+    fuse, i = [], 0
     while i < len(v):
         if (i + 2 < len(v) and v[i + 1] - v[i] <= max_gap
                 and abs((v[i + 2] - v[i + 1]) - (v[i + 1] - v[i])) <= tol):
-            out.append(v[i + 1]); i += 3
+            fuse.append(v[i + 1]); i += 3
         else:
-            out.append(v[i]); i += 1
-    return out
+            fuse.append(v[i]); i += 1
+    # l'ordine conta solo a parita' di merito: prima la lettura intera, che
+    # e' quella che non butta via informazione
+    return [v, fuse] if fuse != v else [v]
+
+
+def merito(b):
+    """Quanto e' credibile una soluzione. Piu' piccolo, meglio e'.
+
+    Prima la falda: una falda fuori scala non e' una falda, e nessuno scarto
+    numerico puo' valere quanto quella. Poi la simmetria, poi il fronte piu'
+    largo.
+    """
+    return (b["side_fin"] > FALDA_LIMITE, b["simmetria"], -b["front"])
 
 
 def solve_bands(web_mm, folds_mm, tol=1.5):
-    """Vedi solve_bands_any: la simmetria non vale su tutti i pack."""
+    """Vedi solve_bands_any: la simmetria non vale su tutti i pack.
+
+    `folds_mm` puo' essere una lista di pieghe o piu' LETTURE alternative
+    dello stesso disegno (una lista di liste): si risolvono tutte e vince la
+    piu' credibile. Serve a non far decidere a un decimo di millimetro quale
+    lettura e' giusta - vedi _collapse_guides.
+    """
+    if folds_mm and isinstance(folds_mm[0], (list, tuple)):
+        sol = [b for b in (solve_bands_any(web_mm, f, tol) for f in folds_mm) if b]
+        return min(sol, key=merito) if sol else None
     return solve_bands_any(web_mm, folds_mm, tol)
+
+
+# Falde misurate su tutti i pack coperti: 4,1 (K Brioss T10) 12,5 (Paradiso)
+# 14,0 (Milch-Schnitte) 15,0 (FULFIL) 16,0 (Country), su nastri da 122 a 420
+# mm. Non scala col nastro perche' e' il lembo che schiacciano le ganasce, e
+# le ganasce non cambiano con la taglia del sacchetto. Il margine e' meta'
+# del massimo visto: serve a non escludere una falda davvero grande, non a
+# lasciar passare un quarto del film.
+FALDA_LIMITE = 24.0
 
 
 def solve_bands_any(web_mm, folds_mm, tol=2.0):
@@ -570,8 +620,16 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0):
                     side_fin=round(fin, 2), back_a=round(ba, 2),
                     back_b=round(bb, 2), folds=(y1, y2, y3, y4),
                     simmetria=round(abs(ba - bb), 2))
-        # a parita' di coerenza si preferisce la soluzione piu' simmetrica
-        if best is None or (cand["simmetria"], -cand["front"]) < (best["simmetria"], -best["front"]):
+        # Prima la falda, poi la simmetria. Su K Brioss STD le due quaterne in
+        # gara erano queste:
+        #
+        #   W 134,93  T  7,00  falda 68,02   simmetria 0,12   <- vinceva
+        #   W 134,93  T 67,73  falda  7,29   simmetria 0,65
+        #
+        # e vinceva la prima per mezzo millimetro di simmetria. A questa scala
+        # mezzo millimetro e' rumore del disegno; una falda da 68 mm no. Il
+        # pack usciva spesso 7 mm, cioe' piatto, con nastro e passo giusti.
+        if best is None or merito(cand) < merito(best):
             best = cand
     return best
 
