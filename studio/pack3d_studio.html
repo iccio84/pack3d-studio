@@ -546,18 +546,28 @@ async function findBackend(){
 }
 
 async function post(p, buf, opts){
+  const inizio = Date.now();
   const r = await fetch(url(p), {method:'POST', body:buf,
     headers:{'Content-Type':'application/pdf','X-Pack3d':JSON.stringify(opts||{})}});
   if (!r.ok){
-    const t = (await r.text()).slice(0,300).trim();
+    const secondi = Math.round((Date.now() - inizio) / 1000);
+    let t = (await r.text()).slice(0,300).trim();
+    // Il nostro server risponde in testo semplice. Una pagina HTML qui viene
+    // dal proxy davanti al servizio, non da noi, e rovesciarne il sorgente
+    // nella riga di stato non informa nessuno: dice solo, malissimo, che il
+    // backend non ha risposto.
+    if (t.charAt(0) === '<') t = '';
     // Un corpo vuoto da noi non esce: _send un corpo lo scrive sempre. Se
     // arriva vuoto la risposta l'ha confezionata il proxy davanti al server,
     // di solito perche' il processo e' morto durante la costruzione. Prima
     // qui nasceva new Error(''), e la pagina scriveva la parola "Error" e
     // basta: il massimo dell'inutile proprio quando serve capire.
-    throw new Error(t || ('il server ha chiuso senza rispondere (HTTP ' + r.status
-      + '): la costruzione non e\' arrivata in fondo, per memoria esaurita o '
-      + 'per tempo scaduto. Il log del servizio dice quale dei due.'));
+    // I secondi non sono un dettaglio: un tempo scaduto cade sempre allo
+    // stesso valore, una memoria esaurita cade quando il picco arriva.
+    throw new Error(t || ('il server ha chiuso senza rispondere dopo ' + secondi
+      + ' s (HTTP ' + r.status + '): la costruzione non e\' arrivata in fondo, '
+      + 'per memoria esaurita o per tempo scaduto. Dimmi quanti secondi e so '
+      + 'quale dei due.'));
   }
   return r;
 }
