@@ -428,7 +428,6 @@ def _ink(pdf_path, box, page_no=0, dpi=72):
     print-free coprono molta superficie ma sono quasi acromatici, mentre la
     grafica vera e' satura."""
     import numpy as np
-    import pypdfium2 as pdfium
     sc = dpi / 72.0
     key = (pdf_path, page_no, dpi)
     if key not in _PREVIEW:

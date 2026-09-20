@@ -23,8 +23,8 @@ mappata sulle facce giuste.
 | `agent.py` | ciclo di tool use: Claude orchestra, il codice misura |
 | `pack3d/tools.py` | strumenti esposti all'agente, controllo visivo compreso |
 | `REGOLE.md` | le regole del progetto, usate come system prompt |
-| `frontend/` | componenti React per il viewer |
-| `PASSI.md` | messa in opera, passo per passo |
+| `pack3d_studio.html` | l'interfaccia: viewer 3D, caricamento PDF, parametri |
+| `PASSI.md` | l'agente: chiave API, strumenti, ciclo di tool use |
 | `DEPLOY.md` | pubblicazione su Hugging Face Spaces o Render |
 
 ## Avvio rapido

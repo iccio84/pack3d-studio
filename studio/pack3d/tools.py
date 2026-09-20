@@ -121,7 +121,6 @@ def measure_region(pdf, x_mm, y_mm, w_mm, h_mm, dpi: int = 200):
     Serve per i dati che non stanno nei tracciati: dove finisce la stampa,
     quanto e' fitta una zigrinatura, dove cade un elemento grafico.
     """
-    import pypdfium2 as pdfium
     s = dpi / 72.0
     im = dl.render_page(pdf, 0, s)
     a = np.asarray(im).astype(int)
@@ -215,9 +214,7 @@ def clean_artwork(pdf, x_mm, y_mm, w_mm, h_mm, dt_x_mm=None, dt_y_mm=None,
     PRIMA di rimuovere; disegno tecnico ridipinto con le tinte piatte del pack,
     non riempito dal pixel vicino.
     """
-    import pypdfium2 as pdfium
     from scipy.ndimage import binary_dilation, distance_transform_edt, label, uniform_filter
-    from . import techink
     s = dpi / 72.0
     page = dl.render_page(pdf, 0, s)
     A = np.asarray(page).astype(int)
@@ -344,7 +341,6 @@ def visual_check(pdf):
     E' il passo che nessuna regola sostituisce. Le regole dicono cosa togliere;
     solo l'occhio si accorge che e' sparito un pezzo di logo.
     """
-    from PIL import Image
     d = _CLEAN.get(pdf)
     if not d:
         return {"errore": "chiama prima clean_artwork"}
@@ -404,7 +400,7 @@ def reconstruct_area(pdf, prompt=None, model=None):
     2. Un modello generativo rigenera i pixel, quindi bordi e posizioni possono
        spostarsi: la zona trattata va tenuta la piu' piccola possibile.
     """
-    import base64, io, tempfile
+    import base64, io
     from PIL import Image
 
     d = _CLEAN.get(pdf)
@@ -491,7 +487,6 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
     Per ogni blocco riporta ingombro, quota di superficie colorata e quota di
     tratto sottile: il primo distingue lo stampato, il secondo il tecnico.
     """
-    import pypdfium2 as pdfium
     from scipy.ndimage import label, binary_closing, find_objects
     s = dpi / 72.0
     im = dl.render_page(pdf, 0, s)
