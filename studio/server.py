@@ -583,6 +583,10 @@ def analyze_pdf(pdf, kind=None):
 # http
 # --------------------------------------------------------------------------- #
 class Handler(BaseHTTPRequestHandler):
+    # HEAD risponde con le stesse intestazioni di GET e senza corpo. Il flag
+    # lo dice a _send, cosi' le due risposte non possono divergere.
+    _senza_corpo = False
+
     def log_message(self, fmt, *a):
         sys.stderr.write("  %s\n" % (fmt % a))
 
@@ -612,7 +616,19 @@ class Handler(BaseHTTPRequestHandler):
                              'attachment; filename="%s"' % filename)
         self._cors()
         self.end_headers()
-        self.wfile.write(body)
+        if not self._senza_corpo:
+            self.wfile.write(body)
+
+    def do_HEAD(self):
+        # Render controlla la salute del servizio con HEAD, e
+        # BaseHTTPRequestHandler senza do_HEAD risponde 501 a ogni controllo:
+        # nel log di produzione si vede "Unsupported method ('HEAD')" a ogni
+        # giro, dal primo istante dopo il deploy.
+        self._senza_corpo = True
+        try:
+            self.do_GET()
+        finally:
+            self._senza_corpo = False
 
     def do_OPTIONS(self):
         self.send_response(204)
