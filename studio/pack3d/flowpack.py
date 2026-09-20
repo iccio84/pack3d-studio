@@ -680,13 +680,14 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     Copre gli impaginati in cui il disegno tecnico traccia le cordonature; per
     gli artwork che non rientrano resta il registro dei casi calibrati.
     """
-    import pdfplumber
     import numpy as np
-    from .dieline import _segments, _technical_pens, render_page
+    from .dieline import _technical_pens, render_page
+    from .tracciati import segmenti
 
-    with pdfplumber.open(pdf_path) as pdf:
-        page = pdf.pages[page_no]
-        segs = _segments(page)
+    # I tracciati li legge pypdfium2, non pdfplumber: stessa informazione,
+    # un decimo del tempo e un sesto della memoria. Vedi tracciati.py.
+    if True:
+        segs, pagina_w, pagina_h = segmenti(pdf_path, page_no)
         if bbox:
             # una tavola contiene piu' viste: senza riquadro si misura il foglio
             bx0, by0, bx1, by1 = bbox
@@ -696,7 +697,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
                     return by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3 and b0 <= bx1 + 3
                 return bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3 and b0 <= by1 + 3
             segs = [sg for sg in segs if _in(sg)]
-        pens = _technical_pens(segs, page.width, page.height)
+        pens = _technical_pens(segs, pagina_w, pagina_h)
         S = [s for s in segs if s[4] in pens]
 
     # pdfplumber si tiene un oggetto Python per ogni tracciato della pagina, e
