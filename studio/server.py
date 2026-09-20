@@ -131,6 +131,12 @@ def analisi_flowpack(pdf):
         if imp in _ANALISI:
             _ANALISI.move_to_end(imp)
             return _ANALISI[imp]
+    # Si rasterizza QUI, una volta, alla risoluzione piu' alta che serva: da
+    # qui in avanti find_blocks (100 dpi) e la texture riscalano quella invece
+    # di rifarla. Senza, il primo che chiede e' find_blocks a 100 e l'analisi
+    # deve comunque rifarla piu' grande.
+    dl.render_page(pdf, 0, fpk.SCALA_ANALISI)
+
     box, _dt = printed_bbox(pdf)
     ripiego = None
     try:

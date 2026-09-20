@@ -674,6 +674,12 @@ class _StesoNonRisolto(ValueError):
     """Le fasce non chiudono su questo asse: forse lo steso e' ruotato."""
 
 
+# Risoluzione a cui l'analisi guarda la pagina. E' anche la piu' alta che
+# serva al flusso su un foglio grande, quindi chi rasterizza per primo lo fa
+# a questa e gli altri riscalano: vedi dieline.render_page.
+SCALA_ANALISI = 150 / 72.0
+
+
 def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
 
@@ -708,7 +714,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     import gc
     gc.collect()
 
-    sc = 150 / 72.0
+    sc = SCALA_ANALISI
     im = render_page(pdf_path, page_no, sc)
     # int16, non int: su un foglio come quello del Brioss la rasterizzazione a
     # 150 dpi e' una ventina di MB in uint8, e .astype(int) li moltiplica per

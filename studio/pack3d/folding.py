@@ -12,6 +12,7 @@ import numpy as np
 import pdfplumber
 from PIL import Image, ImageDraw
 
+from . import dieline
 from .dieline import _segments, _technical_pens, render_page
 
 Image.MAX_IMAGE_PIXELS = None
@@ -172,6 +173,10 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
     sul modello 3D deve restare solo la grafica di stampa."""
     scale = dpi / 72.0
     sheet = render_page(pdf_path, page_no, scale)
+    # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui in
+    # giu' si alloca la maschera e la texture, e tenerla viva vorrebbe dire
+    # sommare due rasterizzazioni nel momento peggiore.
+    dieline.scarta_resa()
 
     pens, palette = set(), set()
     page = None
