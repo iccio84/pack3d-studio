@@ -699,6 +699,14 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
         pens = _technical_pens(segs, page.width, page.height)
         S = [s for s in segs if s[4] in pens]
 
+    # pdfplumber si tiene un oggetto Python per ogni tracciato della pagina, e
+    # su un impaginato grande sono decine di migliaia: centinaia di MB che il
+    # `with` chiude ma che l'allocatore non restituisce da solo. Qui sotto si
+    # rasterizza, e le due cose sommate sono il picco. Una raccolta esplicita
+    # prima di allocare costa millisecondi.
+    import gc
+    gc.collect()
+
     sc = 150 / 72.0
     im = render_page(pdf_path, page_no, sc)
     # int16, non int: su un foglio come quello del Brioss la rasterizzazione a
@@ -722,8 +730,15 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
         try:
             return _risolvi_steso(S, raster, sc, ruotato)
         except _StesoNonRisolto as e:
-            primo = primo or e
-    raise primo
+            # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
+            # porta dietro il traceback, il traceback il frame di
+            # _risolvi_steso, e il frame tutti i suoi locali: le
+            # rasterizzazioni intermedie del tentativo fallito restavano vive
+            # per tutto il secondo tentativo. Su un foglio grande sono
+            # centinaia di MB tenuti in ostaggio da una variabile che serve
+            # solo a ricordare una frase.
+            primo = primo or str(e)
+    raise _StesoNonRisolto(primo)
 
 
 def _risolvi_steso(S, raster, sc, ruotato):
