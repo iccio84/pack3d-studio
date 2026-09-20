@@ -421,6 +421,51 @@ Regole di forma, da applicare senza chiedere:
 - l'apertura della pinna va concentrata vicino alla saldatura (rampa di quinto
   grado): con una rampa corta il gonfiore invade il corpo e deforma i bollini.
 
+### La falda dice se la soluzione e' sbagliata
+
+La falda non scala col nastro: e' il lembo che schiacciano le ganasce, e le
+ganasce non diventano piu' grandi perche' il sacchetto lo e'. Misurate:
+
+| pack | nastro | falda |
+|---|---|---|
+| Kinder Country | 122 | 16,0 |
+| FULFIL | 141 | 15,0 |
+| Milch-Schnitte T1 | 144 | 14,0 |
+| Kinder Paradiso | 165 | 12,5 |
+| K Brioss T10 | 420 | 4,1 |
+
+Da 122 a 420 mm di nastro, sempre fra 4 e 16. **Una falda molto piu' grande
+non e' una falda: e' il segno che il solutore ha preso la quaterna di pieghe
+sbagliata.** Nastro, passo e corpo restano giusti anche cosi', quindi la
+soluzione sembra buona e il pack esce piatto.
+
+Due difetti trovati su K Brioss STD, tutti e due gia' corretti, tutti e due
+di questa famiglia:
+
+1. **La classifica delle quaterne.** Erano in gara `W 134,93 T 7,00 falda
+   68,02` (simmetria 0,12) e `W 134,93 T 67,73 falda 7,29` (simmetria 0,65), e
+   vinceva la prima per mezzo millimetro di simmetria. A questa scala mezzo
+   millimetro e' rumore del disegno; una falda da 68 mm no. La plausibilita'
+   della falda viene prima della simmetria.
+
+2. **La fusione delle guide.** Tre linee ravvicinate ed equidistanti si
+   fondono nella sola di mezzo, perche' spesso una piega e' disegnata con due
+   guide ai lati. Su K Brioss STD le tre a 341,31 / 344,81 / 348,31 hanno
+   passi 3,50 e 3,50, differenza 0,00, e venivano fuse; le loro speculari a
+   71,5 / 74,4 / 78,5 hanno differenza 1,2 e restavano tre. Fondere da una
+   parte sola toglieva dal mazzo la piega che serve alla quaterna giusta.
+   Sul Promo la stessa terna misura 0,68 contro una soglia di 0,6 e si
+   salvava per otto centesimi di millimetro.
+
+   Ora si fonde solo se si fonde anche la terna **speculare**: uno steso di
+   flowpack e' simmetrico rispetto alla mezzeria del nastro, quindi una terna
+   che e' guide da una parte lo e' anche dall'altra.
+
+La lezione, che vale oltre questi due: **quando due soluzioni sono entrambe
+coerenti con l'invariante, a decidere dev'essere una quantita' fisica, non uno
+scarto numerico.** L'invariante `perimetro + 2 falde = nastro` e' soddisfatto
+per costruzione da tutte le candidate, quindi non distingue niente.
+
 ## Coppe e contenitori conici
 
 Lo steso e' un **settore anulare**. Il contorno va letto appiattendo le bezier

@@ -528,12 +528,45 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
 def _collapse_guides(vals, max_gap=8.0, tol=0.6):
     """Le cordonature sono spesso tracciate con due guide equidistanti: tre
     linee ravvicinate e ugualmente spaziate sono una piega sola, quella di
-    mezzo. Senza questo passaggio le fasce escono assurde (5 | 63 | 5)."""
-    out, i = [], 0
+    mezzo. Senza questo passaggio le fasce escono assurde (5 | 63 | 5).
+
+    Ma si fonde solo se si fonde anche la terna SPECULARE. Uno steso di
+    flowpack e' simmetrico rispetto alla mezzeria del nastro - le due falde
+    sono la stessa falda - quindi una terna che e' guide da una parte lo e'
+    anche dall'altra. Su K Brioss STD le tre linee a 341,31 / 344,81 / 348,31
+    hanno passi 3,50 e 3,50, differenza 0,00, e venivano fuse; le loro
+    specularI a 71,5 / 74,4 / 78,5 hanno passi 2,9 e 4,1, differenza 1,2, e
+    restavano tre. Fondere da una parte sola toglieva dal mazzo la piega a
+    341,3, cioe' proprio quella che serve alla quaterna giusta, e il pack
+    usciva spesso 7 mm invece di 57. Sul Promo la stessa terna misura 0,68 e
+    si salvava per otto centesimi di millimetro: la differenza fra un pack
+    giusto e uno piatto non puo' stare li'.
+    """
     v = sorted(vals)
+
+    def terna(i):
+        """i e' l'inizio di tre linee ravvicinate ed equidistanti?"""
+        return (i + 2 < len(v) and v[i + 1] - v[i] <= max_gap
+                and abs((v[i + 2] - v[i + 1]) - (v[i + 1] - v[i])) <= tol)
+
+    def speculare_e_terna(i):
+        """La terna rispecchiata sulla mezzeria e' anch'essa una terna?"""
+        if not v:
+            return False
+        centro = (v[0] + v[-1])
+        bersagli = sorted(centro - x for x in v[i:i + 3])
+        vicini = []
+        for b in bersagli:
+            j = min(range(len(v)), key=lambda k: abs(v[k] - b))
+            if abs(v[j] - b) > max_gap:
+                return False
+            vicini.append(j)
+        j0 = min(vicini)
+        return sorted(vicini) == [j0, j0 + 1, j0 + 2] and terna(j0)
+
+    out, i = [], 0
     while i < len(v):
-        if (i + 2 < len(v) and v[i + 1] - v[i] <= max_gap
-                and abs((v[i + 2] - v[i + 1]) - (v[i + 1] - v[i])) <= tol):
+        if terna(i) and speculare_e_terna(i):
             out.append(v[i + 1]); i += 3
         else:
             out.append(v[i]); i += 1
@@ -543,6 +576,15 @@ def _collapse_guides(vals, max_gap=8.0, tol=0.6):
 def solve_bands(web_mm, folds_mm, tol=1.5):
     """Vedi solve_bands_any: la simmetria non vale su tutti i pack."""
     return solve_bands_any(web_mm, folds_mm, tol)
+
+
+# Falde misurate su tutti i pack coperti: 4,1 (K Brioss T10) 12,5 (Paradiso)
+# 14,0 (Milch-Schnitte) 15,0 (FULFIL) 16,0 (Country), su nastri da 122 a 420
+# mm. Non scala col nastro perche' e' il lembo che schiacciano le ganasce, e
+# le ganasce non cambiano con la taglia del sacchetto. Il margine e' meta'
+# del massimo visto: serve a non escludere una falda davvero grande, non a
+# lasciar passare un quarto del film.
+FALDA_LIMITE = 24.0
 
 
 def solve_bands_any(web_mm, folds_mm, tol=2.0):
@@ -570,8 +612,18 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0):
                     side_fin=round(fin, 2), back_a=round(ba, 2),
                     back_b=round(bb, 2), folds=(y1, y2, y3, y4),
                     simmetria=round(abs(ba - bb), 2))
-        # a parita' di coerenza si preferisce la soluzione piu' simmetrica
-        if best is None or (cand["simmetria"], -cand["front"]) < (best["simmetria"], -best["front"]):
+        # Prima la falda, poi la simmetria. Su K Brioss STD le due quaterne in
+        # gara erano queste:
+        #
+        #   W 134,93  T  7,00  falda 68,02   simmetria 0,12   <- vinceva
+        #   W 134,93  T 67,73  falda  7,29   simmetria 0,65
+        #
+        # e vinceva la prima per mezzo millimetro di simmetria. A questa scala
+        # mezzo millimetro e' rumore del disegno; una falda da 68 mm no. Il
+        # pack usciva spesso 7 mm, cioe' piatto, con nastro e passo giusti.
+        chiave = (cand["side_fin"] > FALDA_LIMITE, cand["simmetria"], -cand["front"])
+        if best is None or chiave < (best["side_fin"] > FALDA_LIMITE,
+                                     best["simmetria"], -best["front"]):
             best = cand
     return best
 
