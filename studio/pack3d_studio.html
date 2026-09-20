@@ -435,6 +435,7 @@ function setFase(f){
   annBtn.style.display = f === 'vuoto'  ? 'none' : '';
 }
 let glbBlob = null, glbName = 'modello.glb', pending = null;
+let avvisi = [];
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
 
@@ -461,8 +462,53 @@ function setTitolo(s){
   if (el) el.textContent = s ? s.replace(/\.pdf$/i,'').toUpperCase() : '';
 }
 function setMeta(items){
+  avvisi = items || [];
   document.getElementById('meta').innerHTML =
-    (items||[]).map(t => '<span>'+t+'</span>').join('');
+    avvisi.map(t => '<span>'+t+'</span>').join('');
+}
+
+/* ------------------- consegna alla viewport che ci ospita -----------------
+ * Dentro il viewer glamlab questa pagina vive in un iframe. Appena il modello
+ * e' pronto glielo passiamo di mano: il pannello si chiude e il pack e' gia'
+ * in viewport, senza il giro dal disco (scarica il GLB, ritrovalo, ricaricalo).
+ *
+ * La stretta di mano c'e' per non spedire mai un file a "*". Chi ci ospita si
+ * presenta, noi ci segniamo la sua origine, e da li' in poi parliamo con
+ * quella soltanto. Chi arriva primo non conta: l'annuncio va in tutte e due
+ * le direzioni e il primo dei due che va a segno basta.
+ * -------------------------------------------------------------------------- */
+let ospite = null;                    // {finestra, origine} di chi ci incornicia
+
+addEventListener('message', e => {
+  if (!e.data || e.data.tipo !== 'pack3d:ospite') return;
+  const nuovo = !ospite || ospite.finestra !== e.source || ospite.origine !== e.origin;
+  ospite = {finestra: e.source, origine: e.origin};
+  // Solo la prima volta. Rispondere a ogni presentazione innesca un rimpallo
+  // infinito, perche' chi ci ospita si ripresenta a ogni "pronto" che riceve:
+  // visto succedere, non ipotizzato.
+  if (nuovo) try{ e.source.postMessage({tipo:'pack3d:pronto'}, e.origin); }catch(err){}
+});
+
+function annunciati(){
+  if (window.self === window.top) return;
+  // annuncio senza dati: "*" qui non espone niente, serve solo a farci trovare
+  try{ parent.postMessage({tipo:'pack3d:pronto'}, '*'); }catch(e){}
+}
+
+function consegna(){
+  if (!ospite || !glbBlob) return false;
+  try{
+    ospite.finestra.postMessage({
+      tipo: 'pack3d:modello',
+      nome: glbName.replace(/\.glb$/i, ''),
+      glb: glbBlob,
+      // gli avvisi viaggiano con il modello: chiudendosi il pannello, i
+      // cartellini qui sotto sparirebbero, e un "GRAFICA RUOTATA" non e' una
+      // cosa che l'utente puo' permettersi di non leggere
+      avvisi: avvisi,
+    }, ospite.origine);
+    return true;
+  }catch(e){ return false; }
 }
 
 /* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in
@@ -523,6 +569,7 @@ async function build(buf, name, opts){
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   show(await glbBlob.arrayBuffer());
   setFase('pronto');
+  if (consegna()) setStatus('Modello passato alla viewport','');
 }
 
 async function handle(file){
@@ -642,6 +689,7 @@ dlBtn.onclick = () => {
     document.body.classList.remove('dragging'); }));
 addEventListener('drop', e => { handle(e.dataTransfer.files[0]); });
 
+annunciati();
 resize();
 </script>
 
