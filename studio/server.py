@@ -329,7 +329,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
             fp0 = fpk.analyze(pdf)
             ripiego = str(e)
 
-    avvisi = avvisi_sez = []
+    # NB: l'UnboundLocalError su 'avvisi' non nasceva qui. Nasceva in
+    # do_POST, che quel nome lo assegnava solo sul ramo flowpack e lo
+    # leggeva su tutti e due. Legare 'avvisi' dentro questa funzione non
+    # tocca l'altra: sono due scope diversi, e qui il nome non si rilegge
+    # mai. La correzione vera sta nel chiamante.
+    avvisi_sez = []
     if ripiego is not None:
         avvisi_sez.append("ANALISI AUTOMATICA FALLITA (%s): ripiego sul "
                           "solutore vecchio, quote e grafica da verificare"
