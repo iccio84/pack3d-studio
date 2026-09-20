@@ -525,9 +525,16 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         # rettangolo vero della pagina, e la texture va rimessa nello stesso
         # telaio della UV, con il perimetro sulle righe
         sh = (sh[1], sh[0], sh[3], sh[2])
+    # Rasterizzare a 200 dpi un foglio che poi write_glb_mesh rimpicciolisce
+    # a tmax px di lato vuol dire produrre pixel per buttarli: sul K Brioss,
+    # 7,5 milioni per tenerne 2. Il dpi si abbassa fino a quello che serve
+    # davvero, mai piu' in su di quello chiesto - quindi sui fogli piccoli,
+    # che sono gia' sotto il limite, non cambia niente.
+    lato_pt = max(sh[2] - sh[0], sh[3] - sh[1])
+    dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
-        dpi=dpi, inset_px=0, clean=(case is None))["film"]
+        dpi=dpi_tex, inset_px=0, clean=(case is None))["film"]
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il
