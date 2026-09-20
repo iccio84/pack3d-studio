@@ -556,8 +556,8 @@ async function post(p, buf, opts){
     // qui nasceva new Error(''), e la pagina scriveva la parola "Error" e
     // basta: il massimo dell'inutile proprio quando serve capire.
     throw new Error(t || ('il server ha chiuso senza rispondere (HTTP ' + r.status
-      + '). Di solito la costruzione ha esaurito la memoria dell\'istanza: '
-      + 'prova un artwork piu\' piccolo, o alza la RAM del servizio'));
+      + '): la costruzione non e\' arrivata in fondo, per memoria esaurita o '
+      + 'per tempo scaduto. Il log del servizio dice quale dei due.'));
   }
   return r;
 }
