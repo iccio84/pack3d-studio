@@ -343,6 +343,39 @@ def printed_bbox(pdf):
         return None, None
 
 
+# Falde misurate sui pack che conosciamo, dal piu' piccolo al piu' grande:
+#
+#   Milch-Schnitte T1  nastro 144   falda 14,0
+#   Kinder Country     nastro 122   falda 16,0
+#   Kinder Paradiso    nastro 165   falda 12,5
+#   K Brioss T10 Promo nastro 420   falda  4,1
+#   FULFIL             nastro 141   falda 15,0
+#
+# Fra 4 e 16 mm, su nastri che vanno da 122 a 420. E' fisica, non statistica:
+# la falda e' il lembo che schiacciano le ganasce, e le ganasce non diventano
+# piu' grandi perche' il sacchetto lo e'. Il solutore invece accetta una falda
+# fino al 25% del nastro, che su 420 mm vuol dire 105: un valore che non e'
+# una falda, e' un quarto del film.
+FALDA_VISTA_MAX = 16.0
+
+
+def falda_sospetta(fp):
+    """Avviso se la falda risolta non somiglia a nessuna falda mai misurata.
+
+    Non rifiuta niente: una quota fuori scala puo' essere giusta su un pack
+    che non abbiamo mai visto. Ma un modello costruito su una falda sbagliata
+    esce plausibile invece che evidentemente rotto - il difetto che questo
+    progetto ha gia' pagato tre volte - e allora almeno lo dice.
+    """
+    if fp.side_fin <= FALDA_VISTA_MAX * 1.5:
+        return None
+    return ("FALDA FUORI SCALA: %.1f mm, contro i %.0f mm della piu' grande "
+            "mai misurata e %.1f di spessore del pack. Se il pack sembra "
+            "troppo sottile e' questo: il solutore ha scelto le pieghe "
+            "sbagliate, e nastro e passo restano giusti lo stesso."
+            % (fp.side_fin, FALDA_VISTA_MAX, fp.T))
+
+
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
                    sezione=None, scatola=False, pinne=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
@@ -381,6 +414,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # tocca l'altra: sono due scope diversi, e qui il nome non si rilegge
     # mai. La correzione vera sta nel chiamante.
     avvisi_sez = []
+    sospetto = falda_sospetta(fp0)
+    if sospetto:
+        avvisi_sez.append(sospetto)
     if ripiego is not None:
         avvisi_sez.append("ANALISI AUTOMATICA FALLITA (%s): ripiego sul "
                           "solutore vecchio, quote e grafica da verificare"
@@ -625,6 +661,10 @@ def analyze_pdf(pdf, kind=None):
     meta = ["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
             "corpo %.1f mm" % fp.L,
             "sezione %.1f x %.1f mm" % (fp.W, fp.T)]
+    sospetto = falda_sospetta(fp)
+    if sospetto:
+        # prima di costruire, non dopo: qui l'utente le quote le sta leggendo
+        meta.insert(0, sospetto)
     if ripiego is not None:
         # anche qui il ripiego si dichiara: questi cartellini sono la prima
         # cosa che l'utente legge, e finora tacevano
