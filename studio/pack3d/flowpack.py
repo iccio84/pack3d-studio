@@ -152,11 +152,9 @@ def _section_path(fp: Flowpack, r: float, n_arc: int = 10, section_w=None):
     pts = [(y_fin, -hz)]
     for k, (cy, cz) in enumerate(corners):
         sy = 1 if cy > 0 else -1
-        sz = 1 if cz > 0 else -1
         # ingresso e uscita dello spigolo
         if k in (0, 2):      # spigoli sul lato del retro/fronte -> arrivo in y
             pts.append((cy - sy * r, cz))
-            centre = (cy - sy * r, cz + (-sz) * 0 + sz * 0)
         pts.append((cy, cz))
     # ricostruzione esplicita con archi
     path = []
@@ -394,7 +392,7 @@ def build_side_fin(fp: Flowpack, nu: int = 120, nv: int = 8, gap: float = 0.45,
     x = np.linspace(-half, half, nu + 1)
     s = np.linspace(0.0, 1.0, nv + 1)          # 0 alla piega, 1 alla cimosa
 
-    y0s, y1s, web = fp.sheet[1], fp.sheet[3], fp.sheet[3] - fp.sheet[1]
+    y0s, web = fp.sheet[1], fp.sheet[3] - fp.sheet[1]
     g0 = fp.girth_span[0]
     fin_pt = fp.side_fin / PT2MM
 
@@ -684,7 +682,6 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     """
     import pdfplumber
     import numpy as np
-    import pypdfium2 as pdfium
     from .dieline import _segments, _technical_pens, render_page
 
     with pdfplumber.open(pdf_path) as pdf:

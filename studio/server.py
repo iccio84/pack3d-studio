@@ -12,9 +12,7 @@ FormData non e' clonabile, mentre un ArrayBuffer lo e'.
 from __future__ import annotations
 
 import hashlib
-import io
 import json
-import math
 import os
 import sys
 from urllib.parse import quote
@@ -38,7 +36,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
 from pack3d import dieline as dl, folding, exporters
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
-from pack3d.flowpack import Flowpack, soft_section_fit, fin_on_surface
+from pack3d.flowpack import Flowpack, fin_on_surface
 from pack3d.exporters import _normals
 
 # gonfiore: raccordo, esponente spigolo, grinza, pancia, rastremazione

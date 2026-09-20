@@ -11,7 +11,6 @@ from __future__ import annotations
 import numpy as np
 import pdfplumber
 from PIL import Image, ImageDraw
-import pypdfium2 as pdfium
 
 from .dieline import _segments, _technical_pens, render_page
 
