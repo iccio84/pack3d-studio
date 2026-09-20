@@ -11,6 +11,7 @@ FormData non e' clonabile, mentre un ArrayBuffer lo e'.
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import math
@@ -20,6 +21,7 @@ from urllib.parse import quote
 import tempfile
 import traceback
 import threading
+from collections import OrderedDict
 from dataclasses import replace
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
@@ -94,6 +96,57 @@ def _sig(path):
     with pdfplumber.open(path) as pdf:
         p = pdf.pages[0]
         return (int(p.width), int(p.height))
+
+
+# Analisi gia' fatte: impronta del file -> (bbox, Flowpack, motivo del ripiego).
+# Sono tre oggetti piccoli, non le rasterizzazioni: la memoria qui non pesa.
+_ANALISI = OrderedDict()
+_ANALISI_MAX = 8
+_ANALISI_CHIAVE = threading.Lock()
+
+
+def _impronta(pdf):
+    """sha256 del file.
+
+    Non `_sig`: quella e' la misura della pagina, e due artwork diversi dello
+    stesso formato hanno la stessa firma. Per il registro dei casi calibrati,
+    scritto a mano, puo' bastare; per una memoria automatica sarebbe il modo
+    di costruire il pack sbagliato con le quote di un altro.
+    """
+    h = hashlib.sha256()
+    with open(pdf, "rb") as fh:
+        for blocco in iter(lambda: fh.read(1 << 20), b""):
+            h.update(blocco)
+    return h.hexdigest()
+
+
+def analisi_flowpack(pdf):
+    """Analisi automatica del flowpack, fatta una volta sola per file.
+
+    L'interfaccia chiama /api/analyze per i cartellini e subito dopo
+    /api/build: senza memoria la stessa analisi si rifaceva da capo, e non e'
+    poco - sette secondi e mezzo di CPU e trecento MB, due volte. Su
+    un'istanza piccola e' la differenza fra farcela e non farcela.
+    """
+    imp = _impronta(pdf)
+    with _ANALISI_CHIAVE:
+        if imp in _ANALISI:
+            _ANALISI.move_to_end(imp)
+            return _ANALISI[imp]
+    box, _dt = printed_bbox(pdf)
+    ripiego = None
+    try:
+        fp = fpk.analyze_auto(pdf, bbox=box)
+    except Exception as e:
+        # Il ripiego era muto, e un modello costruito da un'analisi peggiore
+        # non esce sbagliato: esce plausibile, che e' peggio.
+        fp = fpk.analyze(pdf)
+        ripiego = str(e)
+    with _ANALISI_CHIAVE:
+        _ANALISI[imp] = (box, fp, ripiego)
+        while len(_ANALISI) > _ANALISI_MAX:
+            _ANALISI.popitem(last=False)
+        return _ANALISI[imp]
 
 
 # --------------------------------------------------------------------------- #
@@ -316,18 +369,11 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         ripiego = None
     else:
         clean = pdf
-        box, _ = printed_bbox(pdf)
-        ripiego = None
-        try:
-            fp0 = fpk.analyze_auto(pdf, bbox=box)
-        except Exception as e:
-            # Il ripiego era muto, e un modello costruito da un'analisi
-            # peggiore non esce sbagliato: esce plausibile, che e' peggio. Su
-            # Milch-Schnitte T1 cambiava corpo e pinne, 136,5 e 8,0 invece di
-            # 138,7 e 6,9, e la grafica scivolava sul fronte senza che niente
-            # lo dicesse.
-            fp0 = fpk.analyze(pdf)
-            ripiego = str(e)
+        # Stessa analisi di /api/analyze, non una seconda uguale: il ripiego
+        # muto (che su Milch-Schnitte T1 dava corpo e pinne 136,5 e 8,0 invece
+        # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
+        # dichiarato, perche' il motivo viaggia insieme alle quote.
+        box, fp0, ripiego = analisi_flowpack(pdf)
 
     # NB: l'UnboundLocalError su 'avvisi' non nasceva qui. Nasceva in
     # do_POST, che quel nome lo assegnava solo sul ramo flowpack e lo
@@ -567,16 +613,18 @@ def analyze_pdf(pdf, kind=None):
         except Exception:
             if kind == "carton":
                 raise
-    try:
-        box, _ = printed_bbox(pdf)
-        fp = fpk.analyze_auto(pdf, bbox=box)
-    except Exception:
-        fp = fpk.analyze(pdf)      # se fallisce anche questo, l'errore va al client
+    # se fallisce anche il ripiego, l'errore va al client
+    _box, fp, ripiego = analisi_flowpack(pdf)
+    meta = ["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
+            "corpo %.1f mm" % fp.L,
+            "sezione %.1f x %.1f mm" % (fp.W, fp.T)]
+    if ripiego is not None:
+        # anche qui il ripiego si dichiara: questi cartellini sono la prima
+        # cosa che l'utente legge, e finora tacevano
+        meta.insert(0, "ANALISI AUTOMATICA FALLITA (%s): quote dal solutore "
+                       "vecchio, da verificare" % ripiego[:70])
     return dict(kind="flowpack", title="Flowpack",
-                teeth_default=20, soft_default="medio",
-                meta=["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
-                      "corpo %.1f mm" % fp.L,
-                      "sezione %.1f x %.1f mm" % (fp.W, fp.T)])
+                teeth_default=20, soft_default="medio", meta=meta)
 
 
 # --------------------------------------------------------------------------- #
