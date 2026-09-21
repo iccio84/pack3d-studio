@@ -36,9 +36,12 @@ def strip_separations(src, dst, drop):
     import pypdf
     from pypdf.generic import ContentStream
 
-    r = pypdf.PdfReader(src)
-    w = pypdf.PdfWriter()
-    w.append(r)
+    # `clone_from` e non `append`: append PERDE /OCProperties, e con quello
+    # perde i livelli. Un astuccio che ha insieme una vernice e la colata su un
+    # livello suo usciva dallo strappo senza livelli, e la sostituzione della
+    # colata non partiva - in silenzio, perche' a quel punto il livello non
+    # c'era piu' davvero.
+    w = pypdf.PdfWriter(clone_from=src)
     drop = {d.lower() for d in drop}
 
     def names(res):
@@ -226,11 +229,11 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True):
     """
     from . import folding
     pulito, lastre = senza_coperture(pdf, page_no)
+    avvisi = []
     tex = folding.rasterize_panels(pulito, panels, dpi=dpi, page_no=page_no,
-                                   clean=clean)
+                                   clean=clean, note=avvisi)
     giri, storti = gira_sulla_grafica(
         tex, panels, verso_della_grafica(pulito, panels, page_no))
-    avvisi = []
     if lastre:
         avvisi.append("coperture togliute per nome: %s" % ", ".join(lastre))
     if giri:

@@ -13,7 +13,7 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw
 
-from . import dieline, tracciati
+from . import colata, dieline, tracciati
 from .dieline import _technical_pens, render_page
 
 Image.MAX_IMAGE_PIXELS = None
@@ -164,12 +164,17 @@ def _inpaint(rgb, mask):
 
 
 def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
-                     inset_px: int = 4, page_no: int = 0, clean: bool = True) -> dict:
+                     inset_px: int = 4, page_no: int = 0, clean: bool = True,
+                     note=None) -> dict:
     """Ritaglia la grafica di ogni pannello da una rasterizzazione ad alta
     risoluzione. Con `clean` il disegno tecnico viene tolto dalla texture:
-    sul modello 3D deve restare solo la grafica di stampa."""
+    sul modello 3D deve restare solo la grafica di stampa.
+
+    In `note`, se passata, finiscono le righe da dichiarare a chi guarda il
+    modello: e' il punto da cui passano tutte le texture - astucci e flowpack,
+    server e riga di comando - quindi e' qui che la colata si sostituisce."""
     scale = dpi / 72.0
-    sheet = render_page(pdf_path, page_no, scale)
+    sheet = colata.foglio(pdf_path, scale, page_no, note)
     # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui in
     # giu' si alloca la maschera e la texture, e tenerla viva vorrebbe dire
     # sommare due rasterizzazioni nel momento peggiore.

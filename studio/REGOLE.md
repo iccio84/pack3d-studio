@@ -525,6 +525,20 @@ Che siano quelli i quad giusti non serve crederlo: `FOLD_H` lo dice. Nella
 fasciatura orizzontale i fianchi sono agganciati al fronte per costruzione, e le
 sue due voci `left` e `right` sono **identiche** a queste.
 
+#### Il caso calibrato: Kinder Pingui T6 BOX
+
+    colonne (mm)   16 | 4 | 8 | 32,3 | 140,5 | 32,3 | 8 | 4 | 16
+    fasce   (mm)   33,5 | 40,5 | 125,0 | 40,5 | 30,0
+    fianchi        40,3 x 125,0, accanto al FRONTE
+    quote          140,5 x 125,0 x 40,5 mm
+    finestra       61,5 mm di altezza, fra le due falde da 33,5 e 30,0
+    guscio         7 facce esterne + 7 interne + 8 coste
+
+E' un pack cartotecnico con il **retro a finestra**, che lascia intravedere i
+sei Pingui dentro. Il riscontro che chiude il conto e' la profondita' letta due
+volte da due posti diversi: cielo e fondo danno **40,5**, i fianchi **40,3**.
+Costruisce in 3,9 s con 354 MB di picco.
+
 ### Un astuccio ha uno spessore
 
 Un astuccio non e' una superficie, e trattarlo come tale si paga proprio dove
@@ -587,60 +601,81 @@ stesso, perche' il difetto non stava nella geometria. Il controllo visivo
 La colata Kinder in RGB non si aggiusta a valle (vedi *La grafica va in
 quadricromia, non in RGB*): l'ombra sulle gocce nel file non c'e', e
 reinventarla vorrebbe dire dipingere colore. Quello che si puo' fare e'
-**sostituirla** con la grafica giusta, e per farlo in modo preciso serve
-sapere **dove va**.
+**sostituirla** con la grafica gia' resa come deve venire, e per farlo in modo
+preciso serve sapere **dove va**.
 
-Nell'artwork, com'e' oggi, non si sa. Sul Pingui T6 la colata non e' un oggetto
-solo che si possa scambiare: il campo delle gocce e' una immagine RGB — 259,8 x
-219,0 mm, riquadro noto al punto — mentre la fascia dell'onda e' vettoriale, e
-**niente nel file dice "questa e' la colata"**. Indovinare il riquadro e' il
-modo di consegnare una grafica fuori posto di due millimetri.
+Da un artwork qualunque non si sa. Sul Kinder Pingui T6 BOX la colata non e' un
+oggetto solo che si possa scambiare: il campo delle gocce e' una immagine RGB e
+la fascia dell'onda e' vettoriale, e **niente nel file dice "questa e' la
+colata"**. Indovinare il riquadro e' il modo di consegnare una grafica fuori
+posto di due millimetri.
 
 Da qui la regola, che e' sulla **preparazione del file**: la colata va tolta dal
-livello in cui sta e messa su un **livello suo**, nominato. Allora la
-sostituzione diventa deterministica, e il meccanismo e' questo — misurato, non
-ipotizzato:
+livello in cui sta e messa su un **livello suo**, nominato. `KP_T1_Mandarino` e'
+il primo artwork preparato cosi' - ha un OCG chiamato `Colata` - ed e' il caso
+su cui la sostituzione e' calibrata.
 
-1. si spegne quel livello in una copia del PDF, aggiungendo il suo OCG a
-   `/OCProperties/D/OFF`. E' una modifica **di dizionario**: non costa la
-   passata di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e
-   100 MB;
-2. si rende la pagina due volte a bassa risoluzione, con e senza, e la
-   differenza da' il **riquadro esatto** della colata;
-3. si incolla la risorsa in quel riquadro sul foglio ad alta risoluzione, prima
-   di ritagliare i pannelli.
+I tre passi (`pack3d/colata.py`, agganciato a `rasterize_panels`, che e' il
+punto da cui passano tutte le texture: astucci e flowpack, server e riga di
+comando):
 
-I passi 1 e 2 sono verificati su un livello vero: su K Brioss STD, spegnendo
-`Cutter`, pdfium lo toglie davvero e la differenza da' il riquadro
-x 25,7..1334,3 y 40,0..997,1 pt, che e' la fustella. Va notato che
-`pypdf.PdfWriter().append()` **perde** `/OCProperties`: serve
-`PdfWriter(clone_from=...)`.
+1. **dove.** Si spegne il livello in una copia, aggiungendo il suo OCG a
+   `/OCProperties/D/OFF`. E' una modifica di DIZIONARIO: non costa la passata
+   di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e 100 MB.
+   La differenza fra le due rese da' l'impronta esatta del livello. Nota:
+   `pypdf.PdfWriter().append()` **perde** `/OCProperties`, serve
+   `PdfWriter(clone_from=...)`.
+2. **quanto e in che punto.** La risorsa e' un **master**, non il ritaglio di un
+   pack: la sua onda va portata al passo di quella dell'artwork, e il passo
+   cambia da pack a pack (20,1 mm sul Pingui T6 BOX, 17,1 sul KP T1). La scala
+   esce dal rapporto fra i due periodi, la fase da una correlazione, la quota
+   dalla mediana della differenza fra le due curve rosso/bianco.
+3. **come.** La risorsa si incolla dentro l'impronta del livello vecchio, e solo
+   li'. Cosi' quello che nell'artwork sta **sopra** la colata - uno spicchio di
+   mandarino, il bicchiere di latte, la fascia di fondo - resta dov'e' senza
+   dover sapere in che ordine sono i livelli.
 
-Due cose che la risorsa deve avere, e che oggi non ha (vedi
-`risorse/LEGGIMI.md`):
+Se il livello non c'e', o se la risorsa non e' quel disegno, non si sostituisce
+niente e si costruisce com'e': una colata messa a caso e' peggio di una colata
+brutta. La soglia e' mezzo millimetro di errore mediano, dieci volte quello
+misurato sul caso buono.
 
-- **la posizione**, che viene dal livello;
-- **la risoluzione**. La colata fornita e' a 101 dpi alla scala dell'artwork,
-  sotto ai 200 dpi della qualita' web e ai 300 della qualita' alta:
-  incollarla cosi' peggiorerebbe quella fascia invece di migliorarla.
+#### Tre difetti che solo questa cosa poteva far vedere
 
-Finche' mancano, la risorsa resta un **riferimento visivo** e il codice non la
-usa. Il giorno che arriva un artwork con la colata su un livello suo, il
-meccanismo e' quello dei tre passi qui sopra.
+Ognuno dei tre e' passato indenne dal controllo precedente, ed e' per questo che
+vanno scritti.
 
-#### Il caso calibrato: Kinder Pingui T6 BOX
+**La cassa delle rese RIDUCE invece di rifare.** `render_page` ne tiene una
+sola e, se gliene chiedi una piu' piccola, te la ridimensiona. Una ridotta e una
+nativa differiscono su **tutta** la pagina: l'impronta del livello veniva 1265 x
+1389 px invece di 141 x 681, e l'allineamento finiva a 13 pixel. Le due rese da
+confrontare vanno prodotte allo stesso modo, e qui si rendono a parte.
 
-    colonne (mm)   16 | 4 | 8 | 32,3 | 140,5 | 32,3 | 8 | 4 | 16
-    fasce   (mm)   33,5 | 40,5 | 125,0 | 40,5 | 30,0
-    fianchi        40,3 x 125,0, accanto al FRONTE
-    quote          140,5 x 125,0 x 40,5 mm
-    finestra       61,5 mm di altezza, fra le due falde da 33,5 e 30,0
-    guscio         7 facce esterne + 7 interne + 8 coste
+**Il bianco sul bianco non fa differenza.** L'impronta presa sul colore aveva
+dei buchi esattamente dove la colata e' BIANCA - la cresta e le gocce - perche'
+bianco su foglio bianco e' indistinguibile. Al loro posto restava il fondo, e
+sul modello si vedeva una mezzaluna bianca sul rosso attorno alla goccia. Le due
+rese si fanno su **fondo trasparente** e il confronto guarda anche l'alfa.
 
-E' un pack cartotecnico con il **retro a finestra**, che lascia intravedere i
-sei Pingui dentro. Il riscontro che chiude il conto e' la profondita' letta due
-volte da due posti diversi: cielo e fondo danno **40,5**, i fianchi **40,3**.
-Costruisce in 3,9 s con 354 MB di picco.
+**Una funzione periodica non ha una fase sola.** Spostare la risorsa di un
+periodo intero lascia le due curve sovrapposte, e una misura robusta come la
+mediana non se ne accorge: l'allineamento tornava a 0,22 mm con la goccia a
+mezzo pack di distanza, cioe' sparita. La fase la decide la **goccia**, che e'
+l'unica cosa aperiodica del disegno: fra le fasi che distano un periodo si
+sceglie quella che somiglia di piu' confrontando le IMMAGINI, dove la goccia
+pesa poco in percentuale ma e' l'unica cosa che cambia.
+
+#### Il caso calibrato: KP T1 Mandarino
+
+    livello        `Colata`, riquadro 120,5 x 36,3 mm
+    onda           passo 17,1 mm nell'artwork, 80 px nella risorsa
+    allineamento   scala 1,3166 a 2 px/pt, errore mediano 0,22 mm
+    riscontro      la goccia e la sua bollicina cadono al loro posto
+    costo          +45 MB e +0,4 s, solo su un file che il livello ce l'ha
+
+Il riscontro e' quello che conta: la goccia nell'allineamento **non entra** -
+la mediana la scarta - quindi vederla cadere dov'era e' una verifica
+indipendente che il disegno e' lo stesso e che la fase e' giusta.
 
 ## Flowpack
 
