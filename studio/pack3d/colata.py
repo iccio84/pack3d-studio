@@ -52,6 +52,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
+from . import strati
 from .dieline import PT2MM, render_page
 
 # I nomi di livello che portano la colata, confrontati per nome intero.
@@ -82,44 +83,12 @@ GS = shutil.which("gs")
 CAMBIO_MINIMO = 0.10
 
 
-def livelli(pdf):
-    """{nome minuscolo: riferimento} degli OCG della pagina."""
-    import pypdf
-    try:
-        r = pypdf.PdfReader(pdf)
-        oc = r.trailer["/Root"].get("/OCProperties")
-        if not oc:
-            return {}
-        return {str(g.get_object().get("/Name", "")).strip().lower(): g
-                for g in oc.get("/OCGs", [])}
-    except Exception:
-        return {}
-
-
-def spegni(src, dst, nomi):
-    """Scrive `dst` con quei livelli spenti. Restituisce i nomi spenti.
-
-    `PdfWriter().append()` PERDE `/OCProperties`, e senza quello non c'e'
-    niente da spegnere: si clona.
-    """
-    import pypdf
-    from pypdf.generic import ArrayObject, NameObject
-    w = pypdf.PdfWriter(clone_from=src)
-    oc = w._root_object.get("/OCProperties")
-    if oc is None:
-        return []
-    via = [g for g in oc.get("/OCGs", [])
-           if str(g.get_object().get("/Name", "")).strip().lower() in nomi]
-    if not via:
-        return []
-    d = oc.get("/D")
-    d = d.get_object() if hasattr(d, "get_object") else d
-    off = ArrayObject(list(d.get("/OFF") or []))
-    off.extend(via)
-    d[NameObject("/OFF")] = off
-    with open(dst, "wb") as fh:
-        w.write(fh)
-    return [str(g.get_object().get("/Name")) for g in via]
+# I livelli stanno in `strati.py`, che e' il modulo che li usa per separare il
+# disegno tecnico: qui servono le stesse due funzioni, e averne due copie
+# vorrebbe dire correggere due volte lo stesso difetto - `append` che perde
+# `/OCProperties` l'ho gia' corretto una volta.
+livelli = strati.livelli
+spegni = strati.spegni
 
 
 def _curva(a):

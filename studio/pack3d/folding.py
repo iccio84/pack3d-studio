@@ -13,7 +13,7 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw
 
-from . import colata, dieline, tracciati
+from . import colata, dieline, strati, tracciati
 from .dieline import _technical_pens, render_page
 
 Image.MAX_IMAGE_PIXELS = None
@@ -104,22 +104,26 @@ def _fascia(quad, a, b):
 
 
 def disegno_tecnico(pdf_path, page_no=0):
-    """Gli elementi da togliere dalla texture, in due passate leggere.
+    """Gli elementi da togliere dalla texture: i TRATTI, e solo quelli.
 
-    La prima passata trova le penne della fustella e i colori dei tratti a
-    filo di capello; la seconda, sapendo gia' cosa cercare, si tiene solo
-    quello che serve. Su uno steso curvo (coppe, settori) non ci sono
-    segmenti dritti lunghi da cui dedurre la penna: resta valida la regola
-    del filo di capello, che vale anche quando di penne non se ne trova
-    nessuna.
+    Due passate leggere: la prima trova le penne della fustella, la seconda,
+    sapendo gia' cosa cercare, si tiene solo quello che serve. Su uno steso
+    curvo (coppe, settori) non ci sono segmenti dritti lunghi da cui dedurre
+    la penna: resta valida la regola del filo di capello, che vale anche
+    quando di penne non se ne trova nessuna.
+
+    Pieni e scritte NON si scelgono piu' per colore. La regola vecchia -
+    "tinta cromatica e non di una tinta piatta, quindi tecnica" - e' stata
+    misurata su tutto il parco: su sei file su nove non toglie niente che i
+    tratti non togliessero gia', e sugli altri tre cancella grafica, fra cui
+    il logo `Brioss` e il bollino "x6" del Pingui. Il perche' sta in
+    `strati.py`: una lastra tecnica usa colori che usa anche la grafica, e
+    nessuna soglia separa due cose dello stesso colore. Chi lo dice davvero
+    e' il livello, e quello si spegne prima di rasterizzare.
     """
-    colori = set()
-    segs, larghezza, altezza = tracciati.segmenti(pdf_path, page_no,
-                                                  tavolozza=colori)
+    segs, larghezza, altezza = tracciati.segmenti(pdf_path, page_no)
     penne = _technical_pens(segs, larghezza, altezza)
-    tinte = tracciati.tinte(colori | {c for _, c in penne})
-    tinte -= tracciati.piatte(pdf_path, page_no)
-    return tracciati.tecnici(pdf_path, page_no, penne, tinte)
+    return tracciati.tecnici(pdf_path, page_no, penne, ())
 
 
 def _technical_mask(dt, box, scale, margin=1.2):
@@ -172,15 +176,30 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
 
     In `note`, se passata, finiscono le righe da dichiarare a chi guarda il
     modello: e' il punto da cui passano tutte le texture - astucci e flowpack,
-    server e riga di comando - quindi e' qui che la colata si sostituisce."""
-    scale = dpi / 72.0
-    sheet = colata.foglio(pdf_path, scale, page_no, note)
-    # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui in
-    # giu' si alloca la maschera e la texture, e tenerla viva vorrebbe dire
-    # sommare due rasterizzazioni nel momento peggiore.
-    dieline.scarta_resa()
+    server e riga di comando - quindi e' qui che il disegno tecnico si toglie
+    e la colata si sostituisce.
 
-    dt = disegno_tecnico(pdf_path, page_no) if clean else None
+    Prima cosa: se il file ha LIVELLI che dicono cosa e' tecnico, si spengono.
+    E' l'unico modo che non sbaglia - vedi `strati.py` - e quello che resta da
+    togliere a mano sono solo i tratti."""
+    scale = dpi / 72.0
+    pulito, spenti = (strati.senza_tecnici(pdf_path, page_no) if clean
+                      else (pdf_path, []))
+    try:
+        if spenti and note is not None:
+            note.append("livelli tecnici spenti: %s" % ", ".join(spenti))
+        sheet = colata.foglio(pulito, scale, page_no, note)
+        # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui
+        # in giu' si alloca la maschera e la texture, e tenerla viva vorrebbe
+        # dire sommare due rasterizzazioni nel momento peggiore.
+        dieline.scarta_resa()
+        dt = disegno_tecnico(pulito, page_no) if clean else None
+    finally:
+        if pulito != pdf_path:
+            try:
+                os.unlink(pulito)
+            except OSError:
+                pass
 
     out = {}
     for name, p in panels.items():
