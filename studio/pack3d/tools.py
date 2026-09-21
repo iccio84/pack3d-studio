@@ -462,6 +462,92 @@ def reconstruct_area(pdf, prompt=None, model=None):
                      "originali. Chiama visual_check per guardare il risultato")
 
 
+def area_riservata(pdf, x_mm, y_mm, w_mm, h_mm, dpi=36):
+    """PROPONE la rimozione di un'area riservata indicata a occhio, e la MOSTRA.
+
+    Serve per le aree riservate che il file non dichiara da nessuna parte: sul
+    cartotecnico Pingui T6 e sul Kinder Bueno Dark T2 il nome sta solo nella
+    legenda, non scritto sopra il riquadro, e la lettura automatica non ha
+    niente da leggere. A occhio invece sono ovvie.
+
+    Tu dici DOVE, il codice trova CHE COSA: dentro il riquadro si guarda quale
+    lastra mette l'inchiostro pieno, e quella si toglie per nome. Cosi' il
+    bordo esatto non lo decidi tu, e sbagliare il riquadro di qualche
+    millimetro non cambia il risultato.
+
+    Non decide per te, e non puo': un rettangolo pieno puo' essere anche il
+    fondo della grafica, e i numeri non li distinguono - su Colazione la
+    fascia `TEXT AREA` copre il 6,5% del foglio e `Kinder ORANGE`, che e'
+    grafica, il 7,9%. Per questo torna un'IMMAGINE con in rosso tutto quello
+    che quella lastra dipinge: GUARDALA. Se il rosso tocca grafica la
+    proposta e' sbagliata e va lasciata cadere.
+    """
+    from PIL import Image
+    from . import techink
+
+    esito = techink.lastra_nel_riquadro(pdf, x_mm, y_mm, w_mm, h_mm, dpi=dpi)
+    if not esito:
+        return {"nota": "nessuna lastra piena dentro il riquadro: li' non c'e' "
+                        "un'area riservata, oppure il riquadro e' fuori posto"}
+    mappe = techink.mappe_lastre(pdf, 0, dpi)
+    mappa = mappe.get(esito["lastra"])
+    if mappa is None:
+        return esito
+
+    s = 1.0
+    base = np.asarray(dl.render_page(pdf, 0, s).convert("RGB")).astype(np.uint8)
+    H, W, _ = base.shape
+    ink = np.asarray(Image.fromarray(
+        ((255 - mappa.astype(int)) >= 128).astype(np.uint8) * 255).resize((W, H))) > 127
+    # base in GRIGIO, lastra in rosso pieno. Evidenziare in rosso sopra i
+    # colori veri non si legge: il Pingui T6 ha una fascia di grafica rossa
+    # grande quanto mezzo pack, e il rosso dell'evidenziatore ci spariva
+    # dentro. Cosi' invece tutto quello che e' colorato e' la lastra.
+    g = base.mean(2)
+    vista = np.dstack([g, g, g]).astype(np.uint8)
+    vista[ink] = (255, 0, 0)
+    # il riquadro chiesto, perche' si veda anche dove hai puntato
+    x0, y0 = int(x_mm / PT2MM * s), int(y_mm / PT2MM * s)
+    x1, y1 = int((x_mm + w_mm) / PT2MM * s), int((y_mm + h_mm) / PT2MM * s)
+    for xx in range(max(0, x0), min(W, x1)):
+        for yy in (y0, y1 - 1):
+            if 0 <= yy < H:
+                vista[yy, xx] = (0, 0, 255)
+    for yy in range(max(0, y0), min(H, y1)):
+        for xx in (x0, x1 - 1):
+            if 0 <= xx < W:
+                vista[yy, xx] = (0, 0, 255)
+
+    esito["__image__"] = _png_b64(vista.astype(int))
+    esito["testo"] = (
+        "In ROSSO tutto quello che la lastra '%s' dipinge sul foglio, in BLU "
+        "il riquadro che hai indicato. GUARDA il rosso: se tocca grafica - un "
+        "logo, una foto, il fondo del pack - questa NON e' un'area riservata "
+        "e non va dichiarata. Se il rosso sta solo su riquadri pieni con "
+        "scritto dentro il nome di un'area, allora si'. La lastra copre il "
+        "%.2f%% del foglio, e quel numero da solo non decide niente."
+        % (esito["lastra"], esito["copertura_foglio_pct"]))
+    return esito
+
+
+TOOLS.append(
+    dict(name="area_riservata",
+         description="PROPONE di togliere un'area riservata (GDA, COVERED AREA, "
+                     "TEXT AREA, BEST BEFORE AREA, BAR CODE AREA, PRINT FREE "
+                     "AREA, NEUTRAL AREA) indicandola con un riquadro in mm. "
+                     "Trova la lastra che la dipinge e MOSTRA in rosso tutto "
+                     "quello che quella lastra copre: guarda l'immagine prima "
+                     "di dichiararla. Le aree riservate non devono mai comparire "
+                     "nel render.",
+         input_schema={"type": "object",
+                       "properties": {"x_mm": {"type": "number"},
+                                      "y_mm": {"type": "number"},
+                                      "w_mm": {"type": "number"},
+                                      "h_mm": {"type": "number"}},
+                       "required": ["x_mm", "y_mm", "w_mm", "h_mm"]}))
+_RAW["area_riservata"] = area_riservata
+
+
 TOOLS.append(
     dict(name="reconstruct_area",
          description="PIANO B: ricostruisce con un modello di immagine la grafica "

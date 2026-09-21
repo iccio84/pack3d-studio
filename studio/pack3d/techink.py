@@ -463,6 +463,8 @@ def classify(pdf_path, page_no: int = 0):
 # file che le etichette ce le ha davvero - sul parco sono tre su nove.
 import re as _re
 
+from .dieline import PT2MM
+
 ETICHETTA_RISERVATA = _re.compile(
     r"(?i)\b(gda|covered|text|best\s*before|bar\s*code|barcode|"
     r"print\s*free|printfree|neutral|reserved)\s*area\b")
@@ -472,6 +474,56 @@ ETICHETTA_RISERVATA = _re.compile(
 INCHIOSTRO_MINIMO = 0.5   # quota di lastra su quel pixel
 PIENO_MINIMO = 0.60       # quota di pixel pieni nell'intorno dell'etichetta
 VICINO = 150.0            # punti: quanto puo' stare lontana la riga di sopra
+
+
+def mappe_lastre(pdf, page_no=0, dpi=36):
+    """`{nome lastra: mappa d'inchiostro}` con una passata `tiffsep`.
+
+    Nelle mappe 255 e' niente inchiostro e 0 e' il pieno. Le lastre di
+    processo restano fuori: il processo non riserva mai un'area, e' la
+    grafica.
+
+    Vuota se Ghostscript non c'e' o se la passata non riesce: chi chiama deve
+    sapersela cavare senza, perche' il modello si costruisce comunque.
+    """
+    import glob
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    gs = shutil.which("gs")
+    if not gs:
+        return {}
+    import numpy as np
+    from PIL import Image
+
+    cartella = None
+    try:
+        cartella = tempfile.mkdtemp(prefix="lastre_")
+        esito = subprocess.run(
+            [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-dMaxSpots=40",
+             "-sDEVICE=tiffsep", "-r%g" % dpi,
+             "-dFirstPage=%d" % (page_no + 1), "-dLastPage=%d" % (page_no + 1),
+             "-sOutputFile=" + os.path.join(cartella, "p.tif"), pdf],
+            capture_output=True, timeout=180)
+        if esito.returncode != 0:
+            return {}
+        fuori = {}
+        for percorso in glob.glob(os.path.join(cartella, "p(*.tif")):
+            nome = _re.search(r"\((.*)\)\.tif$", os.path.basename(percorso))
+            if not nome:
+                continue
+            n = _norm(nome.group(1))
+            if n in RESERVED:
+                continue
+            fuori[n] = np.asarray(Image.open(percorso).convert("L"))
+        return fuori
+    except Exception:
+        return {}
+    finally:
+        if cartella:
+            shutil.rmtree(cartella, ignore_errors=True)
 
 
 def _forse_etichette(pdf, page_no=0):
@@ -539,14 +591,9 @@ def aree_riservate(pdf, page_no=0, dpi=36):
     imparato niente e non si tocca niente. Non costa nulla sui file senza
     etichette, che e' la maggioranza.
     """
-    import glob
-    import os
     import shutil
-    import subprocess
-    import tempfile
 
-    gs = shutil.which("gs")
-    if not gs or not _forse_etichette(pdf, page_no):
+    if not shutil.which("gs") or not _forse_etichette(pdf, page_no):
         return {}
     try:
         etichette = _etichette(pdf, page_no)
@@ -557,31 +604,12 @@ def aree_riservate(pdf, page_no=0, dpi=36):
 
     import numpy as np
     import pypdf
-    from PIL import Image
 
-    cartella = None
     try:
         mb = pypdf.PdfReader(pdf).pages[page_no].mediabox
         sx, sy = float(mb.left), float(mb.bottom)
         alto = float(mb.top) - sy
-        cartella = tempfile.mkdtemp(prefix="riservate_")
-        esito = subprocess.run(
-            [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-dMaxSpots=40",
-             "-sDEVICE=tiffsep", "-r%g" % dpi,
-             "-dFirstPage=%d" % (page_no + 1), "-dLastPage=%d" % (page_no + 1),
-             "-sOutputFile=" + os.path.join(cartella, "p.tif"), pdf],
-            capture_output=True, timeout=180)
-        if esito.returncode != 0:
-            return {}
-        lastre = {}
-        for percorso in glob.glob(os.path.join(cartella, "p(*.tif")):
-            nome = _re.search(r"\((.*)\)\.tif$", os.path.basename(percorso))
-            if not nome:
-                continue
-            n = _norm(nome.group(1))
-            if n in RESERVED:
-                continue   # il processo non riserva mai un'area: e' la grafica
-            lastre[n] = np.asarray(Image.open(percorso).convert("L"))
+        lastre = mappe_lastre(pdf, page_no, dpi)
         if not lastre:
             return {}
 
@@ -609,6 +637,52 @@ def aree_riservate(pdf, page_no=0, dpi=36):
         return fuori
     except Exception:
         return {}
-    finally:
-        if cartella:
-            shutil.rmtree(cartella, ignore_errors=True)
+
+
+def lastra_nel_riquadro(pdf, x_mm, y_mm, w_mm, h_mm, page_no=0, dpi=36):
+    """Quale lastra dipinge, piena, dentro questo riquadro.
+
+    E' il modo in cui un riquadro *indicato a occhio* diventa una rimozione
+    *esatta*: l'agente guarda il foglio e dice dove sta l'area riservata, il
+    codice guarda chi ci mette l'inchiostro e toglie quella lastra per nome.
+    L'errore dell'agente vale qualche millimetro di innesco, perche' il bordo
+    vero non lo decide lui: lo decide la lastra.
+
+    Il riquadro e' in millimetri dall'angolo in alto a sinistra del foglio,
+    come per `measure_region` e `clean_artwork`.
+
+    Restituisce `{}` se dentro il riquadro non c'e' nessuna lastra piena:
+    vuol dire che li' non c'e' un'area riservata, e non si tocca niente.
+
+    **Non decide da solo che sia un'area riservata.** Una lastra piena dentro
+    un rettangolo puo' benissimo essere il fondo della grafica: su K Colazione
+    Piu' la fascia `TEXT AREA` copre il 6,5% del foglio e `Kinder ORANGE`, che
+    e' grafica, il 7,9%. Nessuna soglia separa le due cose - misurato - quindi
+    la conferma e' l'occhio, e `copertura_foglio_pct` serve solo a dire quanto
+    c'e' in gioco.
+    """
+    import numpy as np
+
+    lastre = mappe_lastre(pdf, page_no, dpi)
+    if not lastre:
+        return {}
+    s = dpi / 72.0
+    x0, y0 = int(round(x_mm / PT2MM * s)), int(round(y_mm / PT2MM * s))
+    x1 = int(round((x_mm + w_mm) / PT2MM * s))
+    y1 = int(round((y_mm + h_mm) / PT2MM * s))
+    migliore, quota, copertura = None, 0.0, 0.0
+    for nome, mappa in lastre.items():
+        h, w = mappa.shape
+        z = mappa[max(0, y0):min(h, y1), max(0, x0):min(w, x1)]
+        if z.size == 0:
+            continue
+        inchiostro = (255 - z.astype(np.int16)) / 255.0
+        q = float((inchiostro >= INCHIOSTRO_MINIMO).mean())
+        if q > quota:
+            tutta = (255 - mappa.astype(np.int16)) / 255.0
+            migliore, quota = nome, q
+            copertura = float((tutta >= INCHIOSTRO_MINIMO).mean())
+    if not migliore or quota < PIENO_MINIMO:
+        return {}
+    return dict(lastra=migliore, pieno_pct=round(100 * quota, 1),
+                copertura_foglio_pct=round(100 * copertura, 2))

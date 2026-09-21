@@ -56,8 +56,22 @@ Pulizia dell'artwork:
   AREA, PRINT FREE AREA, NEUTRAL AREA - non devono MAI comparire nel render:
   sono il posto tenuto per una cosa, non la cosa. Sono rettangoli pieni con il
   proprio nome scritto dentro in bianco, quindi a guardarle si riconoscono
-  subito. Se dopo la pulizia ne vedi una in visual_check, dillo negli avvisi
-  con il riquadro in mm: e' grafica che non va stampata.
+  subito. Quasi sempre le toglie gia' la costruzione, da sola; quando non ci
+  riesce le vedi restare, e allora tocca a te.
+- Per toglierle chiama area_riservata con il riquadro in mm: non serve che sia
+  preciso, il bordo vero lo trova il codice guardando quale lastra ci mette
+  l'inchiostro. Poi GUARDA l'immagine che torna: in rosso c'e' tutto quello che
+  quella lastra dipinge sul foglio. Se il rosso tocca grafica - un logo, una
+  foto, il fondo del pack - la proposta e' sbagliata e la lasci cadere. Se sta
+  solo sui riquadri pieni, la lastra e' quella.
+- Le lastre che hai confermato cosi' vanno in parametri_costruzione.aree_riservate
+  come elenco di nomi, per esempio ["pantone 571 c", "pantone 346 c"]. Senza
+  quell'elenco la costruzione non le toglie e il lavoro che hai fatto si perde.
+  Dichiara negli avvisi quali hai tolto e come le hai riconosciute.
+- Una lastra piena dentro un rettangolo puo' essere anche il fondo della
+  grafica, e i numeri non lo dicono: su K Colazione Piu' la fascia TEXT AREA
+  copre il 6,5% del foglio e Kinder ORANGE, che e' grafica, il 7,9%. Decide
+  l'occhio, non la percentuale.
 - Sulla colata NON usare reconstruct_area: non le mancano pixel, le manca
   l'inchiostro giusto, e un modello generativo la reinventa. Guardala invece, e
   se l'ombra sulle gocce esce AZZURRA invece che scura scrivilo negli avvisi.
@@ -111,7 +125,8 @@ Rigonfiamento:
 
 Quando hai finito rispondi SOLO con un blocco ```json contenente:
 {"famiglia": "...", "quote": {...}, "pulizia": {"livello": n, "metodo": "..."},
- "parametri_costruzione": {...}, "avvisi": ["..."], "provenienza": {"quota": "come e' stata ricavata"}}
+ "parametri_costruzione": {..., "aree_riservate": ["nome lastra", ...]},
+ "avvisi": ["..."], "provenienza": {"quota": "come e' stata ricavata"}}
 """
 
 

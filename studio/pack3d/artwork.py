@@ -175,7 +175,7 @@ def gira_sulla_grafica(tex, panels, verso):
     return fatte, no
 
 
-def senza_coperture(pdf, page_no=0):
+def senza_coperture(pdf, page_no=0, extra=()):
     """(pdf da cui ritagliare la texture, nomi delle coperture togliute).
 
     Le lastre tecniche dichiarate per nome sono l'informazione piu' attendibile
@@ -204,6 +204,11 @@ def senza_coperture(pdf, page_no=0):
     solo quando il file non ha livelli tecnici: se i livelli ci sono la
     pulizia e' gia' esatta, e quella ricerca costa una passata di testo che
     sul K Brioss STD sono 2,9 secondi buttati.
+
+    `extra` sono le lastre che l'agente ha riconosciuto GUARDANDO, per i file
+    che l'area riservata non la scrivono da nessuna parte - vedi
+    `tools.area_riservata`. Arrivano gia' confermate a occhio, e qui si
+    strappano insieme alle altre: una passata sola invece di due.
     """
     from . import strati, techink
     try:
@@ -218,6 +223,7 @@ def senza_coperture(pdf, page_no=0):
             lastre |= set(techink.aree_riservate(pdf, page_no))
     except Exception:
         pass
+    lastre |= {techink._norm(n) for n in (extra or ()) if str(n).strip()}
     lastre = sorted(lastre)
     if not lastre:
         return pdf, []
@@ -230,7 +236,7 @@ def senza_coperture(pdf, page_no=0):
         return pdf, []
 
 
-def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True):
+def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=()):
     """Le texture di un astuccio, pulite e girate sul verso della grafica.
 
     L'unico punto in cui i tre passaggi si applicano, cosi' non possono piu'
@@ -240,7 +246,7 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True):
     mostrati a chi guarda il modello.
     """
     from . import folding
-    pulito, lastre = senza_coperture(pdf, page_no)
+    pulito, lastre = senza_coperture(pdf, page_no, lastre_extra)
     avvisi = []
     tex = folding.rasterize_panels(pulito, panels, dpi=dpi, page_no=page_no,
                                    clean=clean, note=avvisi)
