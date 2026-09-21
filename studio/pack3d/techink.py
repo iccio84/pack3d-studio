@@ -87,6 +87,8 @@ OCG_TECH = {
     "infopanel", "info panel", "info mad-e", "braille", "reg marks",
     "print free area", "best before area", "bar code area", "covered area",
     "gda", "gda area", "area gda",
+    "guides and grids", "guides", "grids", "guide", "griglia", "griglie",
+    "guide e griglie", "cutter", "cut", "fustella", "tracciato",
 }
 
 # lastre tecniche gia' incontrate, per nome della tinta

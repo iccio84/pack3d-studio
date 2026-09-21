@@ -78,6 +78,15 @@ Fattore 3,3 a parita' di conteggio. Ogni tentativo di calcolarli e' sbagliato.
   venti righe di legale a corpo 5, che e' come la legge un occhio
   (`tracciati.verso_grafica`). Un pannello senza testo abbastanza non dice
   niente e si lascia com'e': indovinare sarebbe peggio.
+- **La `k` di `kinder` e' NERA.** E' l'invariante piu' facile da controllare di
+  tutto il parco, e quando non torna dice sempre la stessa cosa: la
+  **sovrastampa non e' stata simulata**. Sul K Brioss STD la `k` esce azzurra,
+  perche' e' costruita come un ciano che sovrastampa un nero: senza
+  sovrastampa il ciano lo copre invece di sommarcisi. Verificato affiancando
+  tre rese dello stesso marchio — pdfium azzurra, Ghostscript con
+  `-sOverprint=disable` azzurra, Ghostscript con `-sOverprint=simulate`
+  **nera**. Qui l'artwork e' giusto: sbaglia chi lo rende. Vedi *La colata si
+  rimette con l'inchiostro del file*.
 - **Confrontare sempre il modello finito con lo steso.** Mai specchiata ne'
   capovolta.
 - **Non distorcere mai la grafica.** I bollini circolari restano cerchi. Ogni
@@ -168,8 +177,60 @@ gli ultimi due la indovinano. Il livello usato va sempre riportato nel resoconto
    artwork Ferrero ricorrono identici: Pantone 3405 C = Technical Drawing,
    346 C = Dimensions, 571 C = Print Free Area, 350 C = Best Before Area,
    341 C = Bar Code Area, 1565 C = COVERED Area. Anche `All` e' tecnica.
-5. **Euristica** su spessore (filo di capello, <= 0,8 pt) e colore. E' una stima
-   e va dichiarata come tale.
+5. **Euristica** su spessore (filo di capello, <= 0,8 pt). E' una stima e va
+   dichiarata come tale. Sul **colore** vedi la regola qui sotto: non e' una
+   stima debole, e' una stima che non si puo' fare.
+
+### Il colore non dice mai cos'e' disegno tecnico
+
+La maschera sceglieva anche pieni e scritte, e il criterio era la tinta:
+"cromatica e non di una tinta piatta, quindi tecnica". Misurata su tutto il
+parco, quella regola non ha mai tolto un solo pixel di disegno tecnico che i
+tratti non togliessero gia'. Su **sei file su nove** non cambia niente. Sugli
+altri tre cancella **grafica**:
+
+    K Brioss STD   il logo `Brioss`, la tabella nutrizionale, "CON LATTE" e
+                   il testo legale — il 4,4% del foglio
+    K Pingui T6    il bollino "x6" e l'icona del pack
+    K Brioss       lo 0,75% del foglio, tutto grafica
+
+Non era una soglia sbagliata, e non si aggiusta con una soglia migliore: **una
+lastra tecnica usa i colori che usa anche la grafica**. Sul K Brioss STD
+l'unica tinta "tecnica" rimasta era `(0, 174, 239)`, cioe' **ciano di processo
+al 100%** — lo stesso ciano del logo `Brioss`. Il registro `All` e' nero come
+il testo legale; la Pantone di servizio e' la stessa del marchio. Nessuna
+soglia separa due cose che hanno lo stesso colore, e la campionatura delle
+tinte piatte (`tracciati.piatte`) aiuta ma non basta: prende il pieno, non le
+percentuali, e su K Brioss otto tinte della grafica passavano lo stesso.
+
+Quindi pieni e scritte **non si scelgono piu' per colore**. Restano i
+**tratti**: un filo di capello e' tecnico per **geometria**, non per tinta, e
+quella regola vale anche quando di livelli non ce n'e' nessuno.
+
+### Chi lo dice davvero e' il livello
+
+Se il file ha OCG che dicono cosa e' tecnico, si **spengono** prima di
+rasterizzare (`strati.senza_tecnici`) e non resta niente da mascherare a mano.
+E' il livello 1-2 della scala qui sopra usato anche per la MASCHERA, non solo
+per la diagnosi — che e' dove stava da sempre senza servire a niente.
+
+Su K Brioss STD gli otto OCG si chiamano `background, code, cutter, layout,
+legend, mat, preview, promo`: due sono tecnici e spegnendoli si toglie
+l'1,61% — la fustella e il cartiglio, esattamente quelli — con il logo intero.
+
+    K Brioss STD   euristica col colore   4,43% tolto, logo distrutto
+                   livelli spenti         1,87% tolto, logo intero
+
+Spegnere un livello e' una modifica di **dizionario** - l'OCG finisce in
+`/OCProperties/D/OFF` - e non costa la passata di pypdf sul flusso di
+contenuto, che su Colazione vale 7 secondi e 100 MB. **Attenzione**:
+`PdfWriter().append()` perde `/OCProperties`, serve `PdfWriter(clone_from=...)`.
+
+Un nome di livello e' tecnico se e' un Processing Step ISO, se sta in
+`techink.OCG_TECH` o se `techink.tecnica` lo riconosce — `Cutter` passa di li'.
+Sul parco: K Brioss STD `Cutter, Legend`; KP T1 Mandarino `check, notes,
+technical-drawing`; K Country `Guides and Grids, check`. Gli altri sei file
+livelli non ne hanno, e per loro resta la regola dei tratti.
 
 ### Le coperture si tolgono per nome, non per euristica
 
