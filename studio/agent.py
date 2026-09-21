@@ -52,6 +52,18 @@ Pulizia dell'artwork:
   maschera. Poi richiama visual_check e guarda di nuovo.
 - Se reconstruct_area non e' disponibile o fallisce, dichiaralo negli avvisi
   invece di lasciare il residuo senza spiegazione.
+- Le aree riservate - GDA, COVERED AREA, TEXT AREA, BEST BEFORE AREA, BAR CODE
+  AREA, PRINT FREE AREA, NEUTRAL AREA - non devono MAI comparire nel render:
+  sono il posto tenuto per una cosa, non la cosa. Sono rettangoli pieni con il
+  proprio nome scritto dentro in bianco, quindi a guardarle si riconoscono
+  subito. Se dopo la pulizia ne vedi una in visual_check, dillo negli avvisi
+  con il riquadro in mm: e' grafica che non va stampata.
+- Sulla colata NON usare reconstruct_area: non le mancano pixel, le manca
+  l'inchiostro giusto, e un modello generativo la reinventa. Guardala invece, e
+  se l'ombra sulle gocce esce AZZURRA invece che scura scrivilo negli avvisi.
+- Non rigenerare mai loghi, marchi, testo di prodotto e la `k` nera di
+  `kinder`, nemmeno dentro una maschera: se la maschera li tocca, e' la
+  maschera a essere sbagliata.
 
 Sezione del pack chiuso:
 - Le cordonature dicono dove il film e' cordonato, non che forma prende una

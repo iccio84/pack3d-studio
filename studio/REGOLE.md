@@ -67,6 +67,68 @@ dava 275,0 x 101,9 x 31,0 invece di 150,5 x 41,0.
 
 Fattore 3,3 a parita' di conteggio. Ogni tentativo di calcolarli e' sbagliato.
 
+## Cosa chiediamo a chi prepara l'artwork
+
+Tre richieste, e non sono di comodo: sono le tre cose che dal PDF **non si
+possono dedurre**, e ogni volta che si e' provato a indovinarle si e' rotto
+qualcosa di vero. Questa pagina e' quella da girare al prestampa.
+
+### 1. Il disegno tecnico su un livello suo
+
+**La richiesta.** Fustella, cordonature, quote, retini delle aree riservate,
+cartiglio, note, crocini di registro: tutto quello che non si stampa va su un
+**livello separato**, nominato, e non mescolato al livello della grafica.
+
+**Perche'.** Nella texture ci va solo la grafica. Se il disegno tecnico e'
+mescolato, l'unico modo di toglierlo e' indovinarlo, e indovinare vuol dire
+sbagliare: il criterio del colore ha cancellato il logo `Brioss`, la tabella
+nutrizionale e il testo legale del K Brioss STD — il 4,4% del foglio — perche'
+la quota e il logo erano lo stesso ciano. Vedi *Il colore non dice mai cos'e'
+disegno tecnico*. Con il livello si spegne e basta: nessuna maschera, nessun
+ritocco, nessuna grafica persa.
+
+**Come nominarlo, perche' venga riconosciuto.** Meglio di tutto un
+**Processing Step ISO 19593-1** (gruppi `Structural`, `Dimensions`, `Legend`,
+`Position`, `Braille`, `White`, `Varnish`): quello e' lo standard e la lettura
+e' esatta. In mancanza, uno di questi nomi di livello:
+
+    technical drawing   technical-drawing   dieline   die line   cutter
+    fustella   tracciato   dt   dimensions   legend   notes   check
+    guides and grids   print free area   best before area   bar code area
+    covered area   eyemark   infopanel   braille   reg marks   white   varnish
+
+Un nome fuori da questa lista non viene riconosciuto e il file ricade
+sull'euristica. Se serve un nome diverso si aggiunge a `techink.OCG_TECH`: e'
+una riga, ma va chiesta.
+
+**Cosa NON va su quel livello.** Solo quello che non si stampa. Il codice a
+barre stampato, la tabella nutrizionale stampata sul retro, il testo legale, i
+bollini: quella e' grafica, si stampa, e deve restare.
+
+**Da non confondere con le aree riservate.** `GDA`, `COVERED AREA`, `TEXT
+AREA`, `BEST BEFORE AREA`, `BAR CODE AREA`, `PRINT FREE AREA`, `NEUTRAL AREA`
+non sono la cosa stampata: sono il **posto tenuto** per quella cosa, riquadri
+pieni che il tecnico mette per dire dove andra'. Non si stampano e **non
+devono comparire nel render finale**: vanno sul livello del disegno tecnico
+con tutto il resto che non si stampa, oppure su una lastra chiamata col
+proprio nome. Vedi *Le aree riservate non compaiono mai nel render*.
+
+### 2. La colata su un livello suo
+
+Stessa forma, altra ragione: il livello dice **dove** va la colata, e senza
+quello non si puo' ne' renderla in quadricromia ne' sostituirla senza
+indovinare il riquadro. Il nome che si cerca e' `Colata`. Vedi *La colata si
+rimette con l'inchiostro del file*.
+
+### 3. La grafica in quadricromia, non in RGB
+
+In RGB la sovrastampa non esiste e non c'e' niente da simulare: la colata
+Kinder perde l'ombra sulle gocce e diventa una macchia di ciano piatto, e a
+valle non si recupera. Vedi *La grafica va in quadricromia, non in RGB*.
+
+Nello stesso spirito: la **GDA** appartiene al disegno tecnico e nel livello
+della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
+
 ## Regole comuni a tutte le tipologie
 
 - **Il modello segue la GRAFICA, non il disegno tecnico.** Sono due cose
@@ -167,16 +229,32 @@ gli ultimi due la indovinano. Il livello usato va sempre riportato nel resoconto
    `PdfWriter(clone_from=...)`. Poi si leggono le `/Properties` della pagina,
    che mappano `/MC0 /MC1 ...` agli OCG, e si scartano i blocchi `BDC`/`EMC`
    marcati `/OC` sui livelli tecnici.
-3. **Legenda del documento** — quando il DT non sta su un livello separato, lo si
-   riconosce dalle note o dal riquadro tipo "Job Colors": la legenda affianca il
-   **nome della lastra alla sua pastiglia colore**, quindi campionando la
-   pastiglia si associa il nome alla separazione, senza indovinare. Nomi
-   ricorrenti: Technical Drawing, Dimensions, Print Free Area, Best Before Area,
-   Bar Code Area, COVERED Area, Neutral Area, Eyemark, Coldseal, White, Varnish.
-4. **Registro di lastre note** — scorciatoia quando la legenda manca. Negli
-   artwork Ferrero ricorrono identici: Pantone 3405 C = Technical Drawing,
-   346 C = Dimensions, 571 C = Print Free Area, 350 C = Best Before Area,
-   341 C = Bar Code Area, 1565 C = COVERED Area. Anche `All` e' tecnica.
+3. **La scritta sull'area** — quando il DT non sta su un livello e le lastre
+   si chiamano solo col numero Pantone, resta una cosa scritta: dentro ogni
+   area riservata c'e' il suo nome, in bianco, come testo vero. La lastra e'
+   quella che **dipinge sotto la scritta**, e sotto ogni etichetta ce n'e' una
+   sola. Non e' indovinare: e' leggere. Vedi *Le aree riservate non compaiono
+   mai nel render*. La **legenda** del documento — il riquadro tipo "Job
+   Colors", che affianca il nome della lastra alla sua pastiglia — dice le
+   stesse cose ma per **accostamento di posizione**, che e' un'assunzione di
+   impaginato: usarla per strappare una lastra e' un rischio che non abbiamo
+   preso. Nomi ricorrenti: Technical Drawing, Dimensions, Print Free Area,
+   Best Before Area, Bar Code Area, COVERED Area, Neutral Area, Text Area,
+   Eyemark, Coldseal, White, Varnish.
+4. **Registro di lastre note** — scorciatoia quando non c'e' altro, e **solo
+   per riconoscere, mai per strappare**. Negli artwork Ferrero questi numeri
+   ricorrono: Pantone 3405 C = Technical Drawing, 346 C = Dimensions,
+   571 C = Print Free Area, 350 C = Best Before Area, 341 C = Bar Code Area,
+   1565 C = COVERED Area. Anche `All` e' tecnica.
+
+   **Ma ricorrono meno di quanto sembri, ed e' misurato.** Su K Colazione Piu'
+   il registro sbaglia due volte su due: `350 C` li' e' il **disegno tecnico**,
+   `346 C` e' la **BEST BEFORE AREA**. E fidarsene per strappare costa: sul
+   cartotecnico Pingui T6, strappare le lastre che il registro chiama tecniche
+   porta via anche il **bollino `x6`** e il **QR code**, che sono grafica
+   stampata. Un numero Pantone e' un colore, e un colore non dice mai a cosa
+   serve una lastra — e' la stessa regola qui sotto, nella sua forma piu'
+   netta.
 5. **Euristica** su spessore (filo di capello, <= 0,8 pt). E' una stima e va
    dichiarata come tale. Sul **colore** vedi la regola qui sotto: non e' una
    stima debole, e' una stima che non si puo' fare.
@@ -226,6 +304,11 @@ Spegnere un livello e' una modifica di **dizionario** - l'OCG finisce in
 contenuto, che su Colazione vale 7 secondi e 100 MB. **Attenzione**:
 `PdfWriter().append()` perde `/OCProperties`, serve `PdfWriter(clone_from=...)`.
 
+Da qui la richiesta a chi prepara il file: **il disegno tecnico su un livello
+suo**, vedi *Cosa chiediamo a chi prepara l'artwork*. E' la stessa richiesta
+della colata, e per la stessa ragione — quello che il file dichiara non si
+deve indovinare.
+
 Un nome di livello e' tecnico se e' un Processing Step ISO, se sta in
 `techink.OCG_TECH` o se `techink.tecnica` lo riconosce — `Cutter` passa di li'.
 Sul parco: K Brioss STD `Cutter, Legend`; KP T1 Mandarino `check, notes,
@@ -258,6 +341,12 @@ contro 484, cioe' oltre il tetto dei 512 - per togliere tratti che la maschera
 del disegno tecnico prendeva gia'. Il giorno che un pack mostra una fustella
 che l'euristica non prende, si allarga con quello in mano.
 
+Attenzione a non leggerlo come "strappare costa memoria": dipende da cosa si
+strappa. Togliere **tratti** aggiunge una passata e non alleggerisce il
+rendering, quindi il picco sale. Togliere **pieni** toglie anche il lavoro di
+dipingerli: le tre aree riservate di Colazione portano il picco da 613 a 473
+MB. La divisione tratti/pieni di sopra decide tutte e due le cose.
+
 Due precauzioni:
 
 - **il confronto sul nome e' per sottostringa, non per nome intero.** I nomi
@@ -277,12 +366,108 @@ HTTP, e' roba di artwork: sta in `pack3d/artwork.py`, e chi vuole le texture di
 un astuccio chiama `texture_astuccio`, che fa i tre passaggi nell'ordine giusto
 e restituisce gia' scritti gli avvisi da mostrare.
 
+#### Le aree riservate non compaiono mai nel render
+
+La **GDA** non e' sola. `COVERED AREA`, `TEXT AREA`, `BEST BEFORE AREA`, `BAR
+CODE AREA`, `PRINT FREE AREA`, `NEUTRAL AREA` sono la stessa cosa fatta per
+un'altra ragione: **posto tenuto**, non grafica. Nessuna di loro si stampa, e
+**nessuna deve comparire nel render finale**.
+
+Stanno fra le **coperture** e non fra i soli nomi tecnici, per la ragione che
+vale per la GDA: sono PIENI grandi quanto la casella, non tratti, e l'euristica
+su spessore e colore un pieno non lo vede. Finche' sono state solo "nomi
+tecnici", la texture di **K Colazione Piu'** usciva con due fasce `TEXT AREA`,
+una `COVERED AREA` e un riquadro `BEST BEFORE AREA` stampati sul pack, a
+lettere bianche.
+
+##### Quando il file le nomina
+
+Se la lastra si chiama per quello che e' — `Covered Area`, `GDA Area`, `Best
+Before Area` — si strappa per nome, e il conto lo paga solo il file che ce
+l'ha. Se sta su un livello con quel nome, si spegne il livello e non si paga
+niente. Questa e' la strada buona, ed e' meta' di *Cosa chiediamo a chi prepara
+l'artwork*.
+
+##### Quando il file NON le nomina: la scritta dice quello che il nome tace
+
+K Colazione Piu' non nomina niente. Nessun livello, e le lastre si chiamano
+`PANTONE 1595 C`, `PANTONE 1565 C`, `PANTONE 346 C`: numeri di colore, non nomi
+di mestiere.
+
+**Il registro `LASTRE_NOTE` non serve, e mente.** E' costruito su altri file, e
+su questo sbaglia due volte su due: dice `PANTONE 350 C = Best Before Area` e
+li' quella lastra e' il **disegno tecnico**; dice `PANTONE 346 C = Dimensions`
+e li' e' la **BEST BEFORE AREA**. E' la lezione di sempre, nella sua forma piu'
+netta: un numero Pantone e' un colore, e **un colore non dice mai a cosa serve
+una lastra**.
+
+Misurato, per togliersi la tentazione: strappare tutte le separazioni che il
+registro chiama tecniche sul cartotecnico Pingui T6 fa sparire le aree
+riservate **e anche il bollino `x6` e il QR code**. Grafica stampata, tolta da
+un registro che parlava di un altro file.
+
+Quello che il file dice davvero **e' scritto sopra l'area**: dentro ogni
+riquadro c'e' il suo nome, in bianco, come testo vero ed estraibile. Da li' si
+parte, e la lastra si trova guardando **chi dipinge sotto la scritta** — una
+passata `tiffsep` di Ghostscript a bassa risoluzione da' una mappa d'inchiostro
+per separazione, e sotto ogni etichetta c'e' una lastra sola:
+
+    TEXT AREA (x2)     ->  PANTONE 1595 C     inchiostro 93%
+    COVERED AREA       ->  PANTONE 1565 C     inchiostro 89%
+    BEST BEFORE AREA   ->  PANTONE 346 C      inchiostro 89%
+
+Niente colore, niente geometria, niente registro: **l'etichetta e la lastra
+sotto**. La grafica di Colazione resta intera — logo, wordmark, wafer, tazza,
+bollino `x10`, `100% LATTE ITALIANO` — e le tre aree spariscono.
+
+Sul parco lo stesso passaggio ripulisce anche l'astuccio **Kinder Brioss Latte
+e cacao**, che aveva una fascia `COVERED AREA` sul fianco sinistro e un
+riquadro `BEST BEFORE AREA` a destra: via quelle due, e restano interi il logo
+`Brioss`, il bollino `x10`, i pannelli promo con i QR code e il
+`100% LATTE ITALIANO`. Sei GLB su otto non cambiano di un byte, e i due che
+cambiano sono esattamente questi.
+
+**Il prefiltro.** Prima di estrarre il testo si guarda se nel flusso della
+pagina compare la parola `AREA`: costa da 0,00 a 0,05 secondi e divide netto -
+zero occorrenze sui sei file del parco senza etichette, 2, 6 e 11 sui tre che
+le hanno. Senza, l'estrazione del testo sarebbero 2,9 secondi buttati su ogni
+K Brioss STD. Se un file scrivesse `AREA` in una codifica che il prefiltro non
+vede si resterebbe alla pulizia di prima: puo' far perdere un'occasione, non
+puo' far strappare la lastra sbagliata.
+
+**Il costo, detto per intero.** La ricerca parte solo se il file **non ha
+livelli tecnici**: dove i livelli ci sono la pulizia e' gia' esatta e non si
+paga niente. Sul parco i sei file senza etichette restano al loro tempo — K
+Brioss STD 1,9 -> 2,0 s, crt_nuovo 2,4 -> 2,4, vernice 4,1 -> 3,8 — mentre i
+due che le hanno pagano: **Brioss Latte e cacao 0,9 -> 4,5 s**, **Colazione
+2,1 -> 19,7 s**. Quei diciotto secondi sono quasi tutti lo strappo delle tre
+lastre, che su un flusso da 3,6 MB e' la parte cara; la lettura del testo ne
+vale 3,8 e la passata `tiffsep` uno.
+
+E' tanto, e su un piano Free a 0,1 CPU si sente. In cambio il pack non esce
+con `TEXT AREA` scritto sopra, e la memoria **scende**: sul solo Colazione il
+picco va da **613 a 473 MB**, cioe' da sopra a sotto il tetto dei 512 —
+togliere tre lastre piene dal flusso costa meno di quanto costi renderle.
+
+**Quello che resta fuori.** Se il nome dell'area sta solo nella legenda e non
+sopra il riquadro — Kinder Bueno Dark T2, il cartotecnico Pingui T6 — non c'e'
+niente di sicuro da leggere: la legenda e' un accostamento di posizione, e
+sbagliare accostamento vuol dire strappare la lastra della grafica. Li' si
+resta all'euristica, il build lo dichiara, e la risposta e' la richiesta a chi
+prepara il file.
+
 #### La GDA sta nel disegno tecnico, e si scarta
 
-La **GDA** — la dichiarazione nutrizionale con le sue caselle — appartiene al
-disegno tecnico: e' il tecnico che ne riserva il posto, non il grafico che la
-disegna. Nel livello della grafica **non va mai messa**, e quando ci finisce
-comunque, e capita, va **scartata** come qualunque altra arte tecnica.
+La **GDA** — il riquadro che tiene il posto alla dichiarazione nutrizionale
+con le sue caselle — appartiene al disegno tecnico: e' il tecnico che ne
+riserva il posto, non il grafico che la disegna. Nel livello della grafica
+**non va mai messa**, e quando ci finisce comunque, e capita, va **scartata**
+come qualunque altra arte tecnica. **Nel render finale non deve comparire**:
+e' la regola, e vale prima di ogni altra considerazione.
+
+Da non confondere con la **tabella nutrizionale stampata**, che e' grafica, si
+stampa e resta. La GDA e' il posto tenuto, non la cosa. Per tutta la sua
+famiglia vedi *Le aree riservate non compaiono mai nel render*.
 
 Sta fra le **coperture** e non fra i soli nomi tecnici, ed e' la stessa
 distinzione di sopra: un riquadro GDA e' un PIENO grande come la casella, non
@@ -451,6 +636,72 @@ possono essere riscritti.
 
 La metrica che decide e' `dt_su_immagine_pct`: quanto disegno tecnico cade su
 foto, cioe' dove la riverniciatura a tinta piatta non puo' arrivare.
+
+### Cosa passare al modello, e cosa no
+
+Le API OpenAI ci sono e sono configurate; la chiave si legge da
+`OPENAI_API_KEY` e il modello da `PACK3D_IMAGE_MODEL`. Da tenere distinti,
+perche' sono due cose diverse: **chi ragiona e guarda** e' l'agente, che gira
+su `PACK3D_MODEL`, e **chi ridipinge** e' il modello di immagine OpenAI dentro
+`reconstruct_area`. Quasi tutto quello che segue e' lavoro del primo. Ma "c'e'
+il modello"
+non e' una risposta: il modello e' bravo a **vedere** e pessimo a **non
+toccare**, e la grafica finale e' l'unica cosa che conta. Quindi si divide per
+mestiere, non per comodita'.
+
+**La regola che tiene tutto insieme: il modello dice DOVE, il codice fa COSA.**
+Un riquadro, una quota, un giudizio "questa ombra e' azzurra" sono risposte
+piccole, verificabili e reversibili. Un'immagine rigenerata non lo e': una
+volta riscritti, i pixel del logo non tornano.
+
+**1. Quello che il codice non riesce a TROVARE → si', al modello.**
+E' il caso delle aree riservate rimaste: sul cartotecnico Pingui T6 e sul
+Kinder Bueno Dark T2 il nome dell'area sta solo nella legenda, non sopra il
+riquadro, e nel file non c'e' niente di sicuro da leggere — vedi *Le aree
+riservate non compaiono mai nel render*. Per un occhio invece sono ovvie: un
+rettangolo pieno con scritto `BEST BEFORE AREA` in bianco dentro. Questo e'
+lavoro da modello, ed e' **piu' semplice** di qualunque euristica.
+
+Ma quello che torna indietro dev'essere un **riquadro in mm**, non
+un'immagine: un'area riservata e' un rettangolo pieno, quindi il riquadro
+approssimativo basta come innesco e il bordo esatto lo trova il codice
+attaccandosi al pieno. Cosi' l'errore del modello vale qualche millimetro di
+innesco, non un logo riscritto.
+
+*Manca lo strumento.* Oggi l'agente puo' guardare con `visual_check` ma non ha
+modo di restituire un riquadro: `reconstruct_area` lavora solo dentro la
+maschera che `clean_artwork` ha gia' trovato. Serve uno strumento che prenda
+un riquadro in mm e lo tratti come area riservata. Finche' non c'e', quei due
+file restano all'euristica e il build lo dichiara.
+
+**2. Quello che il codice trova ma non sa RIPARARE → si', al modello.**
+Disegno tecnico che attraversa una foto: li' la riverniciatura a tinta piatta
+non arriva e non c'e' niente da inventare a mano. E' `reconstruct_area`, e la
+cautela e' gia' scritta sopra: **solo dentro la maschera**, fuori restano i
+pixel originali. Sul Kinder Bueno T2 sono lo 0,6% dell'immagine.
+
+**3. La colata → no, e non e' pigrizia.**
+La colata non ha pixel mancanti: ha l'inchiostro sbagliato. Il problema e'
+che l'ombra sulle gocce esce azzurra invece che scura, e quello si risolve
+con la quadricromia e la sovrastampa, non ridipingendo — vedi *La colata si
+rimette con l'inchiostro del file*. Un modello generativo la reinventerebbe:
+gocce diverse, ombre diverse, e la cosa che si stava giudicando sparisce
+dentro la riscrittura. Per un marchio, ridisegnare non e' riparare.
+
+Il modello sulla colata serve invece a **guardarla**: "questa ombra e'
+azzurra o e' scura?" e' esattamente la domanda che le metriche hanno sbagliato
+piu' volte e che l'occhio risolve in un secondo. Giudizio si', pennello no.
+
+**4. Quello che non va mai al modello.** I loghi, la `k` nera di `kinder`, i
+marchi, il testo di prodotto: non si rigenerano nemmeno dentro una maschera,
+e se la maschera li tocca la maschera e' sbagliata. E nessuna misura: una
+quota si misura, non si chiede a un'immagine.
+
+**5. E il modello non copre mai quello che il file poteva dichiarare.**
+Se manca il livello del disegno tecnico, la risposta e' *Cosa chiediamo a chi
+prepara l'artwork*, non una chiamata API su ogni build. Il piano B costa una
+chiamata e un rischio: si usa dove il file non poteva dire di meglio, non
+dove non gliel'abbiamo chiesto.
 
 ## Astucci
 
