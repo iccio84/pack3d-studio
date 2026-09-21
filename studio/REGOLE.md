@@ -184,6 +184,42 @@ Due divieti operativi:
   tratti sottili e retini, su aree grandi spalma la grafica. Applicato al 23%
   di un'immagine ha distrutto logo e prodotto. Se restano buchi veri, mostrarli.
 
+### Il colore e lo spessore dipendono da chi legge il PDF
+
+Cambiando lettore cambia quello che si vede, e due differenze sono costate
+grafica vera.
+
+**Le tinte piatte.** pdfminer, e quindi pdfplumber, di una separazione da' solo
+il valore di inchiostro: uno scalare, `1.0`. Uno scalare non e' mai "un colore
+con tinta", percio' le Pantone restavano fuori dalla tavolozza tecnica per una
+proprieta' della rappresentazione, non per una scelta. pdfium le risolve fino
+all'RGB, e da quel momento la Pantone della fustella e la Pantone del logo sono
+lo stesso colore: sul K Brioss STD la maschera ha cancellato le lettere di
+"kInder", disegnate in PANTONE 361 U come il tracciato `/Cutter`, insieme a
+2.327 altre forme.
+
+Rifare i conti a mano non e' praticabile — in questi artwork ci sono funzioni di
+tipo 2 e di tipo 4 e alternative ICC, Lab e CMYK. Si fa invece dipingere la
+campionatura a pdfium: una paginetta con un quadretto per separazione a
+inchiostro pieno, resa con lo stesso motore che rende l'artwork, e quegli RGB si
+escludono dalla tavolozza (`tracciati.piatte`, 0,01-0,04 s). Con
+l'esclusione i riempimenti mascherati tornano **esattamente** quelli di prima su
+cinque pack su sei, e sul sesto differiscono di 11 pixel.
+
+**Lo spessore del tratto.** pdfminer non legge il `/LW` di un ExtGState e lascia
+lo spessore a zero, cioe' a filo di capello, cioe' tecnico. Sul K Brioss STD un
+rettangolo nero da 1 pt attorno all'area di stampa — che per giunta non viene
+nemmeno stampato — faceva togliere due bande verticali di grafica lunghe quanto
+il pack. pdfium lo spessore lo legge giusto, e su uno `0 w` vero risponde 0,0
+come deve: verificato con un PDF costruito apposta con tratti a 0, 0,5, 1 e 2 pt.
+
+**Come si verifica un cambio di maschera.** Non basta il PSNR sulla texture: le
+differenze sono poche e localizzate, e una media le nasconde. Si confrontano le
+due maschere come array booleani, separando i tre livelli (tratti, pieni,
+scritte), si contano i pixel `solo-vecchia` e `solo-nuova`, e si **guardano** i
+gruppi piu' grandi ritagliati sulla pagina. E' cosi' che si e' visto che tutto
+quello che la maschera nuova non copre piu' era grafica o roba invisibile.
+
 **Metodo:** una modifica alla volta, con verifica in mezzo. Cambiandone due
 insieme si perde il risultato buono gia' raggiunto senza capire quale delle due
 ha rotto cosa.
@@ -313,6 +349,12 @@ K Tronky il CropBox e' 459 x 271 pt dentro un MediaBox di 1332 x 958, spostato d
 un'altra parte: nessuna eccezione, solo misure prese nel posto sbagliato, e
 intere viste tecniche che restano fuori dalla resa. Si rasterizza sempre con
 `dieline.render_page`, mai con `pdfium.PdfDocument(...).render()` diretto.
+
+Vale anche in **lettura**, e li' e' meno evidente: `page.get_size()` di pdfium
+da' la CropBox, mentre le coordinate dei tracciati sono nello spazio del PDF.
+Chi ribalta la y su quell'altezza ottiene una pagina intera fuori posto — sul
+K Tronky le due maschere, vecchia e nuova, non avevano un pixel in comune. Il
+telaio si prende sempre dalla MediaBox (`tracciati._telaio`).
 
 **I pannelli della fustella non sono la sezione del pack chiuso.** Le
 cordonature dicono dove il film e' cordonato, non che forma prende una volta

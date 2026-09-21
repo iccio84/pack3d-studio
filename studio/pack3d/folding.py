@@ -9,11 +9,10 @@ Qui la cosa viene ricavata dalla catena di pieghe, non imposta a mano.
 from __future__ import annotations
 
 import numpy as np
-import pdfplumber
 from PIL import Image, ImageDraw
 
-from . import dieline
-from .dieline import _segments, _technical_pens, render_page
+from . import dieline, tracciati
+from .dieline import _technical_pens, render_page
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -63,40 +62,29 @@ FOLD_H = {
 FOLDS = {"vwrap": FOLD_V, "hwrap": FOLD_H}
 
 
-def _is_chromatic(color):
-    """Vero per un colore CMYK/RGB con tinta: esclude nero, grigi e tinte
-    piatte a un solo canale, che possono appartenere anche alla grafica."""
-    try:
-        v = eval(color) if isinstance(color, str) else color
-    except Exception:
-        return False
-    if not isinstance(v, (list, tuple)) or len(v) < 3:
-        return False
-    if len(v) == 4:                      # CMYK: tinta nei primi tre canali
-        return max(v[:3]) > 0.15
-    return max(v) - min(v) > 0.15        # RGB
+def disegno_tecnico(pdf_path, page_no=0):
+    """Gli elementi da togliere dalla texture, in due passate leggere.
+
+    La prima passata trova le penne della fustella e i colori dei tratti a
+    filo di capello; la seconda, sapendo gia' cosa cercare, si tiene solo
+    quello che serve. Su uno steso curvo (coppe, settori) non ci sono
+    segmenti dritti lunghi da cui dedurre la penna: resta valida la regola
+    del filo di capello, che vale anche quando di penne non se ne trova
+    nessuna.
+    """
+    colori = set()
+    segs, larghezza, altezza = tracciati.segmenti(pdf_path, page_no,
+                                                  tavolozza=colori)
+    penne = _technical_pens(segs, larghezza, altezza)
+    tinte = tracciati.tinte(colori | {c for _, c in penne})
+    tinte -= tracciati.piatte(pdf_path, page_no)
+    return tracciati.tecnici(pdf_path, page_no, penne, tinte)
 
 
-HAIRLINE = 0.8   # pt: sotto questa soglia il tratto e' disegno tecnico, non grafica
-
-
-def technical_palette(page, pens):
-    """Colori usati dal disegno tecnico: quelli delle penne di fustella piu'
-    quelli di ogni tratto a filo di capello (retini print-free, quotature)."""
-    pal = {c for lw, c in pens}
-    for kind in ("lines", "rects", "curves"):
-        for o in getattr(page, kind):
-            if kind != "lines" and not o.get("stroke"):
-                continue
-            if (o.get("linewidth") or 0) <= HAIRLINE:
-                pal.add(str(o.get("stroking_color")))
-    pal.discard("None")
-    return pal
-
-
-def _technical_mask(page, pens, palette, box, scale, margin=1.2):
+def _technical_mask(dt, box, scale, margin=1.2):
     """Maschera del disegno tecnico dentro un pannello: tratti di fustella,
     retini delle aree print-free, quote e diciture tecniche."""
+    tratti, pieni, scritte = dt
     x0, y0, x1, y1 = box
     W = max(1, round((x1 - x0) * scale))
     H = max(1, round((y1 - y0) * scale))
@@ -106,48 +94,16 @@ def _technical_mask(page, pens, palette, box, scale, margin=1.2):
     def pt(x, y):
         return ((x - x0) * scale, (y - y0) * scale)
 
-    def stroke(pts, lw):
-        w = max(2, int(round(lw * scale + 2 * margin * scale)))
-        if len(pts) > 1:
-            dr.line([pt(*q) for q in pts], fill=255, width=w, joint="curve")
-
-    def is_tech_stroke(o):
-        lw = o.get("linewidth") or 0
-        return (lw <= HAIRLINE or
-                (round(lw, 2), str(o.get("stroking_color"))) in pens)
-
-    chroma = {c for c in palette if _is_chromatic(c)}
-
-    for ln in page.lines:
-        if is_tech_stroke(ln):
-            # per un segmento obliquo il bbox non dice il verso: servono i punti
-            pts = list(ln.get("pts") or [])
-            if len(pts) < 2:
-                pts = [(ln["x0"], ln["top"]), (ln["x1"], ln["bottom"])]
-            stroke(pts, ln["linewidth"] or 0)
-    for rc in page.rects:
-        if rc.get("stroke") and is_tech_stroke(rc):
-            a, b, c, d = rc["x0"], rc["top"], rc["x1"], rc["bottom"]
-            stroke([(a, b), (c, b), (c, d), (a, d), (a, b)], rc["linewidth"] or 0)
-        elif rc.get("fill") and str(rc.get("non_stroking_color")) in chroma:
-            dr.rectangle([pt(rc["x0"], rc["top"]), pt(rc["x1"], rc["bottom"])], fill=255)
-    for cv in page.curves:
-        pts = list(cv.get("pts") or [])
-        if cv.get("stroke") and is_tech_stroke(cv):
-            stroke(pts, cv["linewidth"] or 0)
-        elif cv.get("fill") and str(cv.get("non_stroking_color")) in chroma and pts:
-            # i simboli tecnici (frecce di orientamento) sono piccoli e spesso
-            # composti da piu' sottotracciati: si mascherano per ingombro
-            if max(cv["x1"] - cv["x0"], cv["bottom"] - cv["top"]) < 25:
-                dr.rectangle([pt(cv["x0"], cv["top"]), pt(cv["x1"], cv["bottom"])], fill=255)
-            elif len(pts) > 2:
-                dr.polygon([pt(*q) for q in pts], fill=255)
-
-    # quote e diciture tecniche: solo colori con tinta del disegno tecnico
-    for ch in page.chars:
-        if str(ch.get("non_stroking_color")) in chroma:
-            dr.rectangle([pt(ch["x0"] - 0.5, ch["top"] - 0.5),
-                          pt(ch["x1"] + 0.5, ch["bottom"] + 0.5)], fill=255)
+    for punti, lw in tratti:
+        dr.line([pt(*q) for q in punti], fill=255, joint="curve",
+                width=max(2, int(round(lw * scale + 2 * margin * scale))))
+    for (a, b, c, d), punti in pieni:
+        if punti is None:
+            dr.rectangle([pt(a, b), pt(c, d)], fill=255)
+        else:
+            dr.polygon([pt(*q) for q in punti], fill=255)
+    for a, b, c, d in scritte:
+        dr.rectangle([pt(a - 0.5, b - 0.5), pt(c + 0.5, d + 0.5)], fill=255)
     return np.asarray(m) > 127
 
 
@@ -178,16 +134,7 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
     # sommare due rasterizzazioni nel momento peggiore.
     dieline.scarta_resa()
 
-    pens, palette = set(), set()
-    page = None
-    if clean:
-        pdf = pdfplumber.open(pdf_path)
-        page = pdf.pages[page_no]
-        # su uno steso curvo (coppe, settori) non ci sono segmenti dritti lunghi
-        # da cui dedurre la penna: resta valida la regola del filo di capello,
-        # che _technical_mask applica anche a penne vuote.
-        pens = _technical_pens(_segments(page), page.width, page.height)
-        palette = technical_palette(page, pens)
+    dt = disegno_tecnico(pdf_path, page_no) if clean else None
 
     out = {}
     for name, p in panels.items():
@@ -196,8 +143,7 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
         im = sheet.crop(box)
         if clean:
             arr = np.asarray(im).copy()
-            mask = _technical_mask(page, pens, palette, (p.x0, p.y0, p.x1, p.y1), scale)
-            mh, mw = mask.shape
+            mask = _technical_mask(dt, (p.x0, p.y0, p.x1, p.y1), scale)
             mask = mask[:arr.shape[0], :arr.shape[1]]
             if mask.shape != arr.shape[:2]:
                 pad = np.zeros(arr.shape[:2], bool)
