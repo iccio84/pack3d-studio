@@ -926,6 +926,15 @@ sei Pingui dentro. Il riscontro che chiude il conto e' la profondita' letta due
 volte da due posti diversi: cielo e fondo danno **40,5**, i fianchi **40,3**.
 Costruisce in 3,9 s con 354 MB di picco.
 
+**L'orientamento e' verificato sul pack vero, e non va piu' toccato.** I
+fianchi erano girati di 180 gradi e sono stati corretti — vedi *I fianchi di
+un astuccio aperto non si ribaltano*; dopo quella correzione e' arrivata la
+segnalazione che fosse il **fronte** a essere girato, e il modello e' stato
+riguardato dai sei lati con chi il pack ce l'ha in mano: **fronte e cielo
+leggono dritti, ed e' giusto cosi'**. Nessun pannello e' stato ruotato per
+quella segnalazione. Se ricapita, si guarda il GLB prima di girare qualcosa:
+girare un pannello che e' gia' a posto costa due errori invece di uno.
+
 ### Un astuccio ha uno spessore
 
 Un astuccio non e' una superficie, e trattarlo come tale si paga proprio dove
