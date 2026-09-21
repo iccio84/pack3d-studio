@@ -59,7 +59,23 @@ def render(faces, cam, size, bg=(255, 255, 255), ss=2, shade=None):
     alpha = np.zeros((Hp, Wp), np.float32)
     ids = np.zeros((Hp, Wp), np.uint8)
 
-    for fidx, fc in enumerate(faces, start=1):
+    # Dal fondo in avanti, e non nell'ordine della lista.
+    #
+    # Qui non c'e' z-buffer: si dipinge, e chi dipinge dopo copre. Finche' un
+    # astuccio era sei facce senza spessore la cosa non si vedeva - il culling
+    # ne lasciava tre, e tre facce di una scatola convessa non si sovrappongono
+    # mai. Col guscio si vede eccome: l'INTERNO della parete lontana guarda la
+    # camera, sopravvive al culling, e dipingeva sopra l'esterno di quella
+    # vicina. Gli astucci uscivano grigi.
+    #
+    # Ordinare per profondita' del baricentro basta: sono quad piani che non
+    # si compenetrano, e su una scatola convessa col suo guscio l'ordine e'
+    # esatto.
+    prof = [(-float(cam2.view(np.asarray(fc["quad"], float).mean(0, keepdims=True))[0][2]), i)
+            for i, fc in enumerate(faces)]
+    for _, fidx0 in sorted(prof, reverse=True):
+        fc = faces[fidx0]
+        fidx = fidx0 + 1
         quad = np.asarray(fc["quad"], float)
         # backface culling: normale verso la camera?
         n = np.cross(quad[1] - quad[0], quad[3] - quad[0])

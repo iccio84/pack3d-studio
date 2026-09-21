@@ -34,7 +34,7 @@ def build(args):
         print("  avviso   :", m)
     tex = folding.rasterize_panels(args.pdf, d.panels, dpi=args.dpi)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
-                                panels=d.panels)
+                                panels=d.panels, chiuso=d.chiuso)
 
     err = None
     if args.reference:

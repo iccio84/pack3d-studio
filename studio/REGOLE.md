@@ -503,6 +503,123 @@ attorno al fondo del pack e **si ricongiunge** — sul fronte si legge
 `bianco | onda | rosso` scendendo, che e' la stessa banda vista dall'altra
 parte. Se il ribaltamento fosse invertito la banda non combacerebbe col fondo.
 
+#### I fianchi di un astuccio aperto non si ribaltano
+
+Su un astuccio chiuso i fianchi sono agganciati al **retro**, e il retro si
+ribalta perche' la fasciatura scavalca il cielo: i fianchi ereditano quel
+ribaltamento, ed e' quello che `FOLD_V` mette in tabella. Su un astuccio aperto
+il retro non c'e' e i fianchi sono agganciati al **fronte**, che non si ribalta.
+La quinta dei fianchi va quindi ruotata di 180 gradi (`FIANCHI_SUL_FRONTE`),
+altrimenti la loro grafica esce capovolta — ed e' quello che si vedeva sul
+Pingui T6, con la foto del prodotto e il QR a testa in giu'.
+
+Che siano quelli i quad giusti non serve crederlo: `FOLD_H` lo dice. Nella
+fasciatura orizzontale i fianchi sono agganciati al fronte per costruzione, e le
+sue due voci `left` e `right` sono **identiche** a queste.
+
+### Un astuccio ha uno spessore
+
+Un astuccio non e' una superficie, e trattarlo come tale si paga proprio dove
+il pack e' aperto: ogni faccia ha una normale sola, da dietro il culling la fa
+sparire, e guardando dentro la finestra del Pingui T6 non si vedeva niente.
+Il pack diventava un guscio di carta zero.
+
+Con lo spessore l'interno c'e', ed e' cartoncino. Per ogni faccia si aggiunge:
+
+- la **faccia interna**, spostata di `PACK3D_SPESSORE_CRT` (0,45 mm) lungo la
+  normale entrante e con l'avvolgimento rovesciato, perche' la sua normale
+  guardi dentro;
+- su ogni spigolo **aperto**, la **costa** del taglio: e' la parte che fa
+  leggere lo spessore sul bordo di una finestra.
+
+Gli avvolgimenti non si ragionano, si derivano. Su una superficie orientata due
+facce adiacenti percorrono lo spigolo in comune in senso **opposto**: quindi
+rovesciare l'ordine di un quad da' una faccia interna coerente, e una costa
+percorre lo spigolo condiviso al contrario della faccia da cui nasce. Cosi' il
+verso viene giusto senza dipendere da quale convenzione usano gli esportatori —
+che qui e' `n = -(q1-q0) x (q3-q0)`, verificata sul fronte.
+
+Uno spigolo e' "aperto" se non confina con nessun'altra faccia, e si riconosce
+per coincidenza dei vertici su una griglia da 0,02 mm. Misurato:
+
+    Pingui T6 (aperto)      7 facce esterne + 7 interne + 8 coste
+    Nutella Donut (chiuso)  6 facce esterne + 6 interne + 0 coste
+
+e le otto coste del Pingui sono esattamente quelle che deve avere: il bordo
+dietro dei due fianchi e i tre lati liberi di ognuna delle due falde. Su un
+astuccio chiuso di coste non ce n'e' nessuna, che e' il controllo che la
+ricerca degli spigoli aperti funziona.
+
+Il rovescio del cartoncino e il taglio **non stanno nell'artwork**: il PDF dice
+solo la faccia stampata. Sono due tinte neutre, e vanno dichiarate per quello
+che sono — una stima, non una misura.
+
+#### Lo spessore ha scoperto che il rasterizzatore dipinge e basta
+
+`raster.render` — quello del render di presentazione, non quello a z-buffer
+delle superfici curve — non ha profondita': dipinge le facce nell'ordine della
+lista, e chi dipinge dopo copre. Finche' un astuccio era sei facce senza
+spessore non si vedeva, perche' il culling ne lascia tre e tre facce di una
+scatola convessa non si sovrappongono mai.
+
+Col guscio si vede eccome. L'**interno della parete lontana** guarda la camera,
+quindi sopravvive al culling, e stando in fondo alla lista dipingeva sopra
+l'esterno della parete vicina: i due astucci uscivano **grigi pieni**. Adesso le
+facce si ordinano per profondita' del baricentro, dal fondo in avanti. Basta
+l'ordinamento per baricentro: sono quad piani che non si compenetrano.
+
+E' anche un promemoria sul metodo: le normali le avevo verificate una per una e
+tornavano tutte: la faccia interna guarda dentro, quella esterna fuori, le
+coste sono spesse 0,45 mm. Il modello era giusto e il render sbagliato lo
+stesso, perche' il difetto non stava nella geometria. Il controllo visivo
+**dopo** quello numerico non e' una ripetizione.
+
+### La colata si sostituisce solo se sta su un livello suo
+
+La colata Kinder in RGB non si aggiusta a valle (vedi *La grafica va in
+quadricromia, non in RGB*): l'ombra sulle gocce nel file non c'e', e
+reinventarla vorrebbe dire dipingere colore. Quello che si puo' fare e'
+**sostituirla** con la grafica giusta, e per farlo in modo preciso serve
+sapere **dove va**.
+
+Nell'artwork, com'e' oggi, non si sa. Sul Pingui T6 la colata non e' un oggetto
+solo che si possa scambiare: il campo delle gocce e' una immagine RGB — 259,8 x
+219,0 mm, riquadro noto al punto — mentre la fascia dell'onda e' vettoriale, e
+**niente nel file dice "questa e' la colata"**. Indovinare il riquadro e' il
+modo di consegnare una grafica fuori posto di due millimetri.
+
+Da qui la regola, che e' sulla **preparazione del file**: la colata va tolta dal
+livello in cui sta e messa su un **livello suo**, nominato. Allora la
+sostituzione diventa deterministica, e il meccanismo e' questo — misurato, non
+ipotizzato:
+
+1. si spegne quel livello in una copia del PDF, aggiungendo il suo OCG a
+   `/OCProperties/D/OFF`. E' una modifica **di dizionario**: non costa la
+   passata di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e
+   100 MB;
+2. si rende la pagina due volte a bassa risoluzione, con e senza, e la
+   differenza da' il **riquadro esatto** della colata;
+3. si incolla la risorsa in quel riquadro sul foglio ad alta risoluzione, prima
+   di ritagliare i pannelli.
+
+I passi 1 e 2 sono verificati su un livello vero: su K Brioss STD, spegnendo
+`Cutter`, pdfium lo toglie davvero e la differenza da' il riquadro
+x 25,7..1334,3 y 40,0..997,1 pt, che e' la fustella. Va notato che
+`pypdf.PdfWriter().append()` **perde** `/OCProperties`: serve
+`PdfWriter(clone_from=...)`.
+
+Due cose che la risorsa deve avere, e che oggi non ha (vedi
+`risorse/LEGGIMI.md`):
+
+- **la posizione**, che viene dal livello;
+- **la risoluzione**. La colata fornita e' a 101 dpi alla scala dell'artwork,
+  sotto ai 200 dpi della qualita' web e ai 300 della qualita' alta:
+  incollarla cosi' peggiorerebbe quella fascia invece di migliorarla.
+
+Finche' mancano, la risorsa resta un **riferimento visivo** e il codice non la
+usa. Il giorno che arriva un artwork con la colata su un livello suo, il
+meccanismo e' quello dei tre passi qui sopra.
+
 #### Il caso calibrato: Kinder Pingui T6 BOX
 
     colonne (mm)   16 | 4 | 8 | 32,3 | 140,5 | 32,3 | 8 | 4 | 16
@@ -510,6 +627,7 @@ parte. Se il ribaltamento fosse invertito la banda non combacerebbe col fondo.
     fianchi        40,3 x 125,0, accanto al FRONTE
     quote          140,5 x 125,0 x 40,5 mm
     finestra       61,5 mm di altezza, fra le due falde da 33,5 e 30,0
+    guscio         7 facce esterne + 7 interne + 8 coste
 
 E' un pack cartotecnico con il **retro a finestra**, che lascia intravedere i
 sei Pingui dentro. Il riscontro che chiude il conto e' la profondita' letta due
@@ -949,3 +1067,10 @@ Astucci, con la quota letta due volte che chiude il conto:
   e' scelta perche' separa il parco validato dai tre file con grafica in RGB,
   non perche' un documento la fissi; e una colata **vettoriale** in RGB, se
   esiste, passerebbe inosservata.
+- Lo **spessore del cartoncino** e' 0,45 mm, che e' un cartoncino teso da
+  astuccio plausibile e non una misura su questo pack. Il PDF non lo dice, e
+  nessuno l'ha misurato col calibro.
+- Il **colore del rovescio** del cartoncino e quello del **taglio** sono due
+  tinte neutre scelte a occhio: l'artwork descrive solo la faccia stampata.
+  Su un cartoncino patinato su un lato il rovescio e' grigio, su un GC1
+  bianco, e dal PDF non si distingue.

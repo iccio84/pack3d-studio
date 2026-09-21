@@ -377,7 +377,7 @@ def build_carton(pdf, out_glb, quality="web"):
     giri, storti = _gira_sulla_grafica(tex, d.panels,
                                        verso_della_grafica(pulito, d.panels))
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
-                                panels=d.panels)
+                                panels=d.panels, chiuso=d.chiuso)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
     exporters.write_glb(faces, out_glb)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
