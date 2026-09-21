@@ -140,15 +140,20 @@ della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
   venti righe di legale a corpo 5, che e' come la legge un occhio
   (`tracciati.verso_grafica`). Un pannello senza testo abbastanza non dice
   niente e si lascia com'e': indovinare sarebbe peggio.
-- **La `k` di `kinder` e' NERA.** E' l'invariante piu' facile da controllare di
-  tutto il parco, e quando non torna dice sempre la stessa cosa: la
-  **sovrastampa non e' stata simulata**. Sul K Brioss STD la `k` esce azzurra,
-  perche' e' costruita come un ciano che sovrastampa un nero: senza
-  sovrastampa il ciano lo copre invece di sommarcisi. Verificato affiancando
-  tre rese dello stesso marchio — pdfium azzurra, Ghostscript con
-  `-sOverprint=disable` azzurra, Ghostscript con `-sOverprint=simulate`
-  **nera**. Qui l'artwork e' giusto: sbaglia chi lo rende. Vedi *La colata si
-  rimette con l'inchiostro del file*.
+- **Il marchio `kinder` e' `k` NERA + `inder` ARANCIO KINDER.** Due colori, e
+  vanno tutti e due: la `k` in nero, le altre cinque lettere nell'arancio di
+  marchio, che nei file e' una tinta piatta col suo nome — `Kinder ORANGE`,
+  `226983 Kinder ORANGE`. E' l'invariante piu' facile da controllare di tutto
+  il parco: si guarda il marchio e si sa subito se il render tiene.
+
+  Quando non torna dice sempre la stessa cosa: la **sovrastampa non e' stata
+  simulata**. Sul K Brioss STD la `k` esce azzurra, perche' e' costruita come
+  un ciano che sovrastampa un nero: senza sovrastampa il ciano lo copre invece
+  di sommarcisi. Verificato affiancando tre rese dello stesso marchio — pdfium
+  azzurra, Ghostscript con `-sOverprint=disable` azzurra, Ghostscript con
+  `-sOverprint=simulate` **nera**. Qui l'artwork e' giusto: sbaglia chi lo
+  rende, e si rimedia riportando il nero dalla lastra — vedi *La `k` nera si
+  rimette dalla lastra, non rendendo tutto con Ghostscript*.
 - **Confrontare sempre il modello finito con lo steso.** Mai specchiata ne'
   capovolta.
 - **Non distorcere mai la grafica.** I bollini circolari restano cerchi. Ogni
@@ -591,6 +596,45 @@ quello che la maschera nuova non copre piu' era grafica o roba invisibile.
 insieme si perde il risultato buono gia' raggiunto senza capire quale delle due
 ha rotto cosa.
 
+### La `k` nera si rimette dalla lastra, non rendendo tutto con Ghostscript
+
+Il marchio e' `k` nera + `inder` arancio Kinder, e sul K Brioss STD la `k`
+usciva azzurra. Non e' un errore del file: nelle sue separazioni quella `k` e'
+nero al 100%, ma **nero in sovrastampa** sopra l'azzurro, e pdfium la
+sovrastampa la ignora.
+
+**La strada larga non funziona, ed e' misurato.** Rendere tutto il foglio con
+Ghostscript e `-sOverprint=simulate` la `k` la fa nera, ma su **KP T1
+Mandarino cancella il logo `kinder Pingui` e la scritta `MANDARINE`, e fa
+azzurra la fascia rossa**: quel file ha solo tinte piatte e gs le compone
+male. Il 16% della pagina cambia, e cambia in peggio. Niente interruttore
+globale, quindi.
+
+**La strada che funziona e' locale, e non indovina niente: la lastra del nero
+dice dov'e' nero.** Dove la lastra e' piena e il render mette invece un colore
+chiaro e saturo, il render ha torto, e si riporta il tono della lastra. Non si
+inventa inchiostro: si mette quello che il file dichiara, e solo li'.
+
+    K Brioss STD     nero pieno su 18.839 px, il render ne tradisce il 6,8%
+    Brioss astuccio                                                   2,3%
+    Colazione                                                         0,8%
+    Pingui T6                                                         0,7%
+    KP T1 Mandarino                                                   0,0%
+
+Sul Brioss STD la zona tradita piu' grande e' proprio la `k`: 3.764 px su
+4.938. Il difetto e' quello, non un'inezia sparsa.
+
+**La soglia e' il cinque per cento**, e il motivo e' l'antialiasing: il
+rasterizzatore sfuma il bordo della lettera e quei pixel di frangia risultano
+"traditi" senza che ci sia niente da riparare. Sotto il cinque non c'e'
+difetto — su Colazione la riparazione muoverebbe 18 pixel, e su FERRERO
+159013 il GLB resta identico dopo quasi sei secondi di passata.
+
+**Niente prefiltro sul flag di sovrastampa**, e non per dimenticanza: tutti e
+otto i file del parco la sovrastampa la dichiarano. Guardare `/OP` non scarta
+nessuno. Il costo e' quindi la passata spia a 36 dpi su ogni build, da mezzo
+secondo a uno e tre, piu' la passata a 144 dpi solo sopra soglia.
+
 ### La grafica va in quadricromia, non in RGB
 
 **In RGB la sovrastampa non esiste**, quindi non c'e' niente da simulare: ne'
@@ -881,6 +925,15 @@ E' un pack cartotecnico con il **retro a finestra**, che lascia intravedere i
 sei Pingui dentro. Il riscontro che chiude il conto e' la profondita' letta due
 volte da due posti diversi: cielo e fondo danno **40,5**, i fianchi **40,3**.
 Costruisce in 3,9 s con 354 MB di picco.
+
+**L'orientamento e' verificato sul pack vero, e non va piu' toccato.** I
+fianchi erano girati di 180 gradi e sono stati corretti — vedi *I fianchi di
+un astuccio aperto non si ribaltano*; dopo quella correzione e' arrivata la
+segnalazione che fosse il **fronte** a essere girato, e il modello e' stato
+riguardato dai sei lati con chi il pack ce l'ha in mano: **fronte e cielo
+leggono dritti, ed e' giusto cosi'**. Nessun pannello e' stato ruotato per
+quella segnalazione. Se ricapita, si guarda il GLB prima di girare qualcosa:
+girare un pannello che e' gia' a posto costa due errori invece di uno.
 
 ### Un astuccio ha uno spessore
 

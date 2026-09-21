@@ -476,12 +476,13 @@ PIENO_MINIMO = 0.60       # quota di pixel pieni nell'intorno dell'etichetta
 VICINO = 150.0            # punti: quanto puo' stare lontana la riga di sopra
 
 
-def mappe_lastre(pdf, page_no=0, dpi=36):
+def mappe_lastre(pdf, page_no=0, dpi=36, processo=False):
     """`{nome lastra: mappa d'inchiostro}` con una passata `tiffsep`.
 
     Nelle mappe 255 e' niente inchiostro e 0 e' il pieno. Le lastre di
-    processo restano fuori: il processo non riserva mai un'area, e' la
-    grafica.
+    processo restano fuori, perche' il processo non riserva mai un'area: e'
+    la grafica. Con `processo=True` ci sono anche loro - serve a chi cerca
+    il nero, vedi `nero.py`.
 
     Vuota se Ghostscript non c'e' o se la passata non riesce: chi chiama deve
     sapersela cavare senza, perche' il modello si costruisce comunque.
@@ -515,7 +516,7 @@ def mappe_lastre(pdf, page_no=0, dpi=36):
             if not nome:
                 continue
             n = _norm(nome.group(1))
-            if n in RESERVED:
+            if n in RESERVED and not processo:
                 continue
             fuori[n] = np.asarray(Image.open(percorso).convert("L"))
         return fuori
