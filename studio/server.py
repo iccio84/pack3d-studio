@@ -550,7 +550,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
-        dpi=dpi_tex, inset_px=0, clean=(case is None))["film"]
+        dpi=dpi_tex, inset_px=0, clean=(case is None),
+        note=avvisi_sez)["film"]
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il

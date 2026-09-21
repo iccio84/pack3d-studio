@@ -5,20 +5,22 @@ Grafica di riferimento che non viene dall'artwork.
 ## colata_kinder.png
 
 La colata di latte Kinder **come deve venire**, fornita dall'utente.
-2000 x 488 px, RGB.
+2000 x 488 px, RGB. E' in uso: vedi in REGOLE.md *La colata si sostituisce solo
+se sta su un livello suo*.
 
 ### Cos'e', misurato
 
-E' **lo stesso disegno** che sta nell'artwork del Kinder Pingui T6 BOX, non un
-disegno diverso: sovrapponendo le due onde alla stessa scala combaciano cresta
-per cresta, goccia compresa, con la sua bollicina satellite. La misura e' il
-periodo dell'onda, preso dallo spettro della curva rosso/bianco:
+E' un **master**: lo stesso disegno che sta negli artwork Kinder, ma non il
+ritaglio di un pack. Sovrapponendolo all'onda di un artwork, portato al suo
+passo, le due combaciano cresta per cresta, goccia e bollicina satellite
+comprese.
 
-    artwork    periodo 20,08 mm
-    risorsa    periodo 80,0 px
+Il passo pero' **cambia da pack a pack**, quindi la risorsa non ha una scala
+sua: la scala si ricava file per file dal rapporto fra i due periodi.
 
-cioe' la risorsa e' disegnata a **3,98 px/mm**, e i suoi 2000 x 488 px coprono
-**502 x 122 mm** alla scala dell'artwork. Sono circa **101 dpi**.
+    Kinder Pingui T6 BOX   onda da 20,08 mm nell'artwork
+    KP T1 Mandarino        onda da 17,13 mm nell'artwork
+    risorsa                onda da 80,0 px
 
 ### Cosa cambia rispetto al nostro reso
 
@@ -32,18 +34,14 @@ E' la sovrastampa: l'ombra e' una lastra di ciano che sovrastampa il rosso, e
 pdfium la rende come un azzurro normale e opaco. Vedi in REGOLE.md
 *La grafica va in quadricromia, non in RGB*.
 
-### Perche' non e' ancora in uso
+### Il limite che ha: la risoluzione
 
-Per sostituirla servono due cose che questo file non ha:
+Portata al passo dell'artwork la risorsa sta attorno ai **110 dpi** (109 sul
+KP T1 Mandarino), mentre la texture si costruisce a 200 dpi in qualita' web e a
+300 in qualita' alta. Viene quindi ingrandita di circa 1,8 volte.
 
-1. **dove va.** Un PNG porta i pixel, non la posizione. Nell'artwork del
-   Pingui la colata non e' un oggetto solo che si possa scambiare: il campo
-   delle gocce e' una immagine RGB (259,8 x 219,0 mm, riquadro noto) e la
-   fascia dell'onda e' vettoriale, e niente nel file dice "questa e' la
-   colata". Serve la colata su un **livello suo**: vedi in REGOLE.md
-   *La colata si sostituisce solo se sta su un livello suo*;
-2. **la risoluzione.** A 101 dpi sta sotto ai 200 dpi con cui si costruisce la
-   texture in qualita' web e ai 300 della qualita' alta. Incollarla cosi'
-   peggiorerebbe quella fascia invece di migliorarla.
-
-Finche' mancano, sta qui come **riferimento visivo** di cosa si deve ottenere.
+Su questo disegno si puo' fare, e non e' una scusa: la colata e' fatta di campi
+pieni e di bordi morbidi, senza dettaglio fine, e un ingrandimento LANCZOS di
+1,8 su una cosa cosi' non si vede - mentre l'alone che toglie si vedeva eccome.
+Ma resta un limite: **una risorsa alla risoluzione di stampa sarebbe meglio**,
+e su un pack piu' grande, dove l'ingrandimento crescerebbe, servirebbe.
