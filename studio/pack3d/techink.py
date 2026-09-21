@@ -63,7 +63,7 @@ FRASI_TECNICHE = (
     "legend", "dimension", "infopanel", "info panel", "job ticket",
     "print free", "printfree", "ink free", "inkfree",
     "best before area", "bar code area", "barcode area",
-    "covered area", "neutral area",
+    "covered area", "neutral area", "text area",
     "gda area", "area gda", "gda box", "gda panel",
 )
 
@@ -86,6 +86,7 @@ OCG_TECH = {
     "white", "varnish", "coldseal", "cold seal", "eyemark", "eye mark",
     "infopanel", "info panel", "info mad-e", "braille", "reg marks",
     "print free area", "best before area", "bar code area", "covered area",
+    "neutral area", "text area",
     "gda", "gda area", "area gda",
     "guides and grids", "guides", "grids", "guide", "griglia", "griglie",
     "guide e griglie", "cutter", "cut", "fustella", "tracciato",
@@ -165,10 +166,21 @@ def processing_steps(reader, page):
 # quel riquadro e' un PIENO grande come la casella: l'euristica sul tratto non
 # lo vede, e sul modello resterebbe stampato. Toglierla per nome e' l'unico
 # modo di scartarla, e il costo lo paga solo il file che ce l'ha davvero.
+# Quello che vale per la GDA vale per tutta la sua famiglia. `COVERED Area`,
+# `TEXT AREA`, `Best Before Area`, `Bar Code Area`, `Print Free Area`,
+# `Neutral Area` sono aree riservate esattamente come lei: rettangoli PIENI
+# grandi quanto la casella, con la scritta in bianco dentro. Stanno gia' fra i
+# nomi tecnici, ma finche' non sono state anche coperture l'unica cosa che
+# poteva toglierle era l'euristica sul tratto, che un pieno non lo vede: sulla
+# texture di K Colazione Piu' restavano stampate sul pack due fasce `TEXT
+# AREA`, una `COVERED AREA` e un riquadro `BEST BEFORE AREA`.
 COPERTURE_FRASI = (
     "varnish", "vernice", "lack", "coating",
     "cold seal", "coldseal", "opaque white", "underprint", "coprente",
     "gda area", "area gda", "gda box", "gda panel",
+    "covered area", "text area", "best before area",
+    "bar code area", "barcode area", "print free area", "printfree area",
+    "neutral area", "area riservata",
 )
 # "white" solo intero: come sottostringa prenderebbe "White Chocolate", che e'
 # un colore dell'artwork. Stessa cosa per "gda", che intero non e' il nome di
@@ -419,3 +431,184 @@ def classify(pdf_path, page_no: int = 0):
 
     return dict(level=4, method="euristica su spessore e colore",
                 certainty="stimata", ocgs={}, separations={}, detail=[])
+
+
+# --- Le aree riservate che il file scrive, ma non nomina -------------------
+#
+# Il caso: K Colazione Piu'. Il foglio ha due fasce `TEXT AREA`, una `COVERED
+# AREA` e un riquadro `BEST BEFORE AREA` - aree riservate, la stessa famiglia
+# della GDA - e finivano stampate sulla texture. Nel file non c'e' niente che
+# lo dica: nessun livello, e le lastre si chiamano `PANTONE 1595 C`,
+# `PANTONE 1565 C`, `PANTONE 346 C`. Numeri di colore, non nomi di mestiere.
+#
+# Il registro `LASTRE_NOTE` non salva: e' costruito su altri file e su questo
+# sbaglia due volte su due. Dice `PANTONE 350 C = Best Before Area`, e su
+# Colazione quella lastra e' il DISEGNO TECNICO; dice `PANTONE 346 C =
+# Dimensions`, e li' e' la BEST BEFORE AREA. E' la stessa lezione del disegno
+# tecnico: un numero Pantone e' un colore, e un colore non dice mai a cosa
+# serve una lastra.
+#
+# Quello che il file dice davvero e' scritto sopra l'area, in lettere: dentro
+# ogni riquadro c'e' il suo nome, in bianco, come testo vero ed estraibile. Da
+# li' si parte, e la lastra si trova guardando CHI DIPINGE SOTTO LA SCRITTA:
+# una passata `tiffsep` di Ghostscript a bassa risoluzione da' una mappa
+# d'inchiostro per separazione, e sotto ogni etichetta c'e' una lastra sola.
+#
+#     TEXT AREA (x2)     -> PANTONE 1595 C     inchiostro 93%
+#     COVERED AREA       -> PANTONE 1565 C     inchiostro 89%
+#     BEST BEFORE AREA   -> PANTONE 346 C      inchiostro 89%
+#
+# Niente colore, niente geometria, niente registro: l'etichetta e la lastra
+# sotto. Costa 1,1 s a 36 dpi su un foglio da 460 x 330 mm, e lo paga solo il
+# file che le etichette ce le ha davvero - sul parco sono tre su nove.
+import re as _re
+
+ETICHETTA_RISERVATA = _re.compile(
+    r"(?i)\b(gda|covered|text|best\s*before|bar\s*code|barcode|"
+    r"print\s*free|printfree|neutral|reserved)\s*area\b")
+
+# quanto inchiostro deve esserci sotto l'etichetta perche' sia un'area piena e
+# non una scritta appoggiata sulla grafica
+INCHIOSTRO_MINIMO = 0.5   # quota di lastra su quel pixel
+PIENO_MINIMO = 0.60       # quota di pixel pieni nell'intorno dell'etichetta
+VICINO = 150.0            # punti: quanto puo' stare lontana la riga di sopra
+
+
+def _forse_etichette(pdf, page_no=0):
+    """Vero se nel flusso della pagina compare la parola `AREA`.
+
+    Prefiltro, e costa quasi niente: da 0,00 a 0,05 secondi contro i 2,9 che
+    l'estrazione del testo costa sul K Brioss STD. Sul parco divide netto -
+    0 occorrenze sui sei file senza etichette, 2, 6 e 11 sui tre che le hanno.
+
+    Se un file scrivesse `AREA` in una codifica che qui non si vede, il
+    prefiltro direbbe di no e si resterebbe alla pulizia di prima: puo' far
+    perdere un'occasione, non puo' far strappare la lastra sbagliata.
+    """
+    try:
+        import pypdf
+        dati = pypdf.PdfReader(pdf).pages[page_no].get_contents()
+        return b"AREA" in (dati.get_data() or b"").upper()
+    except Exception:
+        return True   # nel dubbio si guarda davvero
+
+
+def _etichette(pdf, page_no=0):
+    """[(x, y, etichetta)] delle aree riservate scritte sulla pagina.
+
+    Un'etichetta puo' essere spezzata su due righe, e su K Colazione Piu' lo
+    e': `BEST BEFORE` e `AREA` arrivano come due frammenti. Si ricuce solo
+    quando il frammento e' la parola `AREA` da sola - condizione stretta, e la
+    coda di un'etichetta e' l'unica cosa che la soddisfa - e solo se il
+    frammento prima e' li' accanto.
+    """
+    import pypdf
+    trovate = []
+    precedente = [None]
+
+    def vis(testo, cm, tm, font, size):
+        testo = (testo or "").strip()
+        if not testo:
+            return
+        x, y = float(tm[4]), float(tm[5])
+        m = ETICHETTA_RISERVATA.search(testo)
+        if m is None and testo.upper() == "AREA" and precedente[0]:
+            px, py, prima = precedente[0]
+            if abs(px - x) <= VICINO and abs(py - y) <= VICINO:
+                m = ETICHETTA_RISERVATA.search(prima + " " + testo)
+                if m:
+                    x, y = px, py
+        if m:
+            trovate.append((x, y, m.group(0).strip()))
+        precedente[0] = (x, y, testo)
+
+    pypdf.PdfReader(pdf).pages[page_no].extract_text(visitor_text=vis)
+    return trovate
+
+
+def aree_riservate(pdf, page_no=0, dpi=36):
+    """`{nome della lastra: etichetta}` delle aree riservate del file.
+
+    Si legge quello che il file scrive - `COVERED AREA`, `TEXT AREA`, `BEST
+    BEFORE AREA`, `GDA AREA` - e si guarda quale separazione dipinge sotto la
+    scritta. Vedi il commento qui sopra per il perche' non si puo' fare in
+    nessun altro modo.
+
+    Vuoto se Ghostscript non c'e', se il file non scrive niente, o se sotto
+    l'etichetta non c'e' una lastra piena: in tutti quei casi non si e'
+    imparato niente e non si tocca niente. Non costa nulla sui file senza
+    etichette, che e' la maggioranza.
+    """
+    import glob
+    import os
+    import shutil
+    import subprocess
+    import tempfile
+
+    gs = shutil.which("gs")
+    if not gs or not _forse_etichette(pdf, page_no):
+        return {}
+    try:
+        etichette = _etichette(pdf, page_no)
+    except Exception:
+        return {}
+    if not etichette:
+        return {}
+
+    import numpy as np
+    import pypdf
+    from PIL import Image
+
+    cartella = None
+    try:
+        mb = pypdf.PdfReader(pdf).pages[page_no].mediabox
+        sx, sy = float(mb.left), float(mb.bottom)
+        alto = float(mb.top) - sy
+        cartella = tempfile.mkdtemp(prefix="riservate_")
+        esito = subprocess.run(
+            [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-dMaxSpots=40",
+             "-sDEVICE=tiffsep", "-r%g" % dpi,
+             "-dFirstPage=%d" % (page_no + 1), "-dLastPage=%d" % (page_no + 1),
+             "-sOutputFile=" + os.path.join(cartella, "p.tif"), pdf],
+            capture_output=True, timeout=180)
+        if esito.returncode != 0:
+            return {}
+        lastre = {}
+        for percorso in glob.glob(os.path.join(cartella, "p(*.tif")):
+            nome = _re.search(r"\((.*)\)\.tif$", os.path.basename(percorso))
+            if not nome:
+                continue
+            n = _norm(nome.group(1))
+            if n in RESERVED:
+                continue   # il processo non riserva mai un'area: e' la grafica
+            lastre[n] = np.asarray(Image.open(percorso).convert("L"))
+        if not lastre:
+            return {}
+
+        raggio = max(2, int(round(dpi / 6.0)))   # ~2 mm attorno alla scritta
+        fuori = {}
+        for x, y, etichetta in etichette:
+            px = int(round((x - sx) * dpi / 72.0))
+            py = int(round((alto - (y - sy)) * dpi / 72.0))
+            migliore, quota = None, 0.0
+            for nome, mappa in lastre.items():
+                h, w = mappa.shape
+                if not (0 <= py < h and 0 <= px < w):
+                    continue
+                z = mappa[max(0, py - raggio):py + raggio + 1,
+                          max(0, px - raggio):px + raggio + 1]
+                if not z.size:
+                    continue
+                # tiffsep: 255 = niente inchiostro, 0 = pieno
+                pieno = ((255 - z.astype(np.int16)) / 255.0 >= INCHIOSTRO_MINIMO)
+                q = float(pieno.mean())
+                if q > quota:
+                    migliore, quota = nome, q
+            if migliore and quota >= PIENO_MINIMO:
+                fuori.setdefault(migliore, etichetta)
+        return fuori
+    except Exception:
+        return {}
+    finally:
+        if cartella:
+            shutil.rmtree(cartella, ignore_errors=True)

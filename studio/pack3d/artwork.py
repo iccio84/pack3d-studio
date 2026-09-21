@@ -198,15 +198,27 @@ def senza_coperture(pdf, page_no=0):
     E si toglie SOLO per la texture, mai per l'analisi: il disegno tecnico e'
     quello che fa misurare il pack, e togliendolo prima non si misura piu'
     niente.
+
+    Alle coperture dichiarate per nome si aggiungono le **aree riservate che
+    il file scrive ma non nomina** - vedi `techink.aree_riservate`. Si cercano
+    solo quando il file non ha livelli tecnici: se i livelli ci sono la
+    pulizia e' gia' esatta, e quella ricerca costa una passata di testo che
+    sul K Brioss STD sono 2,9 secondi buttati.
     """
-    from . import techink
+    from . import strati, techink
     try:
         import pypdf
         pagina = pypdf.PdfReader(pdf).pages[page_no]
-        lastre = sorted(set(techink.technical_separations(
-            pagina, prova=techink.copertura).values()))
+        lastre = set(techink.technical_separations(
+            pagina, prova=techink.copertura).values())
     except Exception:
         return pdf, []
+    try:
+        if not strati.tecnici(pdf, page_no):
+            lastre |= set(techink.aree_riservate(pdf, page_no))
+    except Exception:
+        pass
+    lastre = sorted(lastre)
     if not lastre:
         return pdf, []
     try:
