@@ -30,6 +30,10 @@ class Flowpack:
     side_fin: float = 0.0     # altezza della pinna longitudinale
     back_a: float = 0.0       # tratto di retro fra pinna e primo spigolo
     back_b: float = 0.0       # tratto di retro dall'altro lato
+    # chiusura a sovrapposizione: lembo di film che passa SOTTO l'altro bordo
+    # invece di girare intorno al prodotto. Se e' > 0 il pack e' un tubo
+    # piatto - fronte e retro, nessun fianco e nessuna falda che sporge.
+    sovrapposizione: float = 0.0
     web_mm: float = 0.0
     step_mm: float = 0.0
     # riquadro dello steso, in punti PDF: (x0, y0, x1, y1)
@@ -41,7 +45,20 @@ class Flowpack:
     warnings: list = field(default_factory=list)
 
     @property
+    def pillow(self):
+        """Vero se la chiusura e' a sovrapposizione e non a pinna."""
+        return self.sovrapposizione > 0.0
+
+    @property
     def girth(self):
+        """Il film che gira davvero intorno al prodotto.
+
+        A pinna i due lembi escono fuori e il giro e' il perimetro della
+        sezione, 2(W+T). A sovrapposizione non esce niente: il lembo passa
+        sotto, quindi il giro e' tutto il nastro meno quel lembo.
+        """
+        if self.sovrapposizione > 0.0:
+            return self.web_mm - self.sovrapposizione
         return 2.0 * (self.W + self.T)
 
 
@@ -221,12 +238,17 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     #
     # Nella parametrizzazione lo spigolo e' il punto a 45 gradi, dove
     # |uy| = |uz|, cioe' t = 7/4 pi: per n grande tende allo spigolo vero del
-    # rettangolo, per n = 2 e' il punto a 45 gradi dell'ellisse, che e' la
-    # stessa cosa nel senso che serve qui.
+    # rettangolo, ed e' quello da cui _section_path fa partire il cammino.
+    #
+    # Su un tubo piatto non e' quello. Li' non ci sono spigoli: ci sono le due
+    # PIEGHE del tubo appiattito, che sono gli estremi dell'asse maggiore,
+    # cioe' t = 0. Ancorare comunque ai 45 gradi ruota la grafica di tutto
+    # l'arco fra i due punti - misurato sul K Tronky T1: 7,55 mm su un giro di
+    # 71, il 10,6%, con il fronte che finiva mezzo sul fianco.
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
-    i_sp = int(round(npts * 7.0 / 8.0)) % npts
+    i_sp = 0 if fp.pillow else int(round(npts * 7.0 / 8.0)) % npts
     s0 = (cum[i_sp] - fp.back_a) % per
     i0 = int(np.searchsorted(cum, s0)) % len(P)
     P = np.roll(P, -i0, axis=0)
@@ -563,19 +585,14 @@ def _collapse_guides(vals, max_gap=8.0, tol=0.6):
 def merito(b):
     """Quanto e' credibile una soluzione. Piu' piccolo, meglio e'.
 
-    Prima le pieghe misurate: una quaterna letta sul disegno vale piu' di una
-    in cui una piega e' stata dedotta, sempre e comunque. Serve anche a
-    garantire che nessun pack gia' risolto possa cambiare risposta.
-
-    Poi la falda: una falda fuori scala non e' una falda, e nessuno scarto
+    Prima la falda: una falda fuori scala non e' una falda, e nessuno scarto
     numerico puo' valere quanto quella. Poi la simmetria, poi il fronte piu'
     largo.
     """
-    return (b.get("dedotta") is not None, b["side_fin"] > FALDA_LIMITE,
-            b["simmetria"], -b["front"])
+    return (b["side_fin"] > FALDA_LIMITE, b["simmetria"], -b["front"])
 
 
-def solve_bands(web_mm, folds_mm, tol=1.5, dedurre=False):
+def solve_bands(web_mm, folds_mm, tol=1.5):
     """Vedi solve_bands_any: la simmetria non vale su tutti i pack.
 
     `folds_mm` puo' essere una lista di pieghe o piu' LETTURE alternative
@@ -584,10 +601,10 @@ def solve_bands(web_mm, folds_mm, tol=1.5, dedurre=False):
     lettura e' giusta - vedi _collapse_guides.
     """
     if folds_mm and isinstance(folds_mm[0], (list, tuple)):
-        sol = [b for b in (solve_bands_any(web_mm, f, tol, dedurre)
+        sol = [b for b in (solve_bands_any(web_mm, f, tol)
                            for f in folds_mm) if b]
         return min(sol, key=merito) if sol else None
-    return solve_bands_any(web_mm, folds_mm, tol, dedurre)
+    return solve_bands_any(web_mm, folds_mm, tol)
 
 
 # Falde misurate su tutti i pack coperti: 4,1 (K Brioss T10) 12,5 (Paradiso)
@@ -599,7 +616,7 @@ def solve_bands(web_mm, folds_mm, tol=1.5, dedurre=False):
 FALDA_LIMITE = 24.0
 
 
-def solve_bands_any(web_mm, folds_mm, tol=2.0, dedurre=False):
+def solve_bands_any(web_mm, folds_mm, tol=2.0):
     """Ricava fronte, fianco e falda enumerando tutte le quaterne di pieghe.
 
     La versione precedente cercava coppie speculari rispetto alla mezzeria del
@@ -635,61 +652,60 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0, dedurre=False):
         # pack usciva spesso 7 mm, cioe' piatto, con nastro e passo giusti.
         if best is None or merito(cand) < merito(best):
             best = cand
-    if best is not None or not dedurre:
-        return best
-    return _piega_dedotta(web_mm, folds_mm, tol)
+    return best
 
 
-def _piega_dedotta(web_mm, folds_mm, tol=2.0):
-    """Quando di pieghe se ne leggono solo tre, la quarta si calcola.
+def risolvi_pillow(web_mm, folds_mm, tol=2.0):
+    """Il tubo piatto chiuso a sovrapposizione: fronte, retro, lembo coperto.
 
-    Non tutti gli artwork disegnano le cordonature. Il K Tronky T1 segna le
-    AREE - print free, covered, best before - e tre dei loro confini cadono
-    su una piega (23, 59, 71 mm su un nastro di 83); la quarta non c'e',
-    perche' li' non comincia nessuna area. Cercata nel PDF non esiste: ne'
-    su penna tecnica ne' fuori.
+    Non tutti i flowpack hanno la pinna longitudinale. Su un wrap di
+    barretta il film si chiude spesso a SOVRAPPOSIZIONE: un bordo passa
+    sotto l'altro e non sporge niente. Il pack non ha quindi fianchi: e' un
+    tubo piatto, fronte e retro, e gonfiato prende una sezione a ellisse.
 
-    Non serve indovinarla. Su un flowpack i due fianchi sono lo stesso
-    fianco visto da due parti, quindi sono uguali per costruzione: e' lo
-    stesso invariante su cui si regge solve_bands_any, solo usato al
-    contrario. Da sb = 71 - 59 = 12 segue sa = 12, cioe' la piega a 35, e da
-    li' fronte 24, fianco 12, falda 5,5.
+    Cambia l'invariante. A pinna vale `perimetro + 2 falde = nastro`; qui
+    vale `fronte + retro + lembo = nastro` con `fronte = retro`, cioe' il
+    fronte misura mezzo giro. Il K Tronky T1 chiude cosi' al millimetro:
 
-    Il ripiego scatta solo se nessuna quaterna intera chiude, e merito()
-    tiene comunque le soluzioni dedotte dietro a quelle misurate: un pack che
-    oggi si risolve non puo' cambiare risposta.
+        23 (retro) + 36 (FRONTE) + 12 (retro) + 12 (lembo) = 83
+        giro 71, fronte 36, mezzo giro 35,5
+
+    e la fascia da 36 e' proprio quella che il disegno marca TEXT
+    ORIENTATION, come vuole la regola del pannello marcato.
+
+    Il lembo sta a un capo del nastro o all'altro, e si provano tutti e due.
+    Vince la lettura in cui il fronte e' piu' vicino a mezzo giro.
     """
-    import itertools
-    v = sorted(set(folds_mm))
+    v = sorted(set([0.0] + [float(x) for x in folds_mm] + [float(web_mm)]))
     best = None
-    for tre in itertools.combinations(v, 3):
-        a, b_, c = tre
-        # la piega che manca puo' essere in ognuna delle quattro posizioni, e
-        # in ognuna e' determinata da sa = sb
-        for quaterna in ((b_ - (c - b_), a, b_, c),      # manca y1
-                         (a, a + (c - b_), b_, c),       # manca y2
-                         (a, b_, c - (b_ - a), c),       # manca y3
-                         (a, b_, c, c + (b_ - a))):      # manca y4
-            y1, y2, y3, y4 = quaterna
-            if not (0 <= y1 < y2 < y3 < y4 <= web_mm):
+    for coda in (True, False):
+        for s_ in v:
+            lembo = (web_mm - s_) if coda else s_
+            if not (2.0 < lembo < web_mm * 0.25):
                 continue
-            manca = next(y for y in quaterna if y not in v)
-            sa, front, sb = y2 - y1, y3 - y2, y4 - y3
-            if min(sa, front, sb) <= 2 or abs(sa - sb) > tol:
-                continue
-            fin = (y1 + web_mm - y4 - front) / 2.0
-            if not (2 < fin < web_mm * 0.25):
-                continue
-            ba, bb = y1 - fin, (web_mm - fin) - y4
-            if ba < 0 or bb < 0 or abs(ba + bb - front) > tol:
-                continue
-            cand = dict(front=round(front, 2), thick=round((sa + sb) / 2, 2),
-                        side_fin=round(fin, 2), back_a=round(ba, 2),
-                        back_b=round(bb, 2), folds=(y1, y2, y3, y4),
-                        simmetria=round(abs(ba - bb), 2),
-                        dedotta=round(manca, 2))
-            if best is None or merito(cand) < merito(best):
-                best = cand
+            g0 = 0.0 if coda else lembo
+            g1 = s_ if coda else web_mm
+            giro = g1 - g0
+            for i2, y1 in enumerate(v):
+                if not (g0 <= y1 < g1):
+                    continue
+                for y2 in v[i2 + 1:]:
+                    if y2 > g1:
+                        break
+                    fronte = y2 - y1
+                    err = abs(fronte - giro / 2.0)
+                    if err > tol or fronte <= 2.0:
+                        continue
+                    ba, bb = y1 - g0, g1 - y2
+                    if min(ba, bb) < 0:
+                        continue
+                    cand = dict(front=round(fronte, 2),
+                                sovrapposizione=round(lembo, 2),
+                                back_a=round(ba, 2), back_b=round(bb, 2),
+                                giro=round(giro, 2), inizio=round(g0, 2),
+                                scarto=round(err, 2))
+                    if best is None or cand["scarto"] < best["scarto"]:
+                        best = cand
     return best
 
 
@@ -790,19 +806,19 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # scambiando H con V, la rasterizzazione scambiando righe e colonne. Cosi'
     # il solutore resta uno solo e lavora sempre nel verso che conosce. Si
     # parte dall'orizzontale, che e' il piu' comune.
-    # Due giri, non uno. Prima si provano tutti e due i versi con le sole
-    # pieghe disegnate; solo se non chiude nessuno si riprova concedendo di
-    # dedurne una.
+    # Quattro tentativi: due chiusure per due versi. Prima la pinna in tutti e
+    # due i versi, poi la sovrapposizione.
     #
-    # L'ordine conta, e l'ho imparato rompendolo: "nessuna quaterna chiude" e'
-    # anche il segnale che lo steso e' girato. Concedendo la deduzione al
-    # primo giro, il K Brioss - che va letto ruotato - trovava una soluzione
-    # plausibile nel verso sbagliato e il verso giusto non veniva mai provato.
+    # L'ordine conta, e l'ho imparato rompendolo: "le fasce non chiudono" e'
+    # anche il segnale che lo steso e' girato di 90 gradi. Provando l'altra
+    # chiusura prima dell'altro verso, il K Brioss - che va letto ruotato -
+    # trovava una lettura plausibile nel verso sbagliato, e il verso giusto
+    # non veniva mai provato.
     primo = None
-    for dedurre in (False, True):
+    for modo in ("pinna", "pillow"):
         for ruotato in (False, True):
             try:
-                return _risolvi_steso(S, raster, sc, ruotato, dedurre)
+                return _risolvi_steso(S, raster, sc, ruotato, modo)
             except _StesoNonRisolto as e:
                 # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
                 # porta dietro il traceback, il traceback il frame di
@@ -819,7 +835,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     raise _StesoNonRisolto(primo)
 
 
-def _risolvi_steso(S, raster, sc, ruotato, dedurre=False):
+def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
     import numpy as np
     from .dieline import _cluster
@@ -858,13 +874,32 @@ def _risolvi_steso(S, raster, sc, ruotato, dedurre=False):
     x0, x1 = min(vs), max(vs)
     web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM
     folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
-    b = solve_bands(web, folds, dedurre=dedurre)
-    if b is None:
-        raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
+    avvisi = []
+    if modo == "pinna":
+        b = solve_bands(web, folds)
+        if b is None:
+            raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
+        lembo, inizio = 0.0, b["side_fin"]
+        giro = 2.0 * (b["front"] + b["thick"])
+        spessore, falda = b["thick"], b["side_fin"]
+    else:
+        sol = [q for q in (risolvi_pillow(web, f) for f in folds) if q]
+        b = min(sol, key=lambda q: q["scarto"]) if sol else None
+        if b is None:
+            raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione: "
+                                   "nastro %.1f mm" % web)
+        lembo, inizio, giro = b["sovrapposizione"], b["inizio"], b["giro"]
+        spessore, falda = 0.0, 0.0
+        avvisi.append("chiusura a sovrapposizione: lembo coperto %.1f mm, "
+                      "giro %.1f, fronte %.1f su mezzo giro %.1f"
+                      % (lembo, giro, b["front"], giro / 2.0))
 
-    # pinne di testa: la zona non stampata e' quella che finisce nelle ganasce
+    # pinne di testa: la zona non stampata e' quella che finisce nelle ganasce.
+    # La fascia da guardare e' il fronte, e comincia dove comincia il fronte:
+    # dopo falda e retro se c'e' la pinna, dopo lembo e retro se c'e' la
+    # sovrapposizione.
     a = raster
-    fy0 = y0 + (b["side_fin"] + b["back_a"] + b["thick"]) / PT2MM
+    fy0 = y0 + (inizio + b["back_a"] + spessore) / PT2MM
     fy1 = fy0 + b["front"] / PT2MM
     band = a[int(fy0 * sc):int(fy1 * sc), int(x0 * sc):int(x1 * sc)]
     ch = (band.max(2) - band.min(2)).mean(0)
@@ -876,10 +911,6 @@ def _risolvi_steso(S, raster, sc, ruotato, dedurre=False):
     # fondo stampato copre anche la zona delle ganasce. La geometria pero'
     # resta: fra i due tagli esterni stanno le due linee di saldatura, e il
     # rientro dal taglio alla saldatura e' la pinna.
-    avvisi = []
-    if b.get("dedotta") is not None:
-        avvisi.append("una cordonatura non e' disegnata: dedotta a %.1f mm "
-                      "dai fianchi uguali" % b["dedotta"])
     if end_fin < 1.0:
         xs = sorted(vs)
         if len(xs) < 4:
@@ -905,9 +936,18 @@ def _risolvi_steso(S, raster, sc, ruotato, dedurre=False):
         avvisi.append("steso ruotato di 90 gradi: le pinne corrono in verticale")
     # sheet e girth_span restano nel telaio in cui ha lavorato il solutore: chi
     # ritaglia la texture lo rimette dritto guardando `ruotato`.
-    return Flowpack(W=b["front"], T=b["thick"], L=round(step - 2 * end_fin, 1),
-                    end_fin=end_fin, side_fin=b["side_fin"], warnings=avvisi,
+    return Flowpack(W=b["front"], T=spessore, L=round(step - 2 * end_fin, 1),
+                    end_fin=end_fin, side_fin=falda, warnings=avvisi,
                     back_a=b["back_a"], back_b=b["back_b"],
+                    sovrapposizione=lembo,
                     web_mm=round(web, 1), step_mm=round(step, 1),
                     sheet=(x0, y0, x1, y1), ruotato=ruotato,
-                    girth_span=(y0 + b["side_fin"] / PT2MM, y1 - b["side_fin"] / PT2MM))
+                    # a pinna il giro si ancora ai due bordi misurati del
+                    # nastro, non si accumula dalle fasce: accumulare sposta
+                    # il secondo capo di quel poco che il solutore tollera.
+                    # A sovrapposizione il lembo sta da un lato solo, quindi
+                    # il secondo capo lo da' il giro.
+                    girth_span=((y0 + falda / PT2MM, y1 - falda / PT2MM)
+                                if not lembo else
+                                (y0 + inizio / PT2MM,
+                                 y0 + (inizio + giro) / PT2MM)))
