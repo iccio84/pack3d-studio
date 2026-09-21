@@ -149,6 +149,52 @@ gli ultimi due la indovinano. Il livello usato va sempre riportato nel resoconto
 5. **Euristica** su spessore (filo di capello, <= 0,8 pt) e colore. E' una stima
    e va dichiarata come tale.
 
+### Le coperture si tolgono per nome, non per euristica
+
+I cinque livelli sopra sono un ordine di **certezza**, ma non tutti i livelli
+sanno vedere le stesse cose, e questa e' una divisione diversa:
+
+- una **fustella**, una **quota**, un **retino print-free** sono TRATTI:
+  sottili, e l'euristica su spessore e colore li prende;
+- una **vernice**, un **bianco coprente**, un **cold seal** sono PIENI grandi
+  quanto la grafica. Nessuna euristica sul tratto li puo' vedere - non c'e'
+  nessun tratto - e pdfium li rende **opachi**.
+
+Su un astuccio Nutella Donut la lastra si chiama `Water Based Gloss Varnish` e
+copre tutto il pannello: la texture usciva rosa piena, con la grafica sotto e
+invisibile. Il nome lo diceva senza ambiguita', ma nessuno lo leggeva: la
+lettura per nome stava solo in `tools.classify_technical`, che e' uno strumento
+per l'agente, e la costruzione deterministica strappava separazioni solo se un
+caso calibrato le elencava a mano.
+
+Adesso `_senza_coperture` le strappa da sola, su ogni file, e lo dichiara nei
+cartellini. **Solo le coperture**, pero', e la ragione e' misurata: strappare
+per nome anche fustella e quote costa una passata di pypdf sul flusso di
+contenuto, e su Colazione erano **7 secondi e 100 MB di picco in piu'** - 584
+contro 484, cioe' oltre il tetto dei 512 - per togliere tratti che la maschera
+del disegno tecnico prendeva gia'. Il giorno che un pack mostra una fustella
+che l'euristica non prende, si allarga con quello in mano.
+
+Due precauzioni:
+
+- **il confronto sul nome e' per sottostringa, non per nome intero.** I nomi
+  veri sono composti: l'insieme conteneva `varnish`, `gloss varnish` e
+  `waterbased varnish` - tre voci, e nessuna delle tre e' "Water Based Gloss
+  Varnish". Restano per nome intero solo le sigle dove la sottostringa
+  farebbe danni: `white` come sottostringa prenderebbe "White Chocolate", che
+  e' un colore dell'artwork;
+- **si toglie solo per la texture, mai per l'analisi.** Il disegno tecnico e'
+  quello che fa misurare il pack: togliendolo prima, non si misura piu' niente.
+
+### La tipologia non riconosciuta e' un errore, non un ripiego
+
+`kind` si dichiara e non si indovina, e c'era gia' la nota sul sinonimo
+mancante: il viewer glamlab manda `cartotecnico` e senza sinonimo ogni astuccio
+finiva dal solutore flowpack. Lo stesso difetto sta all'altro capo: un valore
+qualsiasi non riconosciuto - `auto`, per esempio - non entrava in nessun ramo e
+cadeva **in silenzio** su quello flowpack. Oggi risponde 400 e dice cosa
+dichiarare.
+
 ### Regole sempre valide
 
 - **Neutral Area** sempre a bianco.

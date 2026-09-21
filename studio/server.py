@@ -248,17 +248,63 @@ def strip_separations(src, dst, drop):
 # --------------------------------------------------------------------------- #
 # costruzione
 # --------------------------------------------------------------------------- #
+def _senza_coperture(pdf, page_no=0):
+    """(pdf da cui ritagliare la texture, nomi delle coperture togliute).
+
+    Le lastre tecniche dichiarate per nome sono l'informazione piu' attendibile
+    che un file possa dare, dopo i Processing Steps: `REGOLE.md` le mette al
+    livello 3-4 dei cinque, sopra l'euristica su spessore e colore. Finora
+    pero' le leggeva solo `tools.classify_technical`, che e' uno strumento per
+    l'agente: la costruzione deterministica non le guardava, e strappava le
+    separazioni solo se un caso calibrato le elencava a mano.
+
+    Il caso che l'ha fatto vedere: su un astuccio Nutella Donut la vernice si
+    chiama `Water Based Gloss Varnish` e copre tutto il pannello. pdfium la
+    rende opaca, quindi la texture uscirebbe rosa piena. Nessuna euristica su
+    spessore e colore la puo' prendere - non e' un tratto sottile, e' un pieno
+    grande quanto la grafica - mentre il nome lo dice senza ambiguita'.
+
+    Si strappano solo le COPERTURE - vernice, bianco coprente, cold seal - e
+    non tutte le lastre tecniche: vedi techink.COPERTURE_FRASI per il perche',
+    che e' misurato in secondi e in MB.
+
+    E si toglie SOLO per la texture, mai per l'analisi: il disegno tecnico e'
+    quello che fa misurare il pack, e togliendolo prima non si misura piu'
+    niente.
+    """
+    from pack3d import techink
+    try:
+        import pypdf
+        pagina = pypdf.PdfReader(pdf).pages[page_no]
+        lastre = sorted(set(techink.technical_separations(
+            pagina, prova=techink.copertura).values()))
+    except Exception:
+        return pdf, []
+    if not lastre:
+        return pdf, []
+    try:
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp.close()
+        return strip_separations(pdf, tmp.name, lastre), lastre
+    except Exception:
+        # meglio una texture con un residuo tecnico che nessun modello
+        return pdf, []
+
+
 def build_carton(pdf, out_glb, quality="web"):
     dpi = 300 if quality == "alta" else 200
-    d = dl.analyze(pdf)
+    d = dl.analyze(pdf)          # sull'originale: il DT e' quello che misura
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
-    tex = folding.rasterize_panels(pdf, d.panels, dpi=dpi)
+    pulito, lastre = _senza_coperture(pdf)
+    tex = folding.rasterize_panels(pulito, d.panels, dpi=dpi)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
     exporters.write_glb(faces, out_glb)
     meta = ["astuccio %s" % d.layout,
             "%.1f x %.1f x %.1f mm" % d.dims_mm]
+    if lastre:
+        meta.append("coperture togliute per nome: %s" % ", ".join(lastre))
     return meta + [w for w in dl.check(d)]
 
 
@@ -401,16 +447,19 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
         clean = strip_separations(pdf, tmp.name, case["drop_seps"])
+        lastre = list(case["drop_seps"])
         fp0 = _flowpack_from_case(case)
         box = None
         ripiego = None
     else:
-        clean = pdf
         # Stessa analisi di /api/analyze, non una seconda uguale: il ripiego
         # muto (che su Milch-Schnitte T1 dava corpo e pinne 136,5 e 8,0 invece
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
         # dichiarato, perche' il motivo viaggia insieme alle quote.
         box, fp0, ripiego = analisi_flowpack(pdf)
+        # L'analisi e' fatta: ora, e non prima, si possono togliere le lastre
+        # tecniche dichiarate per nome.
+        clean, lastre = _senza_coperture(pdf)
 
     # NB: l'UnboundLocalError su 'avvisi' non nasceva qui. Nasceva in
     # do_POST, che quel nome lo assegnava solo sul ramo flowpack e lo
@@ -418,6 +467,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # tocca l'altra: sono due scope diversi, e qui il nome non si rilegge
     # mai. La correzione vera sta nel chiamante.
     avvisi_sez = []
+    if lastre:
+        avvisi_sez.append("coperture togliute per nome: %s" % ", ".join(lastre))
     sospetto = falda_sospetta(fp0)
     if sospetto:
         avvisi_sez.append(sospetto)
@@ -700,11 +751,21 @@ def normalizza_kind(kind):
     return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
 
 
+KIND_NOTI = ("carton", "flowpack")
+
+
 def analyze_pdf(pdf, kind=None):
     """`kind` arriva dall'utente: la tipologia si dichiara, non si indovina.
     Il riconoscimento automatico sbaglia (il solutore astuccio risolve anche
     certi flowpack) e sbagliare qui compromette tutto il resto."""
     kind = normalizza_kind(kind)
+    if kind is not None and kind not in KIND_NOTI:
+        # Cadere nel ramo flowpack e' peggio che fermarsi: e' lo stesso difetto
+        # del sinonimo mancante, solo sull'altro capo. Su questo file - un
+        # astuccio Nutella Donut - passando "auto" invece di niente il solutore
+        # astuccio veniva saltato e usciva un flowpack.
+        raise ValueError("tipologia '%s' non riconosciuta: dichiara "
+                         "'carton' o 'flowpack'" % kind)
     case = CASI.get(_sig(pdf))
     if case and kind in (None, "flowpack"):
         return dict(kind="flowpack", title=case["name"],
@@ -829,6 +890,9 @@ class Handler(BaseHTTPRequestHandler):
                 kind = normalizza_kind(opts.get("kind") or None)
                 if kind == "altro":
                     return self._send(400, "Tipologia non ancora supportata")
+                if kind is not None and kind not in KIND_NOTI:
+                    return self._send(400, "Tipologia '%s' non riconosciuta: "
+                                           "dichiara 'carton' o 'flowpack'" % kind)
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
                     par, tr = agent.analyse(pdf, kind, opts)

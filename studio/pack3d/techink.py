@@ -39,21 +39,44 @@ ISO_TYPES = {
     "hologram", "barcode", "contentarea", "codingmarking", "imprinting",
 }
 
-# nomi ricorrenti nei file che i Processing Steps non ce l'hanno
-VENDOR_NAMES = {
+# Frasi che collocano una separazione fra le lastre tecniche, confrontate per
+# SOTTOSTRINGA e non per nome intero.
+#
+# Il confronto per nome intero e' quello che c'era, e non regge: i nomi veri
+# sono composti. Su un astuccio Nutella Donut la vernice si chiama "Water
+# Based Gloss Varnish" e l'insieme conteneva "varnish", "gloss varnish" e
+# "waterbased varnish" - tre voci, nessuna delle quali e' quel nome. La
+# vernice restava quindi dentro l'artwork, e pdfium la rende opaca: copriva
+# tutto il pannello di rosa.
+#
+# Qui stanno solo le frasi abbastanza lunghe da non prendere niente per
+# sbaglio. Le sigle corte stanno sotto.
+FRASI_TECNICHE = (
+    "varnish", "vernice", "lack", "coating",
     "dieline", "die line", "die-line", "cutcontour", "cut contour",
-    "cut", "thru-cut", "thrucut", "kiss cut", "kisscut",
-    "crease", "cordonatura", "fold", "falz", "rill",
-    "perf", "perfo", "perforation", "glue", "gluelap", "coldseal", "cold seal",
-    "white", "bianco", "opaque white", "underprint",
-    "varnish", "vernice", "lack", "gloss varnish", "matt varnish",
-    "waterbased varnish", "uv varnish", "spot varnish",
-    "technical", "tecnico", "stanze", "stanz", "taglio", "fustella",
-    "braille", "bleed", "abbondanza", "registration", "reg marks",
-    "all", "none", "legend", "dimension", "dimensions",
-    "print free", "printfree", "print free area", "ink free", "inkfree",
-    "stand", "stand blau", "label", "eyemark", "eye mark",
+    "thru-cut", "thrucut", "kiss cut", "kisscut", "cutter", "cutting",
+    "crease", "cordonatura", "creasing",
+    "perf", "glue", "gluelap", "coldseal", "cold seal",
+    "opaque white", "underprint",
+    "technical", "tecnico", "stanz", "fustella",
+    "braille", "registration", "reg mark", "eyemark", "eye mark",
+    "legend", "dimension", "infopanel", "info panel", "job ticket",
+    "print free", "printfree", "ink free", "inkfree",
+    "best before area", "bar code area", "barcode area",
+    "covered area", "neutral area",
+)
+
+# Nomi corti o ambigui: qui la sottostringa farebbe danni - "cut" prenderebbe
+# mezzo dizionario, "td" qualunque parola con quelle due lettere - e si
+# confrontano interi.
+SIGLE_TECNICHE = {
+    "all", "none", "cut", "td", "dt", "white", "bianco", "bleed",
+    "abbondanza", "fold", "falz", "rill", "taglio", "stand", "stand blau",
+    "label", "check", "note", "notes",
 }
+
+# tenuto per chi lo importava: e' l'unione delle due, nella forma vecchia
+VENDOR_NAMES = set(FRASI_TECNICHE) | SIGLE_TECNICHE
 
 # nomi di livello che indicano arte tecnica, anche fuori dallo standard ISO
 OCG_TECH = {
@@ -116,30 +139,100 @@ def processing_steps(reader, page):
     return found
 
 
-def technical_separations(page):
-    """Separazioni il cui nome le colloca fra le lastre tecniche."""
-    out = {}
-    res = page.get("/Resources") or {}
-    cs = res.get("/ColorSpace")
-    if not cs:
-        return out
-    for key, val in cs.get_object().items():
-        try:
-            o = val.get_object()
-            if o[0] == "/Separation":
-                names = [_norm(o[1])]
-            elif o[0] == "/DeviceN":
-                names = [_norm(x) for x in o[1]]
-            else:
-                continue
-        except Exception:
-            continue
-        for n in names:
-            if n in RESERVED and n != "all":
-                continue
-            if n in LASTRE_NOTE or n in VENDOR_NAMES or n in ISO_TYPES or n in ISO_GROUPS:
-                out[str(key)] = n
-                break
+# Le lastre che COPRONO la grafica, invece di tracciarla.
+#
+# La distinzione non e' di comodo, e' quella che decide chi le puo' togliere.
+# Una fustella, una quota, un retino print-free sono TRATTI: sottili, e
+# l'euristica su spessore e colore li prende. Una vernice, un bianco coprente,
+# un cold seal sono PIENI grandi quanto la grafica: nessuna euristica sul
+# tratto li puo' vedere, e pdfium li rende opachi. Sull'astuccio Nutella Donut
+# la `Water Based Gloss Varnish` copriva tutto il pannello di rosa.
+#
+# Solo queste si strappano per nome nella costruzione. Le altre restano
+# all'euristica, e non per pigrizia: strappare anche quelle costa una passata
+# di pypdf sul flusso di contenuto, e su Colazione erano 7 secondi e 100 MB di
+# picco in piu' - oltre il tetto dei 512 MB - per togliere tratti che la
+# maschera del disegno tecnico prendeva gia'.
+COPERTURE_FRASI = (
+    "varnish", "vernice", "lack", "coating",
+    "cold seal", "coldseal", "opaque white", "underprint", "coprente",
+)
+# "white" solo intero: come sottostringa prenderebbe "White Chocolate", che e'
+# un colore dell'artwork
+COPERTURE_SIGLE = {"white", "bianco"}
+
+
+def copertura(nome):
+    """Vero se questa lastra copre la grafica invece di tracciarla."""
+    n = _norm(nome)
+    if n in RESERVED:
+        return False
+    return n in COPERTURE_SIGLE or any(f in n for f in COPERTURE_FRASI)
+
+
+def tecnica(nome):
+    """Vero se il nome di questa separazione la colloca fra le lastre tecniche.
+
+    Cyan, Magenta, Yellow e Black non lo sono mai: sono i colori di processo.
+    `All` invece si', perche' e' il registro.
+    """
+    n = _norm(nome)
+    if n in RESERVED:
+        return n == "all"
+    if n in SIGLE_TECNICHE or n in LASTRE_NOTE or n in ISO_TYPES or n in ISO_GROUPS:
+        return True
+    return any(f in n for f in FRASI_TECNICHE)
+
+
+def technical_separations(page, dentro_i_form=True, prova=None):
+    """Separazioni il cui nome le colloca fra le lastre tecniche.
+
+    Con `prova` si cambia il criterio: `copertura` per le sole lastre che
+    coprono la grafica, che sono quelle che la costruzione strappa.
+
+    Si scende anche nei Form XObject: una vernice o un bianco coprente ci
+    stanno dentro piu' spesso che a livello di pagina.
+    """
+    prova = prova or tecnica
+    out, visti = {}, set()
+
+    def giro(res):
+        if res is None:
+            return
+        res = res.get_object()
+        if id(res) in visti:
+            return
+        visti.add(id(res))
+        cs = res.get("/ColorSpace")
+        if cs:
+            for key, val in cs.get_object().items():
+                try:
+                    o = val.get_object()
+                    if o[0] == "/Separation":
+                        names = [_norm(o[1])]
+                    elif o[0] == "/DeviceN":
+                        names = [_norm(x) for x in o[1]]
+                    else:
+                        continue
+                except Exception:
+                    continue
+                for n in names:
+                    if prova(n):
+                        out[str(key)] = n
+                        break
+        if not dentro_i_form:
+            return
+        xo = res.get("/XObject")
+        if xo:
+            for _, v in xo.get_object().items():
+                try:
+                    o = v.get_object()
+                    if o.get("/Subtype") == "/Form":
+                        giro(o.get("/Resources"))
+                except Exception:
+                    pass
+
+    giro(page.get("/Resources"))
     return out
 
 
