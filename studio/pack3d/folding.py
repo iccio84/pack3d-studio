@@ -8,6 +8,8 @@ Qui la cosa viene ricavata dalla catena di pieghe, non imposta a mano.
 """
 from __future__ import annotations
 
+import os
+
 import numpy as np
 from PIL import Image, ImageDraw
 
@@ -60,6 +62,20 @@ FOLD_H = {
 }
 
 FOLDS = {"vwrap": FOLD_V, "hwrap": FOLD_H}
+
+
+# Su un astuccio APERTO i fianchi non sono agganciati al retro - che non c'e' -
+# ma al FRONTE, e il fronte non si ribalta. La quinta dei fianchi va quindi
+# ruotata di 180 gradi rispetto a quella di un astuccio chiuso, altrimenti la
+# grafica dei fianchi esce capovolta: e' quello che si vedeva sul Pingui T6.
+#
+# Che questi siano i quad giusti lo conferma FOLD_H senza bisogno di fidarsi
+# del ragionamento: nella fasciatura orizzontale i fianchi sono agganciati al
+# fronte per costruzione, e le sue due voci sono identiche a queste.
+FIANCHI_SUL_FRONTE = {
+    "left":  ("BTL", "FTL", "FBL", "BBL"),
+    "right": ("FTR", "BTR", "BBR", "FBR"),
+}
 
 
 # Le due falde che chiudono il retro di un astuccio con finestra non sono
@@ -186,16 +202,109 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
 UV = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
 
 
+# --------------------------------------------------------------------------- #
+# lo spessore del cartoncino
+# --------------------------------------------------------------------------- #
+# Un astuccio non e' una superficie. Se lo fosse - e finora lo era - guardando
+# dentro la finestra di un Pingui T6 non si vedrebbe niente: ogni faccia ha una
+# normale sola, e da dietro il culling la fa sparire. Il pack diventa un guscio
+# di carta zero, e dove e' aperto si vede il vuoto.
+#
+# Con lo spessore l'interno c'e', ed e' cartoncino: per ogni faccia si aggiunge
+# la faccia interna, e su ogni spigolo aperto la costa del taglio, che e' la
+# parte che fa leggere lo spessore sul bordo di una finestra.
+SPESSORE_CRT = float(os.environ.get("PACK3D_SPESSORE_CRT", "0.45"))
+
+# Il rovescio del cartoncino e il taglio non stanno nell'artwork: il PDF dice
+# solo la faccia stampata. Sono due tinte neutre, e vanno dichiarate per quello
+# che sono - una stima, non una misura.
+INTERNO = (238, 235, 229)
+TAGLIO = (212, 203, 188)
+
+
+def _normale(quad):
+    """La normale USCENTE, nella convenzione degli esportatori.
+
+    E' la stessa formula di `exporters._normal`, ripetuta qui per non tirarsi
+    dentro quel modulo: sul fronte - (FTL, FTR, FBR, FBL) - da' +z, e il fronte
+    sta a z positivo.
+    """
+    a = np.array(quad[1], float) - np.array(quad[0], float)
+    b = np.array(quad[3], float) - np.array(quad[0], float)
+    n = -np.cross(a, b)
+    return n / (np.linalg.norm(n) or 1.0)
+
+
+def _nodo(p, griglia=0.02):
+    """Un vertice arrotondato alla griglia, per riconoscere gli spigoli in comune."""
+    return tuple(round(v / griglia) for v in p)
+
+
+def _tinta(rgb):
+    return Image.new("RGB", (4, 4), tuple(rgb))
+
+
+def guscio(faces, spessore=SPESSORE_CRT, interno=INTERNO, taglio=TAGLIO):
+    """Da un guscio di sole facce esterne a un guscio con spessore.
+
+    Per ogni faccia si aggiunge la faccia INTERNA, spostata di `spessore` lungo
+    la normale entrante e con l'avvolgimento rovesciato perche' la sua normale
+    guardi dentro; e per ogni spigolo che non confina con nessun'altra faccia
+    si aggiunge la COSTA, il taglio del cartoncino.
+
+    Gli avvolgimenti non si ragionano, si derivano: su una superficie orientata
+    due facce adiacenti percorrono lo spigolo in comune in senso OPPOSTO.
+    Rovesciare l'ordine di un quad rovescia tutti i suoi spigoli, quindi la
+    faccia interna e' coerente; e una costa percorre lo spigolo condiviso al
+    contrario della faccia da cui nasce. Cosi' il verso viene giusto senza
+    dipendere da quale convenzione usano gli esportatori.
+    """
+    if not spessore or spessore <= 0:
+        return list(faces)
+
+    conta = {}
+    for f in faces:
+        q = f["quad"]
+        for i in range(4):
+            a, b = _nodo(q[i]), _nodo(q[(i + 1) % 4])
+            conta[(a, b) if a <= b else (b, a)] = conta.get(
+                (a, b) if a <= b else (b, a), 0) + 1
+
+    pelle, coste = _tinta(interno), _tinta(taglio)
+    out = list(faces)
+    for f in faces:
+        q = [tuple(float(v) for v in p) for p in f["quad"]]
+        n = _normale(q)
+        dentro = [tuple(np.array(p) - n * spessore) for p in q]
+        out.append({"name": f["name"] + " interno",
+                    "quad": list(reversed(dentro)), "uv": list(UV),
+                    "tex": pelle})
+        for i in range(4):
+            a, b = _nodo(q[i]), _nodo(q[(i + 1) % 4])
+            if conta.get((a, b) if a <= b else (b, a), 0) > 1:
+                continue        # spigolo di piega: dentro il cartoncino
+            j = (i + 1) % 4
+            out.append({"name": "%s taglio %d" % (f["name"], i),
+                        "quad": [q[j], q[i], dentro[i], dentro[j]],
+                        "uv": list(UV), "tex": coste})
+    return out
+
+
 def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
-                panels: dict | None = None) -> list:
+                panels: dict | None = None, chiuso: bool = True,
+                spessore: float = SPESSORE_CRT) -> list:
     """Facce pronte per rasterizzatore ed export: quad 3D + texture + UV.
 
     Con `panels` si costruiscono anche le falde del retro, che sono fasce e
-    non facce: la loro altezza la sa solo la fustella.
+    non facce: la loro altezza la sa solo la fustella. Con `chiuso` falso i
+    fianchi si agganciano al fronte, vedi FIANCHI_SUL_FRONTE. Con `spessore`
+    il guscio prende lo spessore del cartoncino, vedi `guscio`.
     """
     W, H, D = dims_mm
     C = corners(W, H, D)
     pieghe = FOLDS[layout]
+    if layout == "vwrap" and not chiuso:
+        pieghe = {**pieghe, **FIANCHI_SUL_FRONTE}
     faces = []
     for name, keys in pieghe.items():
         if name not in textures:
@@ -222,4 +331,4 @@ def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
                 "uv": list(UV),
                 "tex": textures[name],
             })
-    return faces
+    return guscio(faces, spessore)

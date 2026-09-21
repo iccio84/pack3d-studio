@@ -14,7 +14,7 @@ import json
 import os
 
 from . import dieline as dl
-from . import folding, exporters, studio, knowledge
+from . import artwork, folding, exporters, studio, knowledge
 from .camera import preset_camera
 
 
@@ -32,9 +32,11 @@ def build(args):
 
     for m in dl.check(d):
         print("  avviso   :", m)
-    tex = folding.rasterize_panels(args.pdf, d.panels, dpi=args.dpi)
+    tex, avvisi_tex = artwork.texture_astuccio(args.pdf, d.panels, args.dpi)
+    for m in avvisi_tex:
+        print("  avviso   :", m)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
-                                panels=d.panels)
+                                panels=d.panels, chiuso=d.chiuso)
 
     err = None
     if args.reference:
@@ -72,7 +74,7 @@ def build(args):
                        "bbox_pt": [round(v, 2) for v in p.bbox()]}
                    for k, p in sorted(d.panels.items())},
         "layout": d.layout,
-        "warnings": dl.check(d),
+        "warnings": dl.check(d) + avvisi_tex,
         "camera_fit_error_px": err,
     }
     with open(os.path.join(args.out, f"{base}_report.json"), "w") as fh:

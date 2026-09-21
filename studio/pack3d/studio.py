@@ -14,6 +14,25 @@ SHADING = {"front": 0.94, "top": 0.97, "left": 0.73, "right": 0.73,
            "back": 0.94, "bottom": 0.70,
            "back_top": 0.94, "back_bottom": 0.94}
 
+# Il guscio con spessore aggiunge due famiglie di facce che non stanno in
+# SHADING: l'interno del cartoncino, che sta in ombra, e la costa del taglio,
+# che prende luce di sbieco. Senza queste due voci prenderebbero 1.0 e
+# l'interno di un pack aperto risulterebbe piu' chiaro del fronte.
+INTERNO_OMBRA = 0.55
+TAGLIO_OMBRA = 0.80
+
+
+def ombra(nome, shading=None):
+    """Il fattore di shading di una faccia, coste e interni compresi."""
+    shading = shading or SHADING
+    if nome in shading:
+        return shading[nome]
+    if nome.endswith(" interno"):
+        return INTERNO_OMBRA * shading.get(nome[:-8], 1.0)
+    if " taglio " in nome:
+        return TAGLIO_OMBRA
+    return 1.0
+
 
 def ground_shadow(cam: Camera, dims_mm, size, drop=0.5,
                   blur=0.022, opacity=0.42, spread=1.06, skew=0.10):
@@ -40,7 +59,7 @@ def studio_render(faces, cam: Camera, size=2000, ss=2, shading=None,
     for f in faces:
         tex = f["tex"]
         arr = np.asarray(tex.convert("RGB")) if not isinstance(tex, np.ndarray) else tex
-        fs.append({**f, "tex": arr, "shade": shading.get(f["name"], 1.0)})
+        fs.append({**f, "tex": arr, "shade": ombra(f["name"], shading)})
 
     img, alpha, ids = render(fs, cam, size, bg=background, ss=ss)
 
