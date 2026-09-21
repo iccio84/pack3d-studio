@@ -5,8 +5,15 @@ Grafica di riferimento che non viene dall'artwork.
 ## colata_kinder.png
 
 La colata di latte Kinder **come deve venire**, fornita dall'utente.
-2000 x 488 px, RGB. E' in uso: vedi in REGOLE.md *La colata si sostituisce solo
-se sta su un livello suo*.
+2000 x 488 px, RGB.
+
+E' il **ripiego**, non la prima scelta: quando la colata nel file e' in
+sovrastampa, la si rende in quadricromia con Ghostscript e viene fuori
+l'inchiostro vero del file, che e' sempre meglio di una grafica portata da
+fuori. La risorsa serve quando l'ombra nel file e' **fustellata** invece che in
+sovrastampa - li' sotto non c'e' piu' niente da moltiplicare e non c'e' niente
+da recuperare. Vedi in REGOLE.md *La colata si rimette con l'inchiostro del
+file*.
 
 ### Cos'e', misurato
 

@@ -1,39 +1,52 @@
 """
-La colata Kinder: toglierla dall'artwork e rimetterla fatta bene.
+La colata Kinder: rimetterle l'ombra che il nostro rasterizzatore le toglie.
 
-Perche' serve: la colata e' costruita in SOVRASTAMPA - una lastra che
-moltiplica il fondo, e da quella moltiplicazione vengono l'ombra sulle gocce e
-il volume del getto. Quando arriva in RGB la sovrastampa non esiste, non c'e'
-niente da simulare, e quello che esce e' una macchia piatta con l'onda
-circondata da un alone azzurro sfumato invece che da un'ombra. A valle non si
-aggiusta: reinventare l'ombra vorrebbe dire dipingere colore che nel file non
-c'e'. Si sostituisce, con la colata gia' resa come deve venire.
+La colata e' costruita in **sovrastampa**: una lastra di ciano che moltiplica
+il rosso sotto, e da quella moltiplicazione vengono l'ombra sulle gocce e il
+volume del getto. pdfium la sovrastampa non la simula - verificato con un PDF
+costruito apposta, un ciano sopra un magenta con `/OP true` e senza: esce
+identico, (0, 174, 239) tutte e due le volte. Il ciano copre il rosso invece
+di moltiplicarlo, e l'ombra diventa un alone azzurro piatto.
 
-Perche' si puo' fare in modo preciso: solo se la colata sta su un **livello
-suo**. Allora il livello dice dove va, e non si indovina niente. Il file che ha
-aperto la strada e' `KP_T1_Mandarino`, che ha un OCG chiamato `Colata`.
+Due strade, e la prima e' sempre meglio della seconda perche' usa
+**l'inchiostro del file** invece di roba portata da fuori:
 
-I tre passi, tutti misurati:
+1. **la banda resa in quadricromia.** Ghostscript la sovrastampa la simula
+   (stessa prova: (46, 48, 146), cioe' C+M, il blu giusto). Si rende con lui
+   la sola banda della colata e la si incolla dentro l'impronta del livello.
+   Quello che viene fuori e' la colata del file, resa come la vedrebbe una
+   macchina da stampa.
+2. **la risorsa**, se la prima non ha niente da correggere. Quando l'ombra nel
+   file e' FUSTELLATA invece che in sovrastampa - il ciano toglie il rosso
+   invece di moltiplicarlo - sotto non c'e' piu' niente da moltiplicare, e
+   nessun rasterizzatore la puo' recuperare: misurato su KP T1 Mandarino, dove
+   l'ombra ha Cyan al 34,9% e PANTONE Warm Red al 2,6%, contro il 98,1% del
+   rosso pieno accanto. Li' si sostituisce con `risorse/colata_kinder.png`.
 
-1. **dove.** Si spegne il livello in una copia, aggiungendo il suo OCG a
-   `/OCProperties/D/OFF`. E' una modifica di DIZIONARIO: non costa la passata
-   di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e 100 MB.
-   La differenza fra le due rese da' l'impronta esatta del livello.
-2. **quanto e in che punto.** La risorsa e' un master, non il ritaglio di un
-   pack: la sua onda va portata al PASSO di quella dell'artwork. La scala
-   esce dal rapporto fra i due periodi, presi dallo spettro; la fase da una
-   correlazione fra le due curve rosso/bianco; la quota dalla mediana della
-   differenza. Su KP T1 Mandarino l'errore mediano e' 0,1 mm su 1351 colonne,
-   e la goccia - che nell'allineamento non entra - cade al suo posto: e' la
-   verifica che il disegno e' lo stesso.
-3. **come.** La risorsa si incolla dentro l'IMPRONTA del livello vecchio, e
-   solo li'. Cosi' quello che nell'artwork sta sopra la colata - un bicchiere,
-   uno spicchio, la fascia di fondo - resta dov'e' senza dover sapere in che
-   ordine sono i livelli.
+Tutte e due vogliono la colata su un **livello suo**: il livello dice dove va,
+e non si indovina niente. Il file che ha aperto la strada e'
+`KP_T1_Mandarino`, che ha un OCG chiamato `Colata`.
+
+Si incolla sempre e solo dentro l'**impronta** del livello. Non e' pignoleria:
+e' quello che tiene fuori i guai. Su KP T1 la stessa resa in quadricromia fa
+diventare NERO il bicchierino di latte che sta sopra la colata - lui la
+sovrastampa ce l'ha davvero - ma il bicchiere sul livello `Colata` non sta, e
+fuori dall'impronta non lo tocca nessuno.
+
+Come si trova l'impronta:
+
+- si spegne il livello in una copia, aggiungendo il suo OCG a
+  `/OCProperties/D/OFF`. E' una modifica di DIZIONARIO: non costa la passata
+  di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e 100 MB;
+- si rendono le due pagine su fondo TRASPARENTE e si confronta anche l'alfa.
+  Sul colore soltanto la maschera avrebbe dei buchi dove la colata e' bianca -
+  la cresta e le gocce - perche' bianco su bianco non fa differenza.
 """
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import tempfile
 
 import numpy as np
@@ -57,6 +70,16 @@ MISURA = 2.0
 # risorsa non e' il disegno che sta nel file. Mezzo millimetro e' dieci volte
 # quello misurato sul caso buono.
 ERRORE_MAX_MM = 0.5
+
+# Ghostscript, se c'e'. Senza, resta solo la risorsa: il codice non si rompe,
+# si limita a fare meno.
+GS = shutil.which("gs")
+
+# Quante delle ombre azzurre deve cambiare la sovrastampa perche' la colata si
+# possa dire davvero in sovrastampa. La soglia sta larga fra i due casi
+# misurati: 1,1% su KP T1 Mandarino, dove l'ombra e' fustellata, e 49,6% sul
+# Kinder Pingui T6 BOX, dove e' in sovrastampa.
+CAMBIO_MINIMO = 0.10
 
 
 def livelli(pdf):
@@ -272,15 +295,113 @@ def _su_bianco(a):
             ).astype(np.uint8)
 
 
-def foglio(pdf, scala, page_no=0, note=None):
-    """Il foglio reso, con la colata sostituita se si puo'.
+def quadricromia(pdf, page_no, scala, riq, sovrastampa="simulate"):
+    """La banda `riq` resa da Ghostscript con la sovrastampa simulata.
 
-    Se il file non ha il livello, o la risorsa non e' quel disegno, torna la
-    resa normale: non si consegna una colata messa a caso. E il file che il
-    livello non ce l'ha non paga niente - una lettura dei dizionari e via.
+    `riq` e' (x0, x1, y0, y1) in punti, y in giu'. Si ritaglia il MediaBox
+    sulla banda e si rende solo quella: la colata e' una striscia di 120 x 36
+    mm su un foglio da 300 x 250, e renderla da sola costa un paio di secondi
+    invece di dieci, con una quarantina di MB.
+
+    None se Ghostscript non c'e' o se qualcosa non torna: il modello si
+    costruisce comunque.
+    """
+    if not GS:
+        return None
+    import pypdf
+    x0, x1, y0, y1 = riq
+    sorgente = destinazione = None
+    try:
+        r = pypdf.PdfReader(pdf)
+        mb = r.pages[page_no].mediabox
+        alt = float(mb.top) - float(mb.bottom)
+        bx, by = float(mb.left), float(mb.bottom)
+        w = pypdf.PdfWriter(clone_from=pdf)
+        pg = w.pages[page_no]
+        pg.mediabox.lower_left = (bx + x0, by + alt - y1)
+        pg.mediabox.upper_right = (bx + x1, by + alt - y0)
+        pg.cropbox = pg.mediabox
+        sorgente = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        sorgente.close()
+        destinazione = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        destinazione.close()
+        with open(sorgente.name, "wb") as fh:
+            w.write(fh)
+        esito = subprocess.run(
+            [GS, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER",
+             "-sOverprint=" + sovrastampa, "-sDEVICE=png16m",
+             "-r%g" % (scala * 72.0), "-dTextAlphaBits=4",
+             "-dGraphicsAlphaBits=4", "-sOutputFile=" + destinazione.name,
+             sorgente.name], capture_output=True, timeout=120)
+        if esito.returncode != 0 or not os.path.getsize(destinazione.name):
+            return None
+        return np.asarray(Image.open(destinazione.name).convert("RGB"))
+    except Exception:
+        return None
+    finally:
+        for t in (sorgente, destinazione):
+            try:
+                if t is not None:
+                    os.unlink(t.name)
+            except OSError:
+                pass
+
+
+def _peso_sovrastampa(simulata, piatta, maschera):
+    """Quanto conta la sovrastampa, e su quanti pixel. `(quota, quanti)`.
+
+    La domanda giusta non e' quanta parte della banda cambia - quella e' area,
+    e sui due casi misurati da' lo stesso 5% pur essendo casi opposti. La
+    domanda e': delle zone che senza sovrastampa escono AZZURRE, cioe' delle
+    ombre sbagliate, quante ne rimette a posto?
+
+        KP T1 Mandarino   13.248 px azzurri, ne cambia l'1,1%
+        Kinder Pingui T6   7.672 px azzurri, ne cambia il 49,6%
+
+    Il primo ha l'ombra fustellata: il ciano toglie il rosso invece di
+    moltiplicarlo, sotto non c'e' piu' niente, e non c'e' niente da
+    recuperare. Il secondo ce l'ha in sovrastampa, e si recupera meta'.
+    """
+    if simulata is None or piatta is None:
+        return 0.0, 0
+    h = min(simulata.shape[0], piatta.shape[0], maschera.shape[0])
+    w = min(simulata.shape[1], piatta.shape[1], maschera.shape[1])
+    a = simulata[:h, :w].astype(np.int16)
+    b = piatta[:h, :w].astype(np.int16)
+    azzurro = ((b[:, :, 2] - b[:, :, 0] > 45) & (b[:, :, 2] > 190)
+               & (b[:, :, 1] > 170) & maschera[:h, :w])
+    quante = int(azzurro.sum())
+    if not quante:
+        return 0.0, 0
+    cambia = np.abs(a - b).max(2) > 20
+    return float((azzurro & cambia).sum()) / quante, quante
+
+
+def _incolla(foglio_base, banda, maschera, bx0, by0):
+    """La banda dentro la maschera, alla sua posizione sul foglio."""
+    h = min(banda.shape[0], maschera.shape[0], foglio_base.shape[0] - by0)
+    w = min(banda.shape[1], maschera.shape[1], foglio_base.shape[1] - bx0)
+    if h <= 0 or w <= 0:
+        return 0.0
+    m = maschera[:h, :w]
+    pezzo = foglio_base[by0:by0 + h, bx0:bx0 + w]
+    diverso = (np.abs(pezzo.astype(np.int16) - banda[:h, :w].astype(np.int16))
+               .max(2) > 20) & m
+    pezzo[m] = banda[:h, :w][m]
+    foglio_base[by0:by0 + h, bx0:bx0 + w] = pezzo
+    return float(diverso.sum()) / max(int(m.sum()), 1)
+
+
+def foglio(pdf, scala, page_no=0, note=None):
+    """Il foglio reso, con la colata rimessa a posto se si puo'.
+
+    Prima si prova con l'inchiostro del file - la banda resa in quadricromia,
+    con la sovrastampa simulata - e solo se li' non c'era niente da correggere
+    si passa alla risorsa. Il file che il livello non ce l'ha non paga niente:
+    una lettura dei dizionari e via.
     """
     nomi = set(livelli(pdf)) & NOMI
-    if not nomi or not os.path.exists(RISORSA):
+    if not nomi:
         return render_page(pdf, page_no, scala)
 
     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
@@ -296,13 +417,60 @@ def foglio(pdf, scala, page_no=0, note=None):
         if imp is None:
             return render_page(pdf, page_no, scala)
         _m2, (mx0, mx1, my0, my1) = imp
+        larg = (mx1 - mx0) / MISURA * PT2MM
+        alt = (my1 - my0) / MISURA * PT2MM
+        riq = (mx0 / MISURA, mx1 / MISURA, my0 / MISURA, my1 / MISURA)
 
+        # l'impronta alla risoluzione della texture
+        k = scala / MISURA
+        ba = _rgba(pdf, page_no, scala, riq)
+        bb = _rgba(tmp.name, page_no, scala, riq)
+        imp = _impronta(ba, bb)
+        if imp is None:
+            return render_page(pdf, page_no, scala)
+        maschera, _r = imp
+        bx0 = max(int(round(mx0 * k)), 0)
+        by0 = max(int(round(my0 * k)), 0)
+
+        # --- 1. l'inchiostro del file ------------------------------------ #
+        #
+        # Quanto pesa la sovrastampa lo dicono DUE rese di Ghostscript, una
+        # con e una senza, confrontate dentro l'impronta. Confrontare invece
+        # Ghostscript con pdfium direbbe un'altra cosa: quei due rasterizzano
+        # diverso comunque - bordi, antialiasing - e il 6% di scarto che ne
+        # esce non distingue una sovrastampa che conta da due motori che non
+        # si somigliano.
+        q = quadricromia(pdf, page_no, scala, riq)
+        if q is not None:
+            piatta = quadricromia(pdf, page_no, scala, riq, "disable")
+            peso, quante = _peso_sovrastampa(q, piatta, maschera)
+            if peso >= CAMBIO_MINIMO:
+                fuori = np.asarray(
+                    render_page(pdf, page_no, scala).convert("RGB")).copy()
+                _incolla(fuori, q, maschera, bx0, by0)
+                if note is not None:
+                    note.append(
+                        "colata dal livello '%s' resa in quadricromia: %.1f x "
+                        "%.1f mm, e la sovrastampa rimette l'ombra al %.0f%% "
+                        "delle zone che uscivano azzurre"
+                        % (spenti[0], larg, alt, 100 * peso))
+                return Image.fromarray(fuori)
+            if note is not None:
+                note.append(
+                    "colata dal livello '%s': l'ombra e' FUSTELLATA, non in "
+                    "sovrastampa - delle %d zone azzurre la quadricromia ne "
+                    "recupera solo il %.1f%%, perche' sotto il fondo non c'e' "
+                    "da moltiplicare" % (spenti[0], quante, 100 * peso))
+
+        # --- 2. ripiego: la risorsa -------------------------------------- #
+        if not os.path.exists(RISORSA):
+            return render_page(pdf, page_no, scala)
         ris = Image.open(RISORSA).convert("RGB")
-        acc = allinea(_su_bianco(a2[my0:my1, mx0:mx1]), np.asarray(ris))
+        banda = _su_bianco(a2[my0:my1, mx0:mx1])
+        acc = allinea(banda, np.asarray(ris))
         if acc is None:
             return render_page(pdf, page_no, scala)
         s, dx, dy, err = acc
-        banda = _su_bianco(a2[my0:my1, mx0:mx1])
         pr = _periodo(_curva(np.asarray(ris)))
         if pr:
             dx = _fase(banda, np.asarray(ris), s, dx, dy, pr)
@@ -314,24 +482,10 @@ def foglio(pdf, scala, page_no=0, note=None):
             return render_page(pdf, page_no, scala)
 
         base = np.asarray(render_page(tmp.name, page_no, scala).convert("RGB"))
-        k = scala / MISURA
-        # la banda alla risoluzione della texture, in pixel del foglio
-        bx0, bx1 = int(round(mx0 * k)), int(round(mx1 * k))
-        by0, by1 = int(round(my0 * k)), int(round(my1 * k))
-        bx0, by0 = max(bx0, 0), max(by0, 0)
-        bx1, by1 = min(bx1, base.shape[1]), min(by1, base.shape[0])
-        if bx1 <= bx0 or by1 <= by0:
+        h = min(maschera.shape[0], base.shape[0] - by0)
+        w = min(maschera.shape[1], base.shape[1] - bx0)
+        if h <= 0 or w <= 0:
             return Image.fromarray(base)
-        riq = (mx0 / MISURA, mx1 / MISURA, my0 / MISURA, my1 / MISURA)
-        ba = _rgba(pdf, page_no, scala, riq)
-        bb = _rgba(tmp.name, page_no, scala, riq)
-        h = min(ba.shape[0], bb.shape[0], base.shape[0] - by0)
-        w = min(ba.shape[1], bb.shape[1], base.shape[1] - bx0)
-        imp = _impronta(ba[:h, :w], bb[:h, :w])
-        if imp is None:
-            return Image.fromarray(base)
-        maschera, _riq = imp
-
         nw = max(1, int(round(ris.width * s * k)))
         nh = max(1, int(round(ris.height * s * k)))
         r = np.asarray(ris.resize((nw, nh), Image.LANCZOS))
@@ -342,21 +496,16 @@ def foglio(pdf, scala, page_no=0, note=None):
         if x1 <= x0 or y1 <= y0:
             return Image.fromarray(base)
         tela[y0:y1, x0:x1] = r[y0 - ry:y1 - ry, x0 - rx:x1 - rx]
-
         fuori = base.copy()
-        pezzo = fuori[by0:by0 + h, bx0:bx0 + w]
-        pezzo[maschera] = tela[maschera]
-        fuori[by0:by0 + h, bx0:bx0 + w] = pezzo
+        _incolla(fuori, tela, maschera, bx0, by0)
         if note is not None:
-            note.append("colata sostituita dal livello '%s': %.1f x %.1f mm, "
-                        "allineata a %.2f mm"
-                        % (spenti[0], (mx1 - mx0) / MISURA * PT2MM,
-                           (my1 - my0) / MISURA * PT2MM, err_mm))
+            note.append("colata sostituita con la risorsa: %.1f x %.1f mm, "
+                        "allineata a %.2f mm" % (larg, alt, err_mm))
         return Image.fromarray(fuori)
     except Exception as e:
         if note is not None:
-            note.append("colata: sostituzione non riuscita (%s), lasciata "
-                        "com'e'" % str(e)[:60])
+            note.append("colata: non riuscita (%s), lasciata com'e'"
+                        % str(e)[:60])
         return render_page(pdf, page_no, scala)
     finally:
         try:
