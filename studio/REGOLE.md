@@ -345,6 +345,68 @@ dritti); valida le cordonature fascia per fascia, altrimenti le alette di presa
 del cielo vengono scambiate per fianchi. Il verso di fasciatura, verticale o
 orizzontale, si deduce dalla struttura.
 
+### La griglia non tollera un intruso
+
+Righe e colonne sono la cosa piu' fragile della pipeline astucci: **una sola
+riga in piu' e i ruoli cadono tutti sul pannello sbagliato**, senza che niente
+lanci un'eccezione. Due modi in cui un intruso ci entrava, trovati sullo stesso
+file (Kinder Pingui T6 BOX):
+
+- **il gruppo di fianco.** `_largest_cluster` recuperava i gruppi contenuti
+  nell'ingombro della fustella con un test su **un asse solo**, che serve per
+  le alette a fianchi obliqui: quelle sporgono da un lato e sono contenute
+  nell'altro. Ma un cartiglio a 90 mm dalla fustella e' contenuto nella sua
+  ALTEZZA, e tanto bastava a tirarlo dentro: il riquadro usciva **679 mm invece
+  di 261**, e `solve_carton` moriva su `KeyError: 'left'`. Ora serve contenuto
+  in un asse **e** attaccato al corpo nell'altro: un'aletta lo e' per
+  definizione, un cartiglio no.
+- **la penna che non e' fustella.** `_technical_pens` tiene tutti i tratti
+  sottili che contribuiscono linee lunghe, e fa bene — molti artwork separano
+  taglio, cordonatura e mezzo taglio su colori diversi. Ma per la GRIGLIA un
+  intruso e' fatale, e su questo file c'era un rettangolo nero CMYK da 0,76 pt,
+  quattro segmenti in tutto, che non e' fustella: creava due colonne e una riga
+  finte, e la riga spaccava il fronte in due. Si scartano quindi, dopo il
+  raggruppamento spaziale, le penne che non "sanno" di fustella
+  (`penne_di_fustella`). Il punteggio non e' la lunghezza ma **lunghezza per
+  numero di cordonature distinte**: una penna di piega vera porta molti tratti
+  su molte quote, un rettangolo solo no. Misurato: su tutto il parco la penna
+  di fustella e' una sola e sta a 1,00, quell'intruso a 0,14.
+
+  Nota: la funzione che da' questo punteggio, `_dieline_pen`, era scritta da
+  tempo e **non la chiamava nessuno**.
+
+### Quando il solutore non sa, deve dirlo
+
+`solve_carton` da' le quote solo dopo due controlli che il disegno stesso
+impone, e se non passano solleva un errore che riporta le righe misurate:
+
+- **retro e fronte devono avere la stessa altezza.** Sono la stessa faccia
+  vista da due parti. Il solutore prende come retro e fronte le due fasce piu'
+  alte e ne fa la media: sul Pingui erano 40,6 e 75,7 e la media, 58,1, veniva
+  consegnata come altezza del pack. Quaranta contro settantacinque vuol dire
+  che l'assegnazione dei ruoli e' sbagliata, non che il pack e' strano;
+- **cielo o fianco devono esistere**, altrimenti la profondita' non e'
+  ricavabile e prima si leggeva un `KeyError: 'left'`.
+
+### Il Kinder Pingui T6 BOX resta aperto
+
+Con la griglia pulita la sua struttura e' simmetrica e leggibile:
+
+    colonne (mm)   16 | 4 | 8 | 32,3 | 140,5 | 32,3 | 8 | 4 | 16
+    righe   (mm)   33,5 | 40,5 | 98,0 | 27,0 | 40,5 | 30,0
+    fianchi        45,5 x 125,0, accanto al pannello grande (non al retro)
+
+cioe' una sequenza verticale **aletta arcuata | 40,5 | 125,0 | 40,5 | aletta**,
+con cielo e fondo uguali (40,5 = 40,5, che e' il controllo che passa) e
+**nessun retro**. Il solutore vuole invece `[aletta] RETRO CIELO FRONTE FONDO`
+con i fianchi accanto al retro, e qui non ci sono ne' il retro ne' i fianchi
+dove li cerca.
+
+Non e' un difetto da aggiustare a tentoni: e' una **famiglia che la pipeline
+non ha**, e per darle i ruoli giusti serve sapere che astuccio e' — vassoio,
+espositore, astuccio a innesto con cartellino. Fino ad allora il solutore si
+ferma e lo dice.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due
