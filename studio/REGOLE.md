@@ -208,6 +208,21 @@ Due precauzioni:
 - **si toglie solo per la texture, mai per l'analisi.** Il disegno tecnico e'
   quello che fa misurare il pack: togliendolo prima, non si misura piu' niente.
 
+#### La GDA sta nel disegno tecnico, e si scarta
+
+La **GDA** — la dichiarazione nutrizionale con le sue caselle — appartiene al
+disegno tecnico: e' il tecnico che ne riserva il posto, non il grafico che la
+disegna. Nel livello della grafica **non va mai messa**, e quando ci finisce
+comunque, e capita, va **scartata** come qualunque altra arte tecnica.
+
+Sta fra le **coperture** e non fra i soli nomi tecnici, ed e' la stessa
+distinzione di sopra: un riquadro GDA e' un PIENO grande come la casella, non
+un tratto, quindi l'euristica su spessore e colore non lo vede e sul modello
+resterebbe stampato. Toglierlo per nome e' l'unico modo, e il costo della
+passata lo paga solo il file che la GDA ce l'ha davvero. Come `white`, `gda` si
+confronta per **nome intero**: intero non e' il nome di nessun inchiostro,
+mentre come sottostringa prenderebbe parole qualunque.
+
 ### La tipologia non riconosciuta e' un errore, non un ripiego
 
 `kind` si dichiara e non si indovina, e c'era gia' la nota sul sinonimo
@@ -292,6 +307,40 @@ quello che la maschera nuova non copre piu' era grafica o roba invisibile.
 insieme si perde il risultato buono gia' raggiunto senza capire quale delle due
 ha rotto cosa.
 
+### La grafica va in quadricromia, non in RGB
+
+**In RGB la sovrastampa non esiste**, quindi non c'e' niente da simulare: ne'
+dal nostro rasterizzatore, ne' da quello di chi guardera' il file. E la
+sovrastampa non e' un effetto facoltativo, e' come sono costruite certe
+grafiche.
+
+Il caso che lo dimostra e' la **colata di latte Kinder**. Nasce come una lastra
+che sovrastampa il fondo: dove passa, moltiplica quello che c'e' sotto, e da
+quella moltiplicazione vengono l'ombra sulle gocce e il volume del getto. Sul
+Kinder Pingui T6 BOX quella colata e' arrivata come **immagine indicizzata su
+base ICC a tre canali, con la tavolozza fatta di ciano**: senza sovrastampa la
+moltiplicazione non avviene, le gocce perdono l'ombra e la colata esce come una
+macchia di **ciano piatto**.
+
+Non e' una cosa che si aggiusta a valle: reinventare l'ombra vorrebbe dire
+dipingere colore che nel file non c'e'. La regola e' sull'ingresso — **la colata
+va fornita in quadricromia** — e il nostro compito e' accorgersene e dirlo
+prima che l'utente guardi il modello e non capisca cosa e' andato storto
+(`techink.avviso_rgb`, un decimo di secondo e niente in memoria).
+
+Si guardano le **immagini**, non gli spazi colore dichiarati, e per un motivo
+misurato: uno spazio RGB dichiarato c'e' quasi sempre — sul K Tronky T1 ce n'e'
+uno usato 23 volte, e quel file e' validato — perche' lo usa anche l'arte
+tecnica, che dalla texture viene via comunque. Una immagine **grande** in RGB
+invece e' grafica che si vede: sotto il mezzo megapixel si tace, sopra si
+avvisa. Sul parco l'avviso esce su tre file — la colata del Pingui e due foto
+di prodotto in RGB su altrettanti astucci Ferrero — e tace sui cinque validati.
+
+Attenzione a non confondere **tre canali** con **RGB**: un `/DeviceN` di tre
+inchiostri ha tre canali ed e' tinta piatta in tutto e per tutto, sovrastampa
+compresa. Contano solo `/DeviceRGB`, `/CalRGB`, un `/ICCBased` con `N 3` e un
+`/Indexed` che ha uno di questi per base.
+
 ## Il controllo visivo e' obbligatorio
 
 Dopo ogni pulizia va **guardato** il confronto prima/dopo, non solo lette le
@@ -343,7 +392,8 @@ esteso per escludere i cartigli, recuperando pero' i gruppi che cadono
 nell'ingombro (le alette con fianchi obliqui non toccano il corpo con tratti
 dritti); valida le cordonature fascia per fascia, altrimenti le alette di presa
 del cielo vengono scambiate per fianchi. Il verso di fasciatura, verticale o
-orizzontale, si deduce dalla struttura.
+orizzontale, si deduce dalla struttura, e cosi' la **famiglia**: chiuso o
+aperto, vedi sotto.
 
 ### La griglia non tollera un intruso
 
@@ -377,35 +427,94 @@ file (Kinder Pingui T6 BOX):
 
 ### Quando il solutore non sa, deve dirlo
 
-`solve_carton` da' le quote solo dopo due controlli che il disegno stesso
-impone, e se non passano solleva un errore che riporta le righe misurate:
+`solve_carton` non prova a indovinare: **legge la sequenza delle fasce e
+decide a quale famiglia appartiene**. Se non e' nessuna delle due, solleva un
+errore che riporta le fasce misurate in millimetri, e l'errore dice quale
+condizione e' mancata.
 
-- **retro e fronte devono avere la stessa altezza.** Sono la stessa faccia
-  vista da due parti. Il solutore prende come retro e fronte le due fasce piu'
-  alte e ne fa la media: sul Pingui erano 40,6 e 75,7 e la media, 58,1, veniva
-  consegnata come altezza del pack. Quaranta contro settantacinque vuol dire
-  che l'assegnazione dei ruoli e' sbagliata, non che il pack e' strano;
-- **cielo o fianco devono esistere**, altrimenti la profondita' non e'
-  ricavabile e prima si leggeva un `KeyError: 'left'`.
+Prima di leggere le fasce, pero', bisogna sapere **quali linee sono fasce**. Le
+`ys` del foglio sono l'unione di tutte le cordonature, e ci finisce anche
+quello che non piega il corpo: sul Pingui una linea a 27 mm dal fondo — dove le
+alette laterali cambiano profilo — spezzava la faccia da 125 in 98 + 27, e il
+fronte spariva dalla lettura. Una cordonatura che separa due fasce della
+fasciatura **deve attraversare la colonna del corpo**; quelle che non lo fanno
+appartengono alle alette (`_fasce_del_corpo`). E' lo stesso criterio che si
+usava gia' per le colonne, applicato anche alle righe.
 
-### Il Kinder Pingui T6 BOX resta aperto
+I controlli che decidono la famiglia:
 
-Con la griglia pulita la sua struttura e' simmetrica e leggibile:
+- **astuccio chiuso**: retro e fronte devono avere la **stessa altezza**. Sono
+  la stessa faccia vista da due parti. Il solutore prende come retro e fronte
+  le due fasce piu' alte e ne fa la media: sul Pingui erano 40,5 e 125,0 e la
+  media, 82,8, non e' l'altezza di niente. Quaranta contro centoventicinque
+  vuol dire che questa non e' la lettura giusta;
+- **astuccio aperto**: cielo e fondo devono essere **uguali attorno a una
+  faccia sola**, e i **fianchi devono tornare con la profondita'**;
+- in tutti i casi **cielo o fianco devono esistere**, altrimenti la profondita'
+  non e' ricavabile e prima si leggeva un `KeyError: 'left'`.
+
+### Un astuccio puo' non chiudersi
+
+**Un astuccio non e' obbligato ad avere il retro.** Un vassoio non ce l'ha per
+definizione; un espositore da banco nemmeno; un pack con finestra ce l'ha a
+meta', chiuso da due falde che lasciano in mezzo l'apertura da cui si vede il
+prodotto. Trattare il retro come obbligatorio non e' prudenza: e' rifiutare una
+famiglia di astucci che esiste.
+
+La firma in fustella di un astuccio aperto e' netta e non si confonde con
+quella di uno chiuso:
+
+    chiuso   [aletta] RETRO | CIELO | FRONTE | FONDO     fianchi accanto al RETRO
+    aperto   [falda] CIELO | FRONTE | FONDO [falda]      fianchi accanto al FRONTE
+
+cioe' **una faccia grande sola**, con cielo e fondo **uguali** sopra e sotto, e
+i fianchi agganciati al fronte — al retro che non c'e' non possono esserlo. Le
+due fasce oltre il cielo e il fondo, se ci sono, sono le **falde del retro**, e
+quello che non coprono e' la **finestra**.
+
+Su un astuccio aperto i fianchi **sono** la profondita', e devono tornare con
+cielo e fondo. Questo controllo non e' una cintura di sicurezza, e' quello che
+tiene fuori i flowpack: su Colazione la fascia grande e' il nastro, cielo e
+fondo sono due falde da 5 mm perfettamente uguali, e senza il controllo ne
+usciva un astuccio profondo cinque millimetri. I fianchi da 7 lo smentiscono, e
+il solutore si ferma.
+
+#### Le falde del retro sono fasce, non facce
+
+Sul solido le due falde non sono facce intere: sono **fasce del retro**, e in
+mezzo resta il buco. Gli angoli si interpolano lungo i due lati verticali del
+retro (`folding._fascia`), e non serve rifare i conti sul ribaltamento della
+fasciatura: una fascia del retro **eredita la quinta del retro**, basta
+accorciarla dal lato giusto. Con la fascia intera — da 0 a 1 — la formula
+ridiventa esattamente il quad del retro, che e' la prova che l'interpolazione
+non ha invertito niente.
+
+Da che lato si accorcia lo dice la piega, non il gusto:
+
+- la falda **alta** arriva scavalcando il cielo, quindi il suo bordo di
+  cordonatura sta **in cima** al retro e il bordo libero scende verso la
+  finestra;
+- la falda **bassa** risale dal fondo, quindi il suo bordo di cordonatura sta
+  **in fondo** e il bordo libero sale verso la finestra.
+
+Verificato guardando il modello: la fascia rossa con l'onda di latte gira
+attorno al fondo del pack e **si ricongiunge** — sul fronte si legge
+`latte | onda | rosso` scendendo, sulla falda bassa del retro si legge
+`bianco | onda | rosso` scendendo, che e' la stessa banda vista dall'altra
+parte. Se il ribaltamento fosse invertito la banda non combacerebbe col fondo.
+
+#### Il caso calibrato: Kinder Pingui T6 BOX
 
     colonne (mm)   16 | 4 | 8 | 32,3 | 140,5 | 32,3 | 8 | 4 | 16
-    righe   (mm)   33,5 | 40,5 | 98,0 | 27,0 | 40,5 | 30,0
-    fianchi        45,5 x 125,0, accanto al pannello grande (non al retro)
+    fasce   (mm)   33,5 | 40,5 | 125,0 | 40,5 | 30,0
+    fianchi        40,3 x 125,0, accanto al FRONTE
+    quote          140,5 x 125,0 x 40,5 mm
+    finestra       61,5 mm di altezza, fra le due falde da 33,5 e 30,0
 
-cioe' una sequenza verticale **aletta arcuata | 40,5 | 125,0 | 40,5 | aletta**,
-con cielo e fondo uguali (40,5 = 40,5, che e' il controllo che passa) e
-**nessun retro**. Il solutore vuole invece `[aletta] RETRO CIELO FRONTE FONDO`
-con i fianchi accanto al retro, e qui non ci sono ne' il retro ne' i fianchi
-dove li cerca.
-
-Non e' un difetto da aggiustare a tentoni: e' una **famiglia che la pipeline
-non ha**, e per darle i ruoli giusti serve sapere che astuccio e' — vassoio,
-espositore, astuccio a innesto con cartellino. Fino ad allora il solutore si
-ferma e lo dice.
+E' un pack cartotecnico con il **retro a finestra**, che lascia intravedere i
+sei Pingui dentro. Il riscontro che chiude il conto e' la profondita' letta due
+volte da due posti diversi: cielo e fondo danno **40,5**, i fianchi **40,3**.
+Costruisce in 3,9 s con 354 MB di picco.
 
 ## Flowpack
 
@@ -802,6 +911,13 @@ estraibile — sulla pagina intera pdfplumber trova 20 parole. Sono state lette 
 occhio dalla miniatura per verificare il risultato, non per produrlo: 144 = 10 +
 124 + 10, 83 = 23 + 36 + 12 + 12.
 
+Astucci, con la quota letta due volte che chiude il conto:
+
+| | fasciatura | L x H x P | riscontro |
+|---|---|---|---|
+| Nutella Donut | orizzontale, chiuso | 188,1 x 190,8 x 38,1 | fianchi 38,1 = 38,1 |
+| K Pingui T6 BOX | verticale, aperto | 140,5 x 125,0 x 40,5 | cielo e fondo 40,5, fianchi 40,3 |
+
 ## Assunzioni non verificate
 
 - Il livello **Medio** di gonfiore e' interpolato fra Rigido e Morbido: manca un
@@ -825,3 +941,11 @@ occhio dalla miniatura per verificare il risultato, non per produrlo: 144 = 10 +
   e' stimato dal render: nessun documento lo riporta.
 - Un'eventuale **sovrapposizione incollata** dello sleeve non e' misurabile dal
   PDF: se c'e', tutti i diametri calano.
+- L'**astuccio aperto** ha un caso solo dietro, il Kinder Pingui T6 BOX, e ha
+  due falde di retro. Il vassoio vero — nessuna falda, retro del tutto assente
+  — il codice lo prevede ma **non l'ha mai visto**: la faccia del retro
+  semplicemente non viene costruita, e nei cartellini si dichiara.
+- L'avviso sull'**RGB** guarda le immagini sopra il mezzo megapixel. La soglia
+  e' scelta perche' separa il parco validato dai tre file con grafica in RGB,
+  non perche' un documento la fissi; e una colata **vettoriale** in RGB, se
+  esiste, passerebbe inosservata.

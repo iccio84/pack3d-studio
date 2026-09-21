@@ -63,19 +63,31 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
   con invito a riprovare. Meglio respingere che far cadere il servizio.
 
   Il numero viene dalla memoria, non dalla CPU. Picchi misurati su
-  `/api/analyze` piu' `/api/build` nello stesso processo, qualita' web:
+  `/api/analyze` piu' `/api/build` nello stesso processo, qualita' web.
+  Lo steso e' nastro x passo sui flowpack, ingombro della fustella sugli
+  astucci:
 
-  | pack | foglio | picco | CPU |
-  |---|---|---|---|
-  | Colazione | 460 x 330 mm | 386 MB | 17,1 s |
-  | K Brioss | 420 x 290 mm | 247 MB | 4,2 s |
-  | K Country | 122 x 119 mm | 268 MB | 3,0 s |
-  | K Paradiso | 165 x 155 mm | 226 MB | 2,3 s |
-  | K Brioss STD | 420 x 290 mm | 216 MB | 4,4 s |
-  | K Tronky T1 | 83 x 144 mm | 193 MB | 1,9 s |
+  | pack | tipologia | steso | picco | CPU |
+  |---|---|---|---|---|
+  | Colazione | flowpack | 460 x 330 mm | 434 MB | 20,0 s |
+  | Nutella Donut | astuccio | 452 x 265 mm | 402 MB | 6,8 s |
+  | K Pingui T6 | astuccio aperto | 261 x 270 mm | 354 MB | 4,6 s |
+  | K Country | flowpack | 122 x 119 mm | 274 MB | 3,2 s |
+  | K Brioss | flowpack | 420 x 290 mm | 247 MB | 4,4 s |
+  | K Paradiso | flowpack | 165 x 155 mm | 233 MB | 2,4 s |
+  | K Brioss STD | flowpack | 420 x 290 mm | 216 MB | 4,7 s |
+  | K Tronky T1 | flowpack | 83 x 144 mm | 199 MB | 1,7 s |
 
-  Il picco e' quasi tutto nella rasterizzazione della pagina per l'analisi: la
-  costruzione, da quando i tracciati li legge pypdfium2, costa fra 0,9 e 1,8 s.
+  Presi tutti nello stesso giro e sulla stessa macchina, perche' il picco varia
+  di qualche decina di MB col carico: Colazione, misurata prima, dava 386 MB
+  contro i 434 di adesso, e il codice di allora rimisurato oggi da' 442. Le
+  cifre servono a dimensionare, non a confrontare due versioni: per quello si
+  misurano prima e dopo di seguito.
+
+  Sui flowpack il picco e' quasi tutto nella rasterizzazione della pagina per
+  l'analisi, e la costruzione costa fra 0,5 e 2,1 s. Sugli astucci e'
+  rovesciato: l'analisi e' un paio di secondi e la costruzione se ne prende
+  cinque, perche' ogni pannello si ritaglia e si ripulisce a 200 dpi.
 
   Le istanze Free e Starter di Render hanno 512 MB. Due costruzioni insieme
   non ci stanno: il kernel uccide il processo a meta' e chi aspettava riceve

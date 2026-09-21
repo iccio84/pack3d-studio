@@ -62,6 +62,31 @@ FOLD_H = {
 FOLDS = {"vwrap": FOLD_V, "hwrap": FOLD_H}
 
 
+# Le due falde che chiudono il retro di un astuccio con finestra non sono
+# facce intere: sono FASCE del retro, e in mezzo resta il buco da cui si vede
+# il prodotto. Qui sta a quale bordo del retro ognuna e' attaccata: `back_top`
+# arriva scavalcando il cielo e si ferma in alto, `back_bottom` risale dal
+# fondo. Il ritaglio piano si orienta da se', perche' una fascia del retro
+# eredita la quinta del retro: basta accorciarla dal lato giusto.
+FASCE_RETRO = {"back_top": True, "back_bottom": False}
+
+
+def _fascia(quad, a, b):
+    """La fascia [a, b] di una faccia, in frazioni dell'altezza della texture.
+
+    `a` e' il bordo alto del ritaglio, `b` quello basso, e gli angoli si
+    interpolano lungo i due lati verticali della faccia: cosi' la fascia sta
+    sul solido dove ci sta la faccia intera, e non serve rifare i conti sul
+    ribaltamento della fasciatura.
+    """
+    c0, c1, c2, c3 = quad
+
+    def mix(p, q, t):
+        return tuple(p[i] + (q[i] - p[i]) * t for i in range(3))
+
+    return [mix(c0, c3, a), mix(c1, c2, a), mix(c1, c2, b), mix(c0, c3, b)]
+
+
 def disegno_tecnico(pdf_path, page_no=0):
     """Gli elementi da togliere dalla texture, in due passate leggere.
 
@@ -158,18 +183,43 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
     return out
 
 
-def build_faces(dims_mm, textures: dict, layout: str = "vwrap") -> list:
-    """Facce pronte per rasterizzatore ed export: quad 3D + texture + UV."""
+UV = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+
+
+def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
+                panels: dict | None = None) -> list:
+    """Facce pronte per rasterizzatore ed export: quad 3D + texture + UV.
+
+    Con `panels` si costruiscono anche le falde del retro, che sono fasce e
+    non facce: la loro altezza la sa solo la fustella.
+    """
     W, H, D = dims_mm
     C = corners(W, H, D)
+    pieghe = FOLDS[layout]
     faces = []
-    for name, keys in FOLDS[layout].items():
+    for name, keys in pieghe.items():
         if name not in textures:
             continue
         faces.append({
             "name": name,
             "quad": [C[k] for k in keys],
-            "uv": [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)],
+            "uv": list(UV),
             "tex": textures[name],
         })
+    if "back" in pieghe and panels:
+        retro = [C[k] for k in pieghe["back"]]
+        for name, in_alto in FASCE_RETRO.items():
+            p = panels.get(name)
+            if name not in textures or p is None or H <= 0:
+                continue
+            t = min(1.0, p.h_mm / H)
+            if t <= 0.0:
+                continue
+            a, b = (1.0 - t, 1.0) if in_alto else (0.0, t)
+            faces.append({
+                "name": name,
+                "quad": _fascia(retro, a, b),
+                "uv": list(UV),
+                "tex": textures[name],
+            })
     return faces
