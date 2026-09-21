@@ -528,6 +528,38 @@ e vinceva la prima, per mezzo millimetro di simmetria fra le due meta' del
 retro. A quella scala mezzo millimetro e' rumore del disegno; una falda da 68
 mm no.
 
+### Quando una cordonatura non e' disegnata
+
+Non tutti gli artwork disegnano le pieghe. Il K Tronky T1 segna le **aree** —
+print free, covered, best before, barcode — e tre dei loro confini cadono per
+mestiere su una cordonatura: a 23, 59 e 71 mm su un nastro di 83. La quarta non
+c'e', perche' li' non comincia nessuna area. Cercata nel PDF non esiste: ne' su
+penna tecnica ne' fuori, a nessuna lunghezza.
+
+Non serve indovinarla, e nemmeno serve il render del pack. Su un flowpack i due
+fianchi sono lo stesso fianco visto da due parti, quindi sono uguali per
+costruzione — e' lo stesso invariante su cui si regge `solve_bands_any`, usato
+al contrario. Da `sb = 71 - 59 = 12` segue `sa = 12`, cioe' la piega a 35, e da
+li' fronte 24, fianco 12, falda 5,5, con `5,5 + 17,5 + 12 + 24 + 12 + 6,5 + 5,5
+= 83`. Il render del cliente ha poi confermato la sezione; non l'ha prodotta.
+
+Due precauzioni, tutte e due imparate rompendo qualcosa:
+
+- **il ripiego scatta solo se nessuna quaterna intera chiude, in nessuno dei due
+  versi.** "Nessuna quaterna chiude" non e' solo il segnale che manca una piega:
+  e' anche il segnale che lo steso va letto ruotato di 90 gradi. Concedendo la
+  deduzione al primo giro, il K Brioss — che va letto ruotato — trovava una
+  soluzione plausibile nel verso sbagliato, ci si fermava, e il verso giusto non
+  veniva mai provato. `analyze_auto` fa quindi due giri: prima tutti e due i
+  versi con le sole pieghe disegnate, poi tutti e due concedendo la deduzione;
+- **`merito` tiene le soluzioni dedotte dietro a quelle misurate, sempre.** Non
+  come cortesia: e' cosi' che si garantisce che nessun pack gia' risolto possa
+  cambiare risposta. Verificato — sul parco intero l'unica differenza e' che il
+  Tronky, che prima falliva, adesso esce.
+
+La piega dedotta viene **dichiarata** nei cartellini ("una cordonatura non e'
+disegnata: dedotta a 35.0 mm dai fianchi uguali"), come ogni livello di stima.
+
 ### Le guide ravvicinate: due letture, non una scelta
 
 Tre linee ravvicinate ed equidistanti **possono** essere una piega sola
@@ -579,14 +611,12 @@ Risolti dall'analisi automatica, con l'invariante che chiude:
 | Kinder Country | 122,0 | 119,0 | 35,0 | 10,0 | 16,0 |
 | Kinder Paradiso T1 | 165,0 | 155,0 | 43,0 | 27,0 | 12,5 |
 | K Brioss Latte e Cacao T10 | 419,9 | 290,0 | 148,9 | 57,0 | 4,1 |
+| K Tronky T1 | 83,0 | 144,0 | 24,0 | 12,0 | 5,5 | (una piega dedotta) |
 
-**K Tronky T1 non e' coperto.** Nastro e passo si leggono giusti — 83,0 e 144,0,
-gli stessi numeri che il cartiglio della miniatura scrive come WEB WIDTH e STEP —
-ma la fasciatura non chiude: le fasce lette sono 8,5 | 14,5 | 36 | 7 | 5 | 3,5 |
-8,5 e nessuna quaterna soddisfa l'invariante. Le tre fasce strette in fondo sono
-probabilmente zona di saldatura e eyemark, non cordonature, ma senza il pack in
-mano e' una congettura. Nota: le quote del cartiglio sono testo vettorializzato,
-non estraibile — sulla pagina intera pdfplumber trova 20 parole.
+Nota sul Tronky: le quote del cartiglio sono testo vettorializzato, non
+estraibile — sulla pagina intera pdfplumber trova 20 parole. Sono state lette a
+occhio dalla miniatura per verificare il risultato, non per produrlo: 144 = 10 +
+124 + 10, 83 = 23 + 36 + 12 + 12.
 
 ## Assunzioni non verificate
 

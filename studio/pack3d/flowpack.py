@@ -563,14 +563,19 @@ def _collapse_guides(vals, max_gap=8.0, tol=0.6):
 def merito(b):
     """Quanto e' credibile una soluzione. Piu' piccolo, meglio e'.
 
-    Prima la falda: una falda fuori scala non e' una falda, e nessuno scarto
+    Prima le pieghe misurate: una quaterna letta sul disegno vale piu' di una
+    in cui una piega e' stata dedotta, sempre e comunque. Serve anche a
+    garantire che nessun pack gia' risolto possa cambiare risposta.
+
+    Poi la falda: una falda fuori scala non e' una falda, e nessuno scarto
     numerico puo' valere quanto quella. Poi la simmetria, poi il fronte piu'
     largo.
     """
-    return (b["side_fin"] > FALDA_LIMITE, b["simmetria"], -b["front"])
+    return (b.get("dedotta") is not None, b["side_fin"] > FALDA_LIMITE,
+            b["simmetria"], -b["front"])
 
 
-def solve_bands(web_mm, folds_mm, tol=1.5):
+def solve_bands(web_mm, folds_mm, tol=1.5, dedurre=False):
     """Vedi solve_bands_any: la simmetria non vale su tutti i pack.
 
     `folds_mm` puo' essere una lista di pieghe o piu' LETTURE alternative
@@ -579,9 +584,10 @@ def solve_bands(web_mm, folds_mm, tol=1.5):
     lettura e' giusta - vedi _collapse_guides.
     """
     if folds_mm and isinstance(folds_mm[0], (list, tuple)):
-        sol = [b for b in (solve_bands_any(web_mm, f, tol) for f in folds_mm) if b]
+        sol = [b for b in (solve_bands_any(web_mm, f, tol, dedurre)
+                           for f in folds_mm) if b]
         return min(sol, key=merito) if sol else None
-    return solve_bands_any(web_mm, folds_mm, tol)
+    return solve_bands_any(web_mm, folds_mm, tol, dedurre)
 
 
 # Falde misurate su tutti i pack coperti: 4,1 (K Brioss T10) 12,5 (Paradiso)
@@ -593,7 +599,7 @@ def solve_bands(web_mm, folds_mm, tol=1.5):
 FALDA_LIMITE = 24.0
 
 
-def solve_bands_any(web_mm, folds_mm, tol=2.0):
+def solve_bands_any(web_mm, folds_mm, tol=2.0, dedurre=False):
     """Ricava fronte, fianco e falda enumerando tutte le quaterne di pieghe.
 
     La versione precedente cercava coppie speculari rispetto alla mezzeria del
@@ -629,6 +635,61 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0):
         # pack usciva spesso 7 mm, cioe' piatto, con nastro e passo giusti.
         if best is None or merito(cand) < merito(best):
             best = cand
+    if best is not None or not dedurre:
+        return best
+    return _piega_dedotta(web_mm, folds_mm, tol)
+
+
+def _piega_dedotta(web_mm, folds_mm, tol=2.0):
+    """Quando di pieghe se ne leggono solo tre, la quarta si calcola.
+
+    Non tutti gli artwork disegnano le cordonature. Il K Tronky T1 segna le
+    AREE - print free, covered, best before - e tre dei loro confini cadono
+    su una piega (23, 59, 71 mm su un nastro di 83); la quarta non c'e',
+    perche' li' non comincia nessuna area. Cercata nel PDF non esiste: ne'
+    su penna tecnica ne' fuori.
+
+    Non serve indovinarla. Su un flowpack i due fianchi sono lo stesso
+    fianco visto da due parti, quindi sono uguali per costruzione: e' lo
+    stesso invariante su cui si regge solve_bands_any, solo usato al
+    contrario. Da sb = 71 - 59 = 12 segue sa = 12, cioe' la piega a 35, e da
+    li' fronte 24, fianco 12, falda 5,5.
+
+    Il ripiego scatta solo se nessuna quaterna intera chiude, e merito()
+    tiene comunque le soluzioni dedotte dietro a quelle misurate: un pack che
+    oggi si risolve non puo' cambiare risposta.
+    """
+    import itertools
+    v = sorted(set(folds_mm))
+    best = None
+    for tre in itertools.combinations(v, 3):
+        a, b_, c = tre
+        # la piega che manca puo' essere in ognuna delle quattro posizioni, e
+        # in ognuna e' determinata da sa = sb
+        for quaterna in ((b_ - (c - b_), a, b_, c),      # manca y1
+                         (a, a + (c - b_), b_, c),       # manca y2
+                         (a, b_, c - (b_ - a), c),       # manca y3
+                         (a, b_, c, c + (b_ - a))):      # manca y4
+            y1, y2, y3, y4 = quaterna
+            if not (0 <= y1 < y2 < y3 < y4 <= web_mm):
+                continue
+            manca = next(y for y in quaterna if y not in v)
+            sa, front, sb = y2 - y1, y3 - y2, y4 - y3
+            if min(sa, front, sb) <= 2 or abs(sa - sb) > tol:
+                continue
+            fin = (y1 + web_mm - y4 - front) / 2.0
+            if not (2 < fin < web_mm * 0.25):
+                continue
+            ba, bb = y1 - fin, (web_mm - fin) - y4
+            if ba < 0 or bb < 0 or abs(ba + bb - front) > tol:
+                continue
+            cand = dict(front=round(front, 2), thick=round((sa + sb) / 2, 2),
+                        side_fin=round(fin, 2), back_a=round(ba, 2),
+                        back_b=round(bb, 2), folds=(y1, y2, y3, y4),
+                        simmetria=round(abs(ba - bb), 2),
+                        dedotta=round(manca, 2))
+            if best is None or merito(cand) < merito(best):
+                best = cand
     return best
 
 
@@ -729,26 +790,36 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # scambiando H con V, la rasterizzazione scambiando righe e colonne. Cosi'
     # il solutore resta uno solo e lavora sempre nel verso che conosce. Si
     # parte dall'orizzontale, che e' il piu' comune.
+    # Due giri, non uno. Prima si provano tutti e due i versi con le sole
+    # pieghe disegnate; solo se non chiude nessuno si riprova concedendo di
+    # dedurne una.
+    #
+    # L'ordine conta, e l'ho imparato rompendolo: "nessuna quaterna chiude" e'
+    # anche il segnale che lo steso e' girato. Concedendo la deduzione al
+    # primo giro, il K Brioss - che va letto ruotato - trovava una soluzione
+    # plausibile nel verso sbagliato e il verso giusto non veniva mai provato.
     primo = None
-    for ruotato in (False, True):
-        if ruotato:
-            S = [("V" if k == "H" else "H", c, a0, b0, st) for k, c, a0, b0, st in S]
+    for dedurre in (False, True):
+        for ruotato in (False, True):
+            try:
+                return _risolvi_steso(S, raster, sc, ruotato, dedurre)
+            except _StesoNonRisolto as e:
+                # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
+                # porta dietro il traceback, il traceback il frame di
+                # _risolvi_steso, e il frame tutti i suoi locali: le
+                # rasterizzazioni intermedie del tentativo fallito restavano vive
+                # per tutto il secondo tentativo. Su un foglio grande sono
+                # centinaia di MB tenuti in ostaggio da una variabile che serve
+                # solo a ricordare una frase.
+                primo = primo or str(e)
+            # si passa all'altro verso; al giro dopo si torna a questo
+            S = [("V" if k == "H" else "H", c, a0, b0, st)
+                 for k, c, a0, b0, st in S]
             raster = raster.transpose(1, 0, 2)
-        try:
-            return _risolvi_steso(S, raster, sc, ruotato)
-        except _StesoNonRisolto as e:
-            # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
-            # porta dietro il traceback, il traceback il frame di
-            # _risolvi_steso, e il frame tutti i suoi locali: le
-            # rasterizzazioni intermedie del tentativo fallito restavano vive
-            # per tutto il secondo tentativo. Su un foglio grande sono
-            # centinaia di MB tenuti in ostaggio da una variabile che serve
-            # solo a ricordare una frase.
-            primo = primo or str(e)
     raise _StesoNonRisolto(primo)
 
 
-def _risolvi_steso(S, raster, sc, ruotato):
+def _risolvi_steso(S, raster, sc, ruotato, dedurre=False):
     """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
     import numpy as np
     from .dieline import _cluster
@@ -787,7 +858,7 @@ def _risolvi_steso(S, raster, sc, ruotato):
     x0, x1 = min(vs), max(vs)
     web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM
     folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
-    b = solve_bands(web, folds)
+    b = solve_bands(web, folds, dedurre=dedurre)
     if b is None:
         raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
 
@@ -806,6 +877,9 @@ def _risolvi_steso(S, raster, sc, ruotato):
     # resta: fra i due tagli esterni stanno le due linee di saldatura, e il
     # rientro dal taglio alla saldatura e' la pinna.
     avvisi = []
+    if b.get("dedotta") is not None:
+        avvisi.append("una cordonatura non e' disegnata: dedotta a %.1f mm "
+                      "dai fianchi uguali" % b["dedotta"])
     if end_fin < 1.0:
         xs = sorted(vs)
         if len(xs) < 4:
