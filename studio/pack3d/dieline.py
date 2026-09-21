@@ -95,6 +95,11 @@ class Dieline:
 # --------------------------------------------------------------------------- #
 # estrazione della geometria
 # --------------------------------------------------------------------------- #
+# L'ultima pagina rasterizzata: {(file, pagina): (scala, immagine)}. Una sola,
+# perche' il server costruisce un modello alla volta.
+_RESA = {}
+
+
 def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
     """Rasterizza la pagina nel telaio del MediaBox, quello di pdfplumber.
 
@@ -106,9 +111,44 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
     solo misure prese nel posto sbagliato.
     """
     import pypdfium2 as pdfium
+    from PIL import Image
+
+    # Una pagina, una rasterizzazione. Il flusso ne chiedeva TRE della stessa
+    # pagina a risoluzioni diverse - 100 dpi per trovare il blocco stampato,
+    # 150 per l'analisi, quella della texture per la grafica - e su Colazione
+    # erano 30 secondi su 40 e tre picchi di memoria sovrapposti.
+    #
+    # Si tiene l'ultima resa e si SCENDE soltanto: una riduzione e' una media
+    # di pixel che ci sono gia', un ingrandimento sarebbe invenzione. Se
+    # qualcuno chiede piu' risoluzione di quella in cassa si rasterizza di
+    # nuovo e si sostituisce.
+    chiave = (pdf_path, page_no)
+    vecchia = _RESA.get(chiave)
+    if vecchia is not None and vecchia[0] >= scale - 1e-9:
+        avuta, im = vecchia
+        if abs(avuta - scale) < 1e-9:
+            return im
+        larg = max(1, int(round(im.width * scale / avuta)))
+        alt = max(1, int(round(im.height * scale / avuta)))
+        return im.resize((larg, alt), Image.LANCZOS)
+
     page = pdfium.PdfDocument(pdf_path)[page_no]
     page.set_cropbox(*page.get_mediabox())
-    return page.render(scale=scale).to_pil().convert("RGB")
+    im = page.render(scale=scale).to_pil().convert("RGB")
+    # una sola pagina in cassa: il server costruisce un modello alla volta
+    _RESA.clear()
+    _RESA[chiave] = (scale, im)
+    return im
+
+
+def scarta_resa():
+    """Butta la pagina rasterizzata tenuta in cassa.
+
+    Va chiamata appena l'ultimo che la usa ha preso la sua copia: tenerla
+    viva oltre costa quanto pesa (41 MB su un foglio come Colazione) proprio
+    mentre la costruzione alloca la texture.
+    """
+    _RESA.clear()
 
 
 def _segments(page):

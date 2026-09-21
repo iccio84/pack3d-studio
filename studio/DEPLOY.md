@@ -62,13 +62,20 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
 - **Una** costruzione alla volta (`PACK3D_MAX_JOBS`), la seconda riceve 503
   con invito a riprovare. Meglio respingere che far cadere il servizio.
 
-  Il numero viene dalla memoria, non dalla CPU. Picchi misurati, qualita' web:
+  Il numero viene dalla memoria, non dalla CPU. Picchi misurati su
+  `/api/analyze` piu' `/api/build` nello stesso processo, qualita' web:
 
-  | pack | foglio | picco |
-  |---|---|---|
-  | K Brioss | 420 x 290 mm | 400 MB |
-  | K Country | 122 x 119 mm | 271 MB |
-  | K Paradiso | 165 x 155 mm | 249 MB |
+  | pack | foglio | picco | CPU |
+  |---|---|---|---|
+  | Colazione | 460 x 330 mm | 386 MB | 17,1 s |
+  | K Brioss | 420 x 290 mm | 247 MB | 4,2 s |
+  | K Country | 122 x 119 mm | 268 MB | 3,0 s |
+  | K Paradiso | 165 x 155 mm | 226 MB | 2,3 s |
+  | K Brioss STD | 420 x 290 mm | 216 MB | 4,4 s |
+  | K Tronky T1 | 83 x 144 mm | 193 MB | 1,9 s |
+
+  Il picco e' quasi tutto nella rasterizzazione della pagina per l'analisi: la
+  costruzione, da quando i tracciati li legge pypdfium2, costa fra 0,9 e 1,8 s.
 
   Le istanze Free e Starter di Render hanno 512 MB. Due costruzioni insieme
   non ci stanno: il kernel uccide il processo a meta' e chi aspettava riceve

@@ -131,6 +131,12 @@ def analisi_flowpack(pdf):
         if imp in _ANALISI:
             _ANALISI.move_to_end(imp)
             return _ANALISI[imp]
+    # Si rasterizza QUI, una volta, alla risoluzione piu' alta che serva: da
+    # qui in avanti find_blocks (100 dpi) e la texture riscalano quella invece
+    # di rifarla. Senza, il primo che chiede e' find_blocks a 100 e l'analisi
+    # deve comunque rifarla piu' grande.
+    dl.render_page(pdf, 0, fpk.SCALA_ANALISI)
+
     box, _dt = printed_bbox(pdf)
     ripiego = None
     try:
@@ -441,15 +447,47 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
             # "auto" o valore non riconosciuto: se l'agente ha gia' deciso usa
             # la sua scelta, altrimenti il centro scala
             liv = 5.0
-    # Il rigonfiamento cambia la FORMA, non la taglia: dal rettangolo teso sul
-    # prodotto all'ellisse piena d'aria, tenendo fermi il rapporto
-    # larghezza/spessore e il perimetro del film. La scala che serve a tornare
-    # sul perimetro gonfia il pack in entrambe le direzioni, ed e' l'unico modo
-    # di gonfiarlo senza inventare pellicola che nello steso non c'e'.
+    # Il rigonfiamento cambia la FORMA, non la taglia: il film che c'e' nello
+    # steso e' quello, e gonfiare non ne aggiunge. Le due chiusure pero'
+    # partono da forme diverse, e la scala vuol dire cose diverse: qui sotto
+    # la pinna, in fondo la sovrapposizione.
     liv = max(1.0, min(10.0, liv))
-    n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
     fp = fp0
-    scala = fpk.sezione_rigonfiata(fp, n_sez)
+    if fp0.pillow:
+        # Un tubo piatto non ha un rapporto larghezza/spessore da tenere fermo:
+        # gonfiandosi passa dalla lente al cerchio, e il cerchio e' il massimo
+        # fisico - con quel film non si puo' essere piu' tondi. Il livello dice
+        # quanto ci si avvicina, in frazione del diametro del cerchio.
+        #
+        # La scala e' tarata sul GLB di riferimento del K Tronky T1, che e'
+        # l'unica misura che abbiamo per questa famiglia: sezione a ellisse di
+        # rapporto 1,466 e bbox 26,7 x 18,2 su un giro di 71, cioe' 0,806 del
+        # diametro del cerchio. Il livello 5 ci cade sopra.
+        #
+        # La scala e' volutamente STRETTA - da 1,85 di rapporto a 1,00 - e non
+        # copre i wrap davvero piatti: allargarla vorrebbe dire inventare
+        # numeri che nessun pack misurato conferma, e spostare il centro della
+        # scala via dall'unico riferimento che c'e'. Il giorno che arriva un
+        # pack piatto a sovrapposizione, si allarga con quello in mano.
+        n_sez = SEZ_ELLISSE
+        scala = 1.0
+        pienezza = PILLOW_LENTE + (PILLOW_CERCHIO - PILLOW_LENTE) * (liv - 1) / 9.0
+        # Lo spessore va messo DENTRO il Flowpack, non passato a parte: a
+        # valle fp.T lo usano le nervature delle ganasce, l'apertura delle
+        # pinne e i cartellini. Con T a zero la nervatura divide per la
+        # protezione da zero e la mesh esplode - misurato: vertici a
+        # cinque milioni di millimetri. La proprieta' `girth` non ne soffre,
+        # perche' a sovrapposizione il giro lo da' il nastro meno il lembo.
+        fp = replace(fp, T=round(pienezza * fp0.girth / math.pi, 2))
+        avvisi_sez.append("tubo piatto gonfiato al %.0f%% del cerchio "
+                          "(livello %g)" % (100.0 * pienezza, liv))
+    else:
+        # A pinna la sezione va dal rettangolo teso sul prodotto all'ellisse
+        # piena d'aria, tenendo fermi il rapporto larghezza/spessore MISURATO
+        # nello steso e il perimetro del film. La scala che serve a tornare sul
+        # perimetro gonfia il pack in entrambe le direzioni.
+        n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
+        scala = fpk.sezione_rigonfiata(fp, n_sez)
     if scatola:
         # Il riscalo a perimetro costante dice che una forma piu' tonda, con lo
         # stesso film, e' piu' grande: vale quando dentro c'e' aria. Con una
@@ -546,10 +584,16 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # sezione del pack, e a questo pensa width_end.
     V = grid.reshape(-1, 3)
 
-    V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0)
-    Vm = np.vstack([V, V2])
-    UVm = np.vstack([UV, UV2])
-    Tm = np.vstack([T, T2 + len(V)])
+    if fp.pillow:
+        # a sovrapposizione non c'e' niente da appoggiare sul retro: il lembo
+        # sta SOTTO l'altro bordo, quindi non si vede e non si modella. Una
+        # falda a spessore zero uscirebbe come una lamina degenere.
+        Vm, UVm, Tm = V, UV, T
+    else:
+        V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0)
+        Vm = np.vstack([V, V2])
+        UVm = np.vstack([UV, UV2])
+        Tm = np.vstack([T, T2 + len(V)])
     if _normals(Vm, Tm)[int(np.argmax(Vm[:, 2]))][2] < 0:
         Tm = Tm[:, [0, 2, 1]]
 
@@ -577,9 +621,15 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
 
     base = fin_open / max(int(teeth), 1)
-    return ["flowpack, rigonfiamento %s" % soft,
-            "sezione %.1f x %.1f (perimetro %.1f invariato)"
-            % (scala * fp.W, scala * fp.T, G),
+    if fp.pillow:
+        sez = ("sezione a ellisse %.1f x %.1f (giro %.1f invariato, lembo "
+               "coperto %.1f)" % (2.0 * semiasse, fp.T, G,
+                                  fp.sovrapposizione))
+    else:
+        sez = ("sezione %.1f x %.1f (perimetro %.1f invariato)"
+               % (scala * fp.W, scala * fp.T, G))
+    return ["flowpack%s, rigonfiamento %s"
+            % (" a sovrapposizione" if fp.pillow else "", soft), sez,
             "corpo %.1f mm, pinne %.1f" % (fp0.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri, base %.2f altezza %.2f mm"
@@ -589,6 +639,23 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
 
 def _panel_knots(Ps, d, G, fp):
     """Spigoli della sezione, per far cadere ogni fascia sul suo pannello."""
+    if fp.pillow:
+        # Un'ellisse non ha spigoli, quindi la ricerca per curvatura qui sotto
+        # non trova niente e la verifica non scattava: la grafica poteva
+        # ruotare attorno al tubo senza che nessuno se ne accorgesse. I nodi
+        # di un tubo piatto sono le due PIEGHE, cioe' gli estremi dell'asse
+        # maggiore, e lo steso dice dove devono cadere: a back_a dalla
+        # cucitura e a back_a + fronte.
+        try:
+            ia = int(np.argmax(Ps[:-1, 0]))
+            ib = int(np.argmin(Ps[:-1, 0]))
+            ks = [0.0] + sorted([float(d[ia]), float(d[ib])]) + [G]
+            kf = [0.0, fp.back_a, fp.back_a + fp.W, fp.back_a + fp.W + fp.back_b]
+            if kf[-1] <= 0:
+                return None
+            return ks, [x * G / kf[-1] for x in kf]
+        except Exception:
+            return None
     try:
         t = np.gradient(Ps, axis=0)
         t /= np.maximum(np.linalg.norm(t, axis=1, keepdims=True), 1e-9)
@@ -657,8 +724,15 @@ def analyze_pdf(pdf, kind=None):
     # se fallisce anche il ripiego, l'errore va al client
     _box, fp, ripiego = analisi_flowpack(pdf)
     meta = ["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
-            "corpo %.1f mm" % fp.L,
-            "sezione %.1f x %.1f mm" % (fp.W, fp.T)]
+            "corpo %.1f mm" % fp.L]
+    if fp.pillow:
+        # a sovrapposizione la sezione non c'e' nello steso: il tubo e' piatto
+        # e la forma che prende gonfiandosi la decide il rigonfiamento. Quello
+        # che lo steso dice davvero e' giro, fronte e lembo coperto.
+        meta.append("tubo piatto: giro %.1f, fronte %.1f, lembo coperto %.1f mm"
+                    % (fp.girth, fp.W, fp.sovrapposizione))
+    else:
+        meta.append("sezione %.1f x %.1f mm" % (fp.W, fp.T))
     sospetto = falda_sospetta(fp)
     if sospetto:
         # prima di costruire, non dopo: qui l'utente le quote le sta leggendo
@@ -831,6 +905,14 @@ class Handler(BaseHTTPRequestHandler):
             traceback.print_exc()
             return self._send(500, "%s: %s" % (type(e).__name__, e))
 
+
+# Tubo piatto a sovrapposizione: quanto e' spessa la sezione in frazione del
+# diametro del cerchio, ai due estremi della scala di rigonfiamento. Il cerchio
+# e' il massimo fisico: con quel film non si puo' essere piu' tondi. Il valore
+# al livello 1 viene dalla taratura sul K Tronky T1, che al livello 5 deve
+# uscire con rapporto 1,466 come il suo GLB di riferimento.
+PILLOW_LENTE = float(os.environ.get("PACK3D_PILLOW_LENTE", "0.65"))
+PILLOW_CERCHIO = float(os.environ.get("PACK3D_PILLOW_CERCHIO", "1.0"))
 
 # esponente della superellisse ai due estremi della scala di rigonfiamento:
 # alto = rettangolo (film teso sul prodotto), 2 = ellisse (pack pieno d'aria)

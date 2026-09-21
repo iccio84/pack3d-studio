@@ -184,6 +184,42 @@ Due divieti operativi:
   tratti sottili e retini, su aree grandi spalma la grafica. Applicato al 23%
   di un'immagine ha distrutto logo e prodotto. Se restano buchi veri, mostrarli.
 
+### Il colore e lo spessore dipendono da chi legge il PDF
+
+Cambiando lettore cambia quello che si vede, e due differenze sono costate
+grafica vera.
+
+**Le tinte piatte.** pdfminer, e quindi pdfplumber, di una separazione da' solo
+il valore di inchiostro: uno scalare, `1.0`. Uno scalare non e' mai "un colore
+con tinta", percio' le Pantone restavano fuori dalla tavolozza tecnica per una
+proprieta' della rappresentazione, non per una scelta. pdfium le risolve fino
+all'RGB, e da quel momento la Pantone della fustella e la Pantone del logo sono
+lo stesso colore: sul K Brioss STD la maschera ha cancellato le lettere di
+"kInder", disegnate in PANTONE 361 U come il tracciato `/Cutter`, insieme a
+2.327 altre forme.
+
+Rifare i conti a mano non e' praticabile — in questi artwork ci sono funzioni di
+tipo 2 e di tipo 4 e alternative ICC, Lab e CMYK. Si fa invece dipingere la
+campionatura a pdfium: una paginetta con un quadretto per separazione a
+inchiostro pieno, resa con lo stesso motore che rende l'artwork, e quegli RGB si
+escludono dalla tavolozza (`tracciati.piatte`, 0,01-0,04 s). Con
+l'esclusione i riempimenti mascherati tornano **esattamente** quelli di prima su
+cinque pack su sei, e sul sesto differiscono di 11 pixel.
+
+**Lo spessore del tratto.** pdfminer non legge il `/LW` di un ExtGState e lascia
+lo spessore a zero, cioe' a filo di capello, cioe' tecnico. Sul K Brioss STD un
+rettangolo nero da 1 pt attorno all'area di stampa — che per giunta non viene
+nemmeno stampato — faceva togliere due bande verticali di grafica lunghe quanto
+il pack. pdfium lo spessore lo legge giusto, e su uno `0 w` vero risponde 0,0
+come deve: verificato con un PDF costruito apposta con tratti a 0, 0,5, 1 e 2 pt.
+
+**Come si verifica un cambio di maschera.** Non basta il PSNR sulla texture: le
+differenze sono poche e localizzate, e una media le nasconde. Si confrontano le
+due maschere come array booleani, separando i tre livelli (tratti, pieni,
+scritte), si contano i pixel `solo-vecchia` e `solo-nuova`, e si **guardano** i
+gruppi piu' grandi ritagliati sulla pagina. E' cosi' che si e' visto che tutto
+quello che la maschera nuova non copre piu' era grafica o roba invisibile.
+
 **Metodo:** una modifica alla volta, con verifica in mezzo. Cambiandone due
 insieme si perde il risultato buono gia' raggiunto senza capire quale delle due
 ha rotto cosa.
@@ -314,6 +350,12 @@ un'altra parte: nessuna eccezione, solo misure prese nel posto sbagliato, e
 intere viste tecniche che restano fuori dalla resa. Si rasterizza sempre con
 `dieline.render_page`, mai con `pdfium.PdfDocument(...).render()` diretto.
 
+Vale anche in **lettura**, e li' e' meno evidente: `page.get_size()` di pdfium
+da' la CropBox, mentre le coordinate dei tracciati sono nello spazio del PDF.
+Chi ribalta la y su quell'altezza ottiene una pagina intera fuori posto — sul
+K Tronky le due maschere, vecchia e nuova, non avevano un pixel in comune. Il
+telaio si prende sempre dalla MediaBox (`tracciati._telaio`).
+
 **I pannelli della fustella non sono la sezione del pack chiuso.** Le
 cordonature dicono dove il film e' cordonato, non che forma prende una volta
 riempito. Su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in mano e'
@@ -407,7 +449,8 @@ Paradiso, 25,7 su K Brioss. Il difetto stava nel codice da prima ma era
 dormiente: la costruzione passava per `soft_section_fit`, che parte esplicito
 da `(W/2 - back_a, -T/2)`. E' stato il passaggio alla superellisse ad
 accenderlo, e nessuno se n'e' accorto perche' la misura fascia per fascia non
-esisteva.
+esisteva. Su un tubo piatto lo spigolo non esiste e il punto giusto e' la
+piega: vedi *La cucitura si ancora alla PIEGA, non allo spigolo*.
 
 **La cucitura non e' sempre centrata sul retro** (Kinder Pingui: 16 + 18), e
 **lo steso puo' essere ruotato di 90 gradi** rispetto alla convenzione della
@@ -486,6 +529,85 @@ e vinceva la prima, per mezzo millimetro di simmetria fra le due meta' del
 retro. A quella scala mezzo millimetro e' rumore del disegno; una falda da 68
 mm no.
 
+### Due chiusure, non una: pinna e sovrapposizione
+
+La pipeline nasce sul flowpack a **pinna longitudinale**: i due bordi del film
+escono fuori e si saldano fra loro, il giro e' il perimetro della sezione e
+l'invariante e' `perimetro + 2 falde = nastro`. La sezione e' un rettangolo
+W x T arrotondato.
+
+Non tutti i wrap sono cosi'. Su una barretta il film si chiude spesso a
+**sovrapposizione**: un bordo passa sotto l'altro e non sporge niente. Il pack
+non ha allora fianchi — e' un tubo piatto, fronte e retro — e l'invariante
+cambia:
+
+    fronte + retro + lembo coperto = nastro        con fronte = retro
+
+cioe' il fronte misura **mezzo giro**. Sul K Tronky T1 chiude al millimetro:
+
+    23 (retro) + 36 (FRONTE) + 12 (retro) + 12 (lembo) = 83
+    giro 71,  fronte 36,  mezzo giro 35,5
+
+e la fascia da 36 e' proprio quella che il disegno marca *TEXT ORIENTATION*,
+come vuole la regola del pannello marcato. Il lembo da 12 e' la fascia che la
+legenda chiama *Covered Area*: si chiama coperta perche' finisce sotto.
+
+**Forzare un pack a sovrapposizione nel solutore a pinna da' una risposta
+plausibile e sbagliata.** Sul Tronky usciva falda 5,5 per lato — 11 mm di
+nastro nell'aletta invece che intorno al prodotto, giro 72 invece di 71 — con
+fianchi da 12 e fronte da 24 invece di 36. Il pack veniva sottile, squadrato e
+con la grafica ruotata, e nessun controllo se ne accorgeva perche' i conti
+tornavano tutti. Lo ha visto l'utente, confrontandolo col pack vero.
+
+Corollario, imparato buttando via un'ora di lavoro: **un ripiego che allarga il
+solutore va misurato contro un pack vero prima di tenerlo.** Avevo aggiunto la
+deduzione della quarta piega dall'invariante dei fianchi uguali: matematicamente
+giusta, e sul Tronky dava 24 x 12 con tutti i conti in ordine. Era la famiglia
+sbagliata. E' stata rimossa: era nata per il Tronky, il Tronky non ne ha
+bisogno, e restava una strada capace di produrre in silenzio una sezione
+sbagliata su qualche pack futuro.
+
+#### Come si sceglie la chiusura
+
+Quattro tentativi in ordine: pinna nei due versi dello steso, poi
+sovrapposizione nei due versi. L'ordine conta. "Le fasce non chiudono" non
+segnala solo la chiusura sbagliata: segnala **anche** che lo steso va letto
+ruotato di 90 gradi. Provando l'altra chiusura prima dell'altro verso, il K
+Brioss — che va letto ruotato — trovava una lettura plausibile nel verso
+sbagliato e il verso giusto non veniva mai provato.
+
+#### Il rigonfiamento di un tubo piatto
+
+Un tubo piatto non ha un rapporto larghezza/spessore da tenere fermo:
+gonfiandosi passa dalla lente al **cerchio**, e il cerchio e' il massimo fisico
+— con quel film non si puo' essere piu' tondi. Il livello dice quanto ci si
+avvicina, in frazione del diametro del cerchio, da 0,65 a 1,00.
+
+La scala e' tarata sull'unica misura che esiste per questa famiglia, il GLB di
+riferimento del Tronky: sezione a ellisse di rapporto **1,466** e ingombro
+**26,7 x 18,2** su un giro di 71. Il livello 5 ci cade sopra (1,461 misurato).
+La scala e' volutamente **stretta** e non copre i wrap davvero piatti:
+allargarla vorrebbe dire inventare numeri che nessun pack misurato conferma, e
+spostare il centro della scala via dall'unico riferimento che c'e'.
+
+#### La cucitura si ancora alla PIEGA, non allo spigolo
+
+`superellipse_section` ancorava l'origine del giro al punto a 45 gradi della
+parametrizzazione. Su una sezione squadrata quello **e'** lo spigolo. Su un
+tubo piatto non ci sono spigoli: ci sono le due pieghe del tubo appiattito,
+che sono gli estremi dell'asse maggiore. Ancorare comunque ai 45 gradi ruotava
+la grafica di tutto l'arco fra i due punti: **7,55 mm su un giro di 71, il
+10,6%**, con il fronte che finiva mezzo sul fianco.
+
+E la verifica non scattava. `_panel_knots` cerca quattro spigoli per curvatura
+e un'ellisse non ne ha, quindi tornava `None`, la mappatura passava "per arco"
+e nessuno misurava la rotazione. Ora un tubo piatto ha i suoi due nodi — le
+pieghe — e la verifica c'e': dopo la correzione la rotazione misurata e' 0,1 mm
+invece di 7,55.
+
+Lezione generale: **una verifica che non si applica e una verifica che passa
+non sono la stessa cosa, e nel resoconto devono leggersi diverse.**
+
 ### Le guide ravvicinate: due letture, non una scelta
 
 Tre linee ravvicinate ed equidistanti **possono** essere una piega sola
@@ -538,13 +660,17 @@ Risolti dall'analisi automatica, con l'invariante che chiude:
 | Kinder Paradiso T1 | 165,0 | 155,0 | 43,0 | 27,0 | 12,5 |
 | K Brioss Latte e Cacao T10 | 419,9 | 290,0 | 148,9 | 57,0 | 4,1 |
 
-**K Tronky T1 non e' coperto.** Nastro e passo si leggono giusti — 83,0 e 144,0,
-gli stessi numeri che il cartiglio della miniatura scrive come WEB WIDTH e STEP —
-ma la fasciatura non chiude: le fasce lette sono 8,5 | 14,5 | 36 | 7 | 5 | 3,5 |
-8,5 e nessuna quaterna soddisfa l'invariante. Le tre fasce strette in fondo sono
-probabilmente zona di saldatura e eyemark, non cordonature, ma senza il pack in
-mano e' una congettura. Nota: le quote del cartiglio sono testo vettorializzato,
-non estraibile — sulla pagina intera pdfplumber trova 20 parole.
+Risolti come tubo piatto a sovrapposizione, dove non c'e' falda e la sezione la
+decide il rigonfiamento:
+
+| | nastro | passo | giro | fronte | lembo coperto |
+|---|---|---|---|---|---|
+| K Tronky T1 | 83,0 | 144,0 | 71,0 | 36,0 | 12,0 |
+
+Nota sul Tronky: le quote del cartiglio sono testo vettorializzato, non
+estraibile — sulla pagina intera pdfplumber trova 20 parole. Sono state lette a
+occhio dalla miniatura per verificare il risultato, non per produrlo: 144 = 10 +
+124 + 10, 83 = 23 + 36 + 12 + 12.
 
 ## Assunzioni non verificate
 

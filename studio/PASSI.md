@@ -81,8 +81,8 @@ guardarli tutti e due.
 
 ## Cosa aspettarsi
 
-- **Latenza** 20-60 secondi di analisi piu' 3-15 di costruzione. Serve uno
-  stato visibile.
+- **Latenza** 20-60 secondi di analisi piu' 10-20 di costruzione su una
+  macchina da 0,1 CPU. Serve uno stato visibile.
 - **Costo** qualche centesimo a modello con un modello Sonnet.
 - **L'analisi si fa una volta sola** per file, con memoria sull'impronta
   sha256: `/api/analyze` la calcola e `/api/build` la riusa invece di rifarla.
