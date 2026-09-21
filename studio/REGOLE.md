@@ -189,8 +189,8 @@ lettura per nome stava solo in `tools.classify_technical`, che e' uno strumento
 per l'agente, e la costruzione deterministica strappava separazioni solo se un
 caso calibrato le elencava a mano.
 
-Adesso `_senza_coperture` le strappa da sola, su ogni file, e lo dichiara nei
-cartellini. **Solo le coperture**, pero', e la ragione e' misurata: strappare
+Adesso `artwork.senza_coperture` le strappa da sola, su ogni file, e lo dichiara
+nei cartellini. **Solo le coperture**, pero', e la ragione e' misurata: strappare
 per nome anche fustella e quote costa una passata di pypdf sul flusso di
 contenuto, e su Colazione erano **7 secondi e 100 MB di picco in piu'** - 584
 contro 484, cioe' oltre il tetto dei 512 - per togliere tratti che la maschera
@@ -207,6 +207,14 @@ Due precauzioni:
   e' un colore dell'artwork;
 - **si toglie solo per la texture, mai per l'analisi.** Il disegno tecnico e'
   quello che fa misurare il pack: togliendolo prima, non si misura piu' niente.
+
+E si toglie in **un posto solo**. Finche' questo passaggio e il verso della
+grafica sono stati dentro `server.py`, li applicava solo il server: la riga di
+comando costruiva lo stesso astuccio senza toglierci niente, e il Nutella Donut
+usciva una scatola rosa piena, con la vernice ancora sopra. Non e' roba di
+HTTP, e' roba di artwork: sta in `pack3d/artwork.py`, e chi vuole le texture di
+un astuccio chiama `texture_astuccio`, che fa i tre passaggi nell'ordine giusto
+e restituisce gia' scritti gli avvisi da mostrare.
 
 #### La GDA sta nel disegno tecnico, e si scarta
 
