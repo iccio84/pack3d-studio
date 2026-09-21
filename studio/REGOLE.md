@@ -69,10 +69,32 @@ Fattore 3,3 a parita' di conteggio. Ogni tentativo di calcolarli e' sbagliato.
 
 ## Regole comuni a tutte le tipologie
 
-- **Confrontare sempre il modello finito con lo steso.** La grafica sul 3D deve
-  avere lo stesso orientamento del PDF, mai specchiata o capovolta.
+- **Il modello segue la GRAFICA, non il disegno tecnico.** Sono due cose
+  diverse: il DT dice come e' impaginato il foglio, la grafica dice come si
+  legge il pack in mano. Su un astuccio Nutella Donut il pannello fronte ha
+  tutto il testo a 90 gradi e il retro a 270 — sul foglio, non sul pack — e il
+  modello usciva col marchio coricato. Il verso lo danno i **caratteri
+  stampati**, pesati sull'area: una riga di marchio a corpo 40 conta piu' di
+  venti righe di legale a corpo 5, che e' come la legge un occhio
+  (`tracciati.verso_grafica`). Un pannello senza testo abbastanza non dice
+  niente e si lascia com'e': indovinare sarebbe peggio.
+- **Confrontare sempre il modello finito con lo steso.** Mai specchiata ne'
+  capovolta.
 - **Non distorcere mai la grafica.** I bollini circolari restano cerchi. Ogni
   pannello va sulla faccia corrispondente e centrato.
+
+  Questa regola e' anche il limite della precedente, e il confine lo da' il
+  rapporto di forma. Pannello sul foglio e faccia sul solido hanno le stesse
+  proporzioni — vengono dalla stessa fustella — quindi girare una texture di 90
+  gradi la mappa su una faccia con le proporzioni scambiate. Su un pannello
+  quasi quadrato non si vede; su un fianco stretto si', **ed e' anche il caso
+  in cui girare sarebbe sbagliato**: su un fianco da 38 x 191 il testo
+  verticale E' il progetto, mentre su un pannello da 188 x 191 vuol dire che il
+  foglio e' impaginato girato. Dove girare stirerebbe, non si gira e lo si
+  **dichiara**: la regola dice di seguire la grafica, non di consegnare grafica
+  deformata. Il caso generale — un pack non quadrato impaginato girato, dove
+  servirebbe trasporre anche le quote del solido — aspetta un pack che lo
+  mostri.
 - **Verificare il verso delle normali.** L'attributo NORMAL non basta: conta
   l'avvolgimento dei triangoli, ed e' quello che i viewer usano per il culling.
   Gli astucci sono stati consegnati due volte con le facce rivolte all'interno
@@ -148,6 +170,52 @@ gli ultimi due la indovinano. Il livello usato va sempre riportato nel resoconto
    341 C = Bar Code Area, 1565 C = COVERED Area. Anche `All` e' tecnica.
 5. **Euristica** su spessore (filo di capello, <= 0,8 pt) e colore. E' una stima
    e va dichiarata come tale.
+
+### Le coperture si tolgono per nome, non per euristica
+
+I cinque livelli sopra sono un ordine di **certezza**, ma non tutti i livelli
+sanno vedere le stesse cose, e questa e' una divisione diversa:
+
+- una **fustella**, una **quota**, un **retino print-free** sono TRATTI:
+  sottili, e l'euristica su spessore e colore li prende;
+- una **vernice**, un **bianco coprente**, un **cold seal** sono PIENI grandi
+  quanto la grafica. Nessuna euristica sul tratto li puo' vedere - non c'e'
+  nessun tratto - e pdfium li rende **opachi**.
+
+Su un astuccio Nutella Donut la lastra si chiama `Water Based Gloss Varnish` e
+copre tutto il pannello: la texture usciva rosa piena, con la grafica sotto e
+invisibile. Il nome lo diceva senza ambiguita', ma nessuno lo leggeva: la
+lettura per nome stava solo in `tools.classify_technical`, che e' uno strumento
+per l'agente, e la costruzione deterministica strappava separazioni solo se un
+caso calibrato le elencava a mano.
+
+Adesso `_senza_coperture` le strappa da sola, su ogni file, e lo dichiara nei
+cartellini. **Solo le coperture**, pero', e la ragione e' misurata: strappare
+per nome anche fustella e quote costa una passata di pypdf sul flusso di
+contenuto, e su Colazione erano **7 secondi e 100 MB di picco in piu'** - 584
+contro 484, cioe' oltre il tetto dei 512 - per togliere tratti che la maschera
+del disegno tecnico prendeva gia'. Il giorno che un pack mostra una fustella
+che l'euristica non prende, si allarga con quello in mano.
+
+Due precauzioni:
+
+- **il confronto sul nome e' per sottostringa, non per nome intero.** I nomi
+  veri sono composti: l'insieme conteneva `varnish`, `gloss varnish` e
+  `waterbased varnish` - tre voci, e nessuna delle tre e' "Water Based Gloss
+  Varnish". Restano per nome intero solo le sigle dove la sottostringa
+  farebbe danni: `white` come sottostringa prenderebbe "White Chocolate", che
+  e' un colore dell'artwork;
+- **si toglie solo per la texture, mai per l'analisi.** Il disegno tecnico e'
+  quello che fa misurare il pack: togliendolo prima, non si misura piu' niente.
+
+### La tipologia non riconosciuta e' un errore, non un ripiego
+
+`kind` si dichiara e non si indovina, e c'era gia' la nota sul sinonimo
+mancante: il viewer glamlab manda `cartotecnico` e senza sinonimo ogni astuccio
+finiva dal solutore flowpack. Lo stesso difetto sta all'altro capo: un valore
+qualsiasi non riconosciuto - `auto`, per esempio - non entrava in nessun ramo e
+cadeva **in silenzio** su quello flowpack. Oggi risponde 400 e dice cosa
+dichiarare.
 
 ### Regole sempre valide
 

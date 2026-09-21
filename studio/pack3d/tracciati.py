@@ -446,6 +446,67 @@ def _scritte(page, tinte_tec):
     return fuori
 
 
+def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6):
+    """Di quanto e' ruotata la grafica in ciascun riquadro, in gradi.
+
+    Il verso lo danno i CARATTERI STAMPATI, e non il disegno tecnico. Sono due
+    cose diverse: il disegno tecnico dice come e' impaginato il foglio, la
+    grafica dice come si legge il pack in mano, e il modello deve seguire la
+    seconda. Su un astuccio Nutella Donut il pannello fronte ha tutto il testo
+    a 90 gradi e il retro a 270: sul foglio e' cosi', sul pack no.
+
+    `riquadri` e' un dizionario nome -> (x0, y0, x1, y1) nel telaio di misura.
+    Torna nome -> gradi, con solo 0, 90, 180 o 270; i riquadri senza testo
+    abbastanza non compaiono, perche' non dicono niente e indovinare sarebbe
+    peggio che lasciare com'e'.
+
+    Il peso e' l'AREA del carattere: una riga di marchio a corpo 40 conta piu'
+    di venti righe di legale a corpo 5, che e' come la legge un occhio.
+    """
+    import math
+    fuori = {}
+    doc = pdfium.PdfDocument(pdf_path)
+    try:
+        page = doc[page_no]
+        tp = raw.FPDFText_LoadPage(page.raw)
+        if not tp:
+            return fuori
+        try:
+            a, b, c, d, e, f = _telaio(page)
+            lati = [ctypes.c_double() for _ in range(4)]
+            peso = {k: {} for k in riquadri}
+            quanti = {k: 0 for k in riquadri}
+            for i in range(raw.FPDFText_CountChars(tp)):
+                ang = raw.FPDFText_GetCharAngle(tp, i)
+                if ang < 0:
+                    continue
+                if not raw.FPDFText_GetCharBox(
+                        tp, i, *(ctypes.byref(v) for v in lati)):
+                    continue
+                sx, dx, giu, su = (v.value for v in lati)
+                x = a * (sx + dx) / 2.0 + c * (giu + su) / 2.0 + e
+                y = b * (sx + dx) / 2.0 + d * (giu + su) / 2.0 + f
+                area = max(1e-9, abs(dx - sx) * abs(su - giu))
+                gradi = int(round(math.degrees(ang) / 90.0)) * 90 % 360
+                for nome, (x0, y0, x1, y1) in riquadri.items():
+                    if x0 <= x <= x1 and y0 <= y <= y1:
+                        peso[nome][gradi] = peso[nome].get(gradi, 0.0) + area
+                        quanti[nome] += 1
+                        break
+            for nome, conto in peso.items():
+                tot = sum(conto.values())
+                if quanti[nome] < minimo or tot <= 0:
+                    continue
+                g, w = max(conto.items(), key=lambda kv: kv[1])
+                if w / tot >= quorum:
+                    fuori[nome] = g
+        finally:
+            raw.FPDFText_ClosePage(tp)
+    finally:
+        doc.close()
+    return fuori
+
+
 def tecnici(pdf_path, page_no=0, penne=(), tinte_tec=(), filo=FILO,
             minuto=25.0):
     """Gli elementi del disegno tecnico della pagina, gia' scremati.
