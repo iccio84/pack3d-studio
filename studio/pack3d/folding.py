@@ -186,8 +186,16 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
     pulito, spenti = (strati.senza_tecnici(pdf_path, page_no) if clean
                       else (pdf_path, []))
     try:
-        if spenti and note is not None:
-            note.append("livelli tecnici spenti: %s" % ", ".join(spenti))
+        if note is not None:
+            if spenti:
+                note.append("livelli tecnici spenti: %s" % ", ".join(spenti))
+            else:
+                # Detto qui e non solo nelle regole: e' l'unica riga che
+                # distingue un file preparato bene da uno su cui la pulizia
+                # e' a stima, e chi guarda il modello deve saperlo.
+                note.append("nessun livello per il disegno tecnico: la "
+                            "pulizia e' a stima, sui soli tratti a filo di "
+                            "capello. Chiedere il DT su un livello suo")
         sheet = colata.foglio(pulito, scale, page_no, note)
         # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui
         # in giu' si alloca la maschera e la texture, e tenerla viva vorrebbe

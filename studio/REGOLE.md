@@ -67,6 +67,60 @@ dava 275,0 x 101,9 x 31,0 invece di 150,5 x 41,0.
 
 Fattore 3,3 a parita' di conteggio. Ogni tentativo di calcolarli e' sbagliato.
 
+## Cosa chiediamo a chi prepara l'artwork
+
+Tre richieste, e non sono di comodo: sono le tre cose che dal PDF **non si
+possono dedurre**, e ogni volta che si e' provato a indovinarle si e' rotto
+qualcosa di vero. Questa pagina e' quella da girare al prestampa.
+
+### 1. Il disegno tecnico su un livello suo
+
+**La richiesta.** Fustella, cordonature, quote, retini delle aree riservate,
+cartiglio, note, crocini di registro: tutto quello che non si stampa va su un
+**livello separato**, nominato, e non mescolato al livello della grafica.
+
+**Perche'.** Nella texture ci va solo la grafica. Se il disegno tecnico e'
+mescolato, l'unico modo di toglierlo e' indovinarlo, e indovinare vuol dire
+sbagliare: il criterio del colore ha cancellato il logo `Brioss`, la tabella
+nutrizionale e il testo legale del K Brioss STD — il 4,4% del foglio — perche'
+la quota e il logo erano lo stesso ciano. Vedi *Il colore non dice mai cos'e'
+disegno tecnico*. Con il livello si spegne e basta: nessuna maschera, nessun
+ritocco, nessuna grafica persa.
+
+**Come nominarlo, perche' venga riconosciuto.** Meglio di tutto un
+**Processing Step ISO 19593-1** (gruppi `Structural`, `Dimensions`, `Legend`,
+`Position`, `Braille`, `White`, `Varnish`): quello e' lo standard e la lettura
+e' esatta. In mancanza, uno di questi nomi di livello:
+
+    technical drawing   technical-drawing   dieline   die line   cutter
+    fustella   tracciato   dt   dimensions   legend   notes   check
+    guides and grids   print free area   best before area   bar code area
+    covered area   eyemark   infopanel   braille   reg marks   white   varnish
+
+Un nome fuori da questa lista non viene riconosciuto e il file ricade
+sull'euristica. Se serve un nome diverso si aggiunge a `techink.OCG_TECH`: e'
+una riga, ma va chiesta.
+
+**Cosa NON va su quel livello.** Solo quello che non si stampa. Il codice a
+barre, la dichiarazione nutrizionale, il testo legale, i bollini: quella e'
+grafica, si stampa, e deve restare.
+
+### 2. La colata su un livello suo
+
+Stessa forma, altra ragione: il livello dice **dove** va la colata, e senza
+quello non si puo' ne' renderla in quadricromia ne' sostituirla senza
+indovinare il riquadro. Il nome che si cerca e' `Colata`. Vedi *La colata si
+rimette con l'inchiostro del file*.
+
+### 3. La grafica in quadricromia, non in RGB
+
+In RGB la sovrastampa non esiste e non c'e' niente da simulare: la colata
+Kinder perde l'ombra sulle gocce e diventa una macchia di ciano piatto, e a
+valle non si recupera. Vedi *La grafica va in quadricromia, non in RGB*.
+
+Nello stesso spirito: la **GDA** appartiene al disegno tecnico e nel livello
+della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
+
 ## Regole comuni a tutte le tipologie
 
 - **Il modello segue la GRAFICA, non il disegno tecnico.** Sono due cose
@@ -225,6 +279,11 @@ Spegnere un livello e' una modifica di **dizionario** - l'OCG finisce in
 `/OCProperties/D/OFF` - e non costa la passata di pypdf sul flusso di
 contenuto, che su Colazione vale 7 secondi e 100 MB. **Attenzione**:
 `PdfWriter().append()` perde `/OCProperties`, serve `PdfWriter(clone_from=...)`.
+
+Da qui la richiesta a chi prepara il file: **il disegno tecnico su un livello
+suo**, vedi *Cosa chiediamo a chi prepara l'artwork*. E' la stessa richiesta
+della colata, e per la stessa ragione — quello che il file dichiara non si
+deve indovinare.
 
 Un nome di livello e' tecnico se e' un Processing Step ISO, se sta in
 `techink.OCG_TECH` o se `techink.tecnica` lo riconosce — `Cutter` passa di li'.
