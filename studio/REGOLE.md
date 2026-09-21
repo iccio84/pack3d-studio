@@ -596,49 +596,77 @@ coste sono spesse 0,45 mm. Il modello era giusto e il render sbagliato lo
 stesso, perche' il difetto non stava nella geometria. Il controllo visivo
 **dopo** quello numerico non e' una ripetizione.
 
-### La colata si sostituisce solo se sta su un livello suo
+### La colata si rimette con l'inchiostro del file
 
-La colata Kinder in RGB non si aggiusta a valle (vedi *La grafica va in
-quadricromia, non in RGB*): l'ombra sulle gocce nel file non c'e', e
-reinventarla vorrebbe dire dipingere colore. Quello che si puo' fare e'
-**sostituirla** con la grafica gia' resa come deve venire, e per farlo in modo
-preciso serve sapere **dove va**.
+Il nostro rasterizzatore **non simula la sovrastampa**. Verificato con un PDF
+costruito apposta - un ciano sopra un magenta, disegnato due volte, una con
+`/OP true` e una senza:
 
-Da un artwork qualunque non si sa. Sul Kinder Pingui T6 BOX la colata non e' un
-oggetto solo che si possa scambiare: il campo delle gocce e' una immagine RGB e
-la fascia dell'onda e' vettoriale, e **niente nel file dice "questa e' la
-colata"**. Indovinare il riquadro e' il modo di consegnare una grafica fuori
-posto di due millimetri.
+    pdfium       con sovrastampa (0, 174, 239)   senza (0, 174, 239)
+    ghostscript  con sovrastampa  (46, 48, 146)  senza (0, 174, 239)
 
-Da qui la regola, che e' sulla **preparazione del file**: la colata va tolta dal
-livello in cui sta e messa su un **livello suo**, nominato. `KP_T1_Mandarino` e'
-il primo artwork preparato cosi' - ha un OCG chiamato `Colata` - ed e' il caso
-su cui la sostituzione e' calibrata.
+Identico tutte e due le volte, con pdfium. E non e' un caso limite: la
+sovrastampa e' una cosa da device separato, e un rasterizzatore RGB la butta
+via per costruzione. La colata Kinder e' costruita proprio cosi' - una lastra
+di ciano che **moltiplica** il rosso sotto, e da quella moltiplicazione
+vengono l'ombra sulle gocce e il volume del getto - quindi il ciano copre il
+rosso invece di moltiplicarlo, e l'ombra diventa un alone azzurro piatto.
 
-I tre passi (`pack3d/colata.py`, agganciato a `rasterize_panels`, che e' il
-punto da cui passano tutte le texture: astucci e flowpack, server e riga di
-comando):
+Ghostscript con `-sOverprint=simulate` la simula, e da' il blu giusto. Da qui
+due strade, in quest'ordine, perche' **l'inchiostro del file viene prima di
+qualunque cosa portata da fuori**:
 
-1. **dove.** Si spegne il livello in una copia, aggiungendo il suo OCG a
-   `/OCProperties/D/OFF`. E' una modifica di DIZIONARIO: non costa la passata
-   di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e 100 MB.
-   La differenza fra le due rese da' l'impronta esatta del livello. Nota:
-   `pypdf.PdfWriter().append()` **perde** `/OCProperties`, serve
-   `PdfWriter(clone_from=...)`.
-2. **quanto e in che punto.** La risorsa e' un **master**, non il ritaglio di un
-   pack: la sua onda va portata al passo di quella dell'artwork, e il passo
-   cambia da pack a pack (20,1 mm sul Pingui T6 BOX, 17,1 sul KP T1). La scala
-   esce dal rapporto fra i due periodi, la fase da una correlazione, la quota
-   dalla mediana della differenza fra le due curve rosso/bianco.
-3. **come.** La risorsa si incolla dentro l'impronta del livello vecchio, e solo
-   li'. Cosi' quello che nell'artwork sta **sopra** la colata - uno spicchio di
-   mandarino, il bicchiere di latte, la fascia di fondo - resta dov'e' senza
-   dover sapere in che ordine sono i livelli.
+1. **la banda resa in quadricromia**, con Ghostscript. Si ritaglia il MediaBox
+   sulla sola banda della colata e si rende quella: 120 x 36 mm su un foglio
+   da 300 x 250, un paio di secondi e una quarantina di MB invece dei dieci
+   secondi della pagina intera.
+2. **la risorsa** `risorse/colata_kinder.png`, solo se la prima non ha niente
+   da correggere.
 
-Se il livello non c'e', o se la risorsa non e' quel disegno, non si sostituisce
-niente e si costruisce com'e': una colata messa a caso e' peggio di una colata
-brutta. La soglia e' mezzo millimetro di errore mediano, dieci volte quello
-misurato sul caso buono.
+Se Ghostscript non c'e', il codice se ne accorge e resta la seconda: non si
+rompe niente, si fa meno.
+
+#### Solo dentro l'impronta del livello, e non per pignoleria
+
+La banda in quadricromia si incolla **solo dentro l'impronta del livello
+`Colata`**, mai su tutta la banda e mai su tutta la pagina. Il motivo e'
+misurato: rendendo in quadricromia l'intera pagina del KP T1 Mandarino il
+marchio `kinder` e il bicchierino di latte diventano **neri**. Non e' un
+difetto di Ghostscript ne' l'appiattimento in CMYK - ricomponendo lastra per
+lastra con i colori veri delle Pantone il nero resta - e' che quegli elementi
+la sovrastampa ce l'hanno davvero. Ma sul livello `Colata` non stanno, e fuori
+dall'impronta non li tocca nessuno.
+
+#### Quanto conta la sovrastampa non si misura ad area
+
+La domanda non e' quanta parte della banda cambia. Quella e' area, e sui due
+casi misurati da' lo stesso 5% pur essendo casi **opposti**. La domanda e':
+delle zone che senza sovrastampa escono azzurre - cioe' delle ombre sbagliate
+- quante ne rimette a posto?
+
+    KP T1 Mandarino      13.248 px azzurri, ne recupera l' 1,1%
+    Kinder Pingui T6 BOX  7.672 px azzurri, ne recupera il 49,6%
+
+Il secondo ha l'ombra in sovrastampa e si recupera meta'. Il primo ce l'ha
+**fustellata**: il ciano toglie il rosso invece di moltiplicarlo, e sotto non
+c'e' piu' niente da moltiplicare. Lo dicono le lastre, dove pdfium vede
+l'azzurro:
+
+    Cyan 34,9%   PANTONE Warm Red C 2,6%     (nel rosso pieno accanto: 98,1%)
+
+Quel file non lo aggiusta nessun rasterizzatore, e li' si passa alla risorsa.
+E' anche l'informazione che serve a chi prepara l'artwork, e infatti viene
+dichiarata nei cartellini invece di restare dentro il codice.
+
+#### Il caso calibrato
+
+    KP T1 Mandarino       livello `Colata`, 120,5 x 36,3 mm
+                          ombra fustellata: recupera lo 0,2% -> risorsa
+    Kinder Pingui T6 BOX  ombra in sovrastampa: recupera il 49,6% -> quadricromia
+
+Il T6 BOX il livello `Colata` non ce l'ha, e per questo non lo prende: la
+regola sulla preparazione del file - la colata su un livello suo - e' quella
+che apre tutte e due le strade, non solo la sostituzione.
 
 #### Tre difetti che solo questa cosa poteva far vedere
 
@@ -664,18 +692,6 @@ mezzo pack di distanza, cioe' sparita. La fase la decide la **goccia**, che e'
 l'unica cosa aperiodica del disegno: fra le fasi che distano un periodo si
 sceglie quella che somiglia di piu' confrontando le IMMAGINI, dove la goccia
 pesa poco in percentuale ma e' l'unica cosa che cambia.
-
-#### Il caso calibrato: KP T1 Mandarino
-
-    livello        `Colata`, riquadro 120,5 x 36,3 mm
-    onda           passo 17,1 mm nell'artwork, 80 px nella risorsa
-    allineamento   scala 1,3166 a 2 px/pt, errore mediano 0,22 mm
-    riscontro      la goccia e la sua bollicina cadono al loro posto
-    costo          +45 MB e +0,4 s, solo su un file che il livello ce l'ha
-
-Il riscontro e' quello che conta: la goccia nell'allineamento **non entra** -
-la mediana la scarta - quindi vederla cadere dov'era e' una verifica
-indipendente che il disegno e' lo stesso e che la fase e' giusta.
 
 ## Flowpack
 
@@ -899,7 +915,6 @@ Regole di forma, da applicare senza chiedere:
   agli spigoli con centro piano**;
 - l'apertura della pinna va concentrata vicino alla saldatura (rampa di quinto
   grado): con una rampa corta il gonfiore invade il corpo e deforma i bollini.
-
 ### La falda dice se la soluzione e' sbagliata
 
 La falda non scala col nastro: e' il lembo che schiacciano le ganasce, e le

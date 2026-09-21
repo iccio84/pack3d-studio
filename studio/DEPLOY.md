@@ -57,6 +57,18 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
 | Preflight CORS da altro dominio | 204 |
 | File non PDF | 400 con messaggio |
 
+## Dipendenze di sistema
+
+Oltre a quelle Python del `requirements.txt`, l'immagine installa
+**ghostscript**. Serve a una cosa sola e non c'e' altro modo di farla: simulare
+la sovrastampa, che pdfium non simula. Vedi in REGOLE.md *La colata si rimette
+con l'inchiostro del file*.
+
+Costa una quarantina di MB di immagine e non si vede mai al lavoro: gira solo
+sui file che hanno la colata su un livello suo, e solo sulla sua banda - misurato,
+un paio di secondi e una quarantina di MB di processo figlio. Se manca, il
+codice se ne accorge (`shutil.which`) e usa la risorsa: non si rompe niente.
+
 ## Limiti
 
 - **Una** costruzione alla volta (`PACK3D_MAX_JOBS`), la seconda riceve 503
