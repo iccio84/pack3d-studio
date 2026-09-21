@@ -13,7 +13,7 @@ import os
 import numpy as np
 from PIL import Image, ImageDraw
 
-from . import colata, dieline, strati, tracciati
+from . import colata, dieline, nero, strati, tracciati
 from .dieline import _technical_pens, render_page
 
 Image.MAX_IMAGE_PIXELS = None
@@ -197,6 +197,10 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                             "pulizia e' a stima, sui soli tratti a filo di "
                             "capello. Chiedere il DT su un livello suo")
         sheet = colata.foglio(pulito, scale, page_no, note)
+        # La `k` di `kinder` e' nera, e pdfium la fa azzurra perche' ignora la
+        # sovrastampa. Si rimette il nero dove la lastra lo dichiara, e solo
+        # li': vedi `nero.py` per perche' non si puo' rendere tutto con gs.
+        sheet = nero.riporta(pulito, sheet, scale, page_no, note)
         # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui
         # in giu' si alloca la maschera e la texture, e tenerla viva vorrebbe
         # dire sommare due rasterizzazioni nel momento peggiore.

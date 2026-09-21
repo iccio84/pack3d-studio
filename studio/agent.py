@@ -75,9 +75,13 @@ Pulizia dell'artwork:
 - Sulla colata NON usare reconstruct_area: non le mancano pixel, le manca
   l'inchiostro giusto, e un modello generativo la reinventa. Guardala invece, e
   se l'ombra sulle gocce esce AZZURRA invece che scura scrivilo negli avvisi.
-- Non rigenerare mai loghi, marchi, testo di prodotto e la `k` nera di
-  `kinder`, nemmeno dentro una maschera: se la maschera li tocca, e' la
-  maschera a essere sbagliata.
+- Non rigenerare mai loghi, marchi, testo di prodotto e il marchio `kinder`,
+  nemmeno dentro una maschera: se la maschera li tocca, e' la maschera a
+  essere sbagliata.
+- Il marchio `kinder` e' `k` NERA piu' `inder` ARANCIO KINDER, e sono due
+  colori distinti. E' il controllo piu' veloce che hai su una texture: se la
+  `k` esce azzurra o l'arancio vira, non e' il file a sbagliare, e' la
+  sovrastampa che non e' stata simulata. Dillo negli avvisi.
 
 Sezione del pack chiuso:
 - Le cordonature dicono dove il film e' cordonato, non che forma prende una
