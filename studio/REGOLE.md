@@ -637,6 +637,72 @@ possono essere riscritti.
 La metrica che decide e' `dt_su_immagine_pct`: quanto disegno tecnico cade su
 foto, cioe' dove la riverniciatura a tinta piatta non puo' arrivare.
 
+### Cosa passare al modello, e cosa no
+
+Le API OpenAI ci sono e sono configurate; la chiave si legge da
+`OPENAI_API_KEY` e il modello da `PACK3D_IMAGE_MODEL`. Da tenere distinti,
+perche' sono due cose diverse: **chi ragiona e guarda** e' l'agente, che gira
+su `PACK3D_MODEL`, e **chi ridipinge** e' il modello di immagine OpenAI dentro
+`reconstruct_area`. Quasi tutto quello che segue e' lavoro del primo. Ma "c'e'
+il modello"
+non e' una risposta: il modello e' bravo a **vedere** e pessimo a **non
+toccare**, e la grafica finale e' l'unica cosa che conta. Quindi si divide per
+mestiere, non per comodita'.
+
+**La regola che tiene tutto insieme: il modello dice DOVE, il codice fa COSA.**
+Un riquadro, una quota, un giudizio "questa ombra e' azzurra" sono risposte
+piccole, verificabili e reversibili. Un'immagine rigenerata non lo e': una
+volta riscritti, i pixel del logo non tornano.
+
+**1. Quello che il codice non riesce a TROVARE → si', al modello.**
+E' il caso delle aree riservate rimaste: sul cartotecnico Pingui T6 e sul
+Kinder Bueno Dark T2 il nome dell'area sta solo nella legenda, non sopra il
+riquadro, e nel file non c'e' niente di sicuro da leggere — vedi *Le aree
+riservate non compaiono mai nel render*. Per un occhio invece sono ovvie: un
+rettangolo pieno con scritto `BEST BEFORE AREA` in bianco dentro. Questo e'
+lavoro da modello, ed e' **piu' semplice** di qualunque euristica.
+
+Ma quello che torna indietro dev'essere un **riquadro in mm**, non
+un'immagine: un'area riservata e' un rettangolo pieno, quindi il riquadro
+approssimativo basta come innesco e il bordo esatto lo trova il codice
+attaccandosi al pieno. Cosi' l'errore del modello vale qualche millimetro di
+innesco, non un logo riscritto.
+
+*Manca lo strumento.* Oggi l'agente puo' guardare con `visual_check` ma non ha
+modo di restituire un riquadro: `reconstruct_area` lavora solo dentro la
+maschera che `clean_artwork` ha gia' trovato. Serve uno strumento che prenda
+un riquadro in mm e lo tratti come area riservata. Finche' non c'e', quei due
+file restano all'euristica e il build lo dichiara.
+
+**2. Quello che il codice trova ma non sa RIPARARE → si', al modello.**
+Disegno tecnico che attraversa una foto: li' la riverniciatura a tinta piatta
+non arriva e non c'e' niente da inventare a mano. E' `reconstruct_area`, e la
+cautela e' gia' scritta sopra: **solo dentro la maschera**, fuori restano i
+pixel originali. Sul Kinder Bueno T2 sono lo 0,6% dell'immagine.
+
+**3. La colata → no, e non e' pigrizia.**
+La colata non ha pixel mancanti: ha l'inchiostro sbagliato. Il problema e'
+che l'ombra sulle gocce esce azzurra invece che scura, e quello si risolve
+con la quadricromia e la sovrastampa, non ridipingendo — vedi *La colata si
+rimette con l'inchiostro del file*. Un modello generativo la reinventerebbe:
+gocce diverse, ombre diverse, e la cosa che si stava giudicando sparisce
+dentro la riscrittura. Per un marchio, ridisegnare non e' riparare.
+
+Il modello sulla colata serve invece a **guardarla**: "questa ombra e'
+azzurra o e' scura?" e' esattamente la domanda che le metriche hanno sbagliato
+piu' volte e che l'occhio risolve in un secondo. Giudizio si', pennello no.
+
+**4. Quello che non va mai al modello.** I loghi, la `k` nera di `kinder`, i
+marchi, il testo di prodotto: non si rigenerano nemmeno dentro una maschera,
+e se la maschera li tocca la maschera e' sbagliata. E nessuna misura: una
+quota si misura, non si chiede a un'immagine.
+
+**5. E il modello non copre mai quello che il file poteva dichiarare.**
+Se manca il livello del disegno tecnico, la risposta e' *Cosa chiediamo a chi
+prepara l'artwork*, non una chiamata API su ogni build. Il piano B costa una
+chiamata e un rischio: si usa dove il file non poteva dire di meglio, non
+dove non gliel'abbiamo chiesto.
+
 ## Astucci
 
 `dieline.py` isola il tratto della fustella scegliendo la penna che accumula
