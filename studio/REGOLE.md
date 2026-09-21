@@ -449,12 +449,42 @@ con `TEXT AREA` scritto sopra, e la memoria **scende**: sul solo Colazione il
 picco va da **613 a 473 MB**, cioe' da sopra a sotto il tetto dei 512 —
 togliere tre lastre piene dal flusso costa meno di quanto costi renderle.
 
-**Quello che resta fuori.** Se il nome dell'area sta solo nella legenda e non
-sopra il riquadro — Kinder Bueno Dark T2, il cartotecnico Pingui T6 — non c'e'
-niente di sicuro da leggere: la legenda e' un accostamento di posizione, e
-sbagliare accostamento vuol dire strappare la lastra della grafica. Li' si
-resta all'euristica, il build lo dichiara, e la risposta e' la richiesta a chi
-prepara il file.
+##### Quando il file non le scrive nemmeno: allora si guarda
+
+Se il nome dell'area sta solo nella legenda e non sopra il riquadro — Kinder
+Bueno Dark T2, il cartotecnico Pingui T6 — non c'e' piu' niente da leggere: la
+legenda e' un accostamento di posizione, e sbagliare accostamento vuol dire
+strappare la lastra della grafica. A **occhio** pero' sono ovvie: un rettangolo
+pieno, verde o arancione, appoggiato sulle falde.
+
+Quindi si guarda, ed e' lavoro dell'agente — *il modello dice DOVE, il codice
+fa COSA*, vedi *Cosa passare al modello, e cosa no*. Lo strumento e'
+`tools.area_riservata`: prende un **riquadro in mm** indicato a occhio, cerca
+quale lastra ci mette l'inchiostro pieno, e la toglie per nome. Il bordo esatto
+non lo decide l'agente, lo decide la lastra: sbagliare il riquadro di **3 mm**
+in dentro o in fuori da lo stesso risultato, misurato sul Pingui T6.
+
+**La conferma e' l'immagine, e non puo' essere un numero.** Puntare la fascia
+rossa del Pingui invece della falda verde da' `Pantone Warm Red C` pieno al
+100% e al 3,29% del foglio; la vera area riservata, `Pantone 571 C`, da' pieno
+al 100% e 3,08%. Indistinguibili. E su Colazione la fascia `TEXT AREA` copre il
+6,5% del foglio mentre `Kinder ORANGE`, che e' grafica, il 7,9%: **nessuna
+soglia separa le due cose**. Per questo lo strumento restituisce il foglio in
+grigio con in **rosso tutto quello che quella lastra dipinge**, e l'istruzione
+e' guardare: se il rosso tocca un logo, una foto o il fondo del pack, la
+proposta si lascia cadere. Il rosso su fondo a colori non si leggeva — il
+Pingui ha mezza grafica rossa — quindi la base va in grigio e tutto cio' che
+resta colorato e' la lastra.
+
+Le lastre confermate viaggiano in `parametri_costruzione.aree_riservate` e la
+costruzione le strappa insieme alle altre, una passata sola: `aree_da_agente`
+in `server.py`, come `livello_da_agente` e gli altri. Senza quell'elenco il
+file resta com'era, che e' il comportamento di sempre.
+
+Sul Pingui T6 sparisce il 9,7% della texture — i blocchi sulle falde e il
+riquadro nella fascia rossa — e restano interi il logo, i due bollini `x6`, il
+`FATTO CON LATTE FRESCO`, la bustina e il QR code. Che e' esattamente quello
+che il registro di lastre note portava via.
 
 #### La GDA sta nel disegno tecnico, e si scarta
 
@@ -654,7 +684,8 @@ Un riquadro, una quota, un giudizio "questa ombra e' azzurra" sono risposte
 piccole, verificabili e reversibili. Un'immagine rigenerata non lo e': una
 volta riscritti, i pixel del logo non tornano.
 
-**1. Quello che il codice non riesce a TROVARE → si', al modello.**
+**1. Quello che il codice non riesce a TROVARE → si', al modello.** *Fatto:
+`tools.area_riservata`.*
 E' il caso delle aree riservate rimaste: sul cartotecnico Pingui T6 e sul
 Kinder Bueno Dark T2 il nome dell'area sta solo nella legenda, non sopra il
 riquadro, e nel file non c'e' niente di sicuro da leggere — vedi *Le aree
@@ -662,17 +693,17 @@ riservate non compaiono mai nel render*. Per un occhio invece sono ovvie: un
 rettangolo pieno con scritto `BEST BEFORE AREA` in bianco dentro. Questo e'
 lavoro da modello, ed e' **piu' semplice** di qualunque euristica.
 
-Ma quello che torna indietro dev'essere un **riquadro in mm**, non
-un'immagine: un'area riservata e' un rettangolo pieno, quindi il riquadro
-approssimativo basta come innesco e il bordo esatto lo trova il codice
-attaccandosi al pieno. Cosi' l'errore del modello vale qualche millimetro di
-innesco, non un logo riscritto.
+Ma quello che torna indietro e' un **riquadro in mm**, non un'immagine: un'area
+riservata e' un rettangolo pieno, quindi il riquadro approssimativo basta come
+innesco e il bordo esatto lo trova il codice attaccandosi alla lastra. Cosi'
+l'errore del modello vale qualche millimetro di innesco — **3 mm non cambiano
+niente**, misurato — invece di un logo riscritto. E prima di confermare il
+modello **guarda** cosa sta per togliere: vedi *Quando il file non le scrive
+nemmeno: allora si guarda*.
 
-*Manca lo strumento.* Oggi l'agente puo' guardare con `visual_check` ma non ha
-modo di restituire un riquadro: `reconstruct_area` lavora solo dentro la
-maschera che `clean_artwork` ha gia' trovato. Serve uno strumento che prenda
-un riquadro in mm e lo tratti come area riservata. Finche' non c'e', quei due
-file restano all'euristica e il build lo dichiara.
+*Lo strumento e' `tools.area_riservata`*, e restituisce l'immagine da
+guardare prima di confermare. Vedi *Quando il file non le scrive nemmeno:
+allora si guarda*.
 
 **2. Quello che il codice trova ma non sa RIPARARE → si', al modello.**
 Disegno tecnico che attraversa una foto: li' la riverniciatura a tinta piatta

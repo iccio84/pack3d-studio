@@ -170,7 +170,7 @@ def avviso_quadricromia(pdf, page_no=0):
         return None
 
 
-def build_carton(pdf, out_glb, quality="web"):
+def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
     dpi = 300 if quality == "alta" else 200
     d = dl.analyze(pdf)          # sull'originale: il DT e' quello che misura
     if not d.panels:
@@ -178,7 +178,8 @@ def build_carton(pdf, out_glb, quality="web"):
     # Coperture via per nome e texture girate sul verso della grafica: sono
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
-    tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi)
+    tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
+                                              lastre_extra=lastre_extra)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
@@ -238,6 +239,28 @@ def pinne_da_agente(params):
         return max(1.0, min(3.0, float(pc.get("apertura_pinne"))))
     except (AttributeError, TypeError, ValueError):
         return None
+
+
+def aree_da_agente(params):
+    """Le lastre delle aree riservate che l'agente ha riconosciuto guardando.
+
+    E' il caso dei file che l'area riservata non la dichiarano da nessuna
+    parte - niente livello, niente nome di lastra, niente scritta sopra il
+    riquadro - dove la lettura automatica non ha niente da leggere e l'unica
+    cosa che resta e' guardare. L'agente indica il riquadro, `area_riservata`
+    trova la lastra e gliela MOSTRA, e quello che passa di qui e' gia' stato
+    confermato a occhio.
+
+    Vuoto se non c'e' analisi allegata: allora il file resta come prima, che
+    e' il comportamento di sempre, e il build lo dichiara.
+    """
+    if not isinstance(params, dict):
+        return []
+    pc = params.get("parametri_costruzione")
+    voci = pc.get("aree_riservate") if isinstance(pc, dict) else None
+    if not isinstance(voci, (list, tuple)):
+        return []
+    return [str(v).strip() for v in voci if str(v).strip()]
 
 
 def scatola_da_agente(params):
@@ -310,7 +333,7 @@ def falda_sospetta(fp):
 
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
-                   sezione=None, scatola=False, pinne=None):
+                   sezione=None, scatola=False, pinne=None, lastre_extra=()):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -329,9 +352,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     if case:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
-        clean = artwork.strip_separations(pdf, tmp.name,
-                                          case["drop_seps"])
-        lastre = list(case["drop_seps"])
+        # anche qui le lastre dell'agente: un caso calibrato elenca a mano
+        # quello che sapeva allora, non quello che si vede oggi guardando
+        lastre = sorted(set(case["drop_seps"]) | set(lastre_extra or ()))
+        clean = artwork.strip_separations(pdf, tmp.name, lastre)
         fp0 = _flowpack_from_case(case)
         box = None
         ripiego = None
@@ -343,7 +367,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         box, fp0, ripiego = analisi_flowpack(pdf)
         # L'analisi e' fatta: ora, e non prima, si possono togliere le lastre
         # tecniche dichiarate per nome.
-        clean, lastre = artwork.senza_coperture(pdf)
+        clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra)
 
     # NB: l'UnboundLocalError su 'avvisi' non nasceva qui. Nasceva in
     # do_POST, che quel nome lo assegnava solo sul ramo flowpack e lo
@@ -817,11 +841,15 @@ class Handler(BaseHTTPRequestHandler):
                         # Su TUTTI i rami: e' proprio sul ramo che se ne
                         # dimenticava che nasceva l'UnboundLocalError.
                         avvisi_ingresso = []
+                        # Le aree riservate che l'agente ha visto: valgono su
+                        # tutte e due le famiglie, quindi si leggono una volta
+                        # sola prima di scegliere il ramo.
+                        aree = aree_da_agente(opts.get("params"))
                         if info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
                             # variabile che su questo ramo non esisteva.
-                            avvisi = build_carton(pdf, out, q)
+                            avvisi = build_carton(pdf, out, q, aree)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":
@@ -853,7 +881,7 @@ class Handler(BaseHTTPRequestHandler):
                                 pdf, out, int(opts.get("teeth", 20)),
                                 str(soft), case, q,
                                 sezione_da_agente(opts.get("params")),
-                                scatola, pinne)
+                                scatola, pinne, aree)
                         with open(out, "rb") as fh:
                             # gli avvisi della costruzione viaggiano in un
                             # header: il corpo e' il GLB. Finivano nel nulla,
