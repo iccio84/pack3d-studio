@@ -248,6 +248,63 @@ def strip_separations(src, dst, drop):
 # --------------------------------------------------------------------------- #
 # costruzione
 # --------------------------------------------------------------------------- #
+# Come si rimette dritta una grafica girata. Il verso e' lo STESSO
+# dell'angolo, non l'opposto: pdfium misura l'angolo nello spazio del PDF, con
+# la y in su, mentre la texture ha la y in giu', quindi il senso e' gia'
+# rovesciato una volta. Verificato guardando le due direzioni affiancate.
+GIRO_TEXTURE = {90: Image.ROTATE_90, 180: Image.ROTATE_180, 270: Image.ROTATE_270}
+
+# Quanto puo' essere lontano da quadrato un pannello perche' girarlo di 90
+# gradi non lo stiri. Vedi _gira_sulla_grafica.
+QUADRATO = float(os.environ.get("PACK3D_QUADRATO", "0.9"))
+
+
+def verso_della_grafica(pdf, panels, page_no=0):
+    """Di quanto e' girata la grafica in ogni pannello. {} se non lo dice."""
+    from pack3d import tracciati
+    try:
+        return tracciati.verso_grafica(
+            pdf, {n: (p.x0, p.y0, p.x1, p.y1) for n, p in panels.items()}, page_no)
+    except Exception:
+        return {}
+
+
+def _gira_sulla_grafica(tex, panels, verso):
+    """Rimette dritte le texture seguendo la grafica. (fatte, non fatte).
+
+    La regola e' che il modello segue la GRAFICA e non il disegno tecnico: il
+    DT dice come e' impaginato il foglio, la grafica dice come si legge il
+    pack in mano.
+
+    Un solo limite, e non e' un compromesso: e' l'altra regola, quella che dice
+    di non distorcere mai la grafica. Il pannello sul foglio e la faccia sul
+    solido hanno le stesse proporzioni - vengono dalla stessa fustella - quindi
+    girare la texture di 90 gradi la mappa su una faccia con le proporzioni
+    scambiate. Su un pannello quasi quadrato non si vede; su un fianco stretto
+    si', ed e' anche il caso in cui girare sarebbe sbagliato: su un fianco da
+    38 x 191 il testo verticale E' il progetto, non un errore di impaginato,
+    mentre su un pannello da 188 x 191 vuol dire che il foglio e' girato.
+    Il rapporto di forma distingue i due casi.
+
+    Dove non si puo' girare senza stirare, non si gira e lo si dichiara: la
+    regola dice di seguire la grafica, non di consegnare grafica deformata.
+    """
+    fatte, no = [], []
+    for nome, gradi in sorted(verso.items()):
+        if not gradi or nome not in tex:
+            continue
+        p = panels[nome]
+        lati = abs(p.x1 - p.x0), abs(p.y1 - p.y0)
+        quadrato = min(lati) / max(max(lati), 1e-9) >= QUADRATO
+        if gradi == 180 or quadrato:
+            tex[nome] = tex[nome].transpose(GIRO_TEXTURE[gradi])
+            fatte.append("%s di %d" % (nome, gradi))
+        else:
+            no.append("%s (%d gradi, %.0f x %.0f)"
+                      % (nome, gradi, lati[0] * PT2MM, lati[1] * PT2MM))
+    return fatte, no
+
+
 def _senza_coperture(pdf, page_no=0):
     """(pdf da cui ritagliare la texture, nomi delle coperture togliute).
 
@@ -298,6 +355,13 @@ def build_carton(pdf, out_glb, quality="web"):
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
     pulito, lastre = _senza_coperture(pdf)
     tex = folding.rasterize_panels(pulito, d.panels, dpi=dpi)
+    # Il modello segue la GRAFICA, non il disegno tecnico. Il DT dice come e'
+    # impaginato il foglio; la grafica dice come si legge il pack in mano, e
+    # sono due cose diverse: su questo astuccio il pannello fronte ha tutto il
+    # testo a 90 gradi e il retro a 270. Girata la texture, il marchio si legge
+    # sul modello come si legge sul pack.
+    giri, storti = _gira_sulla_grafica(tex, d.panels,
+                                       verso_della_grafica(pulito, d.panels))
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
     exporters.write_glb(faces, out_glb)
@@ -305,6 +369,11 @@ def build_carton(pdf, out_glb, quality="web"):
             "%.1f x %.1f x %.1f mm" % d.dims_mm]
     if lastre:
         meta.append("coperture togliute per nome: %s" % ", ".join(lastre))
+    if giri:
+        meta.append("girato sul verso della grafica: %s" % ", ".join(giri))
+    if storti:
+        meta.append("GRAFICA GIRATA ma il pannello non e' quadrato, lasciato "
+                    "com'e' per non stirarla: %s" % ", ".join(storti))
     return meta + [w for w in dl.check(d)]
 
 
