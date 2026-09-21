@@ -348,6 +348,20 @@ def _senza_coperture(pdf, page_no=0):
         return pdf, []
 
 
+def avviso_quadricromia(pdf, page_no=0):
+    """La riga sulla quadricromia, se il file ne ha bisogno.
+
+    Costa una lettura di pypdf e una passeggiata nei dizionari delle risorse:
+    centesimi di secondo e niente in memoria, misurati su tutto il parco.
+    """
+    from pack3d import techink
+    try:
+        import pypdf
+        return techink.avviso_rgb(pypdf.PdfReader(pdf).pages[page_no])
+    except Exception:
+        return None
+
+
 def build_carton(pdf, out_glb, quality="web"):
     dpi = 300 if quality == "alta" else 200
     d = dl.analyze(pdf)          # sull'originale: il DT e' quello che misura
@@ -362,11 +376,15 @@ def build_carton(pdf, out_glb, quality="web"):
     # sul modello come si legge sul pack.
     giri, storti = _gira_sulla_grafica(tex, d.panels,
                                        verso_della_grafica(pulito, d.panels))
-    faces = folding.build_faces(d.dims_mm, tex, layout=d.layout)
+    faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
+                                panels=d.panels)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
     exporters.write_glb(faces, out_glb)
-    meta = ["astuccio %s" % d.layout,
+    meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm]
+    rgb = avviso_quadricromia(pdf)
+    if rgb:
+        meta.insert(0, rgb)
     if lastre:
         meta.append("coperture togliute per nome: %s" % ", ".join(lastre))
     if giri:
@@ -536,6 +554,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # tocca l'altra: sono due scope diversi, e qui il nome non si rilegge
     # mai. La correzione vera sta nel chiamante.
     avvisi_sez = []
+    rgb = avviso_quadricromia(pdf)
+    if rgb:
+        avvisi_sez.append(rgb)
     if lastre:
         avvisi_sez.append("coperture togliute per nome: %s" % ", ".join(lastre))
     sospetto = falda_sospetta(fp0)
@@ -845,9 +866,17 @@ def analyze_pdf(pdf, kind=None):
         try:
             d = dl.analyze(pdf)
             if d.panels:
+                meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso
+                                           else " aperto"),
+                        "%.1f x %.1f x %.1f mm" % d.dims_mm]
+                apertura = dl.dichiara_apertura(d)
+                if apertura:
+                    meta.append(apertura)
+                rgb = avviso_quadricromia(pdf)
+                if rgb:
+                    meta.insert(0, rgb)
                 return dict(kind="carton", title="Astuccio %s" % d.layout,
-                            meta=["astuccio %s" % d.layout,
-                                  "%.1f x %.1f x %.1f mm" % d.dims_mm])
+                            meta=meta)
         except Exception:
             if kind == "carton":
                 raise
@@ -867,6 +896,9 @@ def analyze_pdf(pdf, kind=None):
     if sospetto:
         # prima di costruire, non dopo: qui l'utente le quote le sta leggendo
         meta.insert(0, sospetto)
+    rgb = avviso_quadricromia(pdf)
+    if rgb:
+        meta.insert(0, rgb)
     if ripiego is not None:
         # anche qui il ripiego si dichiara: questi cartellini sono la prima
         # cosa che l'utente legge, e finora tacevano

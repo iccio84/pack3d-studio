@@ -7,8 +7,12 @@ from PIL import Image, ImageFilter
 from .raster import Camera, render
 
 # fattori ricavati per confronto fotometrico con il render di riferimento
+# Le falde del retro di un astuccio a finestra prendono lo shading del retro:
+# sono il retro, solo a pezzi. Senza la voce prenderebbero 1.0 e resterebbero
+# piu' chiare della faccia di cui fanno parte.
 SHADING = {"front": 0.94, "top": 0.97, "left": 0.73, "right": 0.73,
-           "back": 0.94, "bottom": 0.70}
+           "back": 0.94, "bottom": 0.70,
+           "back_top": 0.94, "back_bottom": 0.94}
 
 
 def ground_shadow(cam: Camera, dims_mm, size, drop=0.5,

@@ -7,6 +7,7 @@ ricava le quote L x H x P in millimetri.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field, asdict
 
 import pdfplumber
@@ -51,6 +52,8 @@ class Dieline:
     dims_mm: tuple = (0.0, 0.0, 0.0)
     vsegs: list = field(default_factory=list)   # (x, ytop, ybot) cordonature verticali
     hsegs: list = field(default_factory=list)   # (y, xleft, xright) cordonature orizzontali
+    chiuso: bool = True          # un astuccio puo' non avere retro: vedi _aperto
+    finestra_mm: float = 0.0     # quanto del retro resta aperto, in altezza
 
     def cols_in_row(self, y0, y1, cover=0.8):
         """Cordonature verticali che attraversano davvero la fascia [y0, y1]."""
@@ -212,6 +215,11 @@ def _technical_pens(segs, page_w, page_h, min_segs=4, keep=0.15):
             if count[st] >= min_segs and length[st] >= keep * top}
 
 
+# Quanto lontano dal corpo della fustella puo' stare un pezzo e appartenerle
+# ancora, in punti. Un'aletta la tocca; un cartiglio sta molto piu' in la'.
+ATTACCATO = 50.0
+
+
 def _largest_cluster(segs, gap=25.0):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
     cartigli, legende e disegni di riepilogo posti a lato della fustella."""
@@ -249,13 +257,31 @@ def _largest_cluster(segs, gap=25.0):
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)
 
     def inside(g):
-        # le alette con fianchi obliqui non toccano il corpo con tratti H/V:
-        # restano gruppi a se', ma cadono dentro l'ingombro della fustella.
+        """Se questo gruppo fa parte della fustella o e' roba di fianco.
+
+        Le alette con fianchi obliqui non toccano il corpo con tratti H/V:
+        restano gruppi a se', sporgono dall'ingombro da un lato e sono
+        contenute nell'altro. Per quelle il test su un asse solo va bene.
+
+        Contenuto in un asse pero' NON basta, ed e' quello che rompeva gli
+        astucci con due viste sul foglio. Sul Kinder Pingui T6 la pagina porta
+        INSIDE VIEW e OUTSIDE VIEW affiancate piu' il cartiglio: il cartiglio
+        sta 90 mm a destra della fustella, non la tocca in nessun punto, ma e'
+        contenuto nella sua ALTEZZA - e tanto bastava a tirarlo dentro. Il
+        riquadro usciva 679 mm invece di 262, la griglia di colonne veniva
+        assurda e solve_carton non trovava piu' i fianchi: KeyError 'left'.
+
+        Quindi: contenuto in un asse E attaccato al corpo nell'altro. Un'aletta
+        e' attaccata per definizione, un cartiglio a 90 mm no.
+        """
         x0 = min(b[0] for _, b in g); y0 = min(b[1] for _, b in g)
         x1 = max(b[2] for _, b in g); y1 = max(b[3] for _, b in g)
         t = 4.0
-        return ((mx0 - t <= x0 and x1 <= mx1 + t) or
-                (my0 - t <= y0 and y1 <= my1 + t))
+        dentro_x = mx0 - t <= x0 and x1 <= mx1 + t
+        dentro_y = my0 - t <= y0 and y1 <= my1 + t
+        attaccato_x = x0 <= mx1 + ATTACCATO and x1 >= mx0 - ATTACCATO
+        attaccato_y = y0 <= my1 + ATTACCATO and y1 >= my0 - ATTACCATO
+        return ((dentro_x and attaccato_y) or (dentro_y and attaccato_x))
 
     out = []
     for g in groups.values():
@@ -264,8 +290,22 @@ def _largest_cluster(segs, gap=25.0):
     return out
 
 
-def _dieline_pen(segs, page_w, page_h):
-    """La fustella e' la 'penna' che accumula piu' lunghezza su segmenti lunghi."""
+# Quanto deve valere una penna, in frazione della migliore, per contare come
+# fustella. Misurato: su tutti gli artwork del parco la penna di fustella e'
+# una sola e sta a 1,00; sul Kinder Pingui T6 ce n'e' una seconda a 0,14 - un
+# rettangolo nero CMYK da 0,76 pt, quattro segmenti in tutto, che non e'
+# fustella e sballava la griglia. Il divario e' largo e la soglia sta in mezzo.
+FUSTELLA_KEEP = float(os.environ.get("PACK3D_FUSTELLA_KEEP", "0.25"))
+
+
+def _punteggi_penna(segs, page_w, page_h):
+    """Quanto ogni penna "sa" di fustella: {penna: punteggio}.
+
+    Non basta la lunghezza. Una fustella ha molte **cordonature distinte**,
+    non solo tratto lungo, quindi la lunghezza si pesa per il numero di quote
+    di piega riconoscibili. E' quello che distingue una fustella da un
+    rettangolo grande disegnato con un filo sottile.
+    """
     length, coords = {}, {}
     lim = 0.05 * max(page_w, page_h)
     for kind, c, a, b, st in segs:
@@ -273,16 +313,38 @@ def _dieline_pen(segs, page_w, page_h):
             continue
         length[st] = length.get(st, 0.0) + (b - a)
         coords.setdefault(st, {"H": [], "V": []})[kind].append(c)
-    if not length:
-        return None
-
-    def score(st):
-        # una fustella ha molte cordonature distinte, non solo tratto lungo:
-        # pesiamo la lunghezza per il numero di quote di piega riconoscibili.
+    fuori = {}
+    for st, L in length.items():
         n = sum(len(_cluster([(v, 1.0) for v in coords[st][k]])) for k in ("H", "V"))
-        return length[st] * max(n, 1)
+        fuori[st] = L * max(n, 1)
+    return fuori
 
-    return max(length, key=score)
+
+def penne_di_fustella(segs, page_w, page_h, keep=None):
+    """Le penne che disegnano la fustella, fra quelle tecniche.
+
+    `_technical_pens` tiene tutti i tratti sottili che contribuiscono linee
+    lunghe, e fa bene: molti artwork separano taglio, cordonatura e mezzo
+    taglio su colori diversi, e una penna sola non basterebbe. Ma la' dentro
+    finisce anche chi non e' fustella affatto, e per la GRIGLIA - le righe e
+    le colonne da cui si ricavano i pannelli - un intruso e' fatale: una sola
+    riga in piu' e i ruoli cadono tutti sul pannello sbagliato.
+
+    Una penna di cordonatura vera passa la soglia perche' porta molti tratti
+    su molte quote. Un rettangolo solo non la passa.
+    """
+    p = _punteggi_penna(segs, page_w, page_h)
+    if not p:
+        return set()
+    top = max(p.values())
+    lim = FUSTELLA_KEEP if keep is None else keep
+    return {st for st, v in p.items() if v >= lim * top}
+
+
+def _dieline_pen(segs, page_w, page_h):
+    """La penna che sa di fustella piu' di tutte, o None."""
+    p = _punteggi_penna(segs, page_w, page_h)
+    return max(p, key=p.get) if p else None
 
 
 def _cluster(vals, tol=2.0):
@@ -320,6 +382,12 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
         pens = _technical_pens(all_segs, page.width, page.height)
         segs = [s for s in all_segs if s[4] in pens] or all_segs
         segs = _largest_cluster(segs)
+        # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
+        # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
+        # guardando solo quello che sta sulla fustella.
+        fustella = penne_di_fustella(segs, page.width, page.height)
+        if fustella:
+            segs = [s for s in segs if s[4] in fustella] or segs
 
         bx0 = by0 = 1e9
         bx1 = by1 = -1e9
@@ -376,48 +444,150 @@ def classify(d: Dieline) -> str:
     return "unknown"
 
 
-def solve_carton(d: Dieline) -> Dieline:
-    """Ruoli dei pannelli di un astuccio a sezione rettangolare.
+def _fasce_del_corpo(d):
+    """Le fasce della fasciatura, lette sulla colonna del corpo.
 
-    Sequenza verticale attesa: [aletta] RETRO - CIELO - FRONTE - FONDO.
-    Fianchi e patta di incollaggio stanno a sinistra/destra del RETRO.
+    Le `ys` del foglio sono l'unione di TUTTE le cordonature, e ci finisce
+    anche quello che non piega il corpo. Sul Kinder Pingui T6 una linea a 27 mm
+    dal fondo - dove le alette laterali cambiano profilo - spezzava la faccia
+    da 125 in 98 + 27, e il fronte spariva dalla lettura. Una cordonatura che
+    separa due fasce della fasciatura deve attraversare la colonna del corpo:
+    quelle che non lo fanno appartengono alle alette.
     """
-    xs, ys = d.xs, d.ys
-    rows = [(ys[i], ys[i + 1], ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
-    cols = [(xs[i], xs[i + 1], xs[i + 1] - xs[i]) for i in range(len(xs) - 1)]
+    xs = d.xs
+    ci = max(range(len(xs) - 1), key=lambda i: xs[i + 1] - xs[i])
+    ys = d.rows_in_col(xs[ci], xs[ci + 1])
+    if len(ys) < 3:
+        ys = d.ys
+    return [(ys[i], ys[i + 1], ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
 
+
+def _chiuso(rows, tol=3.0):
+    """Ruoli di [aletta] RETRO - CIELO - FRONTE - FONDO, per indice di fascia.
+
+    Retro e fronte sono la stessa faccia vista da due parti, e hanno la STESSA
+    altezza: se le due fasce piu' alte non l'hanno, questa non e' la lettura
+    giusta. Su un Kinder Pingui T6 il solutore prendeva 40,5 e 125 e ne faceva
+    la media, 82,8, che non e' l'altezza di niente.
+    """
+    if len(rows) < 3:
+        return None
     order = sorted(range(len(rows)), key=lambda i: -rows[i][2])
     back_i, front_i = sorted(order[:2])
-    top_i = (max(range(back_i + 1, front_i), key=lambda i: rows[i][2])
-             if front_i - back_i > 1 else None)
-    bottom_i = front_i + 1 if front_i + 1 < len(rows) else None
+    hb, hf = rows[back_i][2] * PT2MM, rows[front_i][2] * PT2MM
+    if abs(hb - hf) > max(tol, 0.08 * max(hb, hf)):
+        return None
+    r = {"back": back_i, "front": front_i, "fianchi": back_i}
+    if front_i - back_i > 1:
+        r["top"] = max(range(back_i + 1, front_i), key=lambda i: rows[i][2])
+    if front_i + 1 < len(rows):
+        r["bottom"] = front_i + 1
+    return r
 
-    cmain = max(range(len(cols)), key=lambda i: cols[i][2])
-    # i fianchi vanno cercati sulla griglia valida per la fascia del retro:
-    # le alette di presa del cielo non attraversano quella fascia.
-    row_xs = d.cols_in_row(rows[back_i][0], rows[back_i][1]) or xs
+
+def _aperto(rows, tol=1.5):
+    """Ruoli di un astuccio che non si chiude: CIELO - FRONTE - FONDO.
+
+    Un astuccio non e' obbligato ad avere il retro. Un vassoio non ce l'ha per
+    definizione; un pack con finestra ce l'ha a meta', chiuso da due falde che
+    lasciano un'apertura in mezzo da cui si vede il prodotto - il Kinder Pingui
+    T6 e' cosi'. La firma in fustella e' una faccia grande sola, con cielo e
+    fondo UGUALI sopra e sotto, e i fianchi agganciati al FRONTE e non al retro
+    che non c'e'.
+
+    Le due fasce oltre il cielo e il fondo, se ci sono, sono le falde del retro.
+    """
+    if len(rows) < 3:
+        return None
+    f = max(range(len(rows)), key=lambda i: rows[i][2])
+    if f == 0 or f == len(rows) - 1:
+        return None
+    ht, hb = rows[f - 1][2] * PT2MM, rows[f + 1][2] * PT2MM
+    if min(ht, hb) <= 0 or abs(ht - hb) > max(tol, 0.10 * max(ht, hb)):
+        return None
+    r = {"front": f, "top": f - 1, "bottom": f + 1, "fianchi": f}
+    if f - 2 >= 0:
+        r["back_top"] = f - 2
+    if f + 2 < len(rows):
+        r["back_bottom"] = f + 2
+    return r
+
+
+def solve_carton(d: Dieline) -> Dieline:
+    """Ruoli dei pannelli di un astuccio a fasciatura verticale.
+
+    Due famiglie, e la fustella dice quale: chiuso, con retro e fronte della
+    stessa altezza, oppure aperto, con una faccia grande sola. Vedi `_chiuso` e
+    `_aperto`.
+    """
+    rows = _fasce_del_corpo(d)
+    ruoli = _chiuso(rows) or _aperto(rows)
+
+    def fasce():
+        """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""
+        return [round(r[2] * PT2MM, 1) for r in rows]
+
+    if ruoli is None:
+        raise ValueError(
+            "astuccio: la sequenza delle fasce non e' ne' quella di un "
+            "astuccio chiuso (retro e fronte alti uguali) ne' quella di uno "
+            "aperto (cielo e fondo uguali attorno a una faccia sola). "
+            "Fasce (mm): %s" % fasce())
+
+    # I fianchi si cercano sulla griglia valida per la fascia a cui sono
+    # agganciati: le alette di presa del cielo non attraversano quella fascia.
+    riga = rows[ruoli["fianchi"]]
+    row_xs = d.cols_in_row(riga[0], riga[1]) or d.xs
     cols = [(row_xs[i], row_xs[i + 1], row_xs[i + 1] - row_xs[i])
             for i in range(len(row_xs) - 1)]
     cmain = max(range(len(cols)), key=lambda i: cols[i][2])
-    left_i = cmain - 1 if cmain - 1 >= 0 else None
-    right_i = cmain + 1 if cmain + 1 < len(cols) else None
 
     def mk(ci, ri, role):
         return Panel(cols[ci][0], rows[ri][0], cols[ci][1], rows[ri][1], role)
 
-    P = {"front": mk(cmain, front_i, "front"), "back": mk(cmain, back_i, "back")}
-    if top_i is not None:
-        P["top"] = mk(cmain, top_i, "top")
-    if bottom_i is not None:
-        P["bottom"] = mk(cmain, bottom_i, "bottom")
-    if left_i is not None:
-        P["left"] = mk(left_i, back_i, "left")
-    if right_i is not None:
-        P["right"] = mk(right_i, back_i, "right")
+    P = {k: mk(cmain, v, k) for k, v in ruoli.items() if k != "fianchi"}
+    if cmain - 1 >= 0:
+        P["left"] = mk(cmain - 1, ruoli["fianchi"], "left")
+    if cmain + 1 < len(cols):
+        P["right"] = mk(cmain + 1, ruoli["fianchi"], "right")
+
+    # Prima di dare le quote, i controlli che il disegno stesso impone. Non
+    # sono cinture di sicurezza: sono la differenza fra dire "non lo so
+    # risolvere" e consegnare un astuccio sbagliato.
+    if "top" not in P and "left" not in P:
+        raise ValueError(
+            "astuccio: non si trova ne' il cielo ne' un fianco, quindi la "
+            "profondita' non e' ricavabile. Fasce (mm): %s" % fasce())
+
+    d.chiuso = "back" in P
+    if d.chiuso:
+        H = (P["back"].h_mm + P["front"].h_mm) / 2.0
+        D = P["top"].h_mm if "top" in P else P["left"].w_mm
+    else:
+        # Su un astuccio aperto i fianchi SONO la profondita', e devono
+        # tornare con cielo e fondo. Senza questo controllo ci casca dentro
+        # qualunque flowpack steso: su Colazione la fascia grande e' il nastro,
+        # cielo e fondo sono le due falde da 5 mm uguali, e ne uscirebbe un
+        # astuccio profondo cinque millimetri. I fianchi da 7 lo smentiscono.
+        if "left" not in P or "right" not in P:
+            raise ValueError(
+                "astuccio aperto: senza fianchi accanto al fronte la "
+                "profondita' non e' ricavabile. Fasce (mm): %s" % fasce())
+        H = P["front"].h_mm
+        D = (P["top"].h_mm + P["bottom"].h_mm) / 2.0
+        wl, wr = P["left"].w_mm, P["right"].w_mm
+        if (abs(wl - wr) > max(1.5, 0.08 * max(wl, wr))
+                or abs((wl + wr) / 2.0 - D) > max(1.5, 0.08 * max(D, 1.0))):
+            raise ValueError(
+                "astuccio aperto: i fianchi (%.1f e %.1f mm) non tornano con "
+                "la profondita' di cielo e fondo (%.1f mm), quindi questa non "
+                "e' una fasciatura ad astuccio. Fasce (mm): %s"
+                % (wl, wr, D, fasce()))
+        # La finestra e' quello che le falde del retro non coprono.
+        d.finestra_mm = round(
+            H - sum(P[k].h_mm for k in ("back_top", "back_bottom") if k in P), 1)
 
     W = P["front"].w_mm
-    H = (P["back"].h_mm + P["front"].h_mm) / 2.0
-    D = P["top"].h_mm if "top" in P else P["left"].w_mm
     d.panels = P
     d.kind = "carton"
     d.dims_mm = (round(W, 1), round(H, 1), round(D, 1))
@@ -539,6 +709,24 @@ def solve_carton_h(d: Dieline, pdf_path=None) -> Dieline:
     return d
 
 
+def dichiara_apertura(d: Dieline):
+    """Come e' aperto il retro, se e' aperto.
+
+    Non e' un difetto, e' una dichiarazione: chi guarda il modello deve sapere
+    che il retro e' aperto per costruzione e non per errore.
+    """
+    if d.chiuso:
+        return None
+    falde = [k for k in ("back_top", "back_bottom") if k in d.panels]
+    if not falde:
+        return "astuccio senza retro: aperto sul dietro, tipo vassoio"
+    return ("retro aperto: lo chiudono %d falde (%s mm) e in mezzo resta una "
+            "finestra alta %.1f mm"
+            % (len(falde),
+               " + ".join("%.1f" % d.panels[k].h_mm for k in falde),
+               d.finestra_mm))
+
+
 def check(d: Dieline):
     """Controlli di coerenza: se qualcosa non torna e' meglio saperlo."""
     msgs = []
@@ -561,6 +749,9 @@ def check(d: Dieline):
     for k in ("front", "back", "left", "right"):
         if k in P and abs(P[k].h_mm - H) / max(H, 1) > 0.03:
             msgs.append(f"'{k}' alto {P[k].h_mm:.1f} mm contro {H:.1f} mm")
+    apertura = dichiara_apertura(d)
+    if apertura:
+        msgs.append(apertura)
     return msgs
 
 
