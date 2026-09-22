@@ -169,7 +169,7 @@ def _inpaint(rgb, mask):
 
 def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                      inset_px: int = 4, page_no: int = 0, clean: bool = True,
-                     note=None) -> dict:
+                     note=None, nero_deciso=None) -> dict:
     """Ritaglia la grafica di ogni pannello da una rasterizzazione ad alta
     risoluzione. Con `clean` il disegno tecnico viene tolto dalla texture:
     sul modello 3D deve restare solo la grafica di stampa.
@@ -196,11 +196,17 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                 note.append("nessun livello per il disegno tecnico: la "
                             "pulizia e' a stima, sui soli tratti a filo di "
                             "capello. Chiedere il DT su un livello suo")
+        # `nero_deciso` arriva da chi costruisce, che la lastra se l'e'
+        # presa all'inizio di tutto: Ghostscript parte con un fork, e
+        # forkare a memoria piena la fa contare due volte. Vedi `nero.spia`.
+        # Se non arriva - riga di comando - se la prende qui.
+        deciso_nero = (nero_deciso if nero_deciso is not None
+                       else nero.spia(pulito, page_no, scale))
         sheet = colata.foglio(pulito, scale, page_no, note)
         # La `k` di `kinder` e' nera, e pdfium la fa azzurra perche' ignora la
         # sovrastampa. Si rimette il nero dove la lastra lo dichiara, e solo
         # li': vedi `nero.py` per perche' non si puo' rendere tutto con gs.
-        sheet = nero.riporta(pulito, sheet, scale, page_no, note)
+        sheet = nero.riporta(pulito, sheet, scale, page_no, note, deciso_nero)
         # Preso il foglio, la pagina in cassa non serve piu' a nessuno: da qui
         # in giu' si alloca la maschera e la texture, e tenerla viva vorrebbe
         # dire sommare due rasterizzazioni nel momento peggiore.

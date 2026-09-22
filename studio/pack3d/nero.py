@@ -65,9 +65,15 @@ DPI_SPIA = 36.0
 
 
 def _lastra(pdf, page_no, dpi):
-    """La mappa d'inchiostro della lastra del nero, o None."""
+    """La mappa d'inchiostro della lastra del nero, o None.
+
+    Si chiede **solo** quella: un foglio ha una dozzina di lastre e tenerle
+    tutte per buttarne undici, su un container da 512 MB, e' il genere di
+    spreco che fa fallire un build.
+    """
     try:
-        mappe = techink.mappe_lastre(pdf, page_no, dpi, processo=True)
+        mappe = techink.mappe_lastre(pdf, page_no, dpi, processo=True,
+                                     solo="black")
     except Exception:
         return None
     return mappe.get("black")
@@ -90,7 +96,44 @@ def _traditi(lastra, reso):
     return tradito, float(tradito.sum()) / float(pieno.sum())
 
 
-def riporta(pdf, foglio, scala, page_no=0, note=None):
+def spia(pdf, page_no=0, scala=None):
+    """Decide TUTTO prima che il foglio grande esista. `(lastra, quota)`.
+
+    Il momento conta piu' del metodo. Ghostscript lo si lancia con un `fork`,
+    e il figlio parte ereditando lo spazio di indirizzi del padre: se il padre
+    in quel momento tiene un foglio da 25 megapixel, quella memoria viene
+    contata due volte finche' il figlio non la rilascia. Misurato sul Pingui
+    T6: forkando a foglio pieno il conto e' 362 + 362 MB, forkando prima
+    362 + 105. Su un container da 512 e' la differenza fra un modello e un
+    `Failed to fetch`, che e' come si vede un processo ucciso dall'OOM.
+
+    Quindi qui si fa tutto: la lastra spia, un render **piccolo** della pagina
+    per il confronto - pdfium a 36 dpi, meno di un megabyte - e, se il difetto
+    supera la soglia, anche la lastra alla risoluzione buona. Chi chiama si
+    porta dietro un array da pochi MB e non fa piu' partire nessun processo.
+
+    Torna `(None, 0.0)` quando non c'e' niente da riparare.
+    """
+    bassa = _lastra(pdf, page_no, DPI_SPIA)
+    if bassa is None:
+        return None, 0.0
+    try:
+        from .dieline import render_page, scarta_resa
+        pagina = render_page(pdf, page_no, DPI_SPIA / 72.0).convert("RGB")
+        piccolo = np.asarray(pagina.resize((bassa.shape[1], bassa.shape[0]),
+                                           Image.BILINEAR))
+        scarta_resa()
+        _m, quota = _traditi(bassa, piccolo)
+    except Exception:
+        return None, 0.0
+    if quota < QUOTA_MINIMA:
+        return None, quota
+    alta = _lastra(pdf, page_no,
+                   DPI_LASTRA if scala is None else min(DPI_LASTRA, scala * 72.0))
+    return alta, quota
+
+
+def riporta(pdf, foglio, scala, page_no=0, note=None, deciso=None):
     """Rimette il nero dove la lastra dice nero e il render ha messo un colore.
 
     `foglio` e' quello che esce dal rasterizzatore, immagine o array; torna
@@ -100,41 +143,40 @@ def riporta(pdf, foglio, scala, page_no=0, note=None):
     costa poco e dice se il difetto c'e', e solo allora la lastra alla
     risoluzione che serve. Un file senza lastra del nero, o senza difetto, non
     paga la seconda.
-    """
-    arr = np.asarray(foglio.convert("RGB")) if hasattr(foglio, "convert") \
-        else np.asarray(foglio)
-    try:
-        spia = _lastra(pdf, page_no, DPI_SPIA)
-        if spia is None:
-            return Image.fromarray(arr.astype(np.uint8))
-        piccolo = np.asarray(Image.fromarray(arr.astype(np.uint8)).resize(
-            (spia.shape[1], spia.shape[0]), Image.BILINEAR))
-        _m, quota = _traditi(spia, piccolo)
-        if quota < QUOTA_MINIMA:
-            return Image.fromarray(arr.astype(np.uint8))
 
-        alta = _lastra(pdf, page_no, min(DPI_LASTRA, scala * 72.0))
+    `deciso` e' quello che ha restituito `spia`: la lastra buona e la quota.
+    Se non c'e' la si chiede qui, ma il posto giusto per chiederla e' prima -
+    vedi `spia` per il perche', che e' misurato in megabyte.
+
+    **Non si tocca mai il foglio grande se non serve.** Sta sui 25 megapixel:
+    ogni copia sono 76 MB, e la prima versione ne faceva tre solo per
+    rimpicciolirlo. Adesso rimpicciolisce PIL, che alloca solo la
+    destinazione, e l'array grande si materializza solo quando c'e' davvero
+    da riparare.
+    """
+    img = foglio if hasattr(foglio, "convert") else Image.fromarray(
+        np.asarray(foglio).astype(np.uint8))
+    try:
+        img = img.convert("RGB")
+        alta, quota = deciso if deciso is not None else spia(pdf, page_no, scala)
         if alta is None:
-            return Image.fromarray(arr.astype(np.uint8))
+            return img
         grande = np.asarray(Image.fromarray(alta).resize(
-            (arr.shape[1], arr.shape[0]), Image.BILINEAR))
+            (img.width, img.height), Image.BILINEAR))
+        del alta
+        arr = np.array(img, dtype=np.uint8)      # qui, e solo qui, la copia
         tradito, _q = _traditi(grande, arr)
         if tradito is None or not tradito.any():
-            return Image.fromarray(arr.astype(np.uint8))
-
-        fuori = arr.astype(np.int16).copy()
+            return img
         h, w = tradito.shape
         # il tono e' quello della lastra: pieno vuol dire nero, e i bordi
         # sfumati restano come li ha disegnati il rasterizzatore
-        tono = (255 - grande[:h, :w].astype(np.int16))
-        vista = fuori[:h, :w]
-        vista[tradito] = (255 - tono[tradito])[:, None]
-        fuori[:h, :w] = vista
+        arr[:h, :w][tradito] = grande[:h, :w][tradito][:, None]
         if note is not None:
             note.append("nero riportato dalla lastra sul %.1f%% dei pixel che "
                         "il file dichiara neri: il rasterizzatore ignora la "
                         "sovrastampa e li faceva colorati" % (100 * quota))
-        return Image.fromarray(np.clip(fuori, 0, 255).astype(np.uint8))
+        return Image.fromarray(arr)
     except Exception:
         # meglio la `k` azzurra che nessun modello
-        return Image.fromarray(arr.astype(np.uint8))
+        return img
