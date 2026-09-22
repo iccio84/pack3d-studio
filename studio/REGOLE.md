@@ -635,6 +635,42 @@ otto i file del parco la sovrastampa la dichiarano. Guardare `/OP` non scarta
 nessuno. Il costo e' quindi la passata spia a 36 dpi su ogni build, da mezzo
 secondo a uno e tre, piu' la passata a 144 dpi solo sopra soglia.
 
+##### Ghostscript costa 105 MB anche a vuoto, e conta QUANDO lo chiami
+
+Questa riparazione, appena messa, ha fatto morire il build del Kinder Pingui
+T6 sul piano Free: `Failed to fetch` nel browser, che e' come si vede da fuori
+un processo ucciso dall'OOM. Due difetti, tutti e due sul **momento** piu' che
+sul metodo.
+
+**Uno: le copie.** Il foglio di un cartotecnico sta sui 25 megapixel, cioe' 76
+MB a copia. La prima versione ne faceva tre soltanto per rimpicciolirlo e
+confrontarlo. Python passava da 359 a 483 MB. Adesso rimpicciolisce PIL, che
+alloca solo la destinazione, e l'array grande si materializza **solo** quando
+c'e' davvero da riparare.
+
+**Due, ed e' quello che conta: il fork.** Ghostscript costa **105 MB fissi** -
+li costa anche con `-sDEVICE=nullpage`, cioe' senza produrre niente: e'
+l'interprete, i font, i profili ICC. Non si limano, misurato a 36 e a 12 dpi e
+con quattro device diversi, sempre 105. E si lancia con un `fork`: il figlio
+parte ereditando lo spazio del padre, quindi chiamarlo **a foglio gia' reso**
+lo raddoppia.
+
+La differenza e' tutta li':
+
+    lastra presa DENTRO la rasterizzazione   python 483 + gs 483
+    lastra presa PRIMA dell'analisi          python 345 + gs 105
+
+Per questo `nero.spia` decide **tutto** - lastra spia, confronto su un render
+piccolo di pdfium, ed eventualmente la lastra buona - e viene chiamata come
+**prima riga** di `build_carton` e `build_flowpack`, prima ancora
+dell'analisi. Li' Python pesa 95 MB su un astuccio e 260 su un flowpack: gs
+finisce e rilascia molto prima che il foglio grande esista, quindi **il picco
+del build non si sposta di un megabyte**. Chi costruisce si porta dietro un
+array da pochi MB, e `rasterize_panels` non fa piu' partire nessun processo.
+
+La lezione e' piu' larga della `k`: su un container da 512 MB, *quando* lanci
+un processo figlio conta quanto *cosa* gli fai fare.
+
 ### La grafica va in quadricromia, non in RGB
 
 **In RGB la sovrastampa non esiste**, quindi non c'e' niente da simulare: ne'

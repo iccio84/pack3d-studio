@@ -33,7 +33,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import artwork, dieline as dl, folding, exporters
+from pack3d import artwork, dieline as dl, folding, exporters, nero
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
 from pack3d.flowpack import Flowpack, fin_on_surface
@@ -172,6 +172,12 @@ def avviso_quadricromia(pdf, page_no=0):
 
 def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
     dpi = 300 if quality == "alta" else 200
+    # PRIMA COSA, e il motivo e' la memoria. Ghostscript costa 105 MB fissi -
+    # li costa anche a vuoto, misurato con `nullpage` - e parte con un fork:
+    # chiamarlo a build avviato vuol dire duplicare quello che Python tiene
+    # in quel momento. Chiamato qui, che sono una cinquantina di MB, il picco
+    # del build non si sposta. Vedi `nero.spia`.
+    deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
     d = dl.analyze(pdf)          # sull'originale: il DT e' quello che misura
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
@@ -179,7 +185,8 @@ def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
-                                              lastre_extra=lastre_extra)
+                                              lastre_extra=lastre_extra,
+                                              nero_deciso=deciso_nero)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
@@ -349,6 +356,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     import math
     par = gonfiore(soft)
     nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (190, 260, 200, 1700)
+    # come per l'astuccio: la lastra del nero prima dell'analisi, che e' il
+    # momento in cui Python pesa poco e il fork di Ghostscript non duplica
+    # niente. Vedi `nero.spia`.
+    deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
     if case:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
@@ -575,7 +586,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
         dpi=dpi_tex, inset_px=0, clean=(case is None),
-        note=avvisi_sez)["film"]
+        note=avvisi_sez, nero_deciso=deciso_nero)["film"]
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il

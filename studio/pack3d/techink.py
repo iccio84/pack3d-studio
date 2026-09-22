@@ -476,13 +476,18 @@ PIENO_MINIMO = 0.60       # quota di pixel pieni nell'intorno dell'etichetta
 VICINO = 150.0            # punti: quanto puo' stare lontana la riga di sopra
 
 
-def mappe_lastre(pdf, page_no=0, dpi=36, processo=False):
+def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None):
     """`{nome lastra: mappa d'inchiostro}` con una passata `tiffsep`.
 
     Nelle mappe 255 e' niente inchiostro e 0 e' il pieno. Le lastre di
     processo restano fuori, perche' il processo non riserva mai un'area: e'
     la grafica. Con `processo=True` ci sono anche loro - serve a chi cerca
     il nero, vedi `nero.py`.
+
+    Con `solo="black"` si carica quella lastra e basta. Non e' pignoleria:
+    un foglio ne ha una dozzina, e chi cerca il nero le altre undici le
+    terrebbe in memoria per buttarle. Su un container da 512 MB quello e'
+    il genere di spreco che fa fallire un build.
 
     Vuota se Ghostscript non c'e' o se la passata non riesce: chi chiama deve
     sapersela cavare senza, perche' il modello si costruisce comunque.
@@ -517,6 +522,8 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False):
                 continue
             n = _norm(nome.group(1))
             if n in RESERVED and not processo:
+                continue
+            if solo is not None and n != _norm(solo):
                 continue
             fuori[n] = np.asarray(Image.open(percorso).convert("L"))
         return fuori
