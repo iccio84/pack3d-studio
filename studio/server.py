@@ -260,12 +260,14 @@ def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
                                                lastre_extra=lastre_extra,
                                                nero_deciso=deciso_nero)
     V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste)
-    exporters.write_glb_mesh(V, UV, T, tex["steso"], out_glb, tex_max=tmax)
+    exporters.write_glb_mesh(V, UV, T, vassoio.con_coda(tex["steso"]), out_glb,
+                             tex_max=tmax)
     meta = ["vassoio espositore",
             "base %.1f x %.1f mm, pareti %s mm"
             % (v.fondo_w, v.fondo_h,
                " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
-            "%d vertici sul profilo della fustella" % len(V)]
+            "%d vertici sul profilo della fustella, cartoncino %.1f mm"
+            % (len(V), vassoio.SPESSORE)]
     return meta + avvisi_tex + list(v.warnings)
 
 
