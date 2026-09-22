@@ -120,33 +120,47 @@ def _strisce(maschera, verso):
     return righe
 
 
-def mesh(v: Vassoio, sagoma, px_mm, origine, creste, alette=False):
+def mesh(v: Vassoio, sagoma, px_mm, creste):
     """La maglia del vassoio piegato: vertici, UV sullo steso, triangoli.
 
-    Una texture sola - lo steso intero - e le UV prese dalla posizione nel
-    piano. Cosi' non c'e' nessun ritaglio da girare: la piega sposta i
-    vertici, la grafica se li porta dietro. E' la stessa idea dei flowpack,
-    dove la mappatura e' per pannello sullo steso.
+    I NOMI, come li chiama chi il display ce l'ha in mano: **base** al
+    centro, **fronte** e **retro** sulle due testate, **lato SX** e
+    **lato DX** sulle due colonne, e quattro **alette** agli angoli.
 
-    `sagoma` e' la maschera booleana della cartotecnica, `px_mm` i pixel per
-    millimetro, `origine` l'angolo (x, y) della maschera in millimetri sulla
-    pagina, `creste` le due cordonature verticali e le due orizzontali in
-    pixel della maschera.
+    LE ALETTE SONO DEI LATERALI, non delle testate. Piegano di 90 gradi
+    rispetto al laterale, e quando il laterale a sua volta piega di 90
+    rispetto alla base si ritrovano in posizione frontale e posteriore: sono
+    lo strato interno del fronte e del retro, che poi ci si chiudono sopra.
+    E' il modo in cui un vassoio sta in piedi, e sbagliarlo vuol dire
+    costruire quattro pareti che non si tengono.
+
+    Una texture sola - lo steso intero - e le UV prese dalla posizione nel
+    piano: la piega sposta i vertici e la grafica se li porta dietro, quindi
+    non c'e' nessun ritaglio da ruotare.
+
+    `sagoma` e' la maschera della cartotecnica, `px_mm` i pixel per
+    millimetro, `creste` le due cordonature verticali e le due orizzontali,
+    in pixel della maschera.
     """
     import numpy as np
 
     H, W = sagoma.shape
     cxL, cxR, cyT, cyB = creste
     Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
-
-    def piano(X, Y):
-        """Dal pixel dello steso al punto sul fondo, in mm."""
-        return ((X - Xc) / px_mm, (Yc - Y) / px_mm)
+    # la z NON si specchia: sullo steso visto da fuori, la colonna di
+    # sinistra deve restare a sinistra anche guardando il vassoio dal
+    # fronte. Girando il segno il modello esce speculare, e si vede solo
+    # confrontandolo con il pack vero.
+    mx = lambda X: (Xc - X) / px_mm
+    mz = lambda Y: (Y - Yc) / px_mm
+    xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
+    # le alette stanno DENTRO fronte e retro: mezzo millimetro piu' in
+    # dentro, se no le due superfici combattono per lo stesso pixel
+    DENTRO = 0.5
 
     V, UV, T = [], [], []
 
     def striscia(masc, verso, punto):
-        base = len(V)
         righe = _strisce(masc, verso)
         if len(righe) < 2:
             return
@@ -156,31 +170,80 @@ def mesh(v: Vassoio, sagoma, px_mm, origine, creste, alette=False):
                 V.append(punto(X, Y))
                 UV.append((X / float(W), Y / float(H)))
             if prima is not None:
+                # l'avvolgimento e' orario: il rasterizzatore e l'export
+                # prendono per diritta quella faccia, e con l'altro verso il
+                # marchio si legge specchiato - che e' come si vede da fuori
+                # il rovescio di un triangolo
                 k = len(V) - 4
-                T.append((k, k + 1, k + 3))
-                T.append((k, k + 3, k + 2))
+                T.append((k, k + 3, k + 1))
+                T.append((k, k + 2, k + 3))
             prima = i
-        return base
 
-    # fondo: resta disteso
-    fondo = np.zeros((H, W), bool)
-    fondo[cyT:cyB, cxL:cxR] = True
-    fondo &= sagoma
-    striscia(fondo, "righe", lambda X, Y: (piano(X, Y)[0], 0.0, piano(X, Y)[1]))
+    def cella(y0, y1, x0, x1):
+        m = np.zeros((H, W), bool)
+        m[y0:y1, x0:x1] = True
+        return m & sagoma
 
-    # fianchi: quello che sta oltre la cordonatura verticale diventa altezza
-    ov = np.zeros((H, W), bool); ov[cyT:cyB, :cxL] = True; ov &= sagoma
-    striscia(ov, "righe", lambda X, Y: (piano(cxL, Y)[0], (cxL - X) / px_mm, piano(X, Y)[1]))
-    es = np.zeros((H, W), bool); es[cyT:cyB, cxR:] = True; es &= sagoma
-    striscia(es, "righe", lambda X, Y: (piano(cxR, Y)[0], (X - cxR) / px_mm, piano(X, Y)[1]))
+    # base: resta distesa
+    striscia(cella(cyT, cyB, cxL, cxR), "righe",
+             lambda X, Y: (mx(X), 0.0, mz(Y)))
+    # laterali: quello che sta oltre la cordonatura verticale diventa altezza
+    striscia(cella(cyT, cyB, 0, cxL), "righe",
+             lambda X, Y: (xL, (cxL - X) / px_mm, mz(Y)))
+    striscia(cella(cyT, cyB, cxR, W), "righe",
+             lambda X, Y: (xR, (X - cxR) / px_mm, mz(Y)))
 
-    # testate: quello che sta oltre la cordonatura orizzontale diventa altezza
-    no = np.zeros((H, W), bool); no[:cyT, cxL:cxR] = True; no &= sagoma
-    striscia(no, "colonne", lambda X, Y: (piano(X, Y)[0], (cyT - Y) / px_mm, piano(X, cyT)[1]))
-    su = np.zeros((H, W), bool); su[cyB:, cxL:cxR] = True; su &= sagoma
-    striscia(su, "colonne", lambda X, Y: (piano(X, Y)[0], (Y - cyB) / px_mm, piano(X, cyB)[1]))
+    # retro e fronte: oltre la cordonatura orizzontale
+    striscia(cella(0, cyT, cxL, cxR), "colonne",
+             lambda X, Y: (mx(X), (cyT - Y) / px_mm, zT))
+    striscia(cella(cyB, H, cxL, cxR), "colonne",
+             lambda X, Y: (mx(X), (Y - cyB) / px_mm, zB))
+    # le quattro alette: piegate sul laterale, finiscono nel piano del retro
+    # (in alto) e del fronte (in basso), un filo piu' dentro
+    striscia(cella(0, cyT, 0, cxL), "righe",
+             lambda X, Y: (xL - (cyT - Y) / px_mm, (cxL - X) / px_mm, zT + DENTRO))
+    striscia(cella(0, cyT, cxR, W), "righe",
+             lambda X, Y: (xR + (cyT - Y) / px_mm, (X - cxR) / px_mm, zT + DENTRO))
+    striscia(cella(cyB, H, 0, cxL), "righe",
+             lambda X, Y: (xL - (Y - cyB) / px_mm, (cxL - X) / px_mm, zB - DENTRO))
+    striscia(cella(cyB, H, cxR, W), "righe",
+             lambda X, Y: (xR + (Y - cyB) / px_mm, (X - cxR) / px_mm, zB - DENTRO))
 
     return (np.array(V, float), np.array(UV, float), np.array(T, np.uint32))
+
+
+def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0):
+    """`(sagoma, creste, resa)` per costruire il vassoio.
+
+    La sagoma della cartotecnica **non viene dal tracciato**. La penna della
+    fustella ha interruzioni - sul display Milch-Schnitte sono da 3 mm, e
+    riempiendola si prende solo la colonna centrale, perche' le cordonature
+    chiudono quella cella e il contorno esterno no. Viene invece
+    dall'**impronta di stampa**: su questi display la stampa arriva al
+    taglio, e allora l'impronta E' la cartotecnica. Misurata sul Milch-
+    Schnitte: 346,5 x 466,5 mm, cioe' esattamente le quote del disegno
+    tecnico 34150.
+    """
+    import numpy as np
+    from scipy.ndimage import binary_fill_holes, label
+
+    from .dieline import render_page
+
+    scala = px_mm * 25.4 / 72.0
+    resa = render_page(pdf, page_no, scala).convert("RGB")
+    a = np.asarray(resa)
+    lab, quanti = label(a.astype(np.int16).max(2) < 246)
+    if quanti == 0:
+        return None, None, resa
+    dim = np.bincount(lab.ravel())
+    dim[0] = 0
+    sagoma = binary_fill_holes(lab == int(np.argmax(dim)))
+    gx = sorted({round(t, 1) for t in d.xs})
+    gy = sorted({round(t, 1) for t in d.ys})
+    creste = (int(round((gx[1] + gx[2]) / 2 * scala)),
+              int(round((gx[3] + gx[4]) / 2 * scala)),
+              int(round(gy[1] * scala)), int(round(gy[2] * scala)))
+    return sagoma, creste, resa
 
 
 def facce(v: Vassoio, textures: dict):

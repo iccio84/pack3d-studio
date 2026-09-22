@@ -235,17 +235,37 @@ def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
     if v is None:
         raise ValueError("non e' un vassoio: la griglia della fustella non ha "
                          "cinque colonne e tre fasce")
-    panels = {nome: Panel(x0, y0, x1, y1, nome)
-              for nome, (x0, y0, x1, y1) in v.riquadri.items()}
-    tex, avvisi_tex = artwork.texture_astuccio(pdf, panels, dpi,
+    # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
+    # piano: la piega sposta i vertici e la grafica se li porta dietro,
+    # quindi non c'e' nessun ritaglio da ruotare. Il pannello unico serve
+    # solo a far passare lo steso dalla pulizia di `texture_astuccio`.
+    # La sagoma si prende a BASSA risoluzione e la texture alla sua: le UV
+    # sono normalizzate, quindi le due cose non si parlano. Prendendo la
+    # sagoma a 200 dpi il picco andava a 736 MB, cioe' fuori dal tetto, per
+    # un contorno che a 4 px/mm e' gia' preciso al quarto di millimetro.
+    px_mm = 4.0
+    sagoma, creste, _resa = vassoio.sagoma_e_creste(pdf, d, px_mm)
+    if sagoma is None:
+        raise ValueError("vassoio: non si riconosce l'impronta della "
+                         "cartotecnica sul foglio")
+    pagina = Panel(0.0, 0.0, d.page_w, d.page_h, "steso")
+    # Il dpi si abbassa fino a quello che la texture terra' davvero, come fa
+    # il flowpack: rendere un foglio da 500 x 700 mm a 200 dpi sono 21
+    # megapixel prodotti per buttarne i tre quarti nel ridimensionamento, e
+    # il picco andava a 682 MB.
+    tmax = 2600 if quality == "alta" else 1700
+    lato = max(d.page_w, d.page_h)
+    dpi_tex = min(dpi, tmax * 72.0 / lato) if lato > 0 else dpi
+    tex, avvisi_tex = artwork.texture_astuccio(pdf, {"steso": pagina}, dpi_tex,
                                                lastre_extra=lastre_extra,
                                                nero_deciso=deciso_nero)
-    faces = folding.guscio(vassoio.facce(v, tex))
-    exporters.write_glb(faces, out_glb)
+    V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste)
+    exporters.write_glb_mesh(V, UV, T, tex["steso"], out_glb, tex_max=tmax)
     meta = ["vassoio espositore",
-            "fondo %.1f x %.1f mm, pareti %s mm"
+            "base %.1f x %.1f mm, pareti %s mm"
             % (v.fondo_w, v.fondo_h,
-               " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items()))]
+               " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
+            "%d vertici sul profilo della fustella" % len(V)]
     return meta + avvisi_tex + list(v.warnings)
 
 
