@@ -814,6 +814,188 @@ prepara l'artwork*, non una chiamata API su ogni build. Il piano B costa una
 chiamata e un rischio: si usa dove il file non poteva dire di meglio, non
 dove non gliel'abbiamo chiesto.
 
+## Perche' un file nuovo non si costruisce: la lista
+
+Due file arrivati insieme, tutti e due fermi con lo stesso messaggio -
+`saldature di testa non riconosciute` - e due cause che non c'entrano niente
+l'una con l'altra. Da li' questa lista, che e' quella da girare a chi prepara
+l'artwork **prima** di mandare un pack nuovo.
+
+### 1. La fustella deve CHIUDERE un rettangolo
+
+E' il riferimento da cui si misura tutto, e si riconosce senza euristiche:
+**due orizzontali della stessa larghezza, due verticali della stessa altezza,
+e i quattro lati che si coprono**. Non serve che gli estremi combacino — una
+fustella sborda, e sul Kinder Choco Fresh la verticale di destra scende 6 mm
+sotto l'orizzontale di sotto — serve che i quattro tratti chiudano.
+
+Una tavola di rettangoli chiusi ne ha parecchi: la cornice del foglio, i
+cartigli, i riquadri della legenda. Vince quello che **somiglia di piu'
+all'ingombro stampato**, perche' la fustella e' il rettangolo in cui la
+grafica sta. Vedi `flowpack.riquadro_fustella`.
+
+### 2. La grafica non deve uscire dal tracciato
+
+Sul Choco Fresh T1 esce: c'e' una striscia di fondo bianco che scende sotto la
+fustella, e chi misura *lo stampato* invece della fustella trova un nastro di
+**121 mm invece di 115**. Con quel numero le fasce non chiudono piu' e il file
+non si costruisce. Oggi c'e' un secondo tentativo che ripiega sulla fustella,
+ma costa otto secondi di rilettura dei tracciati: meglio non doverlo fare.
+
+Se il fondo deve sbordare - e a volte deve, per l'abbondanza - la fustella
+vada comunque tracciata chiusa, cosi' il secondo tentativo ha da leggere.
+
+### 3. Le quote stanno FUORI dal tracciato, o su un livello loro
+
+La linea di quota del Choco Fresh sta sopra il pack, disegnata con la stessa
+penna della fustella, e misurando dagli estremi il nastro diventava 136,8 mm
+invece di 115. Una quota dentro l'ingombro, con la penna del disegno, e' un
+tratto indistinguibile da una cordonatura.
+
+E' lo stesso identico discorso di *Cosa chiediamo a chi prepara l'artwork*:
+quello che non si stampa va su un livello suo. `Dimensions` e' un nome che il
+codice riconosce gia'.
+
+### 4. Le saldature vanno disegnate per intero
+
+Sempre sul Choco Fresh: la saldatura di sinistra e' tracciata a tutta altezza
+(115 mm), quella di destra solo attraverso il corpo (95 mm). Due tratti che
+descrivono la stessa cosa e sono lunghi diversi. Il solutore che cerca
+"quattro verticali a tutta altezza" ne trova tre e si ferma.
+
+Non e' pignoleria: da quella asimmetria non si capisce piu' se la linea corta
+e' una saldatura o una cordonatura del corpo.
+
+### 5. La tipologia va dichiarata quando non e' una di quelle note
+
+Le famiglie che il codice risolve sono **astuccio**, **flowpack** e
+**vassoio**. Un pack che non e' nessuna delle tre non va indovinato: il
+display del Milch-Schnitte Raspberry cadeva nel ramo flowpack e usciva
+`saldature di testa non riconosciute`, un messaggio che a chi ha in mano un
+vassoio non dice niente. Vedi *La tipologia non riconosciuta e' un errore, non
+un ripiego*.
+
+### 6. Il confronto finale lo fa l'occhio, sul modello
+
+Nessuna di queste regole sostituisce il passaggio finale: si apre il GLB e si
+guarda. Le misure dicono che i conti tornano, non che il pack e' giusto — e
+l'unica volta in cui una segnalazione di rotazione e' stata smentita, a
+smentirla e' stato il modello aperto e guardato, non un numero. Vedi *Il
+caso calibrato: Kinder Pingui T6 BOX*.
+
+## Vassoi espositori
+
+La terza famiglia: un **fondo** rettangolare con una parete attaccata a
+ciascuno dei suoi quattro lati, e le alette agli angoli che tengono su le
+pareti.
+
+Si riconosce dalla griglia della fustella, e non per euristica: **cinque
+colonne e tre fasce**, con le due colonne sottili fra fondo e pareti che sono
+la cordonatura. Sul display Milch-Schnitte Raspberry:
+
+    colonne (mm)   98,6 | 2,0 | 145,5 | 2,0 | 98,5
+    fasce   (mm)   40,0 | 385,9 | 40,5
+
+cioe' fondo **145,5 x 385,4**, fianchi lunghi alti **98,5 e 98,7**, pareti
+corte **40,5 e 40,6**.
+
+**Le quattro pareti non sono alte uguali, ed e' normale.** Su un display da
+scaffale i fianchi lunghi reggono la pila e la parete davanti e' bassa perche'
+il prodotto si deve vedere. Il build lo dichiara invece di sospettare un
+errore.
+
+**Le alette angolari sono dei laterali, non delle testate.** Piegano di 90
+gradi rispetto al laterale, e quando il laterale a sua volta piega di 90
+rispetto alla base si ritrovano in posizione frontale e posteriore: sono lo
+strato interno del fronte e del retro, che poi ci si chiudono sopra e le
+incollano — le macchie tratteggiate che il DT disegna agli angoli sono proprio
+quegli incollaggi. E' il modo in cui un vassoio sta in piedi, e sbagliarlo vuol
+dire costruire quattro pareti che non si tengono.
+
+### Il contorno non e' un rettangolo, e il DT lo dice
+
+La prima versione del vassoio faceva quattro rettangoli dalla griglia. Era
+"completamente sbagliato" a vederlo, perche' il contorno di un display e'
+sagomato: sul Milch-Schnitte i fianchi rientrano a meta' altezza e gli angoli
+sporgono. Il DT sul foglio porta le quote — **346,5 x 466,5**, colonne
+98,5 | 149,5 | 98,5 e fasce 40,0 | 386,5 | 40,0 — e il contorno va preso da
+li', non inventato dalla griglia.
+
+**Le cordonature orizzontali non stanno tutte alla stessa quota**: sul
+Milch-Schnitte quella della colonna di mezzo sta a 148,3 e quelle delle colonne
+laterali a 149,2, nove decimi piu' in basso. Non e' un errore del file, e' il
+compenso dello spessore del cartoncino.
+
+### Il foglio si riconosce da dove sta, non da quanto inchiostro ha
+
+La sagoma della cartotecnica si prende dall'**impronta di stampa**, perche' la
+penna della fustella ha interruzioni — sul Milch-Schnitte da 3 mm — e
+riempiendo il tracciato si prende solo la colonna centrale. Ma "impronta di
+stampa" non vuol dire "dove c'e' inchiostro".
+
+Attorno a quel display il file ha un'**ombra sfumata**: un abbellimento della
+presentazione, che in macchina non ci va. Scende da 253 a 170 su quattro
+millimetri e mezzo, quindi qualunque soglia sull'inchiostro se la prende tutta.
+La cartotecnica usciva 4,5 mm piu' larga del vero, e quella fascia — che sulla
+texture pulita e' foglio bianco — finiva stesa sul bordo dei fianchi. E' il
+difetto che si vedeva come **"bianco sui laterali"**.
+
+Il foglio si riconosce invece da DOVE STA: e' il chiaro che si raggiunge
+partendo dal bordo della pagina. Un chiaro circondato dalla grafica — il bianco
+dentro le lettere di `kinder`, un pannello chiaro in mezzo — non si raggiunge e
+resta cartoncino, e non serve piu' tapparlo a posteriori con `fill_holes`. E il
+tratto della fustella, che e' colorato, ferma la macchia da solo: dove la penna
+c'e', anche un cartoncino stampato chiaro fino al taglio si salva.
+
+**Il controllo che lo dice**: la misura dell'impronta va confrontata con il
+riquadro della fustella, che viene dai vettori. Se ballano di piu' di 2 mm il
+build lo scrive, invece di consegnare un modello piu' grande del pack.
+
+### Una texture sola, e uno specchio solo
+
+Lo steso intero e' **una** texture, con in fondo due righe di colore piatto per
+l'interno e per il taglio; le UV sono la posizione nel piano. La piega sposta i
+vertici e la grafica se li porta dietro, quindi non c'e' nessun ritaglio da
+ruotare pannello per pannello.
+
+**Piegando lo steso com'e', la stampa finisce dentro**: la faccia stampata
+guardava in su e piegando in su va a guardare l'interno, e il marchio si legge
+attraverso il cartone. Ci vuole uno specchio per rimetterla fuori, e **uno
+solo**: con due — x e z — e' una rotazione, e torna specchiata.
+
+**Le UV dell'interno e del taglio si misurano sulla TEXTURE, non sulla
+sagoma.** Sono due griglie diverse: sul Milch-Schnitte la sagoma sta a 4 px/mm
+e la texture a 2,4. Prendendo l'altezza della sagoma la riga dell'interno
+cascava su quella del taglio, e tutto il dentro del vassoio usciva del colore
+sbagliato.
+
+### Il verso dell'avvolgimento si misura, non si indovina
+
+Un visualizzatore glTF scarta le facce che guardano dall'altra parte
+(`doubleSided` non c'e', quindi vale il default). Se un pezzo esce avvolto al
+contrario, da fuori si vede la **faccia interna** — il cartoncino — e la stampa
+resta nascosta: il fronte e il retro uscivano bianchi mentre i fianchi erano
+giusti, perche' sono gli unici due pezzi presi *per colonne*, dove la riga
+corre in X e il tratto in Y, e la normale esce rovesciata.
+
+Non si aggiusta a mano pezzo per pezzo: la faccia esterna deve guardare dalla
+parte opposta al dentro, e il piano lo dice da solo — basta chiedere alla
+mappatura dove vanno un passo in X e uno in Y, e girare i triangoli quando la
+normale punta dentro.
+
+**E non si vede rendendo in casa**: il rasterizzatore di `raster.py` non fa
+culling, quindi sulle sei viste il modello sembrava giusto. Per accorgersene
+bisogna scartare le facce voltate, come fa il visualizzatore vero.
+
+### Una riga puo' avere piu' di un tratto pieno
+
+Prendendo il primo e l'ultimo pixel pieno di ogni riga, all'altezza dell'angolo
+il fianco ha **due** tratti — il pezzo dell'aletta e quello della parete,
+separati da foglio — e la striscia faceva ponte stendendoci sopra il bianco.
+Si tengono i tratti uno per uno, e due righe consecutive si cuciono solo se ne
+hanno lo stesso numero: dove il conto cambia la sagoma si apre o si chiude, e
+cucire a indovinare rifarebbe il ponte.
+
 ## Astucci
 
 `dieline.py` isola il tratto della fustella scegliendo la penna che accumula

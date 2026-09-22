@@ -951,3 +951,78 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
                                 if not lembo else
                                 (y0 + inizio / PT2MM,
                                  y0 + (inizio + giro) / PT2MM)))
+
+
+def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.0):
+    """Il rettangolo che la fustella CHIUDE, in punti PDF, o `None`.
+
+    Serve quando l'ingombro dello stampato non e' la fustella. Sul Kinder
+    Choco Fresh T1 la grafica scende sotto il tracciato - c'e' una striscia
+    di fondo bianco che il disegno non comprende - e misurando lo stampato il
+    nastro veniva 121 mm invece di 115: le fasce non chiudevano piu' e il file
+    non si costruiva. La fustella invece si riconosce senza ambiguita', perche'
+    e' **chiusa**: due orizzontali della stessa larghezza, due verticali della
+    stessa altezza, e i quattro angoli che coincidono.
+
+    Non e' un'euristica sul colore ne' sullo spessore: e' una condizione
+    geometrica, o i quattro tratti chiudono o non chiudono.
+
+    Di rettangoli chiusi una tavola ne ha parecchi - la cornice del foglio, i
+    cartigli, i riquadri della legenda - e prendere il piu' grande da' la
+    cornice. Vince invece quello che **somiglia di piu' all'ingombro
+    stampato**, per sovrapposizione: la fustella e' il rettangolo in cui la
+    grafica sta. Senza `stampato` non si sceglie e si torna `None`, perche'
+    senza riferimento la scelta sarebbe un'altra euristica.
+    """
+    from .tracciati import segmenti
+
+    if stampato is None:
+        return None
+    try:
+        segs, _w, _h = segmenti(pdf_path, page_no)
+        S = segs
+    except Exception:
+        return None
+
+    H = [(c, a, b) for k, c, a, b, st in S if k == "H"]
+    V = [(c, a, b) for k, c, a, b, st in S if k == "V"]
+    if len(H) < 2 or len(V) < 2:
+        return None
+
+    px0, py0, px1, py1 = stampato
+    area_st = max(1e-6, (px1 - px0) * (py1 - py0))
+
+    def somiglianza(x0, y0, x1, y1):
+        """Sovrapposizione fra il rettangolo e l'ingombro stampato, 0..1."""
+        ix = max(0.0, min(x1, px1) - max(x0, px0))
+        iy = max(0.0, min(y1, py1) - max(y0, py0))
+        inter = ix * iy
+        unione = (x1 - x0) * (y1 - y0) + area_st - inter
+        return inter / unione if unione > 0 else 0.0
+
+    # I lati devono COPRIRE il rettangolo, non coincidere con esso. Una
+    # fustella sborda: sul Choco Fresh la verticale di destra scende 6 mm sotto
+    # l'orizzontale di sotto, e pretendendo che gli estremi combaciassero il
+    # rettangolo giusto veniva scartato.
+    copre = lambda a, b, p, q: a <= p + tol and b >= q - tol
+    migliore = None
+    for i, (y0, hx0, hx1) in enumerate(H):
+        for y1, gx0, gx1 in H[i + 1:]:
+            alto, basso = min(y0, y1), max(y0, y1)
+            if basso - alto <= tol:
+                continue
+            for x0, va0, va1 in V:
+                if not copre(va0, va1, alto, basso):
+                    continue
+                for x1, vb0, vb1 in V:
+                    if x1 - x0 <= tol or not copre(vb0, vb1, alto, basso):
+                        continue
+                    # e le due orizzontali devono coprire da x0 a x1
+                    if not (copre(hx0, hx1, x0, x1) and copre(gx0, gx1, x0, x1)):
+                        continue
+                    q = somiglianza(x0, alto, x1, basso)
+                    if migliore is None or q > migliore[0]:
+                        migliore = (q, (x0, alto, x1, basso))
+    if migliore is None or migliore[0] < 0.5:
+        return None
+    return migliore[1]
