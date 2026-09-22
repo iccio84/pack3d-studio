@@ -33,7 +33,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import artwork, dieline as dl, folding, exporters, nero
+from pack3d import artwork, dieline as dl, folding, exporters, nero, vassoio
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
 from pack3d.flowpack import Flowpack, fin_on_surface
@@ -142,10 +142,33 @@ def analisi_flowpack(pdf):
     try:
         fp = fpk.analyze_auto(pdf, bbox=box)
     except Exception as e:
-        # Il ripiego era muto, e un modello costruito da un'analisi peggiore
-        # non esce sbagliato: esce plausibile, che e' peggio.
-        fp = fpk.analyze(pdf)
-        ripiego = str(e)
+        # Secondo tentativo, sul RIQUADRO DELLA FUSTELLA invece che
+        # sull'ingombro stampato. Non sono la stessa cosa: sul Kinder Choco
+        # Fresh T1 la grafica scende sotto il tracciato - c'e' una striscia di
+        # fondo bianco che il disegno non comprende - e misurando lo stampato
+        # il nastro veniva 121 mm invece di 115. Con quel numero le fasce non
+        # chiudono e il file non si costruisce; con la fustella si risolve.
+        #
+        # Si paga solo qui, cioe' solo sui file che altrimenti non uscirebbero
+        # affatto: rileggere i tracciati sono otto secondi, e chi si risolve al
+        # primo colpo non li paga. Vedi `fpk.riquadro_fustella`.
+        primo = str(e)
+        fp = ripiego = None
+        try:
+            riq = fpk.riquadro_fustella(pdf, stampato=box)
+            if riq and riq != box:
+                fp = fpk.analyze_auto(pdf, bbox=riq)
+                fp.warnings.append(
+                    "riquadro preso dalla fustella e non dallo stampato: "
+                    "la grafica esce dal tracciato, e misurando lo stampato "
+                    "le fasce non chiudevano")
+        except Exception:
+            fp = None
+        if fp is None:
+            # Il ripiego era muto, e un modello costruito da un'analisi
+            # peggiore non esce sbagliato: esce plausibile, che e' peggio.
+            fp = fpk.analyze(pdf)
+            ripiego = primo
     with _ANALISI_CHIAVE:
         _ANALISI[imp] = (box, fp, ripiego)
         while len(_ANALISI) > _ANALISI_MAX:
@@ -197,6 +220,33 @@ def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
     if rgb:
         meta.insert(0, rgb)
     return meta + avvisi_tex + [w for w in dl.check(d)]
+
+
+def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
+    """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
+
+    Le alette angolari non si costruiscono: da fuori le copre la parete che
+    tengono su, e un pannello che non si vede non vale la texture che costa.
+    """
+    dpi = 300 if quality == "alta" else 200
+    deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
+    d = dl.extract(pdf)
+    v = vassoio.riconosci(d)
+    if v is None:
+        raise ValueError("non e' un vassoio: la griglia della fustella non ha "
+                         "cinque colonne e tre fasce")
+    panels = {nome: Panel(x0, y0, x1, y1, nome)
+              for nome, (x0, y0, x1, y1) in v.riquadri.items()}
+    tex, avvisi_tex = artwork.texture_astuccio(pdf, panels, dpi,
+                                               lastre_extra=lastre_extra,
+                                               nero_deciso=deciso_nero)
+    faces = folding.guscio(vassoio.facce(v, tex))
+    exporters.write_glb(faces, out_glb)
+    meta = ["vassoio espositore",
+            "fondo %.1f x %.1f mm, pareti %s mm"
+            % (v.fondo_w, v.fondo_h,
+               " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items()))]
+    return meta + avvisi_tex + list(v.warnings)
 
 
 def _flowpack_from_case(case):
@@ -674,7 +724,7 @@ def normalizza_kind(kind):
     return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
 
 
-KIND_NOTI = ("carton", "flowpack")
+KIND_NOTI = ("carton", "flowpack", "vassoio")
 
 
 def analyze_pdf(pdf, kind=None):
@@ -695,6 +745,22 @@ def analyze_pdf(pdf, kind=None):
                     teeth_default=case["teeth"], soft_default=case["soft"],
                     meta=["caso calibrato: " + case["name"],
                           "nastro %.0f x passo %.0f mm" % (case["web"], case["step"])])
+    if kind in (None, "carton", "vassoio"):
+        try:
+            grezza = dl.extract(pdf)
+            v = vassoio.riconosci(grezza)
+        except Exception:
+            v = None
+        finally:
+            dl.scarta_resa()
+        if v is not None:
+            return dict(kind="vassoio", title="Vassoio espositore",
+                        meta=["vassoio espositore",
+                              "fondo %.1f x %.1f mm, pareti %s mm"
+                              % (v.fondo_w, v.fondo_h,
+                                 " / ".join("%s %.1f" % (k, a)
+                                            for k, a in v.pareti.items()))]
+                             + list(v.warnings))
     if kind in (None, "carton"):
         try:
             d = dl.analyze(pdf)
@@ -856,7 +922,9 @@ class Handler(BaseHTTPRequestHandler):
                         # tutte e due le famiglie, quindi si leggono una volta
                         # sola prima di scegliere il ramo.
                         aree = aree_da_agente(opts.get("params"))
-                        if info["kind"] == "carton":
+                        if info["kind"] == "vassoio":
+                            avvisi = build_vassoio(pdf, out, q, aree)
+                        elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
                             # variabile che su questo ramo non esisteva.

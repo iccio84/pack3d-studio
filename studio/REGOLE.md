@@ -814,6 +814,110 @@ prepara l'artwork*, non una chiamata API su ogni build. Il piano B costa una
 chiamata e un rischio: si usa dove il file non poteva dire di meglio, non
 dove non gliel'abbiamo chiesto.
 
+## Perche' un file nuovo non si costruisce: la lista
+
+Due file arrivati insieme, tutti e due fermi con lo stesso messaggio -
+`saldature di testa non riconosciute` - e due cause che non c'entrano niente
+l'una con l'altra. Da li' questa lista, che e' quella da girare a chi prepara
+l'artwork **prima** di mandare un pack nuovo.
+
+### 1. La fustella deve CHIUDERE un rettangolo
+
+E' il riferimento da cui si misura tutto, e si riconosce senza euristiche:
+**due orizzontali della stessa larghezza, due verticali della stessa altezza,
+e i quattro lati che si coprono**. Non serve che gli estremi combacino — una
+fustella sborda, e sul Kinder Choco Fresh la verticale di destra scende 6 mm
+sotto l'orizzontale di sotto — serve che i quattro tratti chiudano.
+
+Una tavola di rettangoli chiusi ne ha parecchi: la cornice del foglio, i
+cartigli, i riquadri della legenda. Vince quello che **somiglia di piu'
+all'ingombro stampato**, perche' la fustella e' il rettangolo in cui la
+grafica sta. Vedi `flowpack.riquadro_fustella`.
+
+### 2. La grafica non deve uscire dal tracciato
+
+Sul Choco Fresh T1 esce: c'e' una striscia di fondo bianco che scende sotto la
+fustella, e chi misura *lo stampato* invece della fustella trova un nastro di
+**121 mm invece di 115**. Con quel numero le fasce non chiudono piu' e il file
+non si costruisce. Oggi c'e' un secondo tentativo che ripiega sulla fustella,
+ma costa otto secondi di rilettura dei tracciati: meglio non doverlo fare.
+
+Se il fondo deve sbordare - e a volte deve, per l'abbondanza - la fustella
+vada comunque tracciata chiusa, cosi' il secondo tentativo ha da leggere.
+
+### 3. Le quote stanno FUORI dal tracciato, o su un livello loro
+
+La linea di quota del Choco Fresh sta sopra il pack, disegnata con la stessa
+penna della fustella, e misurando dagli estremi il nastro diventava 136,8 mm
+invece di 115. Una quota dentro l'ingombro, con la penna del disegno, e' un
+tratto indistinguibile da una cordonatura.
+
+E' lo stesso identico discorso di *Cosa chiediamo a chi prepara l'artwork*:
+quello che non si stampa va su un livello suo. `Dimensions` e' un nome che il
+codice riconosce gia'.
+
+### 4. Le saldature vanno disegnate per intero
+
+Sempre sul Choco Fresh: la saldatura di sinistra e' tracciata a tutta altezza
+(115 mm), quella di destra solo attraverso il corpo (95 mm). Due tratti che
+descrivono la stessa cosa e sono lunghi diversi. Il solutore che cerca
+"quattro verticali a tutta altezza" ne trova tre e si ferma.
+
+Non e' pignoleria: da quella asimmetria non si capisce piu' se la linea corta
+e' una saldatura o una cordonatura del corpo.
+
+### 5. La tipologia va dichiarata quando non e' una di quelle note
+
+Le famiglie che il codice risolve sono **astuccio**, **flowpack** e
+**vassoio**. Un pack che non e' nessuna delle tre non va indovinato: il
+display del Milch-Schnitte Raspberry cadeva nel ramo flowpack e usciva
+`saldature di testa non riconosciute`, un messaggio che a chi ha in mano un
+vassoio non dice niente. Vedi *La tipologia non riconosciuta e' un errore, non
+un ripiego*.
+
+### 6. Il confronto finale lo fa l'occhio, sul modello
+
+Nessuna di queste regole sostituisce il passaggio finale: si apre il GLB e si
+guarda. Le misure dicono che i conti tornano, non che il pack e' giusto — e
+l'unica volta in cui una segnalazione di rotazione e' stata smentita, a
+smentirla e' stato il modello aperto e guardato, non un numero. Vedi *Il
+caso calibrato: Kinder Pingui T6 BOX*.
+
+## Vassoi espositori
+
+La terza famiglia: un **fondo** rettangolare con una parete attaccata a
+ciascuno dei suoi quattro lati, e le alette agli angoli che tengono su le
+pareti.
+
+Si riconosce dalla griglia della fustella, e non per euristica: **cinque
+colonne e tre fasce**, con le due colonne sottili fra fondo e pareti che sono
+la cordonatura. Sul display Milch-Schnitte Raspberry:
+
+    colonne (mm)   98,6 | 2,0 | 145,5 | 2,0 | 98,5
+    fasce   (mm)   40,0 | 385,9 | 40,5
+
+cioe' fondo **145,5 x 385,4**, fianchi lunghi alti **98,5 e 98,7**, pareti
+corte **40,5 e 40,6**.
+
+**Le quattro pareti non sono alte uguali, ed e' normale.** Su un display da
+scaffale i fianchi lunghi reggono la pila e la parete davanti e' bassa perche'
+il prodotto si deve vedere. Il build lo dichiara invece di sospettare un
+errore.
+
+**Le alette angolari non si costruiscono**: da fuori le copre la parete che
+tengono su, e un pannello che non si vede non vale la texture che costa.
+
+### La piega gira il ritaglio, e la texture va girata con lei
+
+Il bordo del ritaglio attaccato al fondo finisce **sempre in basso** sulla
+parete alzata. Per la parete a nord quel bordo e' gia' quello di sotto e non
+serve niente; per quella a sud e' quello di sopra, e il ritaglio va ribaltato
+di 180 gradi; per le due laterali e' un fianco, e il ritaglio ruota di 90.
+
+Non e' una correzione a occhio: e' la stessa rotazione che fa il cartoncino
+quando lo pieghi. Senza, sul modello il marchio esce specchiato — verificato
+guardando, che e' l'unico modo di accorgersene.
+
 ## Astucci
 
 `dieline.py` isola il tratto della fustella scegliendo la penna che accumula

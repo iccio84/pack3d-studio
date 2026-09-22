@@ -64,6 +64,26 @@ DPI_LASTRA = 144.0
 DPI_SPIA = 36.0
 
 
+def _pagina(pdf, page_no, dpi):
+    """La pagina resa a `dpi`, FUORI dalla cassa di `dieline.render_page`.
+
+    La cassa tiene l'ultima resa e per le richieste piu' piccole la
+    RIMPICCIOLISCE invece di rifarla. E' giusto per una texture, non per una
+    misura: la spia confronterebbe la lastra con una riduzione di una resa a
+    200 dpi invece che con una resa a 36, e la quota cambierebbe a seconda di
+    chi ha chiamato prima. Misurato: due GLB del parco cambiavano da una
+    passata all'altra senza che cambiasse una riga di codice.
+    """
+    import pypdfium2 as pdfium
+
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        bmp = doc[page_no].render(scale=dpi / 72.0)
+        return bmp.to_pil().convert("RGB")
+    finally:
+        doc.close()
+
+
 def _lastra(pdf, page_no, dpi):
     """La mappa d'inchiostro della lastra del nero, o None.
 
@@ -118,11 +138,9 @@ def spia(pdf, page_no=0, scala=None):
     if bassa is None:
         return None, 0.0
     try:
-        from .dieline import render_page, scarta_resa
-        pagina = render_page(pdf, page_no, DPI_SPIA / 72.0).convert("RGB")
+        pagina = _pagina(pdf, page_no, DPI_SPIA)
         piccolo = np.asarray(pagina.resize((bassa.shape[1], bassa.shape[0]),
                                            Image.BILINEAR))
-        scarta_resa()
         _m, quota = _traditi(bassa, piccolo)
     except Exception:
         return None, 0.0
