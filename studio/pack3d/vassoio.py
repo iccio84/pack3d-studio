@@ -101,6 +101,88 @@ def riconosci(d):
     return v
 
 
+def _strisce(maschera, verso):
+    """Il pezzo come striscia: per ogni riga (o colonna) i due estremi pieni.
+
+    I pezzi di un vassoio sono tutti **convessi in una direzione** - ogni riga
+    di un fianco e' un tratto solo, dalla cordonatura al taglio - quindi non
+    serve inseguire un contorno: bastano i due bordi, e fra loro la maglia e'
+    una striscia di triangoli. Robusto e senza librerie.
+    """
+    import numpy as np
+
+    m = maschera if verso == "righe" else maschera.T
+    righe = []
+    for i in range(m.shape[0]):
+        x = np.flatnonzero(m[i])
+        if x.size:
+            righe.append((i, int(x[0]), int(x[-1]) + 1))
+    return righe
+
+
+def mesh(v: Vassoio, sagoma, px_mm, origine, creste, alette=False):
+    """La maglia del vassoio piegato: vertici, UV sullo steso, triangoli.
+
+    Una texture sola - lo steso intero - e le UV prese dalla posizione nel
+    piano. Cosi' non c'e' nessun ritaglio da girare: la piega sposta i
+    vertici, la grafica se li porta dietro. E' la stessa idea dei flowpack,
+    dove la mappatura e' per pannello sullo steso.
+
+    `sagoma` e' la maschera booleana della cartotecnica, `px_mm` i pixel per
+    millimetro, `origine` l'angolo (x, y) della maschera in millimetri sulla
+    pagina, `creste` le due cordonature verticali e le due orizzontali in
+    pixel della maschera.
+    """
+    import numpy as np
+
+    H, W = sagoma.shape
+    cxL, cxR, cyT, cyB = creste
+    Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
+
+    def piano(X, Y):
+        """Dal pixel dello steso al punto sul fondo, in mm."""
+        return ((X - Xc) / px_mm, (Yc - Y) / px_mm)
+
+    V, UV, T = [], [], []
+
+    def striscia(masc, verso, punto):
+        base = len(V)
+        righe = _strisce(masc, verso)
+        if len(righe) < 2:
+            return
+        prima = None
+        for i, a, b in righe:
+            for X, Y in (((a, i), (b, i)) if verso == "righe" else ((i, a), (i, b))):
+                V.append(punto(X, Y))
+                UV.append((X / float(W), Y / float(H)))
+            if prima is not None:
+                k = len(V) - 4
+                T.append((k, k + 1, k + 3))
+                T.append((k, k + 3, k + 2))
+            prima = i
+        return base
+
+    # fondo: resta disteso
+    fondo = np.zeros((H, W), bool)
+    fondo[cyT:cyB, cxL:cxR] = True
+    fondo &= sagoma
+    striscia(fondo, "righe", lambda X, Y: (piano(X, Y)[0], 0.0, piano(X, Y)[1]))
+
+    # fianchi: quello che sta oltre la cordonatura verticale diventa altezza
+    ov = np.zeros((H, W), bool); ov[cyT:cyB, :cxL] = True; ov &= sagoma
+    striscia(ov, "righe", lambda X, Y: (piano(cxL, Y)[0], (cxL - X) / px_mm, piano(X, Y)[1]))
+    es = np.zeros((H, W), bool); es[cyT:cyB, cxR:] = True; es &= sagoma
+    striscia(es, "righe", lambda X, Y: (piano(cxR, Y)[0], (X - cxR) / px_mm, piano(X, Y)[1]))
+
+    # testate: quello che sta oltre la cordonatura orizzontale diventa altezza
+    no = np.zeros((H, W), bool); no[:cyT, cxL:cxR] = True; no &= sagoma
+    striscia(no, "colonne", lambda X, Y: (piano(X, Y)[0], (cyT - Y) / px_mm, piano(X, cyT)[1]))
+    su = np.zeros((H, W), bool); su[cyB:, cxL:cxR] = True; su &= sagoma
+    striscia(su, "colonne", lambda X, Y: (piano(X, Y)[0], (Y - cyB) / px_mm, piano(X, cyB)[1]))
+
+    return (np.array(V, float), np.array(UV, float), np.array(T, np.uint32))
+
+
 def facce(v: Vassoio, textures: dict):
     """Fondo e quattro pareti come quad 3D, pronti per `folding.guscio`.
 
