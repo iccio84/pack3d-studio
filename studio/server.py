@@ -244,7 +244,9 @@ def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
     # sagoma a 200 dpi il picco andava a 736 MB, cioe' fuori dal tetto, per
     # un contorno che a 4 px/mm e' gia' preciso al quarto di millimetro.
     px_mm = 4.0
-    sagoma, creste, _resa = vassoio.sagoma_e_creste(pdf, d, px_mm)
+    avvisi_sagoma = []
+    sagoma, creste, _resa = vassoio.sagoma_e_creste(pdf, d, px_mm,
+                                                    note=avvisi_sagoma)
     if sagoma is None:
         raise ValueError("vassoio: non si riconosce l'impronta della "
                          "cartotecnica sul foglio")
@@ -259,16 +261,19 @@ def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
     tex, avvisi_tex = artwork.texture_astuccio(pdf, {"steso": pagina}, dpi_tex,
                                                lastre_extra=lastre_extra,
                                                nero_deciso=deciso_nero)
-    V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste)
-    exporters.write_glb_mesh(V, UV, T, vassoio.con_coda(tex["steso"]), out_glb,
-                             tex_max=tmax)
+    # la coda va attaccata PRIMA della maglia: le UV dell'interno e del taglio
+    # si misurano sull'altezza che la texture ha davvero, non su quella della
+    # sagoma, che e' un'altra griglia
+    steso = vassoio.con_coda(tex["steso"])
+    V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste, alt_texture=steso.height)
+    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax)
     meta = ["vassoio espositore",
             "base %.1f x %.1f mm, pareti %s mm"
             % (v.fondo_w, v.fondo_h,
                " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
             "%d vertici sul profilo della fustella, cartoncino %.1f mm"
             % (len(V), vassoio.SPESSORE)]
-    return meta + avvisi_tex + list(v.warnings)
+    return meta + avvisi_sagoma + avvisi_tex + list(v.warnings)
 
 
 def _flowpack_from_case(case):

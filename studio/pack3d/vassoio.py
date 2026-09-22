@@ -21,9 +21,15 @@ la cordonatura, due millimetri di spessore del cartoncino.
     colonne (mm)   98,6 | 2,0 | 145,5 | 2,0 | 98,5
     fasce   (mm)   40,0 | 385,9 | 40,5
 
-Le alette angolari non vengono costruite: da fuori non si vedono, perche' le
-copre la parete che tengono. Il modello e' fondo piu' quattro pareti, con lo
-spessore del cartoncino che ci mette `folding.guscio`.
+Le alette angolari invece si costruiscono, e sono DEI LATERALI: piegano di 90
+gradi rispetto al fianco, e quando il fianco a sua volta piega di 90 rispetto
+alla base si ritrovano in posizione frontale e posteriore, a fare lo strato
+interno del fronte e del retro. Su questo display sporgono sopra la parete
+davanti, che e' bassa, quindi si vedono eccome.
+
+Il contorno non e' un rettangolo: si sagoma sull'impronta della cartotecnica,
+vedi `_foglio` e `sagoma_e_creste`. Il modello e' una maglia sola con una
+texture sola - lo steso - e lo spessore del cartoncino gliela mette `mesh`.
 """
 from __future__ import annotations
 
@@ -152,7 +158,8 @@ def con_coda(steso):
     return Image.fromarray(np.concatenate([a, coda], 0))
 
 
-def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
+def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
+         alt_texture=None):
     """La maglia del vassoio piegato: vertici, UV sullo steso, triangoli.
 
     I NOMI, come li chiama chi il display ce l'ha in mano: **base** al
@@ -187,18 +194,25 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
     # va a guardare l'interno. Ci vuole uno specchio per rimetterla fuori, e
     # uno solo: con due (x e z) e' una rotazione, e torna mirror.
     #
-    # Si specchia la **z**, non la x. Le due scelte leggono uguale, ma
-    # cambiano quale banda va davanti: sullo steso quella di sopra legge
-    # dritta e quella di sotto e' ruotata di 180, e chi monta il display
-    # chiama FRONTE quella di sotto.
+    # Si specchia la **z**, non la x. Le due scelte leggono uguale - il
+    # marchio sta dritto su tutte e quattro le pareti - e cambiano solo quale
+    # testata guarda la camera. Sul Milch-Schnitte le due testate portano la
+    # stessa grafica, quindi da qui non si decide: se arriva un display con
+    # fronte e retro diversi, quello e' il file su cui verificarlo.
     mx = lambda X: (X - Xc) / px_mm
     mz = lambda Y: (Yc - Y) / px_mm
     xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
     DENTRO = 0.5
 
-    Ht = H + CODA                       # la texture ha la coda in fondo
-    vI = (H + CODA * 0.25) / Ht         # riga dell'interno
-    vT = (H + CODA * 0.75) / Ht         # riga del taglio
+    # Le UV si misurano sulla TEXTURE, non sulla sagoma. La coda e' CODA righe
+    # in fondo alla texture (vedi `con_coda`), e la sagoma ha un'altezza tutta
+    # sua - 4 px/mm contro i 2,4 della texture sul Milch-Schnitte. Prendendo
+    # `H + CODA` come altezza totale la riga dell'interno cascava su quella del
+    # taglio, e tutto il dentro del vassoio usciva del colore del taglio.
+    ht = float(alt_texture) if alt_texture else float(H + CODA)
+    q = (ht - CODA) / ht                # la frazione che tiene la grafica
+    vI = (ht - CODA * 0.75) / ht        # riga dell'interno
+    vT = (ht - CODA * 0.25) / ht        # riga del taglio
 
     V, UV, T = [], [], []
 
@@ -221,18 +235,35 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
         if len(righe) < 2:
             return
         d = np.array(dentro, float) * spessore
+        # Il verso dell'avvolgimento non si indovina: si MISURA. La faccia
+        # esterna deve guardare dalla parte opposta a `dentro`, e il piano lo
+        # dice da solo - basta chiedere a `punto` dove vanno un passo in X e
+        # uno in Y. Se la normale che ne esce punta dentro, i triangoli vanno
+        # girati. Succede ai pezzi presi per colonne, dove la riga corre in X
+        # e il tratto in Y: e' l'ordine scambiato rispetto a "righe", e la
+        # normale esce rovesciata. Fuori si vedeva la faccia interna, cioe'
+        # il cartoncino, e la stampa restava nascosta - il fronte e il retro
+        # uscivano bianchi mentre i fianchi erano giusti.
+        o = np.array(punto(0.0, 0.0), float)
+        ex = np.array(punto(1.0, 0.0), float) - o
+        ey = np.array(punto(0.0, 1.0), float) - o
+        n = np.cross(ey, ex) if verso == "righe" else np.cross(ex, ey)
+        rovescio = float(np.dot(n, np.array(dentro, float))) > 0
         prec = None
         for i, tratti in righe:
             corr = []
             for a, b in tratti:
+                if rovescio:
+                    a, b = b, a
                 XY = ((a, i), (b, i)) if verso == "righe" else ((i, a), (i, b))
                 fuori = [np.array(punto(X, Y), float) for X, Y in XY]
-                dentro_p = [q + d for q in fuori]
+                dentro_p = [f + d for f in fuori]
                 k = len(V)
-                for (X, Y), q in zip(XY, fuori):
-                    V.append(tuple(q)); UV.append((X / float(W), Y / float(Ht)))
-                for q in dentro_p:
-                    V.append(tuple(q)); UV.append((0.5, vI))
+                for (X, Y), p in zip(XY, fuori):
+                    V.append(tuple(p))
+                    UV.append((X / float(W), Y / float(H) * q))
+                for pt in dentro_p:
+                    V.append(tuple(pt)); UV.append((0.5, vI))
                 corr.append((k, fuori, dentro_p, XY))
             if prec is not None and len(prec) == len(corr):
                 for (pk, pf, pd, pXY), (k, fuori, dentro_p, XY) in zip(prec, corr):
@@ -295,7 +326,36 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
     return (np.array(V, float), np.array(UV, float), np.array(T, np.uint32))
 
 
-def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0):
+# piu' chiaro di cosi', e attaccato al bordo del foglio, non e' cartoncino
+FOGLIO_CHIARO = 150
+
+
+def _foglio(a):
+    """Il foglio attorno alla cartotecnica, come maschera.
+
+    Non e' "dove non c'e' inchiostro". Attorno al display Milch-Schnitte il
+    file ha un'OMBRA SFUMATA - un abbellimento della presentazione, che in
+    macchina non ci va - e scende da 253 a 170 su quattro millimetri e mezzo.
+    Una soglia sull'inchiostro se la prende tutta: la cartotecnica usciva 4,5
+    mm piu' larga del vero, e quella fascia, che sulla texture pulita e' foglio
+    bianco, finiva stesa sul bordo dei fianchi. E' il "bianco sui laterali".
+
+    Il foglio si riconosce invece da DOVE STA: e' il chiaro che si raggiunge
+    partendo dal bordo della pagina. Un chiaro circondato dalla grafica - il
+    bianco dentro le lettere di kinder, un pannello chiaro in mezzo - non si
+    raggiunge e resta cartoncino, e non serve piu' tapparlo a posteriori. E il
+    tratto della fustella, che e' colorato, ferma la macchia da solo: dove la
+    penna c'e', anche un cartoncino stampato chiaro fino al taglio si salva.
+    """
+    import numpy as np
+    from scipy.ndimage import label
+
+    lab, _ = label(a.min(2) > FOGLIO_CHIARO)
+    bordo = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    return np.isin(lab, bordo[bordo > 0])
+
+
+def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None):
     """`(sagoma, creste, resa)` per costruire il vassoio.
 
     La sagoma della cartotecnica **non viene dal tracciato**. La penna della
@@ -306,72 +366,35 @@ def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0):
     taglio, e allora l'impronta E' la cartotecnica. Misurata sul Milch-
     Schnitte: 346,5 x 466,5 mm, cioe' esattamente le quote del disegno
     tecnico 34150.
+
+    E l'impronta non e' "dove c'e' inchiostro": vedi `_foglio`.
     """
     import numpy as np
     from scipy.ndimage import binary_fill_holes, label
 
-    from .dieline import render_page
+    from .dieline import PT2MM, render_page
 
     scala = px_mm * 25.4 / 72.0
     resa = render_page(pdf, page_no, scala).convert("RGB")
     a = np.asarray(resa)
-    lab, quanti = label(a.astype(np.int16).max(2) < 246)
+    lab, quanti = label(~_foglio(a))
     if quanti == 0:
         return None, None, resa
     dim = np.bincount(lab.ravel())
     dim[0] = 0
     sagoma = binary_fill_holes(lab == int(np.argmax(dim)))
+    if note is not None:
+        ys, xs = np.nonzero(sagoma)
+        mis = ((xs.max() - xs.min() + 1) / px_mm, (ys.max() - ys.min() + 1) / px_mm)
+        dt = ((d.bbox[2] - d.bbox[0]) * PT2MM, (d.bbox[3] - d.bbox[1]) * PT2MM)
+        if max(abs(m - q) for m, q in zip(mis, dt)) > 2.0:
+            note.append("l'impronta della cartotecnica misura %.1f x %.1f mm ma "
+                        "la fustella ne misura %.1f x %.1f: la stampa non arriva "
+                        "al taglio, oppure e' chiara e si confonde col foglio"
+                        % (mis + dt))
     gx = sorted({round(t, 1) for t in d.xs})
     gy = sorted({round(t, 1) for t in d.ys})
     creste = (int(round((gx[1] + gx[2]) / 2 * scala)),
               int(round((gx[3] + gx[4]) / 2 * scala)),
               int(round(gy[1] * scala)), int(round(gy[2] * scala)))
     return sagoma, creste, resa
-
-
-def facce(v: Vassoio, textures: dict):
-    """Fondo e quattro pareti come quad 3D, pronti per `folding.guscio`.
-
-    Stessa convenzione degli astucci - **y in alto**, vedi `folding.corners` -
-    cosi' rasterizzatore, guscio ed export non vedono differenza fra un
-    vassoio e un astuccio. Il fondo sta a y=0 e le pareti salgono.
-
-    **La piega gira il ritaglio, e la texture va girata con lei.** Il bordo
-    del ritaglio attaccato al fondo finisce sempre in BASSO sulla parete
-    alzata: per la parete a nord quel bordo e' gia' quello di sotto e non
-    serve niente, per quella a sud e' quello di sopra e il ritaglio va
-    ribaltato di 180 gradi, per le due laterali e' un fianco e il ritaglio
-    ruota di 90. Non e' una correzione a occhio: e' la stessa rotazione che fa
-    il cartoncino quando lo pieghi.
-    """
-    W, P = v.fondo_w, v.fondo_h
-    hx, hz = W / 2.0, P / 2.0
-    UV = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
-    a = v.pareti
-    out = []
-
-    def aggiungi(nome, quad, giro=None):
-        t = textures.get(nome)
-        if t is None:
-            return
-        if giro is not None:
-            t = t.transpose(giro)
-        out.append({"name": nome, "quad": quad, "uv": list(UV), "tex": t})
-
-    from PIL import Image as _I
-
-    # Fondo: visto da sopra, la riga alta del ritaglio confina con NORD.
-    aggiungi("fondo", [(-hx, 0.0, -hz), (+hx, 0.0, -hz),
-                       (+hx, 0.0, +hz), (-hx, 0.0, +hz)])
-    # Nord, sul retro: il ritaglio e' gia' nel verso giusto.
-    aggiungi("nord", [(+hx, a["nord"], -hz), (-hx, a["nord"], -hz),
-                      (-hx, 0.0, -hz), (+hx, 0.0, -hz)])
-    # Sud, davanti: il bordo attaccato al fondo e' quello alto, quindi 180.
-    aggiungi("sud", [(-hx, a["sud"], +hz), (+hx, a["sud"], +hz),
-                     (+hx, 0.0, +hz), (-hx, 0.0, +hz)], _I.ROTATE_180)
-    # Est e ovest: il bordo attaccato al fondo e' un fianco, quindi 90.
-    aggiungi("est", [(+hx, a["est"], +hz), (+hx, a["est"], -hz),
-                     (+hx, 0.0, -hz), (+hx, 0.0, +hz)], _I.ROTATE_90)
-    aggiungi("ovest", [(-hx, a["ovest"], -hz), (-hx, a["ovest"], +hz),
-                       (-hx, 0.0, +hz), (-hx, 0.0, -hz)], _I.ROTATE_270)
-    return out
