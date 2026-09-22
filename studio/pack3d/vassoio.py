@@ -102,22 +102,30 @@ def riconosci(d):
 
 
 def _strisce(maschera, verso):
-    """Il pezzo come striscia: per ogni riga (o colonna) i due estremi pieni.
+    """Il pezzo riga per riga, coi TRATTI pieni di ciascuna.
 
-    I pezzi di un vassoio sono tutti **convessi in una direzione** - ogni riga
-    di un fianco e' un tratto solo, dalla cordonatura al taglio - quindi non
-    serve inseguire un contorno: bastano i due bordi, e fra loro la maglia e'
-    una striscia di triangoli. Robusto e senza librerie.
+    Non basta prendere il primo e l'ultimo pixel pieno: su un fianco del
+    display Milch-Schnitte, all'altezza dell'angolo, la riga ha **due**
+    tratti - il pezzo rosa dell'aletta e il rosso della parete - separati da
+    bianco che non e' cartoncino, e' foglio. Prendendo gli estremi la
+    striscia faceva ponte e ci stendeva sopra il bianco: e' il difetto che si
+    vedeva come "bianco sulla texture dei laterali".
+
+    Torna `[(riga, [(a, b), ...]), ...]`.
     """
     import numpy as np
 
     m = maschera if verso == "righe" else maschera.T
-    righe = []
+    fuori = []
     for i in range(m.shape[0]):
         x = np.flatnonzero(m[i])
-        if x.size:
-            righe.append((i, int(x[0]), int(x[-1]) + 1))
-    return righe
+        if not x.size:
+            continue
+        tagli = np.flatnonzero(np.diff(x) > 1)
+        inizio = np.concatenate(([0], tagli + 1))
+        fine = np.concatenate((tagli, [len(x) - 1]))
+        fuori.append((i, [(int(x[a]), int(x[b]) + 1) for a, b in zip(inizio, fine)]))
+    return fuori
 
 
 # Lo spessore del cartoncino di un display: piu' di un astuccio, perche' e'
@@ -173,11 +181,18 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
     H, W = sagoma.shape
     cxL, cxR, cyT, cyB = creste
     Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
-    # la x SI specchia: lo steso e' la vista da FUORI, e senza lo specchio il
-    # laterale sinistro finisce a destra e il marchio si legge mirror - che e'
-    # diverso da capovolto, e si vede solo accanto al pack vero
-    mx = lambda X: (Xc - X) / px_mm
-    mz = lambda Y: (Y - Yc) / px_mm
+    # UNO specchio, e uno solo. Piegando lo steso cosi' com'e' la stampa
+    # finisce DENTRO - il marchio si legge mirror, cioe' attraverso il
+    # cartone - perche' la faccia stampata guardava in su e piegando in su
+    # va a guardare l'interno. Ci vuole uno specchio per rimetterla fuori, e
+    # uno solo: con due (x e z) e' una rotazione, e torna mirror.
+    #
+    # Si specchia la **z**, non la x. Le due scelte leggono uguale, ma
+    # cambiano quale banda va davanti: sullo steso quella di sopra legge
+    # dritta e quella di sotto e' ruotata di 180, e chi monta il display
+    # chiama FRONTE quella di sotto.
+    mx = lambda X: (X - Xc) / px_mm
+    mz = lambda Y: (Yc - Y) / px_mm
     xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
     DENTRO = 0.5
 
@@ -195,38 +210,47 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
         T.append((k, k + 3, k + 2))
 
     def pezzo(masc, verso, punto, dentro, su_cordone):
-        """Un pezzo col suo spessore: esterna, interna e coste."""
+        """Un pezzo col suo spessore: esterna, interna e coste.
+
+        Due righe consecutive si cuciono solo se hanno lo stesso numero di
+        tratti: dove il conto cambia - li' la sagoma si apre o si chiude -
+        resta una riga scucita alta un pixel, cioe' un quarto di millimetro,
+        e cucirla a indovinare farebbe di nuovo il ponte sul bianco.
+        """
         righe = _strisce(masc, verso)
         if len(righe) < 2:
             return
         d = np.array(dentro, float) * spessore
         prec = None
-        for i, a, b in righe:
-            XY = ((a, i), (b, i)) if verso == "righe" else ((i, a), (i, b))
-            fuori = [np.array(punto(X, Y), float) for X, Y in XY]
-            dentro_p = [q + d for q in fuori]
-            k = len(V)
-            for (X, Y), q in zip(XY, fuori):
-                V.append(tuple(q)); UV.append((X / float(W), Y / float(Ht)))
-            for q in dentro_p:
-                V.append(tuple(q)); UV.append((0.5, vI))
-            if prec is not None:
-                pk, pf, pd, pXY = prec
-                # faccia esterna
-                T.append((pk, k, pk + 1)); T.append((k, k + 1, pk + 1))
-                # faccia interna, avvolta al contrario
-                T.append((pk + 2, pk + 3, k + 2)); T.append((k + 2, pk + 3, k + 3))
-                # coste, solo dove il bordo e' taglio e non cordonatura
-                for lato in (0, 1):
-                    if su_cordone(*pXY[lato]) and su_cordone(*XY[lato]):
-                        continue
-                    if lato == 0:
-                        quad(tuple(pf[0]), tuple(fuori[0]),
-                             tuple(dentro_p[0]), tuple(pd[0]), (0.5, vT))
-                    else:
-                        quad(tuple(fuori[1]), tuple(pf[1]),
-                             tuple(pd[1]), tuple(dentro_p[1]), (0.5, vT))
-            prec = (k, fuori, dentro_p, XY)
+        for i, tratti in righe:
+            corr = []
+            for a, b in tratti:
+                XY = ((a, i), (b, i)) if verso == "righe" else ((i, a), (i, b))
+                fuori = [np.array(punto(X, Y), float) for X, Y in XY]
+                dentro_p = [q + d for q in fuori]
+                k = len(V)
+                for (X, Y), q in zip(XY, fuori):
+                    V.append(tuple(q)); UV.append((X / float(W), Y / float(Ht)))
+                for q in dentro_p:
+                    V.append(tuple(q)); UV.append((0.5, vI))
+                corr.append((k, fuori, dentro_p, XY))
+            if prec is not None and len(prec) == len(corr):
+                for (pk, pf, pd, pXY), (k, fuori, dentro_p, XY) in zip(prec, corr):
+                    # faccia esterna
+                    T.append((pk, k, pk + 1)); T.append((k, k + 1, pk + 1))
+                    # faccia interna, avvolta al contrario
+                    T.append((pk + 2, pk + 3, k + 2)); T.append((k + 2, pk + 3, k + 3))
+                    # coste, solo dove il bordo e' taglio e non cordonatura
+                    for lato in (0, 1):
+                        if su_cordone(*pXY[lato]) and su_cordone(*XY[lato]):
+                            continue
+                        if lato == 0:
+                            quad(tuple(pf[0]), tuple(fuori[0]),
+                                 tuple(dentro_p[0]), tuple(pd[0]), (0.5, vT))
+                        else:
+                            quad(tuple(fuori[1]), tuple(pf[1]),
+                                 tuple(pd[1]), tuple(dentro_p[1]), (0.5, vT))
+            prec = corr
 
     def cella(y0, y1, x0, x1):
         m = np.zeros((H, W), bool)
@@ -242,31 +266,31 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE):
           lambda X, Y: True)
     # laterali: la cordonatura e' quella verticale
     pezzo(cella(cyT, cyB, 0, cxL), "righe",
-          lambda X, Y: (xL, (cxL - X) / px_mm, mz(Y)), (-1, 0, 0),
+          lambda X, Y: (xL, (cxL - X) / px_mm, mz(Y)), (1, 0, 0),
           lambda X, Y: vicino(X, cxL))
     pezzo(cella(cyT, cyB, cxR, W), "righe",
-          lambda X, Y: (xR, (X - cxR) / px_mm, mz(Y)), (1, 0, 0),
+          lambda X, Y: (xR, (X - cxR) / px_mm, mz(Y)), (-1, 0, 0),
           lambda X, Y: vicino(X, cxR))
     # retro e fronte: la cordonatura e' quella orizzontale
     pezzo(cella(0, cyT, cxL, cxR), "colonne",
-          lambda X, Y: (mx(X), (cyT - Y) / px_mm, zT), (0, 0, 1),
+          lambda X, Y: (mx(X), (cyT - Y) / px_mm, zT), (0, 0, -1),
           lambda X, Y: vicino(Y, cyT))
     pezzo(cella(cyB, H, cxL, cxR), "colonne",
-          lambda X, Y: (mx(X), (Y - cyB) / px_mm, zB), (0, 0, -1),
+          lambda X, Y: (mx(X), (Y - cyB) / px_mm, zB), (0, 0, 1),
           lambda X, Y: vicino(Y, cyB))
     # le alette: piegate sul laterale, finiscono nel piano di retro e fronte
     pezzo(cella(0, cyT, 0, cxL), "righe",
-          lambda X, Y: (xL - (cyT - Y) / px_mm, (cxL - X) / px_mm, zT + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, cyT))
+          lambda X, Y: (xL + (cyT - Y) / px_mm, (cxL - X) / px_mm, zT - DENTRO),
+          (0, 0, -1), lambda X, Y: vicino(Y, cyT))
     pezzo(cella(0, cyT, cxR, W), "righe",
-          lambda X, Y: (xR + (cyT - Y) / px_mm, (X - cxR) / px_mm, zT + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, cyT))
+          lambda X, Y: (xR - (cyT - Y) / px_mm, (X - cxR) / px_mm, zT - DENTRO),
+          (0, 0, -1), lambda X, Y: vicino(Y, cyT))
     pezzo(cella(cyB, H, 0, cxL), "righe",
-          lambda X, Y: (xL - (Y - cyB) / px_mm, (cxL - X) / px_mm, zB - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, cyB))
+          lambda X, Y: (xL + (Y - cyB) / px_mm, (cxL - X) / px_mm, zB + DENTRO),
+          (0, 0, 1), lambda X, Y: vicino(Y, cyB))
     pezzo(cella(cyB, H, cxR, W), "righe",
-          lambda X, Y: (xR + (Y - cyB) / px_mm, (X - cxR) / px_mm, zB - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, cyB))
+          lambda X, Y: (xR - (Y - cyB) / px_mm, (X - cxR) / px_mm, zB + DENTRO),
+          (0, 0, 1), lambda X, Y: vicino(Y, cyB))
 
     return (np.array(V, float), np.array(UV, float), np.array(T, np.uint32))
 
