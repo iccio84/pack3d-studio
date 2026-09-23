@@ -728,6 +728,40 @@ inchiostri ha tre canali ed e' tinta piatta in tutto e per tutto, sovrastampa
 compresa. Contano solo `/DeviceRGB`, `/CalRGB`, un `/ICCBased` con `N 3` e un
 `/Indexed` che ha uno di questi per base.
 
+## Un servizio che si sveglia non e' un servizio rotto
+
+Il piano gratuito di Render sospende il servizio dopo 15 minuti di
+inattivita', e a svegliarlo e' la prima richiesta che arriva: un'attesa che si
+misura in decine di secondi. La sonda del frontend scadeva dopo **un secondo e
+mezzo**, quindi scriveva *"Backend non raggiungibile"* di un servizio che
+stava benissimo e si stava solo alzando — e per riprovare bisognava ricaricare
+la pagina.
+
+Percio' la ricerca del backend e' in **due tempi**:
+
+1. **Il giro veloce**, un secondo e mezzo per candidato: trova subito un
+   server locale, o uno remoto gia' sveglio, e non fa aspettare nessuno.
+2. **L'attesa vera**, fino a due minuti, con la rotella che gira e i secondi
+   che scorrono — ma solo se c'e' un candidato **remoto** da svegliare. Sulle
+   porte di `localhost` non c'e' niente da aspettare: o il server c'e' o non
+   c'e', e far girare una rotella per due minuti sarebbe una bugia.
+
+Tre cose che non sono dettagli:
+
+- **Il tentativo resta aperto a lungo** (30 s). E' la richiesta stessa che
+  sveglia il servizio: chiuderla presto butterebbe via il lavoro gia' fatto
+  per farlo salire.
+- **Fra un tentativo e l'altro ci vuole un respiro** (2 s). Un 502 del proxy
+  davanti al servizio torna subito, e senza pausa il ciclo martellerebbe la
+  macchina proprio mentre sta partendo.
+- **Se alla fine non risponde, ci vuole un bottone.** Senza, l'unico modo di
+  riprovare era ricaricare la pagina, e chi ha appena aspettato due minuti non
+  se lo merita.
+
+La rotella **non si spegne** con `prefers-reduced-motion`: e' l'unica cosa che
+dice che il servizio sta salendo. Si rallenta, che e' quello che quella
+preferenza chiede davvero.
+
 ## Il controllo visivo e' obbligatorio
 
 Dopo ogni pulizia va **guardato** il confronto prima/dopo, non solo lette le

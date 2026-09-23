@@ -73,6 +73,31 @@
          align-items:center;justify-content:center;gap:6px;color:var(--muted-foreground);
          text-align:center;padding:24px;pointer-events:none}
   #empty strong{color:var(--foreground);font-weight:600;font-size:15px}
+  /* il bottone dentro #empty deve ricevere il puntatore: il riquadro non lo
+     prende, se no si mangia trascinamento e rotella sul palco */
+  #empty button{pointer-events:auto;margin-top:10px}
+
+  /* La rotella del risveglio. Il piano gratuito sospende il servizio dopo 15
+     minuti, e la prima richiesta lo sveglia in decine di secondi: senza un
+     segnale che gira quell'attesa e' indistinguibile da una pagina rotta.
+     Sta PRIMA di #empty nel documento apposta, cosi' la riga qui sotto puo'
+     spegnere l'altro riquadro senza che ci pensi il codice. */
+  #sveglia{position:absolute;inset:0;display:none;flex-direction:column;
+           align-items:center;justify-content:center;gap:8px;text-align:center;
+           padding:24px;color:var(--muted-foreground);pointer-events:none;z-index:2}
+  #sveglia.on{display:flex}
+  #sveglia.on ~ #empty{display:none}
+  #sveglia strong{color:var(--foreground);font-weight:600;font-size:15px}
+  #sveglia .rotella{width:40px;height:40px;border-radius:50%;margin-bottom:4px;
+           border:3px solid var(--secondary);border-top-color:var(--primary);
+           animation:gira .9s linear infinite}
+  #sveglia .sec{font-variant-numeric:tabular-nums;color:var(--foreground)}
+  @keyframes gira{ to{transform:rotate(360deg)} }
+  @media (prefers-reduced-motion:reduce){
+    /* non si toglie: e' l'unica cosa che dice che il servizio sta salendo.
+       Si rallenta, che e' quello che la preferenza chiede davvero. */
+    #sveglia .rotella{animation-duration:2.6s}
+  }
 
   #prog{position:absolute;left:0;right:0;top:0;height:3px;overflow:hidden;
         background:var(--secondary);display:none;z-index:3;pointer-events:none}
@@ -175,9 +200,16 @@
   <div id="prog"><i></i></div>
   <div id="drop"></div>
   <div id="titolo" class="tit"></div>
+  <div id="sveglia">
+    <div class="rotella" role="progressbar" aria-label="Avvio del servizio in corso"></div>
+    <strong>Sto svegliando il servizio…</strong>
+    <div>Il piano gratuito lo sospende dopo 15 minuti: il primo avvio può
+         prendere un minuto. <span class="sec" id="sveglia-sec"></span></div>
+  </div>
   <div id="empty">
     <strong>Carica un artwork PDF</strong>
     <div>Il modello 3D comparirà qui. Puoi anche trascinare il file.</div>
+    <button id="riprova" type="button" hidden>Riprova</button>
   </div>
   <div id="meta"></div>
   <div id="status">Nessun modello caricato</div>
@@ -438,18 +470,98 @@ function setFase(f){
 let glbBlob = null, glbName = 'modello.glb', pending = null;
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
+// il sottotitolo del riquadro vuoto cambia quando il backend manca: si tiene
+// da parte l'originale invece di riscriverlo a mano, che e' il modo di farli
+// divergere
+const INVITO = document.querySelector('#empty div').textContent;
 
-(async () => {
+/* Un servizio che si sveglia NON e' un servizio irraggiungibile, ed e' il
+   caso piu' comune di tutti: il piano gratuito di Render sospende dopo 15
+   minuti di inattivita', e a svegliarlo e' la prima richiesta che arriva -
+   un'attesa che si misura in decine di secondi. La sonda di `findBackend`
+   scade dopo un secondo e mezzo, quindi scriveva "backend non raggiungibile"
+   di un servizio che stava benissimo e si stava solo alzando; e per riprovare
+   bisognava ricaricare la pagina.
+
+   Percio' due tempi. Un giro veloce, che trova subito un server locale o uno
+   gia' sveglio e non fa aspettare nessuno. E poi l'attesa vera, con la
+   rotella e i secondi che scorrono, ma SOLO se c'e' un candidato remoto da
+   svegliare: sulle porte di localhost non c'e' niente da aspettare, o il
+   server c'e' o non c'e', e far girare una rotella per due minuti sarebbe una
+   bugia. */
+const ATTESA_SVEGLIA = 120000;   // quanto aspettiamo in tutto che si alzi
+const TENTATIVO_LUNGO = 30000;   // quanto teniamo aperto un singolo tentativo
+const RESPIRO = 2000;            // pausa fra un tentativo e il prossimo
+
+/** Vero se questo candidato e' un servizio remoto, cioe' uno che puo' dormire. */
+function remoto(base){
+  try{
+    const h = new URL(base || location.href, location.href).hostname;
+    return !!h && !/^(localhost|127\.0\.0\.1|\[?::1\]?)$/.test(h);
+  }catch(e){ return false; }
+}
+
+function mostraSveglia(on, secondi){
+  document.getElementById('sveglia').classList.toggle('on', !!on);
+  document.getElementById('sveglia-sec').textContent =
+    on && secondi ? secondi + ' s' : '';
+}
+
+/** Aspetta che uno dei `basi` risponda, tenendo aggiornato chi guarda. */
+async function aspettaRisveglio(basi){
+  const inizio = Date.now(), fine = inizio + ATTESA_SVEGLIA;
+  const conta = setInterval(
+    () => mostraSveglia(true, Math.round((Date.now() - inizio) / 1000)), 1000);
+  mostraSveglia(true, 0);
+  setStatus('Il servizio si sta svegliando\u2026','busy');
+  try{
+    while (Date.now() < fine){
+      for (const base of basi){
+        const resta = fine - Date.now();
+        if (resta <= 0) break;
+        const ctl = new AbortController();
+        // il tentativo resta aperto a lungo: e' la richiesta stessa che
+        // sveglia il servizio, e chiuderla presto butterebbe via il lavoro
+        // gia' fatto per farlo salire
+        const t = setTimeout(() => ctl.abort(), Math.min(TENTATIVO_LUNGO, resta));
+        try{
+          const r = await fetch(base + '/api/ping', {cache:'no-store', signal: ctl.signal});
+          if (r.ok){ API = base; return true; }
+        }catch(e){ /* ancora sotto: si riprova */ }
+        finally{ clearTimeout(t); }
+      }
+      // un 502 dal proxy davanti al servizio torna subito: senza respiro il
+      // ciclo martellerebbe la macchina proprio mentre sta partendo
+      await new Promise(r => setTimeout(r, RESPIRO));
+    }
+    return false;
+  } finally {
+    clearInterval(conta);
+    mostraSveglia(false);
+  }
+}
+
+async function cercaBackend(){
+  const riprova = document.getElementById('riprova');
+  riprova.hidden = true;
   setStatus('Cerco il backend\u2026','busy');
   backendUp = await findBackend();
   if (!backendUp){
+    const dormienti = candidates().filter(remoto);
+    if (dormienti.length) backendUp = await aspettaRisveglio(dormienti);
+  }
+  if (backendUp){
+    document.querySelector('#empty div').textContent = INVITO;
+    setStatus(API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale','');
+  } else {
     setStatus(OFFLINE,'err');
     document.querySelector('#empty div').textContent =
       'Per generare un modello serve il backend. Puoi comunque trascinare qui un GLB gia\u2019 pronto.';
-  } else {
-    setStatus(API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale','');
+    // senza questo bottone l'unico modo di riprovare era ricaricare la
+    // pagina, e chi ha aspettato due minuti non se lo merita
+    riprova.hidden = false;
   }
-})();
+}
 
 function setStatus(text, cls){
   statusEl.textContent = text; statusEl.className = cls || '';
@@ -631,6 +743,11 @@ function annulla(){
 
 annBtn.onclick = annulla;
 setFase('vuoto');
+// l'avvio sta qui e non piu' in alto: `API` viene dichiarata sotto la ricerca
+// del backend, e chiamarla prima significava reggersi sull'ordine esatto in
+// cui gli await cedono il turno
+document.getElementById('riprova').onclick = cercaBackend;
+cercaBackend();
 document.getElementById('upload').onclick = () => document.getElementById('file').click();
 document.getElementById('file').onchange = e => { handle(e.target.files[0]); e.target.value=''; };
 document.querySelectorAll('#packtype button').forEach(b => {
