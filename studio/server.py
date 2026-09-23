@@ -742,7 +742,9 @@ def _panel_knots(Ps, d, G, fp):
 # guardia: la tipologia si dichiara, e se la dichiarazione non viene
 # riconosciuta e' come non averla.
 SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
-                 "carton": "carton", "flowpack": "flowpack"}
+                 "carton": "carton", "flowpack": "flowpack",
+                 "vassoio": "vassoio", "espositore": "vassoio",
+                 "display": "vassoio", "tray": "vassoio"}
 
 
 def normalizza_kind(kind):
@@ -764,8 +766,8 @@ def analyze_pdf(pdf, kind=None):
         # del sinonimo mancante, solo sull'altro capo. Su questo file - un
         # astuccio Nutella Donut - passando "auto" invece di niente il solutore
         # astuccio veniva saltato e usciva un flowpack.
-        raise ValueError("tipologia '%s' non riconosciuta: dichiara "
-                         "'carton' o 'flowpack'" % kind)
+        raise ValueError("tipologia '%s' non riconosciuta: dichiara %s"
+                         % (kind, " o ".join("'%s'" % k for k in KIND_NOTI)))
     case = CASI.get(_sig(pdf))
     if case and kind in (None, "flowpack"):
         return dict(kind="flowpack", title=case["name"],
@@ -773,6 +775,7 @@ def analyze_pdf(pdf, kind=None):
                     meta=["caso calibrato: " + case["name"],
                           "nastro %.0f x passo %.0f mm" % (case["web"], case["step"])])
     if kind in (None, "carton", "vassoio"):
+        grezza = None
         try:
             grezza = dl.extract(pdf)
             v = vassoio.riconosci(grezza)
@@ -780,6 +783,28 @@ def analyze_pdf(pdf, kind=None):
             v = None
         finally:
             dl.scarta_resa()
+        if v is None and kind == "vassoio":
+            # La dichiarazione deve valere anche quando dice di NO. Senza
+            # questo ramo "vassoio" scivolava fino in fondo alla funzione e
+            # usciva un FLOWPACK: un modello plausibile della famiglia
+            # sbagliata, cioe' il difetto peggiore che questo progetto possa
+            # avere. Chi ha dichiarato la tipologia merita di sapere che la
+            # fustella non gli da' ragione, non un altro pack.
+            # Il messaggio sta dentro i 200 caratteri che l'interfaccia
+            # mostra: piu' lungo, e il consiglio finale - quello che dice
+            # cosa fare - veniva tagliato via proprio lui.
+            letto = "non si legge"
+            if grezza is not None:
+                # stesso arrotondamento di `vassoio.riconosci`, altrimenti
+                # il conto che si legge nel messaggio non e' quello su cui la
+                # decisione e' stata presa
+                letto = "ne ha %d e %d" % (
+                    max(0, len({round(t, 2) for t in grezza.xs}) - 1),
+                    max(0, len({round(t, 2) for t in grezza.ys}) - 1))
+            raise ValueError(
+                "vassoio: un espositore ha cinque colonne e tre fasce, questa "
+                "fustella %s. Se e' un astuccio dichiara 'cartotecnico'."
+                % letto)
         if v is not None:
             return dict(kind="vassoio", title="Vassoio espositore",
                         meta=["vassoio espositore",
@@ -919,7 +944,9 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, "Tipologia non ancora supportata")
                 if kind is not None and kind not in KIND_NOTI:
                     return self._send(400, "Tipologia '%s' non riconosciuta: "
-                                           "dichiara 'carton' o 'flowpack'" % kind)
+                                           "dichiara %s"
+                                           % (kind, " o ".join("'%s'" % k
+                                                               for k in KIND_NOTI)))
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
                     par, tr = agent.analyse(pdf, kind, opts)
