@@ -1139,8 +1139,12 @@ FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
 GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 
 MAX_UPLOAD = 60 * 1024 * 1024
-# Uno, non due: una costruzione misurata arriva a 400 MB di picco e le
-# istanze piccole hanno 512 MB di RAM. Vedi DEPLOY.md per i numeri.
+# Uno, e non e' un numero da tarare sulla macchina: pdfium non e' thread-safe
+# nemmeno su documenti diversi, e due costruzioni insieme fanno morire il
+# processo intero con un int3 dentro libpdfium.so. Provato su 16 GB, dove la
+# memoria non c'entrava niente. Alzarlo vuol dire far cadere il servizio sotto
+# i piedi anche di chi non c'entrava. Vedi REGOLE.md, *pdfium non si chiama da
+# due thread*, e DEPLOY.md per i numeri per fase.
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "1"))
 _slots = threading.Semaphore(MAX_JOBS)
 
