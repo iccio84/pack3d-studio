@@ -75,6 +75,40 @@ sui file che hanno la colata su un livello suo, e solo sulla sua banda - misurat
 un paio di secondi e una quarantina di MB di processo figlio. Se manca, il
 codice se ne accorge (`shutil.which`) e usa la risorsa: non si rompe niente.
 
+## Quando una costruzione non arriva in fondo
+
+Se il processo muore - ucciso per memoria, o tagliato dalla piattaforma
+perche' ci mette troppo - la risposta non arriva e nel browser esce un **502
+senza niente dentro**. Non si sa nemmeno in quale pezzo sia morto.
+
+Per questo ogni costruzione lascia una traccia sul log del servizio, una riga
+per fase, scritta **appena la fase finisce**: se il processo muore dopo, le
+righe gia' stampate restano. Sulla dashboard di Render stanno sotto **Logs**.
+
+    [pack3d] analisi           0.4 s     69 MB ora,    69 max  vassoio, 3077 kB
+    [pack3d] costruzione       4.6 s    164 MB ora,   260 max  1106 kB
+    [pack3d] totale            5.0 s    164 MB ora,   260 max
+
+I numeri di memoria sono due perche' servono tutti e due: *ora* e' quello che
+il processo sta usando in quel momento, *max* il peggio da quando e' partito -
+e quello non scende mai, quindi dopo tre costruzioni dice il massimo delle tre
+anche se nessuna ci e' arrivata vicino.
+
+**Come si legge:**
+
+- l'ultima riga e' `totale` → la costruzione e' arrivata in fondo, il 502 e'
+  venuto da altro;
+- l'ultima riga e' `analisi` → e' morta costruendo;
+- non c'e' nessuna riga → e' morta prima, cioe' nell'analisi;
+- `ora` vicino a 512 MB sull'ultima riga → e' la memoria;
+- `ora` basso e i secondi alti → e' il tempo.
+
+**Il piano Free da' 0,1 CPU**, cioe' un decimo di core: i secondi di CPU
+misurati qui sotto vanno moltiplicati per dieci per sapere quanto dura
+l'attesa davvero. Colazione costa 20 secondi di CPU, quindi la' sono **oltre
+tre minuti** - e l'analisi da sola tiene 514 MB vivi, sopra il tetto. Quel
+file su quel piano non si costruisce, e non c'e' codice che lo aggiusti.
+
 ## Limiti
 
 - **Una** costruzione alla volta (`PACK3D_MAX_JOBS`), la seconda riceve 503
