@@ -1,0 +1,22 @@
+# Versioni FISSATE, non ">=".
+#
+# Erano tutte aperte, e questo e' un problema vero, non pulizia: la geometria
+# che esce da un artwork dipende da COME pypdfium2 rasterizza la pagina e da
+# come pdfplumber legge i tracciati. Con ">=" l'immagine costruita su Render
+# oggi non e' la stessa di ieri ne' quella su cui si prova in sviluppo, e
+# "da me funziona" smette di voler dire qualcosa.
+#
+# Queste sono le versioni su cui i casi calibrati sono verificati, su
+# Python 3.11.
+numpy==2.4.6
+scipy==1.17.1
+pillow==12.3.0
+pdfplumber==0.11.10
+pypdf==6.19.0
+pypdfium2==5.13.0
+
+# Questi due non toccano la geometria: servono solo all'agente di
+# /api/analyze-ai. Restano aperti perche' qui non sono installati e fissarli a
+# un numero che non ho provato sarebbe peggio che lasciarli liberi.
+anthropic>=0.40
+openai>=1.60
