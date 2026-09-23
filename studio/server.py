@@ -17,6 +17,7 @@ import os
 import sys
 from urllib.parse import quote
 import tempfile
+import time
 import traceback
 import threading
 from collections import OrderedDict
@@ -327,6 +328,49 @@ def pinne_da_agente(params):
         return max(1.0, min(3.0, float(pc.get("apertura_pinne"))))
     except (AttributeError, TypeError, ValueError):
         return None
+
+
+def _rss():
+    """La memoria che il processo sta usando adesso, in MB. 0 se non si sa."""
+    try:
+        with open("/proc/self/statm") as fh:
+            return int(fh.read().split()[1]) * os.sysconf("SC_PAGE_SIZE") / 1048576.0
+    except (OSError, IndexError, ValueError):
+        return 0.0
+
+
+def traccia(fase, da=None, dettaglio=""):
+    """Una riga sul log: quanto e' durata la fase e a che memoria siamo.
+
+    Serve quando la costruzione NON arriva in fondo. Se il processo muore -
+    ucciso per memoria, o tagliato dalla piattaforma perche' ci mette troppo -
+    la risposta non arriva e chi guarda vede un 502 senza niente dentro: non
+    si sa nemmeno in quale pezzo e' morto. Le righe gia' stampate invece
+    restano nel log del servizio, e dicono l'ultimo passo cominciato.
+
+    E' la differenza che conta su un piano da 0,1 CPU, dove un file che qui
+    costa 9 secondi di CPU la' ne prende 94 di orologio: senza traccia,
+    memoria e tempo si distinguono solo a indovinare.
+
+    Scrive su stderr perche' e' li' che finisce gia' `log_message`, e torna il
+    tempo di adesso cosi' le fasi si incatenano senza contarlo due volte.
+    """
+    import resource
+    ora = time.time()
+    if da is not None:
+        # DUE numeri, e servono tutti e due. `ru_maxrss` e' il massimo del
+        # processo da quando e' partito e non scende mai: dopo tre costruzioni
+        # dice 681 MB anche se nessuna singola ci e' arrivata vicino, quindi
+        # da solo inganna. Quello che si sta usando ADESSO lo dice /proc, e in
+        # coppia i due raccontano la cosa giusta: quanto pesa questa fase, e
+        # quanto ha pesato il peggio fin qui.
+        sys.stderr.write(
+            "  [pack3d] %-22s %6.1f s  %5.0f MB ora, %5.0f max%s\n"
+            % (fase, ora - da, _rss(),
+               resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024.0,
+               ("  " + dettaglio) if dettaglio else ""))
+        sys.stderr.flush()
+    return ora
 
 
 def aree_da_agente(params):
@@ -997,8 +1041,11 @@ class Handler(BaseHTTPRequestHandler):
                     # rispondeva 503 a chiunque fino al riavvio.
                     try:
                         out = os.path.join(td, "out.glb")
+                        t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
                         info = analyze_pdf(pdf, kind)
+                        t1 = traccia("analisi", t0,
+                                     "%s, %d kB" % (info["kind"], len(data) // 1024))
                         q = "alta" if str(opts.get("quality")) == "alta" else "web"
                         # Su TUTTI i rami: e' proprio sul ramo che se ne
                         # dimenticava che nasceva l'UnboundLocalError.
@@ -1050,6 +1097,9 @@ class Handler(BaseHTTPRequestHandler):
                                 str(soft), case, q,
                                 sezione_da_agente(opts.get("params")),
                                 scatola, pinne, aree, col_riq)
+                        traccia("costruzione", t1,
+                                "%d kB" % (os.path.getsize(out) // 1024))
+                        traccia("totale", t0)
                         with open(out, "rb") as fh:
                             # gli avvisi della costruzione viaggiano in un
                             # header: il corpo e' il GLB. Finivano nel nulla,
