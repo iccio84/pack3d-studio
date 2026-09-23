@@ -40,6 +40,12 @@ si risvegliano alla prima visita, con qualche secondo di attesa.
 URL finale: `https://pack3d-studio.onrender.com`. Il piano gratuito va in
 sospensione dopo 15 minuti di inattivita'.
 
+Il risveglio non e' piu' muto: se la pagina sta altrove e punta qui con
+`?api=`, l'interfaccia mostra una rotella con i secondi che scorrono - *"Sto
+svegliando il servizio"* - invece di dichiararlo irraggiungibile dopo un
+secondo e mezzo. Aspetta fino a due minuti, e se non risponde lascia un
+bottone **Riprova** invece di obbligare a ricaricare.
+
 ## Aggiornare dopo una nuova regola
 
 Quando la pipeline cambia, sostituisci i file modificati (di solito qualcosa
