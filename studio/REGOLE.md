@@ -1064,14 +1064,39 @@ normale punta dentro.
 culling, quindi sulle sei viste il modello sembrava giusto. Per accorgersene
 bisogna scartare le facce voltate, come fa il visualizzatore vero.
 
-### Una riga puo' avere piu' di un tratto pieno
+### Il cartoncino fra due righe e' quello che hanno in comune
 
-Prendendo il primo e l'ultimo pixel pieno di ogni riga, all'altezza dell'angolo
-il fianco ha **due** tratti — il pezzo dell'aletta e quello della parete,
-separati da foglio — e la striscia faceva ponte stendendoci sopra il bianco.
-Si tengono i tratti uno per uno, e due righe consecutive si cuciono solo se ne
-hanno lo stesso numero: dove il conto cambia la sagoma si apre o si chiude, e
-cucire a indovinare rifarebbe il ponte.
+Prendendo il primo e l'ultimo pixel pieno di ogni riga, all'altezza
+dell'angolo il fianco ha **due** tratti — il pezzo dell'aletta e quello della
+parete, separati da foglio — e la striscia faceva ponte stendendoci sopra il
+bianco. Quindi i tratti si tengono uno per uno.
+
+Il primo rimedio era: due righe si cuciono solo se hanno **lo stesso numero**
+di tratti. Sbagliato, e si vedeva. Sul fronte del display la sagoma si apre —
+l'aletta si stacca dalla parete — il conto cambia, e quella regola lasciava li'
+una colonna scucita larga un pixel: un quarto di millimetro, che nel modello
+era una **feritoia in mezzo all'aletta del fronte**. Quattro, contando anche i
+bordi esterni.
+
+La regola giusta non guarda i conti, guarda la superficie: il cartoncino fra
+due righe vicine c'e' **dove c'e' su tutte e due**. Si prende
+l'**intersezione**, si spezza nei suoi tratti, e ognuno diventa una fascia.
+Cosi' il pezzo resta uno anche dove la sagoma si apre o si chiude, e il ponte
+non torna, perche' fra due tratti il cartoncino non c'e' su nessuna delle due
+righe.
+
+**Il capo di una fascia non e' sempre un taglio.** Dove la fascia finisce solo
+perche' l'altra riga e' piu' corta, il cartoncino continua: metterci la costa
+vorrebbe dire disegnare una riga di spessore in mezzo al pezzo. La costa va
+solo dove fuori non c'e' cartoncino su nessuna delle due righe — e comunque
+mai su una cordonatura, dove il cartoncino continua nel pezzo accanto.
+
+**Le fasce che non cambiano si stendono in una sola.** Sulla base e su buona
+parte delle pareti il tratto e' lo stesso per centinaia di righe, e farne un
+quad per riga e' geometria pagata per niente: il Milch-Schnitte passa da
+55.588 vertici a **24.736** e da 2,47 a 1,13 MB. Si uniscono solo se il tratto
+e i capi coincidono, quindi la superficie e' la stessa — verificato al pixel,
+zero differenze su 5,8 milioni di pixel resi da sette angolazioni.
 
 ## Astucci
 
