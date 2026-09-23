@@ -7,11 +7,34 @@ controesempi che le giustificano.
 
 | regola | dove |
 |---|---|
-| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Coppa conica, Altro. La tipologia si dichiara, non si indovina. | pannello del frontend + `analyze_pdf(pdf, kind)` |
+| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Coppa conica, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
 | Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
 | Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". | `gonfiore()` in `server.py` |
 | Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
 | Solo flowpack: chiedere se il **film avvolge una scatola**. | casella `scatola`, `parametri_costruzione.avvolge_scatola` |
+
+### La dichiarazione vale anche quando dice di no
+
+Una tipologia dichiarata non serve solo a scegliere il solutore: serve a
+**fermarsi**. Chi ha detto "vassoio" e si sente rispondere con un flowpack non
+ha ricevuto un ripiego, ha ricevuto la famiglia sbagliata senza saperlo — ed e'
+il difetto peggiore che questo progetto possa avere, perche' il modello esce
+plausibile.
+
+Il ramo del vassoio ce l'aveva: se la griglia non era quella di un espositore
+la funzione scivolava fino in fondo e usciva un flowpack. Adesso si ferma
+dicendo che ci vogliono cinque colonne e tre fasce e quante se ne leggono
+davvero, cosi' chi guarda impara che cos'e' che non torna. E sta **dentro i
+200 caratteri** che l'interfaccia mostra: piu' lungo, e veniva tagliato via
+proprio il consiglio finale, cioe' l'unico pezzo che dice cosa fare.
+
+Lo stesso vale per i nomi. `SINONIMI_KIND` traduce le etichette con cui la
+tipologia puo' arrivare — `cartotecnico` e `astuccio` per l'astuccio,
+`espositore`, `display` e `tray` per il vassoio — perche' **una dichiarazione
+che non viene riconosciuta e' come non averla**: il viewer glamlab mandava
+`cartotecnico` e ogni astuccio finiva dal solutore flowpack. E il messaggio
+che elenca le tipologie accettate si scrive da `KIND_NOTI`, non a mano: quando
+ne e' arrivata una terza il messaggio ne nominava ancora due.
 
 L'apertura delle pinne dice come si comporta il film **alle ganasce**, il
 rigonfiamento che forma prende il **corpo**: sono due cose diverse e vanno
