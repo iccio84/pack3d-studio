@@ -868,17 +868,26 @@ non arriva e non c'e' niente da inventare a mano. E' `reconstruct_area`, e la
 cautela e' gia' scritta sopra: **solo dentro la maschera**, fuori restano i
 pixel originali. Sul Kinder Bueno T2 sono lo 0,6% dell'immagine.
 
-**3. La colata → no, e non e' pigrizia.**
-La colata non ha pixel mancanti: ha l'inchiostro sbagliato. Il problema e'
-che l'ombra sulle gocce esce azzurra invece che scura, e quello si risolve
-con la quadricromia e la sovrastampa, non ridipingendo — vedi *La colata si
-rimette con l'inchiostro del file*. Un modello generativo la reinventerebbe:
-gocce diverse, ombre diverse, e la cosa che si stava giudicando sparisce
-dentro la riscrittura. Per un marchio, ridisegnare non e' riparare.
+**3. La colata → no al pennello, si' all'occhio.**
+La colata non ha pixel mancanti: ha l'inchiostro sbagliato. L'ombra sulle
+gocce esce azzurra invece che scura, e quello si risolve con la quadricromia e
+la sovrastampa, non ridipingendo — vedi *La colata si rimette con l'inchiostro
+del file*. Un modello generativo la reinventerebbe: gocce diverse, ombre
+diverse, e la cosa che si stava giudicando sparisce dentro la riscrittura. Per
+un marchio, ridisegnare non e' riparare. E non saprebbe nemmeno QUALE scuro:
+quello giusto e' il prodotto del ciano del file per il rosso sotto, un numero
+che il file porta e che Ghostscript calcola.
 
-Il modello sulla colata serve invece a **guardarla**: "questa ombra e'
-azzurra o e' scura?" e' esattamente la domanda che le metriche hanno sbagliato
-piu' volte e che l'occhio risolve in un secondo. Giudizio si', pennello no.
+Il modello sulla colata serve a **guardarla**, e serve due volte:
+
+- a **trovarla**, sui file che non la mettono su un livello suo — otto su
+  nove, sul parco — dove il codice non ha niente da misurare. Il modello
+  indica la banda, il codice rilegge l'inchiostro: `tools.colata_a_occhio`.
+- a **giudicarla**: "questa ombra e' azzurra o e' scura?" e' esattamente la
+  domanda che le metriche hanno sbagliato piu' volte, e che l'occhio risolve
+  in un secondo. Per questo lo strumento torna la banda prima e dopo.
+
+Giudizio si', pennello no.
 
 **4. Quello che non va mai al modello.** I loghi, la `k` nera di `kinder`, i
 marchi, il testo di prodotto: non si rigenerano nemmeno dentro una maschera,
@@ -1373,6 +1382,55 @@ l'azzurro:
 Quel file non lo aggiusta nessun rasterizzatore, e li' si passa alla risorsa.
 E' anche l'informazione che serve a chi prepara l'artwork, e infatti viene
 dichiarata nei cartellini invece di restare dentro il codice.
+
+#### Il file che il livello non ce l'ha: lo indica l'occhio
+
+Tutto quello che c'e' scritto sopra parte dal livello `Colata`: e' il livello
+che dice DOVE sta la colata, e senza di lui non c'e' niente da misurare. Sul
+parco di prova il livello ce l'ha **un file su nove**, e su tutti gli altri
+non succedeva niente: l'ombra restava azzurra e nessuno lo diceva.
+
+Li' l'unica cosa che resta e' guardare, ed e' il caso in cui il modello serve
+davvero: **indica la banda, e l'inchiostro fa il resto**. Lo strumento e'
+`tools.colata_a_occhio`, e la divisione del lavoro e' quella di sempre - il
+modello dice DOVE, il codice decide CHE COSA.
+
+Dentro il riquadro non si tocca il riquadro: si toccano **i pixel azzurri che
+la sovrastampa cambia**. E' una maschera piu' stretta dell'impronta del
+livello e piu' sicura, perche' non puo' toccare quello che azzurro non e' - il
+marchio `kinder` e il bicchierino di latte, che rendendo in quadricromia
+diventano neri, azzurri non sono mai. Sbagliare il bordo di qualche
+millimetro non cambia il risultato.
+
+**E l'azzurro da solo non riconosce niente.** Sul Kinder Pingui T6 BOX la
+macchia azzurra piu' grande del foglio non e' un'ombra rotta: e' il FONDO del
+pack, gocce d'acqua su azzurro, 15.800 px che vanno lasciati in pace. Per
+questo lo strumento torna la banda **due volte, prima e dopo**, e chiede di
+guardarle: se cambia un fondo, un marchio o una foto, il riquadro e' fuori
+posto.
+
+Misurato sul T6 BOX, che la colata in sovrastampa ce l'ha ma il livello no:
+
+    banda indicata a occhio    187 x 58 mm
+    zone azzurre               41.821
+    rimesse dalla sovrastampa  24%     -> si sostituisce
+    fondo azzurro del pack      0,1%   -> si rifiuta da solo
+
+Il secondo numero e' la prova che il meccanismo si limita da se': puntandolo
+sul fondo del pack, sotto soglia non fa niente.
+
+#### Il foglio in cassa va buttato appena qualcuno se l'e' preso
+
+La sostituzione della colata restituisce **un'immagine nuova**, e quella resa
+da `render_page` resta in cassa: due fogli interi vivi insieme. Sul T6 BOX
+sono 6516 x 3923 px, 76 MB, e il picco della costruzione passava da 351 a 456
+MB - dentro il tetto di 512 del piano Free, ma per un margine che non vale la
+pena di spendere.
+
+`dieline.scarta_resa()` va chiamata **subito dopo la colata**, non dopo il
+nero: `nero` la sua resa se la fa da se', fuori dalla cassa, quindi da li' in
+giu' la cassa non serve a nessuno. Col foglio buttato al momento giusto la
+colata costa **13 MB**, non 105.
 
 #### Il caso calibrato
 

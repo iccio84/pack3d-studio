@@ -237,7 +237,7 @@ def senza_coperture(pdf, page_no=0, extra=()):
 
 
 def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
-                     nero_deciso=None):
+                     nero_deciso=None, colata_riquadro=None):
     """Le texture di un astuccio, pulite e girate sul verso della grafica.
 
     L'unico punto in cui i tre passaggi si applicano, cosi' non possono piu'
@@ -251,7 +251,8 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     avvisi = []
     tex = folding.rasterize_panels(pulito, panels, dpi=dpi, page_no=page_no,
                                    clean=clean, note=avvisi,
-                                   nero_deciso=nero_deciso)
+                                   nero_deciso=nero_deciso,
+                                   colata_riquadro=colata_riquadro)
     giri, storti = gira_sulla_grafica(
         tex, panels, verso_della_grafica(pulito, panels, page_no))
     if lastre:

@@ -193,7 +193,8 @@ def avviso_quadricromia(pdf, page_no=0):
         return None
 
 
-def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
+def build_carton(pdf, out_glb, quality="web", lastre_extra=(),
+                 colata_riquadro=None):
     dpi = 300 if quality == "alta" else 200
     # PRIMA COSA, e il motivo e' la memoria. Ghostscript costa 105 MB fissi -
     # li costa anche a vuoto, misurato con `nullpage` - e parte con un fork:
@@ -209,7 +210,8 @@ def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
     # anche la riga di comando.
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
                                               lastre_extra=lastre_extra,
-                                              nero_deciso=deciso_nero)
+                                              nero_deciso=deciso_nero,
+                                              colata_riquadro=colata_riquadro)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso)
     exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
@@ -222,7 +224,8 @@ def build_carton(pdf, out_glb, quality="web", lastre_extra=()):
     return meta + avvisi_tex + [w for w in dl.check(d)]
 
 
-def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
+def build_vassoio(pdf, out_glb, quality="web", lastre_extra=(),
+                  colata_riquadro=None):
     """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
 
     Le alette angolari non si costruiscono: da fuori le copre la parete che
@@ -260,7 +263,8 @@ def build_vassoio(pdf, out_glb, quality="web", lastre_extra=()):
     dpi_tex = min(dpi, tmax * 72.0 / lato) if lato > 0 else dpi
     tex, avvisi_tex = artwork.texture_astuccio(pdf, {"steso": pagina}, dpi_tex,
                                                lastre_extra=lastre_extra,
-                                               nero_deciso=deciso_nero)
+                                               nero_deciso=deciso_nero,
+                                               colata_riquadro=colata_riquadro)
     # la coda va attaccata PRIMA della maglia: le UV dell'interno e del taglio
     # si misurano sull'altezza che la texture ha davvero, non su quella della
     # sagoma, che e' un'altra griglia
@@ -347,6 +351,31 @@ def aree_da_agente(params):
     return [str(v).strip() for v in voci if str(v).strip()]
 
 
+def colata_da_agente(params):
+    """Il riquadro della colata che l'agente ha indicato guardando.
+
+    Serve ai file che la colata non la mettono su un livello suo - sul parco
+    di prova otto su nove - dove il codice non ha niente da misurare e
+    l'ombra resta azzurra. L'agente indica la banda, `colata_a_occhio` gliela
+    MOSTRA prima e dopo, e quello che passa di qui e' gia' stato confermato a
+    occhio. Il livello, quando c'e', viene comunque prima.
+
+    `None` se non c'e' analisi allegata, o se il riquadro non e' quattro
+    numeri: un riquadro mezzo scritto e' peggio di nessun riquadro.
+    """
+    if not isinstance(params, dict):
+        return None
+    pc = params.get("parametri_costruzione")
+    r = pc.get("colata") if isinstance(pc, dict) else None
+    if not isinstance(r, dict):
+        return None
+    try:
+        v = tuple(float(r[k]) for k in ("x_mm", "y_mm", "w_mm", "h_mm"))
+    except (KeyError, TypeError, ValueError):
+        return None
+    return v if v[2] > 0 and v[3] > 0 else None
+
+
 def scatola_da_agente(params):
     """Se il film avvolge un corpo rigido che arriva fino alla saldatura.
 
@@ -417,7 +446,8 @@ def falda_sospetta(fp):
 
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
-                   sezione=None, scatola=False, pinne=None, lastre_extra=()):
+                   sezione=None, scatola=False, pinne=None, lastre_extra=(),
+                   colata_riquadro=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -663,7 +693,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
         dpi=dpi_tex, inset_px=0, clean=(case is None),
-        note=avvisi_sez, nero_deciso=deciso_nero)["film"]
+        note=avvisi_sez, nero_deciso=deciso_nero,
+        colata_riquadro=colata_riquadro)["film"]
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il
@@ -976,13 +1007,17 @@ class Handler(BaseHTTPRequestHandler):
                         # tutte e due le famiglie, quindi si leggono una volta
                         # sola prima di scegliere il ramo.
                         aree = aree_da_agente(opts.get("params"))
+                        # stessa storia delle aree riservate: il file non
+                        # dichiara la colata, e l'unica cosa che resta e'
+                        # quello che l'agente ha guardato
+                        col_riq = colata_da_agente(opts.get("params"))
                         if info["kind"] == "vassoio":
-                            avvisi = build_vassoio(pdf, out, q, aree)
+                            avvisi = build_vassoio(pdf, out, q, aree, col_riq)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
                             # variabile che su questo ramo non esisteva.
-                            avvisi = build_carton(pdf, out, q, aree)
+                            avvisi = build_carton(pdf, out, q, aree, col_riq)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":
@@ -1014,7 +1049,7 @@ class Handler(BaseHTTPRequestHandler):
                                 pdf, out, int(opts.get("teeth", 20)),
                                 str(soft), case, q,
                                 sezione_da_agente(opts.get("params")),
-                                scatola, pinne, aree)
+                                scatola, pinne, aree, col_riq)
                         with open(out, "rb") as fh:
                             # gli avvisi della costruzione viaggiano in un
                             # header: il corpo e' il GLB. Finivano nel nulla,
