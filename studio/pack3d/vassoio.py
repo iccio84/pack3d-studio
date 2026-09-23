@@ -107,31 +107,45 @@ def riconosci(d):
     return v
 
 
-def _strisce(maschera, verso):
-    """Il pezzo riga per riga, coi TRATTI pieni di ciascuna.
+def _fasce_comuni(m, i):
+    """I tratti che le righe `i-1` e `i` hanno IN COMUNE, e i loro capi.
 
-    Non basta prendere il primo e l'ultimo pixel pieno: su un fianco del
-    display Milch-Schnitte, all'altezza dell'angolo, la riga ha **due**
-    tratti - il pezzo rosa dell'aletta e il rosso della parete - separati da
-    bianco che non e' cartoncino, e' foglio. Prendendo gli estremi la
-    striscia faceva ponte e ci stendeva sopra il bianco: e' il difetto che si
-    vedeva come "bianco sulla texture dei laterali".
+    Il cartoncino fra due righe vicine c'e' dove c'e' su tutte e due: la
+    fascia di superficie che le unisce e' l'INTERSEZIONE, non l'una o
+    l'altra. Presa cosi' non serve piu' che le due righe abbiano lo stesso
+    numero di tratti, ed e' quello che conta: sul fronte del display la
+    sagoma si apre - l'aletta si stacca dalla parete - il conto cambiava, e
+    la vecchia regola "si cuce solo a conti pari" lasciava li' una colonna
+    scucita larga un pixel. Un quarto di millimetro, che nel modello si
+    vedeva come una **feritoia** in mezzo all'aletta del fronte.
 
-    Torna `[(riga, [(a, b), ...]), ...]`.
+    E non fa ponti: l'intersezione di due righe non copre mai il foglio che
+    sta fra due tratti, perche' li' non c'e' cartoncino su nessuna delle due.
+
+    Per ogni tratto torna `(a, b, capo_a, capo_b)`, dove i capi dicono se il
+    bordo e' un TAGLIO - fuori non c'e' cartoncino su nessuna delle due
+    righe - oppure un taglio finto, cioe' un punto in cui la fascia finisce
+    solo perche' l'altra riga e' piu' corta. Sul taglio finto la costa non va
+    messa: sarebbe una riga di spessore in mezzo al pezzo.
     """
     import numpy as np
 
-    m = maschera if verso == "righe" else maschera.T
-    fuori = []
-    for i in range(m.shape[0]):
-        x = np.flatnonzero(m[i])
-        if not x.size:
-            continue
-        tagli = np.flatnonzero(np.diff(x) > 1)
-        inizio = np.concatenate(([0], tagli + 1))
-        fine = np.concatenate((tagli, [len(x) - 1]))
-        fuori.append((i, [(int(x[a]), int(x[b]) + 1) for a, b in zip(inizio, fine)]))
-    return fuori
+    su, giu = m[i - 1], m[i]
+    comune = su & giu
+    x = np.flatnonzero(comune)
+    if not x.size:
+        return []
+    tagli = np.flatnonzero(np.diff(x) > 1)
+    inizio = np.concatenate(([0], tagli + 1))
+    fine = np.concatenate((tagli, [len(x) - 1]))
+    larghezza = m.shape[1]
+    out = []
+    for s_, e_ in zip(inizio, fine):
+        a, b = int(x[s_]), int(x[e_]) + 1
+        capo_a = True if a == 0 else not (su[a - 1] or giu[a - 1])
+        capo_b = True if b >= larghezza else not (su[b] or giu[b])
+        out.append((a, b, capo_a, capo_b))
+    return out
 
 
 # Lo spessore del cartoncino di un display: piu' di un astuccio, perche' e'
@@ -226,13 +240,12 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
     def pezzo(masc, verso, punto, dentro, su_cordone):
         """Un pezzo col suo spessore: esterna, interna e coste.
 
-        Due righe consecutive si cuciono solo se hanno lo stesso numero di
-        tratti: dove il conto cambia - li' la sagoma si apre o si chiude -
-        resta una riga scucita alta un pixel, cioe' un quarto di millimetro,
-        e cucirla a indovinare farebbe di nuovo il ponte sul bianco.
+        Si procede a FASCE: due righe vicine e il cartoncino che hanno in
+        comune, vedi `_fasce_comuni`. Cosi' il pezzo esce uno solo anche dove
+        la sagoma si apre o si chiude, e le coste restano sui tagli veri.
         """
-        righe = _strisce(masc, verso)
-        if len(righe) < 2:
+        m = masc if verso == "righe" else masc.T
+        if m.shape[0] < 2:
             return
         d = np.array(dentro, float) * spessore
         # Il verso dell'avvolgimento non si indovina: si MISURA. La faccia
@@ -249,39 +262,56 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
         ey = np.array(punto(0.0, 1.0), float) - o
         n = np.cross(ey, ex) if verso == "righe" else np.cross(ex, ey)
         rovescio = float(np.dot(n, np.array(dentro, float))) > 0
-        prec = None
-        for i, tratti in righe:
-            corr = []
-            for a, b in tratti:
-                if rovescio:
-                    a, b = b, a
-                XY = ((a, i), (b, i)) if verso == "righe" else ((i, a), (i, b))
-                fuori = [np.array(punto(X, Y), float) for X, Y in XY]
-                dentro_p = [f + d for f in fuori]
-                k = len(V)
-                for (X, Y), p in zip(XY, fuori):
-                    V.append(tuple(p))
-                    UV.append((X / float(W), Y / float(H) * q))
-                for pt in dentro_p:
-                    V.append(tuple(pt)); UV.append((0.5, vI))
-                corr.append((k, fuori, dentro_p, XY))
-            if prec is not None and len(prec) == len(corr):
-                for (pk, pf, pd, pXY), (k, fuori, dentro_p, XY) in zip(prec, corr):
-                    # faccia esterna
-                    T.append((pk, k, pk + 1)); T.append((k, k + 1, pk + 1))
-                    # faccia interna, avvolta al contrario
-                    T.append((pk + 2, pk + 3, k + 2)); T.append((k + 2, pk + 3, k + 3))
-                    # coste, solo dove il bordo e' taglio e non cordonatura
-                    for lato in (0, 1):
-                        if su_cordone(*pXY[lato]) and su_cordone(*XY[lato]):
-                            continue
-                        if lato == 0:
-                            quad(tuple(pf[0]), tuple(fuori[0]),
-                                 tuple(dentro_p[0]), tuple(pd[0]), (0.5, vT))
-                        else:
-                            quad(tuple(fuori[1]), tuple(pf[1]),
-                                 tuple(pd[1]), tuple(dentro_p[1]), (0.5, vT))
-            prec = corr
+
+        def dove(t, riga):
+            return (t, riga) if verso == "righe" else (riga, t)
+
+        def stendi(fascia, r0, r1):
+            """Una fascia dalla riga `r0` alla `r1`, col suo spessore."""
+            a, b, capo_a, capo_b = fascia
+            if rovescio:
+                a, b, capo_a, capo_b = b, a, capo_b, capo_a
+            XY = [dove(a, r0), dove(b, r0), dove(a, r1), dove(b, r1)]
+            fuori = [np.array(punto(X, Y), float) for X, Y in XY]
+            dentro_p = [f + d for f in fuori]
+            k = len(V)
+            for (X, Y), f in zip(XY, fuori):
+                V.append(tuple(f))
+                UV.append((X / float(W), Y / float(H) * q))
+            for pt in dentro_p:
+                V.append(tuple(pt)); UV.append((0.5, vI))
+            # faccia esterna
+            T.append((k, k + 2, k + 1)); T.append((k + 2, k + 3, k + 1))
+            # faccia interna, avvolta al contrario
+            T.append((k + 4, k + 5, k + 6)); T.append((k + 6, k + 5, k + 7))
+            # coste: solo sui tagli veri, e non dove il bordo e' cordonatura,
+            # che e' cartoncino che continua nel pezzo accanto
+            if capo_a and not (su_cordone(*XY[0]) and su_cordone(*XY[2])):
+                quad(tuple(fuori[0]), tuple(fuori[2]),
+                     tuple(dentro_p[2]), tuple(dentro_p[0]), (0.5, vT))
+            if capo_b and not (su_cordone(*XY[1]) and su_cordone(*XY[3])):
+                quad(tuple(fuori[3]), tuple(fuori[1]),
+                     tuple(dentro_p[1]), tuple(dentro_p[3]), (0.5, vT))
+
+        # Le fasce che non cambiano si stendono in UNA sola: su un display la
+        # base e buona parte delle pareti hanno lo stesso tratto per centinaia
+        # di righe, e farne un quad per riga e' geometria pagata per niente.
+        # Si uniscono solo se il tratto e i capi coincidono, quindi la
+        # superficie che esce e' la stessa - verificato al pixel sul render.
+        aperta, inizio = None, 0
+        for i in range(1, m.shape[0]):
+            fasce = _fasce_comuni(m, i)
+            sola = fasce[0] if len(fasce) == 1 else None
+            if aperta is not None and sola == aperta:
+                continue
+            if aperta is not None:
+                stendi(aperta, inizio, i - 1)
+            for f in fasce:
+                if f is not sola:
+                    stendi(f, i - 1, i)
+            aperta, inizio = sola, i - 1
+        if aperta is not None:
+            stendi(aperta, inizio, m.shape[0] - 1)
 
     def cella(y0, y1, x0, x1):
         m = np.zeros((H, W), bool)

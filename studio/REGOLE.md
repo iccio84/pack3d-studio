@@ -762,6 +762,26 @@ La rotella **non si spegne** con `prefers-reduced-motion`: e' l'unica cosa che
 dice che il servizio sta salendo. Si rallenta, che e' quello che quella
 preferenza chiede davvero.
 
+### Dove la rotella NON arriva
+
+Aprendo l'indirizzo del servizio **direttamente** mentre dorme, la rotella non
+si vede: quella schermata nera con scritto *SERVICE WAKING UP* e' del router
+di Render, che tiene la richiesta mentre il container si accende. Il nostro
+HTML — e quindi il nostro JavaScript — arriva DAL container, che in quel
+momento non c'e' ancora. Non e' una cosa da sistemare nel frontend: e' fuori
+dalla sua portata, sempre.
+
+La rotella serve l'altro caso, che e' quello vero di chi usa lo strumento: la
+pagina sta altrove — dentro il viewer glamlab, o su un host statico — e punta
+al servizio con `?api=`. Li' la pagina compare subito e l'attesa la racconta
+la rotella.
+
+Per far sparire anche la schermata di Render bisogna **separare la pagina
+dall'API** (la pagina su un host statico, il servizio su Render), tenere il
+servizio sveglio con una chiamata periodica, o pagare un piano che non
+sospende. Nessuna delle tre e' una modifica al frontend, e la scelta e' di
+chi paga il servizio.
+
 ## Il controllo visivo e' obbligatorio
 
 Dopo ogni pulizia va **guardato** il confronto prima/dopo, non solo lette le
@@ -848,17 +868,26 @@ non arriva e non c'e' niente da inventare a mano. E' `reconstruct_area`, e la
 cautela e' gia' scritta sopra: **solo dentro la maschera**, fuori restano i
 pixel originali. Sul Kinder Bueno T2 sono lo 0,6% dell'immagine.
 
-**3. La colata → no, e non e' pigrizia.**
-La colata non ha pixel mancanti: ha l'inchiostro sbagliato. Il problema e'
-che l'ombra sulle gocce esce azzurra invece che scura, e quello si risolve
-con la quadricromia e la sovrastampa, non ridipingendo — vedi *La colata si
-rimette con l'inchiostro del file*. Un modello generativo la reinventerebbe:
-gocce diverse, ombre diverse, e la cosa che si stava giudicando sparisce
-dentro la riscrittura. Per un marchio, ridisegnare non e' riparare.
+**3. La colata → no al pennello, si' all'occhio.**
+La colata non ha pixel mancanti: ha l'inchiostro sbagliato. L'ombra sulle
+gocce esce azzurra invece che scura, e quello si risolve con la quadricromia e
+la sovrastampa, non ridipingendo — vedi *La colata si rimette con l'inchiostro
+del file*. Un modello generativo la reinventerebbe: gocce diverse, ombre
+diverse, e la cosa che si stava giudicando sparisce dentro la riscrittura. Per
+un marchio, ridisegnare non e' riparare. E non saprebbe nemmeno QUALE scuro:
+quello giusto e' il prodotto del ciano del file per il rosso sotto, un numero
+che il file porta e che Ghostscript calcola.
 
-Il modello sulla colata serve invece a **guardarla**: "questa ombra e'
-azzurra o e' scura?" e' esattamente la domanda che le metriche hanno sbagliato
-piu' volte e che l'occhio risolve in un secondo. Giudizio si', pennello no.
+Il modello sulla colata serve a **guardarla**, e serve due volte:
+
+- a **trovarla**, sui file che non la mettono su un livello suo — otto su
+  nove, sul parco — dove il codice non ha niente da misurare. Il modello
+  indica la banda, il codice rilegge l'inchiostro: `tools.colata_a_occhio`.
+- a **giudicarla**: "questa ombra e' azzurra o e' scura?" e' esattamente la
+  domanda che le metriche hanno sbagliato piu' volte, e che l'occhio risolve
+  in un secondo. Per questo lo strumento torna la banda prima e dopo.
+
+Giudizio si', pennello no.
 
 **4. Quello che non va mai al modello.** I loghi, la `k` nera di `kinder`, i
 marchi, il testo di prodotto: non si rigenerano nemmeno dentro una maschera,
@@ -1044,14 +1073,39 @@ normale punta dentro.
 culling, quindi sulle sei viste il modello sembrava giusto. Per accorgersene
 bisogna scartare le facce voltate, come fa il visualizzatore vero.
 
-### Una riga puo' avere piu' di un tratto pieno
+### Il cartoncino fra due righe e' quello che hanno in comune
 
-Prendendo il primo e l'ultimo pixel pieno di ogni riga, all'altezza dell'angolo
-il fianco ha **due** tratti — il pezzo dell'aletta e quello della parete,
-separati da foglio — e la striscia faceva ponte stendendoci sopra il bianco.
-Si tengono i tratti uno per uno, e due righe consecutive si cuciono solo se ne
-hanno lo stesso numero: dove il conto cambia la sagoma si apre o si chiude, e
-cucire a indovinare rifarebbe il ponte.
+Prendendo il primo e l'ultimo pixel pieno di ogni riga, all'altezza
+dell'angolo il fianco ha **due** tratti — il pezzo dell'aletta e quello della
+parete, separati da foglio — e la striscia faceva ponte stendendoci sopra il
+bianco. Quindi i tratti si tengono uno per uno.
+
+Il primo rimedio era: due righe si cuciono solo se hanno **lo stesso numero**
+di tratti. Sbagliato, e si vedeva. Sul fronte del display la sagoma si apre —
+l'aletta si stacca dalla parete — il conto cambia, e quella regola lasciava li'
+una colonna scucita larga un pixel: un quarto di millimetro, che nel modello
+era una **feritoia in mezzo all'aletta del fronte**. Quattro, contando anche i
+bordi esterni.
+
+La regola giusta non guarda i conti, guarda la superficie: il cartoncino fra
+due righe vicine c'e' **dove c'e' su tutte e due**. Si prende
+l'**intersezione**, si spezza nei suoi tratti, e ognuno diventa una fascia.
+Cosi' il pezzo resta uno anche dove la sagoma si apre o si chiude, e il ponte
+non torna, perche' fra due tratti il cartoncino non c'e' su nessuna delle due
+righe.
+
+**Il capo di una fascia non e' sempre un taglio.** Dove la fascia finisce solo
+perche' l'altra riga e' piu' corta, il cartoncino continua: metterci la costa
+vorrebbe dire disegnare una riga di spessore in mezzo al pezzo. La costa va
+solo dove fuori non c'e' cartoncino su nessuna delle due righe — e comunque
+mai su una cordonatura, dove il cartoncino continua nel pezzo accanto.
+
+**Le fasce che non cambiano si stendono in una sola.** Sulla base e su buona
+parte delle pareti il tratto e' lo stesso per centinaia di righe, e farne un
+quad per riga e' geometria pagata per niente: il Milch-Schnitte passa da
+55.588 vertici a **24.736** e da 2,47 a 1,13 MB. Si uniscono solo se il tratto
+e i capi coincidono, quindi la superficie e' la stessa — verificato al pixel,
+zero differenze su 5,8 milioni di pixel resi da sette angolazioni.
 
 ## Astucci
 
@@ -1328,6 +1382,55 @@ l'azzurro:
 Quel file non lo aggiusta nessun rasterizzatore, e li' si passa alla risorsa.
 E' anche l'informazione che serve a chi prepara l'artwork, e infatti viene
 dichiarata nei cartellini invece di restare dentro il codice.
+
+#### Il file che il livello non ce l'ha: lo indica l'occhio
+
+Tutto quello che c'e' scritto sopra parte dal livello `Colata`: e' il livello
+che dice DOVE sta la colata, e senza di lui non c'e' niente da misurare. Sul
+parco di prova il livello ce l'ha **un file su nove**, e su tutti gli altri
+non succedeva niente: l'ombra restava azzurra e nessuno lo diceva.
+
+Li' l'unica cosa che resta e' guardare, ed e' il caso in cui il modello serve
+davvero: **indica la banda, e l'inchiostro fa il resto**. Lo strumento e'
+`tools.colata_a_occhio`, e la divisione del lavoro e' quella di sempre - il
+modello dice DOVE, il codice decide CHE COSA.
+
+Dentro il riquadro non si tocca il riquadro: si toccano **i pixel azzurri che
+la sovrastampa cambia**. E' una maschera piu' stretta dell'impronta del
+livello e piu' sicura, perche' non puo' toccare quello che azzurro non e' - il
+marchio `kinder` e il bicchierino di latte, che rendendo in quadricromia
+diventano neri, azzurri non sono mai. Sbagliare il bordo di qualche
+millimetro non cambia il risultato.
+
+**E l'azzurro da solo non riconosce niente.** Sul Kinder Pingui T6 BOX la
+macchia azzurra piu' grande del foglio non e' un'ombra rotta: e' il FONDO del
+pack, gocce d'acqua su azzurro, 15.800 px che vanno lasciati in pace. Per
+questo lo strumento torna la banda **due volte, prima e dopo**, e chiede di
+guardarle: se cambia un fondo, un marchio o una foto, il riquadro e' fuori
+posto.
+
+Misurato sul T6 BOX, che la colata in sovrastampa ce l'ha ma il livello no:
+
+    banda indicata a occhio    187 x 58 mm
+    zone azzurre               41.821
+    rimesse dalla sovrastampa  24%     -> si sostituisce
+    fondo azzurro del pack      0,1%   -> si rifiuta da solo
+
+Il secondo numero e' la prova che il meccanismo si limita da se': puntandolo
+sul fondo del pack, sotto soglia non fa niente.
+
+#### Il foglio in cassa va buttato appena qualcuno se l'e' preso
+
+La sostituzione della colata restituisce **un'immagine nuova**, e quella resa
+da `render_page` resta in cassa: due fogli interi vivi insieme. Sul T6 BOX
+sono 6516 x 3923 px, 76 MB, e il picco della costruzione passava da 351 a 456
+MB - dentro il tetto di 512 del piano Free, ma per un margine che non vale la
+pena di spendere.
+
+`dieline.scarta_resa()` va chiamata **subito dopo la colata**, non dopo il
+nero: `nero` la sua resa se la fa da se', fuori dalla cassa, quindi da li' in
+giu' la cassa non serve a nessuno. Col foglio buttato al momento giusto la
+colata costa **13 MB**, non 105.
 
 #### Il caso calibrato
 

@@ -73,8 +73,33 @@ Pulizia dell'artwork:
   copre il 6,5% del foglio e Kinder ORANGE, che e' grafica, il 7,9%. Decide
   l'occhio, non la percentuale.
 - Sulla colata NON usare reconstruct_area: non le mancano pixel, le manca
-  l'inchiostro giusto, e un modello generativo la reinventa. Guardala invece, e
-  se l'ombra sulle gocce esce AZZURRA invece che scura scrivilo negli avvisi.
+  l'inchiostro giusto, e un modello generativo la reinventa - gocce diverse,
+  ombre diverse, e la cosa che stavi giudicando sparisce dentro la riscrittura.
+  Per un marchio, ridisegnare non e' riparare.
+- L'ombra giusta e' GIA' NEL FILE. La colata e' costruita in sovrastampa: una
+  lastra di ciano che moltiplica il rosso sotto. Il rasterizzatore la
+  sovrastampa la ignora, quindi il ciano copre il rosso invece di
+  moltiplicarlo e l'ombra diventa un alone azzurro piatto. Non va inventata,
+  va riletta, e a rileggerla e' Ghostscript.
+- Se il file mette la colata su un livello suo non devi fare niente: la trova
+  il codice. Se non ce l'ha - e quasi nessuno ce l'ha - chiama
+  colata_a_occhio col riquadro della banda in mm. Torna la stessa banda due
+  volte, sopra com'e' adesso e sotto come esce rimettendo la sovrastampa:
+  GUARDALE. Se nel "dopo" l'ombra lungo il getto e attorno alle gocce e'
+  diventata scura e non e' cambiato nient'altro, il riquadro e' buono.
+- Il riquadro confermato va in parametri_costruzione.colata come
+  {"x_mm":..., "y_mm":..., "w_mm":..., "h_mm":...}. Senza, la costruzione non
+  la tocca e l'ombra resta azzurra.
+- NON decidere dai numeri: l'azzurro da solo non distingue un'ombra rotta da
+  una grafica blu. Sul Kinder Pingui T6 BOX la macchia azzurra piu' grande del
+  foglio e' il FONDO del pack - gocce d'acqua su azzurro - e ripararla sarebbe
+  un disastro. Guarda le due immagini: se cambia un fondo, un marchio o una
+  foto, il riquadro e' sbagliato e non lo dichiari.
+- Se lo strumento dice che sotto soglia non cambia niente, quell'ombra non e'
+  in sovrastampa: e' FUSTELLATA, il ciano toglie il rosso invece di
+  moltiplicarlo, e sotto non c'e' piu' niente da moltiplicare. Li' non c'e'
+  niente da rimettere, e va scritto negli avvisi come cosa da chiedere a chi
+  prepara l'artwork.
 - Non rigenerare mai loghi, marchi, testo di prodotto e il marchio `kinder`,
   nemmeno dentro una maschera: se la maschera li tocca, e' la maschera a
   essere sbagliata.
@@ -129,7 +154,8 @@ Rigonfiamento:
 
 Quando hai finito rispondi SOLO con un blocco ```json contenente:
 {"famiglia": "...", "quote": {...}, "pulizia": {"livello": n, "metodo": "..."},
- "parametri_costruzione": {..., "aree_riservate": ["nome lastra", ...]},
+ "parametri_costruzione": {..., "aree_riservate": ["nome lastra", ...],
+                           "colata": {"x_mm":.., "y_mm":.., "w_mm":.., "h_mm":..}},
  "avvisi": ["..."], "provenienza": {"quota": "come e' stata ricavata"}}
 """
 

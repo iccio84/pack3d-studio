@@ -316,6 +316,63 @@ def quadricromia(pdf, page_no, scala, riq, sovrastampa="simulate"):
                 pass
 
 
+def _azzurro(a):
+    """I pixel dell'ombra sbagliata: chiari, con molto piu' blu che rosso.
+
+    E' l'aspetto che prende l'ombra della colata quando la sovrastampa non
+    viene simulata: il ciano copre il rosso invece di moltiplicarlo, e
+    l'ombra diventa un alone azzurro piatto.
+
+    **Da solo non distingue niente.** Sul Kinder Pingui T6 BOX la macchia
+    azzurra piu' grande del foglio non e' un'ombra rotta: e' il fondo del
+    pack, gocce d'acqua su azzurro, 15.800 px che vanno lasciati in pace.
+    Serve percio' sempre dentro un riquadro che qualcuno ha guardato - il
+    livello `Colata`, o l'occhio - e mai come riconoscitore.
+    """
+    b = a.astype(np.int16)
+    return ((b[:, :, 2] - b[:, :, 0] > 45) & (b[:, :, 2] > 190)
+            & (b[:, :, 1] > 170))
+
+
+def dal_riquadro(pdf, page_no, scala, riq):
+    """La banda riparata e la maschera, partendo da un RIQUADRO.
+
+    Sul file che la colata la dichiara la maschera viene dall'impronta del
+    livello. Su quello che non la dichiara il livello non c'e' e l'impronta
+    non si puo' misurare: resta il riquadro indicato a occhio. Ma il riquadro
+    da solo e' troppo grosso - dentro una banda di 186 x 57 mm non c'e' solo
+    l'ombra - quindi la maschera sono **i pixel azzurri che la sovrastampa
+    cambia**, dentro quel riquadro.
+
+    Piu' stretta dell'impronta del livello, e piu' sicura: non puo' toccare
+    quello che azzurro non e'. Il marchio `kinder` e il bicchierino di latte,
+    che rendendo in quadricromia diventano neri, azzurri non sono mai.
+
+    Torna `(banda, maschera, quota, quanti)`, o `None` se Ghostscript non c'e'
+    o se una delle due rese non viene.
+    """
+    from scipy.ndimage import binary_dilation
+
+    q = quadricromia(pdf, page_no, scala, riq, "simulate")
+    piatta = quadricromia(pdf, page_no, scala, riq, "disable")
+    if q is None or piatta is None:
+        return None
+    h = min(q.shape[0], piatta.shape[0])
+    w = min(q.shape[1], piatta.shape[1])
+    q, piatta = q[:h, :w], piatta[:h, :w]
+    azzurro = _azzurro(piatta)
+    quante = int(azzurro.sum())
+    if not quante:
+        return q, np.zeros((h, w), bool), 0.0, 0
+    cambia = np.abs(q.astype(np.int16) - piatta.astype(np.int16)).max(2) > 20
+    # L'orlo dell'ombra e' sfumato, e un pixel mezzo azzurro la prova
+    # dell'azzurro non la passa: si tiene anche quello che CONFINA con
+    # l'azzurro e cambia, se no attorno all'ombra rimessa resta un filo
+    # chiaro largo un pixel, che e' il difetto di prima in miniatura.
+    maschera = cambia & binary_dilation(azzurro, np.ones((3, 3), bool))
+    return q, maschera, float((azzurro & cambia).sum()) / quante, quante
+
+
 def _peso_sovrastampa(simulata, piatta, maschera):
     """Quanto conta la sovrastampa, e su quanti pixel. `(quota, quanti)`.
 
@@ -337,8 +394,7 @@ def _peso_sovrastampa(simulata, piatta, maschera):
     w = min(simulata.shape[1], piatta.shape[1], maschera.shape[1])
     a = simulata[:h, :w].astype(np.int16)
     b = piatta[:h, :w].astype(np.int16)
-    azzurro = ((b[:, :, 2] - b[:, :, 0] > 45) & (b[:, :, 2] > 190)
-               & (b[:, :, 1] > 170) & maschera[:h, :w])
+    azzurro = _azzurro(b) & maschera[:h, :w]
     quante = int(azzurro.sum())
     if not quante:
         return 0.0, 0
@@ -346,31 +402,89 @@ def _peso_sovrastampa(simulata, piatta, maschera):
     return float((azzurro & cambia).sum()) / quante, quante
 
 
-def _incolla(foglio_base, banda, maschera, bx0, by0):
-    """La banda dentro la maschera, alla sua posizione sul foglio."""
-    h = min(banda.shape[0], maschera.shape[0], foglio_base.shape[0] - by0)
-    w = min(banda.shape[1], maschera.shape[1], foglio_base.shape[1] - bx0)
+def _incolla(base, banda, maschera, bx0, by0):
+    """La banda dentro la maschera, alla sua posizione sul foglio.
+
+    Si incolla su un'immagine PIL, **in posto**, e chi chiama deve possederla
+    - `render_page` la sua resa la tiene in cassa e restituisce quella, quindi
+    scriverci dentro vorrebbe dire sporcare la cassa; `convert` una copia
+    fresca la fa gia'.
+
+    Passando per numpy servirebbe invece una copia SCRIVIBILE dell'intero
+    foglio: sul Kinder Pingui T6 BOX sono 6516 x 3923 px, 76 MB, sommati ai 76
+    che `convert` ha appena fatto. Il picco della costruzione andava a 500 MB,
+    cioe' a un soffio dal tetto di 512 del piano Free, per incollarne uno da
+    1474 x 457.
+    """
+    h = min(banda.shape[0], maschera.shape[0])
+    w = min(banda.shape[1], maschera.shape[1])
     if h <= 0 or w <= 0:
-        return 0.0
-    m = maschera[:h, :w]
-    pezzo = foglio_base[by0:by0 + h, bx0:bx0 + w]
-    diverso = (np.abs(pezzo.astype(np.int16) - banda[:h, :w].astype(np.int16))
-               .max(2) > 20) & m
-    pezzo[m] = banda[:h, :w][m]
-    foglio_base[by0:by0 + h, bx0:bx0 + w] = pezzo
-    return float(diverso.sum()) / max(int(m.sum()), 1)
+        return
+    base.paste(Image.fromarray(banda[:h, :w]), (bx0, by0),
+               Image.fromarray(maschera[:h, :w]))
 
 
-def foglio(pdf, scala, page_no=0, note=None):
+def _a_occhio(pdf, scala, page_no, note, riquadro):
+    """La colata riparata dentro un riquadro indicato a occhio.
+
+    E' la strada per i file che il livello `Colata` non ce l'hanno - sul
+    parco di prova otto su nove - dove oggi non succedeva niente e l'ombra
+    restava azzurra. Il riquadro lo da' chi ha guardato il foglio; dentro,
+    quello che si tocca lo decide l'inchiostro, non il rettangolo.
+    """
+    x_mm, y_mm, w_mm, h_mm = riquadro
+    riq = (x_mm / PT2MM, (x_mm + w_mm) / PT2MM,
+           y_mm / PT2MM, (y_mm + h_mm) / PT2MM)
+    # Ghostscript prima del foglio, per l'abitudine di `nero.spia`: costa 105
+    # MB fissi e parte con un fork, quindi il momento in cui lo chiami conta.
+    # Qui non cambia il picco - la resa della pagina a questo punto e' gia' in
+    # cassa, quindi `render_page` non alloca niente - ma non costa niente
+    # neanche a tenerlo cosi', e su un file che in cassa non ce l'ha conta.
+    esito = dal_riquadro(pdf, page_no, scala, riq)
+    base = render_page(pdf, page_no, scala)
+    if esito is None:
+        if note is not None:
+            note.append("colata indicata a occhio: Ghostscript non c'e' o la "
+                        "banda non si rende, l'ombra resta com'e'")
+        return base
+    banda, maschera, quota, quante = esito
+    if quota < CAMBIO_MINIMO:
+        if note is not None:
+            note.append(
+                "colata indicata a occhio a %.0f,%.0f mm: delle %d zone "
+                "azzurre la sovrastampa ne cambia solo il %.1f%%, quindi li' "
+                "l'ombra non e' in sovrastampa e non c'e' niente da rimettere"
+                % (x_mm, y_mm, quante, 100 * quota))
+        return base
+    fuori = base.convert("RGB")
+    _incolla(fuori, banda, maschera,
+             max(int(round(riq[0] * scala)), 0), max(int(round(riq[2] * scala)), 0))
+    if note is not None:
+        note.append(
+            "colata indicata a occhio, resa in quadricromia: %.0f x %.0f mm, "
+            "e la sovrastampa rimette l'ombra al %.0f%% delle %d zone che "
+            "uscivano azzurre" % (w_mm, h_mm, 100 * quota, quante))
+    return fuori
+
+
+def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
     """Il foglio reso, con la colata rimessa a posto se si puo'.
 
     Prima si prova con l'inchiostro del file - la banda resa in quadricromia,
     con la sovrastampa simulata - e solo se li' non c'era niente da correggere
     si passa alla risorsa. Il file che il livello non ce l'ha non paga niente:
     una lettura dei dizionari e via.
+
+    `riquadro` e' `(x_mm, y_mm, w_mm, h_mm)` e serve ai file che il livello
+    non ce l'hanno: lo indica chi ha GUARDATO il foglio, vedi
+    `tools.colata_a_occhio`. Il livello, quando c'e', viene prima: e' una cosa
+    che il file dichiara, e quello che il file dichiara batte quello che si
+    vede.
     """
     nomi = set(livelli(pdf)) & NOMI
     if not nomi:
+        if riquadro:
+            return _a_occhio(pdf, scala, page_no, note, riquadro)
         return render_page(pdf, page_no, scala)
 
     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
@@ -414,8 +528,7 @@ def foglio(pdf, scala, page_no=0, note=None):
             piatta = quadricromia(pdf, page_no, scala, riq, "disable")
             peso, quante = _peso_sovrastampa(q, piatta, maschera)
             if peso >= CAMBIO_MINIMO:
-                fuori = np.asarray(
-                    render_page(pdf, page_no, scala).convert("RGB")).copy()
+                fuori = render_page(pdf, page_no, scala).convert("RGB")
                 _incolla(fuori, q, maschera, bx0, by0)
                 if note is not None:
                     note.append(
@@ -423,7 +536,7 @@ def foglio(pdf, scala, page_no=0, note=None):
                         "%.1f mm, e la sovrastampa rimette l'ombra al %.0f%% "
                         "delle zone che uscivano azzurre"
                         % (spenti[0], larg, alt, 100 * peso))
-                return Image.fromarray(fuori)
+                return fuori
             if note is not None:
                 note.append(
                     "colata dal livello '%s': l'ombra e' FUSTELLATA, non in "
@@ -450,11 +563,11 @@ def foglio(pdf, scala, page_no=0, note=None):
                             "file (errore %.2f mm), lasciata com'e'" % err_mm)
             return render_page(pdf, page_no, scala)
 
-        base = np.asarray(render_page(tmp.name, page_no, scala).convert("RGB"))
-        h = min(maschera.shape[0], base.shape[0] - by0)
-        w = min(maschera.shape[1], base.shape[1] - bx0)
+        base = render_page(tmp.name, page_no, scala).convert("RGB")
+        h = min(maschera.shape[0], base.height - by0)
+        w = min(maschera.shape[1], base.width - bx0)
         if h <= 0 or w <= 0:
-            return Image.fromarray(base)
+            return base
         nw = max(1, int(round(ris.width * s * k)))
         nh = max(1, int(round(ris.height * s * k)))
         r = np.asarray(ris.resize((nw, nh), Image.LANCZOS))
@@ -463,14 +576,13 @@ def foglio(pdf, scala, page_no=0, note=None):
         x0, y0 = max(rx, 0), max(ry, 0)
         x1, y1 = min(rx + nw, w), min(ry + nh, h)
         if x1 <= x0 or y1 <= y0:
-            return Image.fromarray(base)
+            return base
         tela[y0:y1, x0:x1] = r[y0 - ry:y1 - ry, x0 - rx:x1 - rx]
-        fuori = base.copy()
-        _incolla(fuori, tela, maschera, bx0, by0)
+        _incolla(base, tela, maschera, bx0, by0)
         if note is not None:
             note.append("colata sostituita con la risorsa: %.1f x %.1f mm, "
                         "allineata a %.2f mm" % (larg, alt, err_mm))
-        return Image.fromarray(fuori)
+        return base
     except Exception as e:
         if note is not None:
             note.append("colata: non riuscita (%s), lasciata com'e'"

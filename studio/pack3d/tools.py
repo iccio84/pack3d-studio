@@ -548,6 +548,99 @@ TOOLS.append(
 _RAW["area_riservata"] = area_riservata
 
 
+def colata_a_occhio(pdf, x_mm, y_mm, w_mm, h_mm, scala=3.0):
+    """PROPONE di rimettere l'ombra alla colata, e MOSTRA prima e dopo.
+
+    La colata Kinder e' costruita in **sovrastampa**: una lastra di ciano che
+    moltiplica il rosso sotto, e da quella moltiplicazione vengono l'ombra
+    sulle gocce e il volume del getto. Il nostro rasterizzatore la sovrastampa
+    la butta via, quindi il ciano COPRE il rosso invece di moltiplicarlo e
+    l'ombra diventa un alone azzurro piatto. L'ombra giusta e' gia' nel file:
+    non va inventata, va letta, e a leggerla e' Ghostscript.
+
+    Quando il file mette la colata su un livello suo non serve niente: il
+    codice la trova da solo. Questo strumento e' per gli altri - sul parco di
+    prova otto file su nove - dove il livello non c'e' e nessuno puo' misurare
+    dove sta la colata. Li' serve un occhio.
+
+    **Tu dici DOVE, l'inchiostro decide CHE COSA.** Dentro il riquadro si
+    toccano solo i pixel azzurri che la sovrastampa cambia, non il riquadro
+    intero: sbagliare il bordo di qualche millimetro non cambia il risultato,
+    e quello che azzurro non e' non lo tocca nessuno.
+
+    **E non decidere dai numeri.** L'azzurro da solo non distingue un'ombra
+    rotta da una grafica blu: sul Kinder Pingui T6 BOX la macchia azzurra piu'
+    grande del foglio e' il FONDO del pack, gocce d'acqua su azzurro, e
+    ripararla sarebbe un disastro. Per questo qui torna un'immagine con sopra
+    e sotto la stessa banda, prima e dopo: GUARDALA. Se il "dopo" ha un'ombra
+    scura lungo il getto e attorno alle gocce, la proposta e' giusta. Se e'
+    cambiato altro - un fondo, un marchio, una foto - il riquadro e' fuori
+    posto e va lasciato cadere.
+    """
+    from PIL import Image
+    from . import colata as col
+
+    riq = (x_mm / PT2MM, (x_mm + w_mm) / PT2MM,
+           y_mm / PT2MM, (y_mm + h_mm) / PT2MM)
+    esito = col.dal_riquadro(pdf, 0, scala, riq)
+    if esito is None:
+        return {"errore": "la banda non si rende: Ghostscript non c'e' oppure "
+                          "il riquadro cade fuori dalla pagina"}
+    banda, maschera, quota, quante = esito
+    piatta = col.quadricromia(pdf, 0, scala, riq, "disable")
+    if piatta is None:
+        return {"errore": "la banda senza sovrastampa non si rende"}
+    h = min(piatta.shape[0], banda.shape[0], maschera.shape[0])
+    w = min(piatta.shape[1], banda.shape[1], maschera.shape[1])
+    prima = piatta[:h, :w]
+    dopo = prima.copy()
+    m = maschera[:h, :w]
+    dopo[m] = banda[:h, :w][m]
+    sep = np.full((10, w, 3), 255, np.uint8)
+    vista = np.concatenate([prima, sep, dopo], 0)
+
+    basta = quota >= col.CAMBIO_MINIMO
+    return {"__image__": _png_b64(vista),
+            "zone_azzurre": quante,
+            "rimesse_pct": round(100 * float(quota), 1),
+            "pixel_cambiati": int(m.sum()),
+            "banda_mm": [round(w_mm, 1), round(h_mm, 1)],
+            "in_sovrastampa": bool(basta),
+            "testo": (
+                "SOPRA la banda come esce adesso, SOTTO come esce rimettendo "
+                "la sovrastampa. Delle %d zone azzurre ne cambia il %.1f%%. "
+                "%s GUARDA le due immagini: se nel 'dopo' l'ombra lungo il "
+                "getto e attorno alle gocce e' diventata SCURA e non e' "
+                "cambiato nient'altro, dichiara il riquadro in "
+                "parametri_costruzione.colata. Se e' cambiato un fondo, un "
+                "marchio o una foto, il riquadro e' sbagliato: non "
+                "dichiararlo."
+                % (quante, 100 * quota,
+                   "" if basta else
+                   "Sotto la soglia: li' l'ombra non e' in sovrastampa - e' "
+                   "FUSTELLATA, il ciano toglie il rosso invece di "
+                   "moltiplicarlo, e sotto non c'e' piu' niente da "
+                   "moltiplicare. In quel caso non c'e' niente da rimettere."))}
+
+
+TOOLS.append(
+    dict(name="colata_a_occhio",
+         description="PROPONE di rimettere l'ombra alla colata indicandola con "
+                     "un riquadro in mm, per i file che non la mettono su un "
+                     "livello suo. L'ombra esce azzurra perche' il "
+                     "rasterizzatore ignora la sovrastampa; quella giusta e' "
+                     "gia' nel file e la legge Ghostscript. MOSTRA la banda "
+                     "prima e dopo: guarda l'immagine prima di dichiararla. "
+                     "Non ridipinge niente - rilegge l'inchiostro del file.",
+         input_schema={"type": "object",
+                       "properties": {"x_mm": {"type": "number"},
+                                      "y_mm": {"type": "number"},
+                                      "w_mm": {"type": "number"},
+                                      "h_mm": {"type": "number"}},
+                       "required": ["x_mm", "y_mm", "w_mm", "h_mm"]}))
+_RAW["colata_a_occhio"] = colata_a_occhio
+
+
 TOOLS.append(
     dict(name="reconstruct_area",
          description="PIANO B: ricostruisce con un modello di immagine la grafica "
