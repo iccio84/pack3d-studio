@@ -762,6 +762,26 @@ La rotella **non si spegne** con `prefers-reduced-motion`: e' l'unica cosa che
 dice che il servizio sta salendo. Si rallenta, che e' quello che quella
 preferenza chiede davvero.
 
+### Dove la rotella NON arriva
+
+Aprendo l'indirizzo del servizio **direttamente** mentre dorme, la rotella non
+si vede: quella schermata nera con scritto *SERVICE WAKING UP* e' del router
+di Render, che tiene la richiesta mentre il container si accende. Il nostro
+HTML — e quindi il nostro JavaScript — arriva DAL container, che in quel
+momento non c'e' ancora. Non e' una cosa da sistemare nel frontend: e' fuori
+dalla sua portata, sempre.
+
+La rotella serve l'altro caso, che e' quello vero di chi usa lo strumento: la
+pagina sta altrove — dentro il viewer glamlab, o su un host statico — e punta
+al servizio con `?api=`. Li' la pagina compare subito e l'attesa la racconta
+la rotella.
+
+Per far sparire anche la schermata di Render bisogna **separare la pagina
+dall'API** (la pagina su un host statico, il servizio su Render), tenere il
+servizio sveglio con una chiamata periodica, o pagare un piano che non
+sospende. Nessuna delle tre e' una modifica al frontend, e la scelta e' di
+chi paga il servizio.
+
 ## Il controllo visivo e' obbligatorio
 
 Dopo ogni pulizia va **guardato** il confronto prima/dopo, non solo lette le
