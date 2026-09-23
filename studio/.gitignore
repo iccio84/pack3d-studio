@@ -1,8 +1,0 @@
-__pycache__/
-*.pyc
-.env
-out/
-*.glb
-*.obj
-*.mtl
-istantanea_pack3d.md
