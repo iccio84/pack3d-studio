@@ -475,10 +475,10 @@ const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagi
 // divergere
 const INVITO = document.querySelector('#empty div').textContent;
 
-/* Un servizio che si sveglia NON e' un servizio irraggiungibile, ed e' il
-   caso piu' comune di tutti: il piano gratuito di Render sospende dopo 15
-   minuti di inattivita', e a svegliarlo e' la prima richiesta che arriva -
-   un'attesa che si misura in decine di secondi. La sonda di `findBackend`
+/* Un servizio che si sveglia NON e' un servizio irraggiungibile: un servizio
+   ospitato si mette in pausa quando nessuno lo usa - quindici minuti sul
+   piano gratuito di Render, due giorni su uno Space - e a svegliarlo e' la
+   prima richiesta che arriva, un'attesa che si misura in decine di secondi. La sonda di `findBackend`
    scade dopo un secondo e mezzo, quindi scriveva "backend non raggiungibile"
    di un servizio che stava benissimo e si stava solo alzando; e per riprovare
    bisognava ricaricare la pagina.
