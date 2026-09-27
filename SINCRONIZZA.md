@@ -121,9 +121,12 @@ Il controllo minimo su ognuno: perimetro + 2 falde = nastro, la riga
 "mappatura verificata" negli avvisi della costruzione, e un'occhiata al render.
 Le tre cose insieme prendono quasi tutto.
 
-La riga sulla mappatura e' l'unico controllo che oggi si fa da solo: misura la
-rotazione della grafica attorno al tubo e grida sopra l'1% del giro. E' nata
-da un difetto che nessuno aveva visto per settimane.
+La riga sulla mappatura e' stata il primo controllo che si fa da solo: misura
+la rotazione della grafica attorno al tubo e grida sopra l'1% del giro. E' nata
+da un difetto che nessuno aveva visto per settimane. Adesso ne ha accanto
+altri tre: le testate del modello contro le linee del DT, le testate contro le
+quote scritte sul file, e il fronte dell'AW sul fronte del modello. Vedi
+REGOLE.md, *Le due verifiche*.
 
 ## Quello che resta appeso
 
@@ -132,4 +135,7 @@ da un difetto che nessuno aveva visto per settimane.
 - Il canale `quote.larghezza` / `quote.spessore` dall'agente alla costruzione
   non e' mai stato percorso con una chiave API vera.
 - La texture ha rettangoli bianchi che tagliano la grafica: da capire se li
-  produce `clean_artwork` o `strip_separations`.
+  produce `clean_artwork` o `strip_separations`. La costruzione il disegno
+  tecnico non lo toglie piu' con una maschera sui pixel ma spegnendo gli
+  oggetti, quindi da li' non possono piu' venire: se si rivedono, il
+  sospettato resta `strip_separations`.

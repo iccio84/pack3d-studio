@@ -44,6 +44,16 @@ SOLIDO = 0.85
 CHIARO = 120
 # croma sopra la quale il render ci ha messo un colore, non un grigio
 SATURO = 40
+# L'orlo della lettera: attorno al pieno la lastra sfuma, e sotto SOLIDO quei
+# pixel non entravano mai. Restavano come li ha fatti il rasterizzatore - il
+# nero sfumato con l'azzurro dipinto sopra, (30, 66, 71) sul K Brioss STD - e
+# in HD si vedono: un filo petrolio attorno alla `k`. Non sono chiari, quindi
+# la prova del pieno non li prende: basta che siano TINTI (ORLO_CROMA), a non
+# piu' di ORLO_PX dal pieno tradito, dove la lastra ha almeno ORLO
+# d'inchiostro.
+ORLO = 0.10
+ORLO_PX = 2
+ORLO_CROMA = 25
 # Sotto questa quota il difetto non c'e' e non si paga la passata alla
 # risoluzione della texture. Cinque per cento perche' sotto sono i bordi:
 # l'antialiasing del rasterizzatore sfuma la lettera e quei pixel di frangia
@@ -99,8 +109,13 @@ def _lastra(pdf, page_no, dpi):
     return mappe.get("black")
 
 
-def _traditi(lastra, reso):
-    """Maschera dei pixel che la lastra dice neri e il render fa colorati."""
+def _traditi(lastra, reso, orlo=False):
+    """Maschera dei pixel che la lastra dice neri e il render fa colorati.
+
+    La quota si conta sempre sul solo pieno: e' lei che decide se il difetto
+    c'e'. Con `orlo` alla maschera si aggiunge l'orlo sfumato della lettera,
+    vedi ORLO.
+    """
     h = min(lastra.shape[0], reso.shape[0])
     w = min(lastra.shape[1], reso.shape[1])
     if h == 0 or w == 0:
@@ -110,10 +125,26 @@ def _traditi(lastra, reso):
     if not pieno.any():
         return None, 0.0
     px = reso[:h, :w].astype(np.int16)
-    chiaro = px.mean(2) > CHIARO
-    saturo = (px.max(2) - px.min(2)) > SATURO
-    tradito = pieno & chiaro & saturo
-    return tradito, float(tradito.sum()) / float(pieno.sum())
+    croma = px.max(2) - px.min(2)
+    tradito = pieno & (px.mean(2) > CHIARO) & (croma > SATURO)
+    quota = float(tradito.sum()) / float(pieno.sum())
+    if orlo and tradito.any():
+        from scipy.ndimage import (binary_dilation, binary_erosion,
+                                   binary_propagation)
+        # L'orlo si allarga solo attorno ai traditi PIENI, come la `k`. La
+        # lastra arriva da 144 dpi ingrandita, e sfuma di un pixel oltre ogni
+        # lettera: sul bordo di un testo nero su azzurro quella sfumatura da'
+        # traditi a strisce, larghi un pixel, e allargarci attorno l'orlo
+        # ingrigirebbe i bordi del testo - che li' sono giusti, nero sfumato
+        # sull'azzurro. Una striscia l'erosione non la passa, una lettera si'.
+        nucleo = binary_propagation(binary_erosion(tradito, iterations=2),
+                                    mask=tradito)
+        if nucleo.any():
+            vicino = binary_dilation(nucleo, np.ones((3, 3), bool),
+                                     iterations=ORLO_PX)
+            tradito = tradito | (vicino & (croma > ORLO_CROMA)
+                                 & (inchiostro >= ORLO))
+    return tradito, quota
 
 
 def spia(pdf, page_no=0, scala=None):
@@ -146,12 +177,17 @@ def spia(pdf, page_no=0, scala=None):
         return None, 0.0
     if quota < QUOTA_MINIMA:
         return None, quota
-    alta = _lastra(pdf, page_no,
-                   DPI_LASTRA if scala is None else min(DPI_LASTRA, scala * 72.0))
+    alta = _lastra(pdf, page_no, alta_scala(scala) * 72.0)
     return alta, quota
 
 
-def riporta(pdf, foglio, scala, page_no=0, note=None, deciso=None):
+def alta_scala(scala=None):
+    """La scala, in px per punto, a cui si prende la lastra buona."""
+    return (DPI_LASTRA if scala is None else min(DPI_LASTRA, scala * 72.0)) / 72.0
+
+
+def riporta(pdf, foglio, scala, page_no=0, note=None, deciso=None,
+            livello=None):
     """Rimette il nero dove la lastra dice nero e il render ha messo un colore.
 
     `foglio` e' quello che esce dal rasterizzatore, immagine o array; torna
@@ -171,6 +207,12 @@ def riporta(pdf, foglio, scala, page_no=0, note=None, deciso=None):
     rimpicciolirlo. Adesso rimpicciolisce PIL, che alloca solo la
     destinazione, e l'array grande si materializza solo quando c'e' davvero
     da riparare.
+
+    Se il foglio viene dal livello della grafica (`livello`), il nero non si
+    riporta dove dipinge il disegno tecnico. La lastra la fa Ghostscript, che
+    gli oggetti spenti in pdfium non li vede: una fustella tracciata in nero
+    pieno per lui e' nero come la `k`, e senza questa esclusione tornerebbe
+    sulla texture dalla lastra.
     """
     img = foglio if hasattr(foglio, "convert") else Image.fromarray(
         np.asarray(foglio).astype(np.uint8))
@@ -183,12 +225,24 @@ def riporta(pdf, foglio, scala, page_no=0, note=None, deciso=None):
             (img.width, img.height), Image.BILINEAR))
         del alta
         arr = np.array(img, dtype=np.uint8)      # qui, e solo qui, la copia
-        tradito, _q = _traditi(grande, arr)
+        tradito, _q = _traditi(grande, arr, orlo=True)
         if tradito is None or not tradito.any():
             return img
         h, w = tradito.shape
-        # il tono e' quello della lastra: pieno vuol dire nero, e i bordi
-        # sfumati restano come li ha disegnati il rasterizzatore
+        if livello is not None:
+            from . import strati
+            # alla risoluzione della lastra: e' quella la precisione del nero
+            # che si riporta, e renderla piu' fine costerebbe per niente
+            fuori = strati.impronta_dt(pdf, page_no, alta_scala(scala),
+                                       misura=(img.width, img.height),
+                                       allarga=2)
+            if fuori is not None:
+                tradito &= ~fuori[:h, :w]
+                if not tradito.any():
+                    return img
+        # il tono e' quello della lastra: pieno vuol dire nero, e sull'orlo
+        # il grigio della sua sfumatura, che e' l'antialiasing giusto di una
+        # lettera nera sul bianco
         arr[:h, :w][tradito] = grande[:h, :w][tradito][:, None]
         if note is not None:
             note.append("nero riportato dalla lastra sul %.1f%% dei pixel che "

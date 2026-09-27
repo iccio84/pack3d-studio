@@ -188,6 +188,34 @@ quelle restano per gli altri quattro file che qui non ci sono. Il numero piu'
 solido di tutti e' comunque un altro: i **460 MB ancora vivi** a fine analisi
 di Colazione, che su una macchina da 512 MB non lasciano spazio per costruire.
 
+### In HD, di serie
+
+Dal 27 settembre 2026 la texture e' a 300 dpi con un tetto di 8192 px di lato
+(`TEXTURE` in `server.py`; `quality: "web"` rida' i 200 dpi e i 1700 px di
+prima). Costa tempo e memoria, e sugli Spaces l'uno e l'altra ci sono. Misurato
+su questo container, un file per processo, due processi alla volta sui quattro
+core:
+
+| file | tipo | analisi | costruzione | picco | texture | GLB |
+|---|---|---|---|---|---|---|
+| Colazione | flowpack | 23,5 s | 85,6 s | 987 MB | 3897 x 5433 | 5,3 MB |
+| K Brioss STD | flowpack | 4,2 s | 25,8 s | 1186 MB | 3425 x 4960 | 5,9 MB |
+| K Brioss Latte e Cacao | flowpack | 4,3 s | 13,0 s | 536 MB | 3425 x 4959 | 5,5 MB |
+| KMS T1 | flowpack | 1,6 s | 13,3 s | 486 MB | 1801 x 1700 | 4,3 MB |
+| K Tronky T1 | flowpack | 1,3 s | 9,1 s | 873 MB | 1701 x 980 | 3,6 MB |
+| KP T1 Mandarino | flowpack | 1,6 s | 7,5 s | 316 MB | 1759 x 1599 | 4,1 MB |
+| Kinder Country | flowpack | 2,5 s | 4,3 s | 409 MB | 1406 x 1441 | 4,4 MB |
+| Kinder Paradiso T1 | flowpack | 1,6 s | 2,6 s | 307 MB | 1831 x 1949 | 4,3 MB |
+| KCF T1 | flowpack | 14,0 s | 1,9 s | 212 MB | 1358 x 1193 | 3,6 MB |
+| K Pingui T6 BOX | astuccio | 2,7 s | 6,1 s | 579 MB | fronte 1659 x 1476 | 0,8 MB |
+| Nutella Donut | astuccio | 3,5 s | 8,5 s | 625 MB | fronte 2254 x 2226 | 2,2 MB |
+| KMS Display | vassoio | 0,5 s | 12,9 s | 874 MB | 5846 x 8192 | 3,4 MB |
+
+Il file lento e' sempre Colazione: quasi due minuti, dei quali una sessantina
+sono la resa del foglio a 300 dpi. Non sono i tratti, sono le 21 immagini con
+trasparenza della grafica, e ritagliare la resa sul foglio non aiuta perche'
+stanno tutte dentro il foglio. Vedi REGOLE.md, *La texture e' HD di serie*.
+
 ## Limiti
 
 - **Una** costruzione alla volta (`PACK3D_MAX_JOBS`), la seconda riceve 503
@@ -200,7 +228,8 @@ di Colazione, che su una macchina da 512 MB non lasciano spazio per costruire.
   passavano.
 
   Il numero viene dalla memoria, non dalla CPU. Picchi misurati su
-  `/api/analyze` piu' `/api/build` nello stesso processo, qualita' web.
+  `/api/analyze` piu' `/api/build` nello stesso processo, qualita' web - cioe'
+  prima dell'HD: per quelli di adesso vedi *In HD, di serie*.
   Lo steso e' nastro x passo sui flowpack, ingombro della fustella sugli
   astucci:
 
@@ -224,7 +253,8 @@ di Colazione, che su una macchina da 512 MB non lasciano spazio per costruire.
   Sui flowpack il picco e' quasi tutto nella rasterizzazione della pagina per
   l'analisi, e la costruzione costa fra 0,5 e 2,1 s. Sugli astucci e'
   rovesciato: l'analisi e' un paio di secondi e la costruzione se ne prende
-  cinque, perche' ogni pannello si ritaglia e si ripulisce a 200 dpi.
+  cinque, perche' ogni pannello si ritaglia dalla resa della grafica - allora
+  a 200 dpi, oggi a 300.
 
   Le istanze Free e Starter di Render hanno 512 MB: li' non ci stava nemmeno
   una costruzione sola dei file piu' grandi. Il kernel uccideva il processo a

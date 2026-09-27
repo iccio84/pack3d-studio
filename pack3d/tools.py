@@ -104,15 +104,20 @@ def analyze_carton(pdf):
 
 def analyze_flowpack(pdf):
     """Fasce del nastro, perimetro e saldature di un flowpack."""
+    from . import quote
     try:
         fp = fpk.analyze_auto(pdf)
     except Exception as e:
         return {"errore": str(e)[:160]}
     return dict(nastro_mm=fp.web_mm, passo_mm=fp.step_mm,
                 fronte=fp.W, spessore=fp.T, corpo=fp.L,
-                pinna_testa=fp.end_fin, falda_longitudinale=fp.side_fin,
+                pinna_testa=fp.end_fin, gola=fp.gola,
+                falda_longitudinale=fp.side_fin,
                 perimetro=round(fp.girth, 1),
-                verifica_perimetro_piu_falde=round(fp.girth + 2 * fp.side_fin, 1))
+                verifica_perimetro_piu_falde=round(fp.girth + 2 * fp.side_fin, 1),
+                letture=list(fp.warnings),
+                quote_del_file=quote.riscontro_testate(pdf, fp.step_mm,
+                                                       fp.end_fin, fp.gola))
 
 
 def measure_region(pdf, x_mm, y_mm, w_mm, h_mm, dpi: int = 200):
@@ -577,7 +582,6 @@ def colata_a_occhio(pdf, x_mm, y_mm, w_mm, h_mm, scala=3.0):
     cambiato altro - un fondo, un marchio, una foto - il riquadro e' fuori
     posto e va lasciato cadere.
     """
-    from PIL import Image
     from . import colata as col
 
     riq = (x_mm / PT2MM, (x_mm + w_mm) / PT2MM,
@@ -735,4 +739,93 @@ TOOLS.insert(1, dict(
                 "blocco tecnico di pari ingombro e' la maschera per clean_artwork.",
     input_schema={"type": "object", "properties": {}}))
 _RAW["find_blocks"] = find_blocks
+RUN = {k: (lambda f: lambda *a, **kw: _plain(f(*a, **kw)))(v) for k, v in _RAW.items()}
+
+
+# --------------------------------------------------------------------------- #
+# i due livelli: prima il DT con le sue quote, poi la grafica
+# --------------------------------------------------------------------------- #
+def livelli(pdf, x_mm=None, y_mm=None, w_mm=None, h_mm=None):
+    """Il livello DT/note e quello della grafica, affiancati.
+
+    E' l'ordine del lavoro: il pack si costruisce dal DT, e la texture si
+    prende dalla grafica col DT spento. Il livello DT e' quello da guardare per
+    primo, perche' dentro ci sono le MINIATURE con le loro quote - le misure
+    scritte da chi ha progettato il pack. Quando sono testo le legge gia' il
+    codice (`quote.py`); quando sono vettorializzate, come sul K Tronky, solo un
+    occhio le legge. Servono a verificare le misure, non a produrle: una quota
+    si misura dal disegno.
+
+    Senza riquadro si vede la pagina intera; col riquadro in mm si ingrandisce
+    un pezzo - una miniatura - abbastanza da leggerne i numeri.
+    """
+    from PIL import Image
+    from . import quote, strati
+    riq = None
+    if None not in (x_mm, y_mm, w_mm, h_mm):
+        riq = (x_mm / PT2MM, y_mm / PT2MM, (x_mm + w_mm) / PT2MM,
+               (y_mm + h_mm) / PT2MM)
+        lato = max(w_mm, h_mm) / PT2MM
+    else:
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf)
+        try:
+            mx0, my0, mx1, my1 = doc[0].get_mediabox()
+        finally:
+            doc.close()
+        lato = max(mx1 - mx0, my1 - my0)
+    # ogni meta' dell'immagine sta sui 780 px: due affiancate fanno la
+    # larghezza che il modello guarda senza ridurre
+    s = min(780.0 / max(lato, 1.0), 600 / 72.0)
+    # i testi fuori dall'artwork stampato sono note: quote delle miniature,
+    # legenda, cartiglio. Il riquadro dell'artwork e' il primo blocco
+    # stampato, quello che find_blocks mette in cima.
+    stampato = None
+    try:
+        b = [x for x in find_blocks(pdf)["blocchi"] if x["tipo"] == "stampato"]
+        if b:
+            stampato = (b[0]["x_mm"] / PT2MM, b[0]["y_mm"] / PT2MM,
+                        (b[0]["x_mm"] + b[0]["w_mm"]) / PT2MM,
+                        (b[0]["y_mm"] + b[0]["h_mm"]) / PT2MM)
+    except Exception:
+        pass
+    dt = strati.rendi(pdf, 0, s, strati.DT, riq, stampato=stampato)
+    gr = strati.rendi(pdf, 0, s, strati.GRAFICA, riq, stampato=stampato)
+    c = strati.CONTI
+    tela = Image.new("RGB", (dt.width + gr.width + 12, max(dt.height, gr.height)),
+                     (128, 128, 128))
+    tela.paste(dt, (0, 0))
+    tela.paste(gr, (dt.width + 12, 0))
+    try:
+        numeri = len(quote.numeri(pdf))
+    except Exception:
+        numeri = 0
+    return {"__image__": _png_b64(np.asarray(tela), maxw=1600),
+            "oggetti_dt": c.get("livelli", 0) + c.get("tratti", 0),
+            "dai_livelli_del_file": c.get("livelli", 0),
+            "stimati_dai_tratti": c.get("tratti", 0),
+            "numeri_scritti_come_testo": numeri,
+            "testo": ("A sinistra il livello DT/note: fustella, cordonature, "
+                      "quote, miniature. A destra la grafica come finira' sulla "
+                      "texture, col DT spento oggetto per oggetto. Guarda le "
+                      "miniature del DT e leggi le quote: confrontale con le "
+                      "misure della fustella. Se nella grafica resta un tratto "
+                      "tecnico, o se nel DT e' finito un pezzo di grafica, "
+                      "dillo negli avvisi.")}
+
+
+TOOLS.insert(2, dict(
+    name="livelli",
+    description="Il livello DT/note (fustella, quote, miniature) e il livello "
+                "della grafica, affiancati. Da chiamare subito dopo "
+                "find_blocks: il pack si costruisce dal DT, e nelle miniature "
+                "ci sono le quote scritte da chi l'ha progettato. Con un "
+                "riquadro in mm ingrandisce una miniatura per leggerne i "
+                "numeri.",
+    input_schema={"type": "object",
+                  "properties": {"x_mm": {"type": "number"},
+                                 "y_mm": {"type": "number"},
+                                 "w_mm": {"type": "number"},
+                                 "h_mm": {"type": "number"}}}))
+_RAW["livelli"] = livelli
 RUN = {k: (lambda f: lambda *a, **kw: _plain(f(*a, **kw)))(v) for k, v in _RAW.items()}

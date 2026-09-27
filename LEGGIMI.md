@@ -65,14 +65,17 @@ Si puo' anche trascinare un GLB gia' pronto per guardarlo senza backend.
 
 ## Qualita'
 
-Di default i modelli escono in qualita' web: mesh e texture ridotte, per stare
-in pochi MB su una connessione qualsiasi. Con `{"quality":"alta"}` nell'header
-`X-Pack3d` si ottiene la densita' piena usata per i render.
+Di default la texture esce **HD**: 300 dpi, fino a 8192 px di lato, cioe'
+quasi 12 pixel per millimetro di foglio. Con `{"quality":"web"}` nell'header
+`X-Pack3d` si torna alla texture leggera di prima - 200 dpi e al massimo 1700
+px, che sui fogli grandi scende sotto i 4 px/mm - e con `{"quality":"alta"}`
+si aggiunge all'HD la maglia piu' fitta usata per i render.
 
-| | qualita' web | qualita' alta |
+| | web | HD, di serie |
 |---|---|---|
-| Astuccio | ~0,9 MB | ~1,5 MB |
-| Flowpack | ~3,6 MB | ~12 MB |
+| Astuccio | 0,5 - 1,2 MB | 0,8 - 2,2 MB |
+| Flowpack | 3,5 - 4,2 MB | 3,6 - 5,9 MB |
+| Vassoio | 1,1 MB | 3,4 MB |
 
 ## Rigonfiamento
 

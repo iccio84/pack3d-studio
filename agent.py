@@ -29,6 +29,18 @@ Metodo:
   lastra di separazione e' colorata al 99% ma porta una ventina di colori,
   una grafica vera ne porta centinaia. L'elenco parte gia' dal piu' probabile.
   Il blocco tecnico di pari ingombro e' la maschera da passare a clean_artwork.
+- Il pack si costruisce dal DISEGNO TECNICO, e solo dopo si guarda la grafica.
+  Subito dopo find_blocks chiama livelli: a sinistra il livello DT/note -
+  fustella, cordonature, quote, miniature - e a destra la grafica come finira'
+  sulla texture, col DT gia' spento oggetto per oggetto.
+- Guarda le MINIATURE del DT con le loro quote, ingrandendole con il riquadro
+  di livelli: sono le misure scritte da chi ha progettato il pack. Confrontale
+  con quelle di analyze_flowpack o analyze_carton; se discordano dillo negli
+  avvisi, con i due numeri. Le quote servono a VERIFICARE, non a costruire:
+  non metterle nei parametri.
+- Non misurare mai il pack dal contenuto. La grafica puo' avere del bianco, e
+  un margine bianco non e' una pinna: su Colazione il margine dava 41,2 mm e
+  la saldatura del DT, confermata dal cartiglio, 20.
 - Non stimare mai una quota che puoi misurare con uno strumento.
 - Cerca sempre il disegno tecnico in miniatura con list_paths: sta fuori
   dall'ingombro dell'artwork ed e' piu' pulito del contorno sotto la grafica.
@@ -42,6 +54,15 @@ Metodo:
   chiederne altre.
 
 Pulizia dell'artwork:
+- Il disegno tecnico la costruzione lo spegne da sola, oggetto per oggetto: i
+  livelli tecnici del file, i tratti a filo di capello, le penne della
+  fustella. Sotto resta la grafica intera, anche dove una cordonatura passa su
+  una foto, e non c'e' niente da ridipingere. Guarda la meta' destra di
+  livelli: se ci resta un tratto tecnico, o se nella sinistra e' finito un
+  pezzo di grafica, dillo negli avvisi.
+- clean_artwork, visual_check e reconstruct_area servono solo quando il
+  disegno tecnico e' stampato DENTRO un'immagine raster: li' non e' un oggetto
+  da spegnere ma dei pixel.
 - Dopo clean_artwork chiama SEMPRE visual_check e GUARDA l'immagine. Le metriche
   dicono quanto hai tolto, non se hai tolto la cosa sbagliata: solo l'occhio si
   accorge che manca un pezzo di logo.

@@ -124,6 +124,11 @@
         pointer-events:none}
   #meta span{background:var(--surface);border:1px solid var(--border);
              border-radius:999px;padding:3px 10px}
+  /* un avviso che la costruzione GRIDA - una verifica non passata, un
+     ripiego - comincia in maiuscolo, e fra una dozzina di cartellini grigi
+     deve saltare all'occhio */
+  #meta span.grido{color:var(--destructive);font-weight:600;
+                   border-color:color-mix(in oklab,var(--destructive) 55%,transparent)}
 
   footer{padding:0 16px 18px}
 
@@ -574,8 +579,11 @@ function setTitolo(s){
   if (el) el.textContent = s ? s.replace(/\.pdf$/i,'').toUpperCase() : '';
 }
 function setMeta(items){
-  document.getElementById('meta').innerHTML =
-    (items||[]).map(t => '<span>'+t+'</span>').join('');
+  // prima le grida, poi il resto nell'ordine in cui arriva
+  const grida = t => /^[A-Z][A-Z' ]{7,}/.test(String(t));
+  const tutti = (items||[]).slice().sort((a, b) => grida(b) - grida(a));
+  document.getElementById('meta').innerHTML = tutti.map(t =>
+    '<span' + (grida(t) ? ' class="grido"' : '') + '>' + t + '</span>').join('');
 }
 
 /* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in

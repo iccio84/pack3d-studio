@@ -402,8 +402,14 @@ def _peso_sovrastampa(simulata, piatta, maschera):
     return float((azzurro & cambia).sum()) / quante, quante
 
 
-def _incolla(base, banda, maschera, bx0, by0):
+def _incolla(base, banda, maschera, bx0, by0, fuori=None):
     """La banda dentro la maschera, alla sua posizione sul foglio.
+
+    `fuori` e' dove la banda NON va incollata anche se la maschera lo
+    vorrebbe: l'impronta del disegno tecnico. La banda la rende Ghostscript,
+    che gli oggetti spenti in pdfium non li vede, e senza questa esclusione una
+    cordonatura che attraversa la colata tornerebbe sulla texture proprio da
+    qui. Vedi `strati.impronta_dt`.
 
     Si incolla su un'immagine PIL, **in posto**, e chi chiama deve possederla
     - `render_page` la sua resa la tiene in cassa e restituisce quella, quindi
@@ -420,11 +426,27 @@ def _incolla(base, banda, maschera, bx0, by0):
     w = min(banda.shape[1], maschera.shape[1])
     if h <= 0 or w <= 0:
         return
-    base.paste(Image.fromarray(banda[:h, :w]), (bx0, by0),
-               Image.fromarray(maschera[:h, :w]))
+    m = maschera[:h, :w]
+    if fuori is not None:
+        hh, ww = min(h, fuori.shape[0]), min(w, fuori.shape[1])
+        m = m.copy()
+        m[:hh, :ww] &= ~fuori[:hh, :ww]
+    base.paste(Image.fromarray(banda[:h, :w]), (bx0, by0), Image.fromarray(m))
 
 
-def _a_occhio(pdf, scala, page_no, note, riquadro):
+def _impronta_dt(pdf, page_no, scala, riq, livello):
+    """L'impronta del disegno tecnico sulla banda `riq` (x0, x1, y0, y1 in
+    punti), o None se la texture non viene dal livello della grafica."""
+    if livello is None:
+        return None
+    try:
+        return strati.impronta_dt(pdf, page_no, scala,
+                                  riquadro=(riq[0], riq[2], riq[1], riq[3]))
+    except Exception:
+        return None
+
+
+def _a_occhio(pdf, scala, page_no, note, riquadro, livello=None):
     """La colata riparata dentro un riquadro indicato a occhio.
 
     E' la strada per i file che il livello `Colata` non ce l'hanno - sul
@@ -441,7 +463,7 @@ def _a_occhio(pdf, scala, page_no, note, riquadro):
     # cassa, quindi `render_page` non alloca niente - ma non costa niente
     # neanche a tenerlo cosi', e su un file che in cassa non ce l'ha conta.
     esito = dal_riquadro(pdf, page_no, scala, riq)
-    base = render_page(pdf, page_no, scala)
+    base = render_page(pdf, page_no, scala, livello)
     if esito is None:
         if note is not None:
             note.append("colata indicata a occhio: Ghostscript non c'e' o la "
@@ -458,7 +480,8 @@ def _a_occhio(pdf, scala, page_no, note, riquadro):
         return base
     fuori = base.convert("RGB")
     _incolla(fuori, banda, maschera,
-             max(int(round(riq[0] * scala)), 0), max(int(round(riq[2] * scala)), 0))
+             max(int(round(riq[0] * scala)), 0), max(int(round(riq[2] * scala)), 0),
+             _impronta_dt(pdf, page_no, scala, riq, livello))
     if note is not None:
         note.append(
             "colata indicata a occhio, resa in quadricromia: %.0f x %.0f mm, "
@@ -467,7 +490,7 @@ def _a_occhio(pdf, scala, page_no, note, riquadro):
     return fuori
 
 
-def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
+def foglio(pdf, scala, page_no=0, note=None, riquadro=None, livello=None):
     """Il foglio reso, con la colata rimessa a posto se si puo'.
 
     Prima si prova con l'inchiostro del file - la banda resa in quadricromia,
@@ -480,25 +503,30 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
     `tools.colata_a_occhio`. Il livello, quando c'e', viene prima: e' una cosa
     che il file dichiara, e quello che il file dichiara batte quello che si
     vede.
+
+    `livello` e' quello da cui si prende il foglio: per una texture
+    `strati.GRAFICA`, cioe' senza disegno tecnico. La colata si misura
+    comunque sulla pagina intera - e' un confronto fra due rese, e il disegno
+    tecnico sta uguale in tutte e due.
     """
     nomi = set(livelli(pdf)) & NOMI
     if not nomi:
         if riquadro:
-            return _a_occhio(pdf, scala, page_no, note, riquadro)
-        return render_page(pdf, page_no, scala)
+            return _a_occhio(pdf, scala, page_no, note, riquadro, livello)
+        return render_page(pdf, page_no, scala, livello)
 
     tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
     tmp.close()
     try:
         spenti = spegni(pdf, tmp.name, nomi)
         if not spenti:
-            return render_page(pdf, page_no, scala)
+            return render_page(pdf, page_no, scala, livello)
 
         a2 = _rgba(pdf, page_no, MISURA)
         b2 = _rgba(tmp.name, page_no, MISURA)
         imp = _impronta(a2, b2)
         if imp is None:
-            return render_page(pdf, page_no, scala)
+            return render_page(pdf, page_no, scala, livello)
         _m2, (mx0, mx1, my0, my1) = imp
         larg = (mx1 - mx0) / MISURA * PT2MM
         alt = (my1 - my0) / MISURA * PT2MM
@@ -510,7 +538,7 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
         bb = _rgba(tmp.name, page_no, scala, riq)
         imp = _impronta(ba, bb)
         if imp is None:
-            return render_page(pdf, page_no, scala)
+            return render_page(pdf, page_no, scala, livello)
         maschera, _r = imp
         bx0 = max(int(round(mx0 * k)), 0)
         by0 = max(int(round(my0 * k)), 0)
@@ -528,8 +556,9 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
             piatta = quadricromia(pdf, page_no, scala, riq, "disable")
             peso, quante = _peso_sovrastampa(q, piatta, maschera)
             if peso >= CAMBIO_MINIMO:
-                fuori = render_page(pdf, page_no, scala).convert("RGB")
-                _incolla(fuori, q, maschera, bx0, by0)
+                fuori = render_page(pdf, page_no, scala, livello).convert("RGB")
+                _incolla(fuori, q, maschera, bx0, by0,
+                         _impronta_dt(pdf, page_no, scala, riq, livello))
                 if note is not None:
                     note.append(
                         "colata dal livello '%s' resa in quadricromia: %.1f x "
@@ -546,12 +575,12 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
 
         # --- 2. ripiego: la risorsa -------------------------------------- #
         if not os.path.exists(RISORSA):
-            return render_page(pdf, page_no, scala)
+            return render_page(pdf, page_no, scala, livello)
         ris = Image.open(RISORSA).convert("RGB")
         banda = _su_bianco(a2[my0:my1, mx0:mx1])
         acc = allinea(banda, np.asarray(ris))
         if acc is None:
-            return render_page(pdf, page_no, scala)
+            return render_page(pdf, page_no, scala, livello)
         s, dx, dy, err = acc
         pr = _periodo(_curva(np.asarray(ris)))
         if pr:
@@ -561,9 +590,9 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
             if note is not None:
                 note.append("colata: la risorsa non combacia col disegno del "
                             "file (errore %.2f mm), lasciata com'e'" % err_mm)
-            return render_page(pdf, page_no, scala)
+            return render_page(pdf, page_no, scala, livello)
 
-        base = render_page(tmp.name, page_no, scala).convert("RGB")
+        base = render_page(tmp.name, page_no, scala, livello).convert("RGB")
         h = min(maschera.shape[0], base.height - by0)
         w = min(maschera.shape[1], base.width - bx0)
         if h <= 0 or w <= 0:
@@ -587,7 +616,7 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None):
         if note is not None:
             note.append("colata: non riuscita (%s), lasciata com'e'"
                         % str(e)[:60])
-        return render_page(pdf, page_no, scala)
+        return render_page(pdf, page_no, scala, livello)
     finally:
         try:
             os.unlink(tmp.name)

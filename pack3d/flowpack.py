@@ -34,6 +34,13 @@ class Flowpack:
     # invece di girare intorno al prodotto. Se e' > 0 il pack e' un tubo
     # piatto - fronte e retro, nessun fianco e nessuna falda che sporge.
     sovrapposizione: float = 0.0
+    # tratto fra la saldatura di testa e la fine del prodotto, dove il tubo si
+    # schiaccia verso la pinna: la zona "grinze" del DT, o la gola. Zero se il
+    # disegno non la segna uguale dai due lati.
+    gola: float = 0.0
+    # le linee del DT che attraversano il nastro, in mm dal primo taglio: la
+    # verifica delle UV le confronta con le testate del modello
+    linee_passo: tuple = ()
     web_mm: float = 0.0
     step_mm: float = 0.0
     # riquadro dello steso, in punti PDF: (x0, y0, x1, y1)
@@ -835,9 +842,112 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     raise _StesoNonRisolto(primo)
 
 
+# Fin dove, da un taglio verso l'interno, si cerca la testata: oltre un terzo
+# del passo si e' nel corpo, e una linea li' e' una cordonatura della
+# grafica, non una saldatura.
+TESTATA_MAX = 0.3
+
+
+def _strutture(dist):
+    """Le linee di una testata in ordine dal taglio: `[(mm, piega)]`.
+
+    Tre linee ravvicinate ed equidistanti sono una piega sola, quella di mezzo,
+    disegnata con due guide ai lati: e' la stessa lettura di
+    `_collapse_guides`, e sulla testata la conferma la quota. Su Colazione il
+    cartiglio scrive 20 | 37,5 | 215 | 37,5 | 20, e le guide stanno a 52,5,
+    57,5 e 62,5: la piega e' a 57,5 = 20 + 37,5.
+    """
+    v = sorted(dist)
+    fuori, i = [], 0
+    while i < len(v):
+        if (i + 2 < len(v) and v[i + 1] - v[i] <= 8.0
+                and abs((v[i + 2] - v[i + 1]) - (v[i + 1] - v[i])) <= 0.6):
+            fuori.append((v[i + 1], True))
+            i += 3
+        else:
+            fuori.append((v[i], False))
+            i += 1
+    return fuori
+
+
+def testate_dal_dt(vs, x0, x1):
+    """Pinna di testa e gola lette dal disegno tecnico. `(pinna, gola, righe)`.
+
+    `vs` sono le linee lunghe che attraversano il nastro, `x0` e `x1` i due
+    tagli, in punti nel telaio del solutore. `pinna` e' None se il disegno non
+    dice niente, e allora chi chiama ricade sullo stampato.
+
+    La regola e' **prima le misure, poi il contenuto**. La pinna si misurava
+    dal margine non stampato, e il margine non stampato non e' la pinna quando
+    la grafica ha del bianco: su Colazione il fronte ha una fascia bianca sopra
+    il marchio, e il margine veniva 41,2 mm contro i 20 della saldatura -
+    quella che il DT disegna e il cartiglio quota. Sul Brioss STD usciva 32,6
+    contro i 37,6 della piega, che e' la misura su cui la gola e' tarata.
+
+    Dal taglio verso l'interno:
+
+    - la prima linea e' la SALDATURA, e la pinna finisce li';
+    - la seconda e' dove finisce il prodotto, e fra le due c'e' la GOLA: il
+      tubo che si schiaccia verso la pinna. Il DT la chiama zona grinze
+      (KMS, KP: 10 mm) o la quota come tratto a se' (Colazione: 37,5);
+    - se la prima struttura e' una piega con le sue guide, la saldatura non e'
+      disegnata e la testata arriva alla piega: e' il film che avvolge una
+      scatola (Brioss), dove la gola la decide lo spessore.
+
+    I due lati devono dire la stessa cosa. Se non la dicono, per la pinna si
+    tiene il rientro piu' stretto - la regola che c'era gia' per le saldature
+    - e la gola non si usa: un solo lato non basta a dire dove finisce il
+    prodotto.
+    """
+    passo = (x1 - x0) * PT2MM
+    lim = TESTATA_MAX * passo
+
+    def lato(dist):
+        dist = [d for d in dist if 0.3 < d <= lim]
+        if not dist:
+            return None
+        st = _strutture(dist)
+        primo, piega = st[0]
+        if piega:
+            return primo, None, "piega"
+        return primo, (st[1][0] - primo if len(st) > 1 else None), "saldatura"
+
+    sx = lato([(c - x0) * PT2MM for c in vs])
+    dx = lato([(x1 - c) * PT2MM for c in vs])
+    righe = []
+    if sx is None and dx is None:
+        return None, 0.0, righe
+    if sx is None or dx is None:
+        uno = sx or dx
+        righe.append("testata letta da un lato solo: il DT dall'altro non "
+                     "segna niente")
+        return round(uno[0], 1), 0.0, righe
+    (a, ga, ka), (b, gb, kb) = sx, dx
+    if abs(a - b) <= 0.5:
+        pinna = round((a + b) / 2.0, 1)
+    else:
+        pinna = round(min(a, b), 1)
+        righe.append("rientri diversi (%.1f e %.1f mm) su un disegno "
+                     "speculare: tengo il piu' stretto" % (a, b))
+    gola = 0.0
+    if ka == kb == "saldatura" and ga is not None and gb is not None:
+        if abs(ga - gb) <= 1.0:
+            gola = round((ga + gb) / 2.0, 1)
+        else:
+            righe.append("gola diversa ai due capi (%.1f e %.1f mm): non la "
+                         "uso" % (ga, gb))
+    if ka == kb == "piega":
+        righe.append("testate dal DT: piega a %.1f mm dal taglio, saldatura "
+                     "non disegnata" % pinna)
+    else:
+        righe.append("testate dal DT: saldatura %.1f mm%s" % (
+            pinna, ", gola %.1f fino alla fine del prodotto" % gola
+            if gola else ""))
+    return pinna, gola, righe
+
+
 def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
-    import numpy as np
     from .dieline import _cluster
 
     # Le soglie erano assolute, 150 e 250 punti, e non possono esserlo: fra il
@@ -894,50 +1004,29 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
                       "giro %.1f, fronte %.1f su mezzo giro %.1f"
                       % (lembo, giro, b["front"], giro / 2.0))
 
-    # pinne di testa: la zona non stampata e' quella che finisce nelle ganasce.
-    # La fascia da guardare e' il fronte, e comincia dove comincia il fronte:
-    # dopo falda e retro se c'e' la pinna, dopo lembo e retro se c'e' la
-    # sovrapposizione.
-    a = raster
-    fy0 = y0 + (inizio + b["back_a"] + spessore) / PT2MM
-    fy1 = fy0 + b["front"] / PT2MM
-    band = a[int(fy0 * sc):int(fy1 * sc), int(x0 * sc):int(x1 * sc)]
-    ch = (band.max(2) - band.min(2)).mean(0)
-    mm = np.arange(len(ch)) / sc * PT2MM
-    idx = np.nonzero(ch > 25)[0]
-    end_fin = round(float((mm[idx[0]] + (mm[-1] - mm[idx[-1]])) / 2.0), 1) if len(idx) else 0.0
-    # Un flowpack le pinne di testa ce le ha sempre: un margine nullo non e'
-    # una misura, e' l'euristica che non si applica — artwork al vivo, dove il
-    # fondo stampato copre anche la zona delle ganasce. La geometria pero'
-    # resta: fra i due tagli esterni stanno le due linee di saldatura, e il
-    # rientro dal taglio alla saldatura e' la pinna.
-    if end_fin < 1.0:
-        xs = sorted(vs)
-        if len(xs) < 4:
-            raise ValueError("pinne di testa non misurabili: la fascia fronte "
-                             "non ha margine non stampato e mancano le linee "
-                             "di saldatura")
-        sin, des = (xs[1] - xs[0]) * PT2MM, (xs[-1] - xs[-2]) * PT2MM
-        avvisi.append("pinne ricavate dalle saldature: la grafica e' al vivo e "
-                      "non lascia margine da misurare")
-        # La saldatura c'e' da tutte e due le parti, quindi il disegno tecnico
-        # e' speculare e le due pinne sono uguali per costruzione. Entro la
-        # tolleranza del solutore storico la differenza e' rumore e si media;
-        # oltre, su un lato c'e' un segno in piu', e mediarlo lo spalmerebbe
-        # su ogni pack: si tiene il rientro piu' stretto.
-        if abs(sin - des) <= 0.5:
-            end_fin = round((sin + des) / 2.0, 1)
-        else:
-            end_fin = round(min(sin, des), 1)
-            avvisi.append("rientri diversi (%.1f e %.1f mm) su un disegno "
-                          "speculare: tengo il piu' stretto" % (sin, des))
+    # Pinne di testa: PRIMA il disegno tecnico. Lo stampato si guarda solo se
+    # il DT sulle testate non dice niente - vedi testate_dal_dt per perche'.
+    end_fin, gola, righe = testate_dal_dt(vs, x0, x1)
+    avvisi.extend(righe)
+    if end_fin is None:
+        end_fin, gola = _testate_dallo_stampato(raster, sc, x0, x1, y0,
+                                                inizio, b, spessore), 0.0
+        avvisi.append("testate: il DT non segna la saldatura, pinna %.1f mm "
+                      "dal margine non stampato - e' una stima, la grafica "
+                      "puo' avere del bianco" % end_fin)
+        if end_fin < 1.0:
+            raise ValueError("pinne di testa non misurabili: il DT non segna "
+                             "le saldature e la fascia fronte non ha margine "
+                             "non stampato")
 
     if ruotato:
         avvisi.append("steso ruotato di 90 gradi: le pinne corrono in verticale")
     # sheet e girth_span restano nel telaio in cui ha lavorato il solutore: chi
     # ritaglia la texture lo rimette dritto guardando `ruotato`.
     return Flowpack(W=b["front"], T=spessore, L=round(step - 2 * end_fin, 1),
-                    end_fin=end_fin, side_fin=falda, warnings=avvisi,
+                    end_fin=end_fin, side_fin=falda, warnings=avvisi, gola=gola,
+                    linee_passo=tuple(round((c - x0) * PT2MM, 2)
+                                      for c in sorted(vs) if x0 < c < x1),
                     back_a=b["back_a"], back_b=b["back_b"],
                     sovrapposizione=lembo,
                     web_mm=round(web, 1), step_mm=round(step, 1),
@@ -951,6 +1040,25 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
                                 if not lembo else
                                 (y0 + inizio / PT2MM,
                                  y0 + (inizio + giro) / PT2MM)))
+
+
+def _testate_dallo_stampato(raster, sc, x0, x1, y0, inizio, b, spessore):
+    """La pinna dal margine non stampato della fascia fronte: il ripiego.
+
+    La zona non stampata e' quella che finisce nelle ganasce - quando lo e'. Se
+    la grafica ha del bianco vicino alla testata il margine si allunga fino a
+    lui, ed e' per questo che si guarda solo quando il DT tace.
+    """
+    import numpy as np
+    fy0 = y0 + (inizio + b["back_a"] + spessore) / PT2MM
+    fy1 = fy0 + b["front"] / PT2MM
+    band = raster[int(fy0 * sc):int(fy1 * sc), int(x0 * sc):int(x1 * sc)]
+    ch = (band.max(2) - band.min(2)).mean(0)
+    mm = np.arange(len(ch)) / sc * PT2MM
+    idx = np.nonzero(ch > 25)[0]
+    if not len(idx):
+        return 0.0
+    return round(float((mm[idx[0]] + (mm[-1] - mm[idx[-1]])) / 2.0), 1)
 
 
 def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.0):

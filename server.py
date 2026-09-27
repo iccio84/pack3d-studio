@@ -34,7 +34,10 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import artwork, dieline as dl, folding, exporters, nero, vassoio
+from pack3d import (artwork, dieline as dl, folding, exporters, nero,
+                    vassoio, verifica)
+# le quote scritte sul file; `quote` qui e' gia' quella di urllib
+from pack3d import quote as quotature
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
 from pack3d.flowpack import Flowpack, fin_on_surface
@@ -194,9 +197,33 @@ def avviso_quadricromia(pdf, page_no=0):
         return None
 
 
-def build_carton(pdf, out_glb, quality="web", lastre_extra=(),
+# La risoluzione della texture, (dpi, lato massimo in px), per qualita'.
+#
+# Di serie e' HD. Sul piano Free di Render la texture di un flowpack stava in
+# 1700 px, e un foglio come Colazione - 460 mm di nastro - usciva a 3,7 px/mm,
+# meno di 100 dpi: sgranato appena ci si avvicinava. Il limite era la memoria,
+# e sugli Spaces non c'e' piu' (vedi DEPLOY.md). A 300 dpi quel foglio fa 5433
+# px di lato; il tetto a 8192 e' quello che le schede video da scrivania
+# reggono tutte, e sotto il quale three.js non deve ridimensionare niente.
+#
+# "web" resta per chi vuole un GLB leggero, e sono i numeri di prima.
+TEXTURE = {"web": (200, 1700), "hd": (300, 8192)}
+
+
+def qualita(q):
+    """"web", "hd" o "alta" - che e' HD con la maglia piu' fitta."""
+    q = str(q or "").strip().lower()
+    return q if q in ("web", "hd", "alta") else "hd"
+
+
+def risoluzione(quality):
+    """(dpi, lato massimo) della texture per quella qualita'."""
+    return TEXTURE["web" if qualita(quality) == "web" else "hd"]
+
+
+def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                  colata_riquadro=None):
-    dpi = 300 if quality == "alta" else 200
+    dpi, tmax = risoluzione(quality)
     # PRIMA COSA, e il motivo e' la memoria. Ghostscript costa 105 MB fissi -
     # li costa anche a vuoto, misurato con `nullpage` - e parte con un fork:
     # chiamarlo a build avviato vuol dire duplicare quello che Python tiene
@@ -215,24 +242,26 @@ def build_carton(pdf, out_glb, quality="web", lastre_extra=(),
                                               colata_riquadro=colata_riquadro)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso)
-    exporters.write_glb_mesh  # noqa: B018  (import usato sotto per i flowpack)
-    exporters.write_glb(faces, out_glb)
+    # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
+    # fronte davanti: vedi `verifica.facce_astuccio`
+    _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
+    exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm]
     rgb = avviso_quadricromia(pdf)
     if rgb:
         meta.insert(0, rgb)
-    return meta + avvisi_tex + [w for w in dl.check(d)]
+    return meta + avvisi_tex + verifiche + [w for w in dl.check(d)]
 
 
-def build_vassoio(pdf, out_glb, quality="web", lastre_extra=(),
+def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                   colata_riquadro=None):
     """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
 
     Le alette angolari non si costruiscono: da fuori le copre la parete che
     tengono su, e un pannello che non si vede non vale la texture che costa.
     """
-    dpi = 300 if quality == "alta" else 200
+    dpi, tmax = risoluzione(quality)
     deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
     d = dl.extract(pdf)
     v = vassoio.riconosci(d)
@@ -259,7 +288,6 @@ def build_vassoio(pdf, out_glb, quality="web", lastre_extra=(),
     # il flowpack: rendere un foglio da 500 x 700 mm a 200 dpi sono 21
     # megapixel prodotti per buttarne i tre quarti nel ridimensionamento, e
     # il picco andava a 682 MB.
-    tmax = 2600 if quality == "alta" else 1700
     lato = max(d.page_w, d.page_h)
     dpi_tex = min(dpi, tmax * 72.0 / lato) if lato > 0 else dpi
     tex, avvisi_tex = artwork.texture_astuccio(pdf, {"steso": pagina}, dpi_tex,
@@ -489,7 +517,7 @@ def falda_sospetta(fp):
             % (fp.side_fin, FALDA_VISTA_MAX, fp.T))
 
 
-def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
+def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
@@ -506,7 +534,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     """
     import math
     par = gonfiore(soft)
-    nu, nv, dpi, tmax = (320, 420, 300, 2600) if quality == "alta" else (190, 260, 200, 1700)
+    nu, nv = (320, 420) if quality == "alta" else (190, 260)
+    dpi, tmax = risoluzione(quality)
     # come per l'astuccio: la lastra del nero prima dell'analisi, che e' il
     # momento in cui Python pesa poco e il fork di Ghostscript non duplica
     # niente. Vedi `nero.spia`.
@@ -537,9 +566,15 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
     # tocca l'altra: sono due scope diversi, e qui il nome non si rilegge
     # mai. La correzione vera sta nel chiamante.
     avvisi_sez = []
+    # l'analisi com'e' uscita dal DT, prima che la sezione dell'agente la
+    # cambi: e' su questa che si controlla il fronte
+    analisi = fp0 if case is None else None
     rgb = avviso_quadricromia(pdf)
     if rgb:
         avvisi_sez.append(rgb)
+    # Quello che l'analisi ha da dire - testate dal DT, steso ruotato,
+    # rientri diversi - finiva nel Flowpack e da li' da nessuna parte.
+    avvisi_sez.extend(fp0.warnings)
     if lastre:
         avvisi_sez.append("coperture togliute per nome: %s" % ", ".join(lastre))
     sospetto = falda_sospetta(fp0)
@@ -560,7 +595,20 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         avvisi_sez.append("sezione dall'analisi AI: %.1f x %.1f, riportata sul "
                           "perimetro del film come %.1f x %.1f"
                           % (w_a, t_a, w_n, t_n))
-        fp0 = replace(fp0, W=round(w_n, 2), T=round(t_n, 2))
+        # E la cucitura si sposta di meta' della differenza. Il film non si
+        # allunga: dal centro del fronte alla cucitura ci sono gli stessi
+        # millimetri di film comunque si riempia il pack, quindi se il fronte
+        # chiuso e' piu' stretto della fascia del DT la cucitura sul retro si
+        # avvicina allo spigolo di (W - W')/2 - 4,5 mm sul Bueno T2, 50 x 11
+        # sulla fustella e 41 x 20 in mano. Tenendo fermo `back_a` i nodi del
+        # giro sommavano a W + W' + 2T' invece che al perimetro, e il riscalo
+        # che li riporta sul giro stirava la grafica fra un nodo e l'altro. Il
+        # centro del fronte no: li' il riscalo compensa, e la verifica del
+        # fronte lo dava gia' a posto anche prima.
+        sposta = (fp0.W - w_n) / 2.0
+        fp0 = replace(fp0, W=round(w_n, 2), T=round(t_n, 2),
+                      back_a=round(max(fp0.back_a - sposta, 0.5), 2),
+                      back_b=round(max(fp0.back_b - sposta, 0.5), 2))
 
     # (1) la sezione si arrotonda a perimetro costante
     liv = FASCE.get(str(soft).strip().lower(), None)
@@ -663,10 +711,15 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         avvisi_sez.append("rigonfiamento %g su un pack che avvolge una "
                           "scatola: di norma e' 1" % liv)
 
+    # Dove il tubo comincia a schiacciarsi. Con una scatola dentro lo decide
+    # la gola; se no, prima il DT - la zona fra la saldatura e la fine del
+    # prodotto, quando la segna uguale dai due lati - e solo dove tace la
+    # regola di sempre, mai piu' corta della pinna.
+    rastremo = gola if scatola else (fp0.gola or max(fp0.end_fin, 6.0))
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
         width_end=fin_open / sw,
-        taper=gola if scatola else max(fp0.end_fin, 6.0), flare_pow=3.0, soft=True,
+        taper=rastremo, flare_pow=3.0, soft=True,
         serration=teeth > 0, serr_teeth=max(int(teeth), 1),
         fin_stations=36 if quality == "alta" else 26,
         bulge=par["bulge"], crimp_period=1.4, crimp_mm=0.32,
@@ -701,6 +754,15 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
                               % (rotazione, peggio, G))
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
+    if case is None:
+        # PRIMA della mappatura: le UV sono il DT steso, e se le testate non
+        # cadono sulle sue linee la grafica andra' fuori posto comunque la si
+        # mappi. E le misure del disegno contro le quote che il file scrive.
+        avvisi_sez.append(verifica.uvw_flowpack(fp0, fp, rastremo, scatola)[1])
+        riscontro = quotature.riscontro_testate(pdf, fp0.step_mm,
+                                                fp0.end_fin, fp0.gola)
+        if riscontro:
+            avvisi_sez.append(riscontro)
 
     grid = V.reshape(-1, nv + 1, 3)
     # (4) le pinne restano saldate e piatte: nessuna manipolazione dei lembi.
@@ -727,11 +789,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         # rettangolo vero della pagina, e la texture va rimessa nello stesso
         # telaio della UV, con il perimetro sulle righe
         sh = (sh[1], sh[0], sh[3], sh[2])
-    # Rasterizzare a 200 dpi un foglio che poi write_glb_mesh rimpicciolisce
-    # a tmax px di lato vuol dire produrre pixel per buttarli: sul K Brioss,
-    # 7,5 milioni per tenerne 2. Il dpi si abbassa fino a quello che serve
-    # davvero, mai piu' in su di quello chiesto - quindi sui fogli piccoli,
-    # che sono gia' sotto il limite, non cambia niente.
+    # Rasterizzare piu' fine di quanto write_glb_mesh poi terra' vuol dire
+    # produrre pixel per buttarli. Il dpi si abbassa fino a quello che serve
+    # davvero, mai piu' in su di quello chiesto - quindi sui fogli che stanno
+    # sotto il lato massimo, cioe' quasi tutti in HD, non cambia niente.
     lato_pt = max(sh[2] - sh[0], sh[3] - sh[1])
     dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
     tex = folding.rasterize_panels(
@@ -739,11 +800,18 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="web",
         dpi=dpi_tex, inset_px=0, clean=(case is None),
         note=avvisi_sez, nero_deciso=deciso_nero,
         colata_riquadro=colata_riquadro)["film"]
+    foglio = tex
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il
         # perimetro crescente come lo intende girth_span.
         tex = tex.transpose(Image.ROTATE_270)
+    # DOPO la mappatura: il fronte dell'AW sul fronte del modello. Il fronte
+    # e' quello del DT, cioe' dell'analisi: se l'agente ha cambiato la sezione
+    # e' proprio lo spostamento che si vuole vedere.
+    avvisi_sez.append(verifica.fronte_flowpack(
+        V, UV, nv, analisi if analisi is not None else fp0,
+        tex, foglio, dpi_tex / 72.0)[1])
     exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
 
     base = fin_open / max(int(teeth), 1)
@@ -1046,7 +1114,7 @@ class Handler(BaseHTTPRequestHandler):
                         info = analyze_pdf(pdf, kind)
                         t1 = traccia("analisi", t0,
                                      "%s, %d kB" % (info["kind"], len(data) // 1024))
-                        q = "alta" if str(opts.get("quality")) == "alta" else "web"
+                        q = qualita(opts.get("quality"))
                         # Su TUTTI i rami: e' proprio sul ramo che se ne
                         # dimenticava che nasceva l'UnboundLocalError.
                         avvisi_ingresso = []

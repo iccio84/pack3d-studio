@@ -205,6 +205,16 @@ della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
   contorno sotto la grafica. Attenzione: e' in scala ridotta, quindi **forma e
   proporzioni dalla miniatura, scala dal disegno grande o dalle quote**.
 
+  Le sue **quote** sono il riscontro piu' forte che esista: numeri scritti da
+  chi ha progettato il pack, non dedotti da noi. Quando sono testo le legge
+  `quote.py` - catene allineate sullo stesso asse che sommano alla misura
+  totale, come i `20 | 37,5 | 215 | 37,5 | 20 = 330` di Colazione - e la
+  costruzione dice se le misure del disegno tornano. Quando sono
+  vettorializzate, come sul K Tronky, le legge solo un occhio: lo strumento
+  `livelli` mostra il livello del DT con le miniature, ingrandibile. **Servono
+  a verificare, non a costruire**: una quota si misura dal disegno, vedi *Prima
+  le misure, poi il contenuto*.
+
 ### Mezzo millimetro non puo' cambiare il pack
 
 **Due disegni tecnici simili devono dare pack simili.** Se due AW dello stesso
@@ -316,8 +326,9 @@ quella regola vale anche quando di livelli non ce n'e' nessuno.
 ### Chi lo dice davvero e' il livello
 
 Se il file ha OCG che dicono cosa e' tecnico, si **spengono** prima di
-rasterizzare (`strati.senza_tecnici`) e non resta niente da mascherare a mano.
-E' il livello 1-2 della scala qui sopra usato anche per la MASCHERA, non solo
+rasterizzare (`strati.senza_tecnici`), e quel che resta del DT fuori dai
+livelli si spegne oggetto per oggetto (*I due livelli li fa la costruzione*).
+E' il livello 1-2 della scala qui sopra usato anche per la texture, non solo
 per la diagnosi — che e' dove stava da sempre senza servire a niente.
 
 Su K Brioss STD gli otto OCG si chiamano `background, code, cutter, layout,
@@ -343,6 +354,88 @@ Sul parco: K Brioss STD `Cutter, Legend`; KP T1 Mandarino `check, notes,
 technical-drawing`; K Country `Guides and Grids, check`. Gli altri sei file
 livelli non ne hanno, e per loro resta la regola dei tratti.
 
+### I due livelli li fa la costruzione, oggetto per oggetto
+
+Il file i livelli li dichiara quando vuole: K Brioss STD `Cutter` e `Legend`,
+KMS T1 `Fustella` e `Note`, Colazione nessuno. Quello che serve alla
+costruzione invece sono sempre **due livelli**, e sempre gli stessi: il
+**DT/note**, da cui si misura il pack e si controllano le UV, e la
+**grafica**, da cui si prende la texture. Quando il file non li ha, li fa la
+costruzione (`strati.dividi`), e li fa sugli **oggetti**, non sui pixel.
+
+Prima non era cosi', ed era la texture che l'utente descriveva **"ritagliata in
+piu' punti"**. Senza livelli il disegno tecnico si toglieva DOPO la resa: una
+maschera sui tratti sottili, larga il tratto piu' 1,2 pt per parte, e il pixel
+valido piu' vicino a riempire. Lungo ogni cordonatura spariva un millimetro di
+grafica, rifatto coi bordi:
+
+    Colazione    l'angolo del cedolino blu del marchio a gradini, e degli
+                 incroci del retino delle saldature i puntini sul bianco
+    KP T1        il bordo alto del foglio strappato
+    ogni file    una riga di grafica stirata dove il DT l'attraversava
+
+pdfium gli oggetti li conosce uno per uno e li sa **spegnere**
+(`FPDFPageObj_SetIsActive`): un oggetto spento non si rende, e sotto resta
+quello che il file ci ha messo. Nel livello DT va:
+
+- tutto quello che sta su un **livello tecnico del file**. pdfium lo dice con
+  la marca `OC`, che porta il nome dell'OCG; dentro un form la marca ce l'ha
+  il form, e i figli la ereditano;
+- ogni **tratto a filo di capello** (<= 0,8 pt) e ogni tratto nelle **penne
+  della fustella** - la stessa scelta che faceva la maschera, ma sull'oggetto.
+  Di un percorso **pieno** con un contorno tecnico si spegne solo il contorno:
+  il pieno e' grafica;
+- i **testi fuori dall'artwork stampato** - quote delle miniature, legenda,
+  cartiglio - ma solo nella vista del DT, e solo fuori: dentro l'artwork un
+  testo e' grafica anche quando ha il colore di una quota.
+
+Il colore non si guarda mai, come sempre.
+
+**Ghostscript gli oggetti spenti non li vede.** Due cose della texture le rende
+lui - la lastra del nero e la banda della colata - e un tratto di fustella in
+nero pieno per la lastra e' nero come la `k`: senza precauzioni tornerebbe
+sulla texture proprio da li'. Percio' `nero.riporta` e la colata non
+incollano niente dentro l'**impronta del DT** (`strati.impronta_dt`, la resa
+del solo livello DT su fondo trasparente).
+
+Col DT spento cade anche il **margine** dei pannelli degli astucci: il ritaglio
+si ingrandiva di 4 px per parte per non portarsi sul bordo della faccia la
+cordonatura dipinta, e cosi' stirava la grafica. La cordonatura non c'e' piu',
+e sul bordo resta quello che ci va: la grafica che gira sullo spigolo.
+
+Quello che si paga e' una passata sugli oggetti prima di rendere: da 0,1 a 0,3
+secondi, anche sui 32.757 percorsi di Colazione.
+
+### La texture e' HD di serie
+
+L'altra meta' di "ritagliata e sgranata" era la risoluzione. Sul piano Free di
+Render la texture di un flowpack stava in **1700 px** di lato, e l'interfaccia
+la qualita' alta non la chiedeva mai: i fogli grandi uscivano sotto i 100 dpi.
+Il limite era la memoria, e sugli Spaces non c'e' piu'. Di serie adesso la
+texture e' a **300 dpi**, con un tetto a **8192 px** di lato; `web` resta,
+per chi vuole un GLB leggero, ed e' quella di prima.
+
+    |                | prima            | adesso            | tempo      | GLB           |
+    | Colazione      | 1219 x 1700  3,7 | 3897 x 5433  11,8 | 63 -> 109 s | 3,9 -> 5,3 MB |
+    | K Brioss STD   | 1174 x 1700  4,0 | 3425 x 4960  11,8 | 16 -> 30 s  | 4,0 -> 5,9 MB |
+    | KMS T1         | 1201 x 1134  7,9 | 1801 x 1700  11,8 | 11 -> 15 s  | 4,1 -> 4,3 MB |
+    | Pingui T6 BOX  | fronte 1106  7,9 | fronte 1659  11,8 |  9 -> 9 s   | 0,5 -> 0,8 MB |
+    | Display KMS    | 1209 x 1700      | 5846 x 8192       |  7 -> 13 s  | 1,1 -> 3,4 MB |
+
+(px per mm dopo le dimensioni; tempi di analisi piu' costruzione, un file per
+processo, su questo container.) Il picco di memoria arriva a 1,2 GB sul Brioss
+STD: sugli Spaces non e' un tema.
+
+Il tempo in piu' sta quasi tutto nelle **immagini con trasparenza** dentro la
+grafica, non nei tratti: su Colazione a 100 dpi, spente le 21 immagini, la
+resa passa da 11 a 2 secondi; spenti i 32.757 percorsi, da 11 a 10. E ritagliare la resa sul
+solo foglio non aiuta, perche' le immagini stanno tutte dentro il foglio:
+Colazione a 300 dpi fa 61 secondi pagina intera e 61 il foglio da solo.
+
+Il tetto a 8192 e' quello che le schede video da scrivania reggono tutte. Su
+un telefono con un limite piu' basso three.js la riduce da se' al caricamento:
+si perde definizione su quel telefono, non il modello.
+
 ### Le coperture si tolgono per nome, non per euristica
 
 I cinque livelli sopra sono un ordine di **certezza**, ma non tutti i livelli
@@ -367,7 +460,9 @@ per nome anche fustella e quote costa una passata di pypdf sul flusso di
 contenuto, e su Colazione erano **7 secondi e 100 MB di picco in piu'** - 584
 contro 484, cioe' oltre il tetto dei 512 - per togliere tratti che la maschera
 del disegno tecnico prendeva gia'. Il giorno che un pack mostra una fustella
-che l'euristica non prende, si allarga con quello in mano.
+che l'euristica non prende, si allarga con quello in mano. (Oggi quei tratti
+li spegne il livello DT in pdfium, oggetto per oggetto, e la passata di pypdf
+resta per i soli pieni: vedi *I due livelli li fa la costruzione*.)
 
 Attenzione a non leggerlo come "strappare costa memoria": dipende da cosa si
 strappa. Togliere **tratti** aggiunge una passata e non alleggerisce il
@@ -647,6 +742,24 @@ inventa inchiostro: si mette quello che il file dichiara, e solo li'.
 Sul Brioss STD la zona tradita piu' grande e' proprio la `k`: 3.764 px su
 4.938. Il difetto e' quello, non un'inezia sparsa.
 
+**E l'orlo.** Il pieno si riporta dove la lastra supera l'85%, e l'orlo della
+lettera - dove la lastra sfuma - restava com'era: il nero sfumato con
+l'azzurro dipinto sopra, pixel scuri color petrolio, (30, 66, 71). A 1700 px
+non si vedeva; in HD attorno alla `k` c'era un filo petrolio. Adesso si
+riporta il tono della lastra anche li', a due pixel dal pieno tradito, dove la
+lastra ha almeno il 10% e il pixel e' tinto: sul Brioss STD i pixel petrolio
+attorno alla `k` passano da 218 a 0.
+
+Ma solo attorno ai traditi **pieni**, quelli che un'erosione di due pixel non
+cancella: le lettere. La lastra arriva da 144 dpi ingrandita, sfuma oltre ogni
+lettera, e sul bordo di un testo nero su azzurro da' traditi a strisce larghe
+un pixel. Allargando l'orlo anche li' - la prima versione lo faceva - si
+toccavano 4.499 pixel invece di 665, e i bordi del testo della tabella
+nutrizionale uscivano grigi invece che neri sfumati sull'azzurro, che e' il
+loro colore giusto. Misurato sulla maschera, non sulla texture: il JPEG
+ricodifica il blocco 8 x 8 appena un pixel cambia, e contare i pixel diversi
+fra due texture conta anche quello.
+
 **La soglia e' il cinque per cento**, e il motivo e' l'antialiasing: il
 rasterizzatore sfuma il bordo della lettera e quei pixel di frangia risultano
 "traditi" senza che ci sia niente da riparare. Sotto il cinque non c'e'
@@ -840,6 +953,57 @@ sempre dopo `clean_artwork` e prima di costruire.
 Priorita' negli errori: **un logo perso e' grave, un residuo tecnico no.** Nel
 dubbio si toglie meno.
 
+## Le due verifiche: le UV sul DT prima, il fronte sul fronte dopo
+
+Il lavoro va nell'ordine in cui lo si fa a mano: si costruisce dal DT, si
+controlla che le UV del modello siano il DT steso, **poi** si spegne il livello
+del DT, si accende quello della grafica e si mappa, e alla fine si controlla
+che il fronte dell'AW stia sul fronte del modello. Le due verifiche stanno in
+`verifica.py`, girano su ogni costruzione, e il loro esito va negli avvisi.
+
+**1. Le UV sul DT, prima della mappatura.** Per un flowpack lungo il passo le
+UV sono lineari per costruzione - `L/2 + end_fin` non cambia mai - quindi
+quello che puo' sbagliare sono i due confini delle testate: dove comincia la
+pinna e dove comincia il prodotto a sezione piena. Tutti e due devono cadere
+su una linea del DT, dai due lati. Lungo il giro c'era gia' la misura degli
+spigoli contro le pieghe del disegno (*Verificare il modello mappato contro
+l'AW*). Per un astuccio le UV sono i quattro angoli del ritaglio, e il
+confronto e' sulle proporzioni: la faccia e il pannello del DT devono avere
+gli stessi lati.
+
+**2. Il fronte sul fronte, dopo.** Il centro del pannello fronte dell'AW - dove
+lo dice il DT - deve cadere al centro della faccia fronte del modello, con la
+normale verso il davanti, e **non specchiato**. La regola di mano: vista da
+fuori la texture ha la u a destra e la v in giu', perche' glTF conta le v
+dall'alto, quindi `du x dv` punta dentro; dove punta fuori, la grafica e'
+specchiata. E in quel punto, e in quattro attorno, la texture deve essere la
+grafica dell'AW: un giro di troppo fra pagina e texture lo tradisce subito,
+perche' una grafica non e' mai uguale a se stessa girata.
+
+**Tutte e due hanno i denti, e sono stati provati.** Rimettendo la pinna dal
+margine su KMS T1 la prima grida `UVW NON CORRISPONDE AL DT - il DT segna 8,0
+mm, il modello 6,9`. Girando la texture di 90 gradi invece che di 270 su KP T1
+la seconda grida `FRONTE NON SUL FRONTE`, con uno scarto di colore di 166
+contro i 5 della mappatura giusta. Le sonde del colore mediano su due
+millimetri: a cinque pixel un gradiente con mezzo pixel di sfasamento dava 33
+anche a mappatura giusta.
+
+Sul parco passano tutte e due quasi dappertutto, e dove no dicono una cosa
+vera:
+
+- **KCF T1** e **Kinder Country**: il DT non e' speculare sulle testate - 6
+  mm da un taglio e 10 dall'altro sul primo, 10 e 7 sul secondo. Una
+  saldatura e' disegnata corta o manca, il modello prende il rientro piu'
+  stretto, e la verifica lo dice. E' il punto 4 di *Perche' un file nuovo
+  non si costruisce*;
+- **Nutella Donut**: cielo e fondo sul DT sono 36,9 mm, la faccia del solido
+  38,1. La grafica di quelle falde si stira del 3%, e prima nessuno lo
+  vedeva.
+
+Nessuna delle due cambia il modello: dicono se e' giusto, e quando non lo e'
+lo gridano. Un modello plausibile e sbagliato e' il difetto peggiore che
+questo progetto possa avere.
+
 ## Quando la pulizia deterministica non basta
 
 Alcune pulizie non si chiudono con criteri numerici, e non per mancanza di
@@ -868,6 +1032,13 @@ possono essere riscritti.
 
 La metrica che decide e' `dt_su_immagine_pct`: quanto disegno tecnico cade su
 foto, cioe' dove la riverniciatura a tinta piatta non puo' arrivare.
+
+**Da quando il DT si spegne oggetto per oggetto, il piano B serve molto meno.**
+Una cordonatura che attraversa una foto e' un tratto vettoriale SOPRA la foto:
+spento il tratto, la foto sotto c'e' intera, e non c'e' niente da rigenerare -
+ne' a tinta piatta ne' col modello. Resta per il caso che lo spegnimento non
+puo' toccare: il disegno tecnico stampato DENTRO un'immagine raster, dove non
+e' un oggetto ma dei pixel. Vedi *I due livelli li fa la costruzione*.
 
 ### Cosa passare al modello, e cosa no
 
@@ -1566,10 +1737,17 @@ coperti: si prende il **minimo** fra costante e frazione.
 
 **Un ripiego non deve mai essere muto.** Se `analyze_auto` fallisce, la
 costruzione passa al solutore vecchio: il modello che ne esce non e' sbagliato
-in modo evidente, e' **plausibile**, che e' peggio. Su Milch-Schnitte T1
-cambiavano corpo e pinne — 136,5 e 8,0 invece di 138,7 e 6,9 — e la grafica
-scivolava sul fronte, senza che niente lo dicesse. Ogni ripiego va dichiarato
-negli avvisi della costruzione.
+in modo evidente, e' **plausibile**, che e' peggio. Su Milch-Schnitte T1 la
+grafica scivolava sul fronte, senza che niente lo dicesse. Ogni ripiego va
+dichiarato negli avvisi della costruzione.
+
+Qui c'era scritto che a scivolare erano corpo e pinne - 136,5 e 8,0 invece di
+138,7 e 6,9 - e non era vero. Il solutore vecchio le pinne le leggeva dalle
+saldature del DT, che su quel file stanno a 8,0 mm dal taglio: era
+`analyze_auto` a sbagliarle, prendendole dal margine non stampato (vedi *Prima
+le misure, poi il contenuto*). Quello che faceva scivolare la grafica era la
+cucitura: `back_a` 8,5 invece di 21,5 mm, tredici millimetri di rotazione
+attorno al tubo. Rimisurato mettendo le due analisi una accanto all'altra.
 
 **Gli avvisi della costruzione devono arrivare all'utente.** Viaggiano
 nell'header `X-Pack3d-Meta` della risposta di `/api/build`, perche' il corpo e'
@@ -1703,14 +1881,14 @@ simmetria.
 2. la fasciatura e' **simmetrica rispetto alla mezzeria del nastro**, quindi le
    pieghe stanno a coppie speculari: la coppia esterna separa retro e fianco,
    quella interna fianco e fronte;
-3. le pinne di testa si misurano dal **margine non stampato**, non dalle linee
-   di quota — ma solo se quel margine esiste. Su artwork **al vivo** non c'e':
-   su Kinder Bueno T2 la grafica copre 923 colonne su 1010 da bordo a bordo, la
-   misura per margine dava `end_fin = 0` e il modello usciva con il 21% di
-   triangoli degeneri, tutti collassati sulla punta della pinna. Sotto 1 mm la
-   misura non e' piccola, e' assente: `analyze_auto` la ricava allora dalle
-   **coppie di linee di taglio e saldatura**, cioe' dal rientro fra le due
-   linee piu' esterne di ciascun lato.
+3. le pinne di testa si misurano dalle **saldature del DT**, e il margine non
+   stampato si guarda solo dove il disegno non le segna: vedi *Prima le
+   misure, poi il contenuto*. Era il contrario, e il margine sbagliava in
+   tutti e due i versi: su artwork **al vivo** non c'e' - su Kinder Bueno T2
+   la grafica copre 923 colonne su 1010, la misura dava `end_fin = 0` e il
+   modello usciva con il 21% di triangoli degeneri - e su una grafica col
+   bianco vicino alla testata e' troppo lungo - su Colazione 41,2 mm contro i
+   20 della saldatura.
 
 Verifica: perimetro + 2 falde deve dare la larghezza del nastro.
 
@@ -1734,6 +1912,68 @@ Regole di forma, da applicare senza chiedere:
   agli spigoli con centro piano**;
 - l'apertura della pinna va concentrata vicino alla saldatura (rampa di quinto
   grado): con una rampa corta il gonfiore invade il corpo e deforma i bollini.
+### Prima le misure, poi il contenuto
+
+Il pack si costruisce dal **disegno tecnico**, e il disegno tecnico si
+controlla con le **quote**. Il contenuto - dove c'e' inchiostro e dove no -
+viene per ultimo, perche' **la grafica puo' avere del bianco**: una fascia
+bianca vicino alla testata e il margine "non stampato" si allunga fino a lei,
+e il margine non e' piu' la pinna.
+
+Le testate si leggono cosi' (`flowpack.testate_dal_dt`), da ciascun taglio
+verso l'interno, entro un terzo del passo:
+
+- la **prima linea** del DT e' la saldatura: li' finisce la pinna;
+- la **seconda** e' dove finisce il prodotto, e fra le due c'e' la **gola**, il
+  tubo che si schiaccia verso la pinna. E' la zona che il DT chiama "grinze"
+  (KMS, KP: 10 mm) o "superficie inclinata verso saldatura" e quota a parte
+  (Colazione: 37,5). E' li' che il modello si rastrema;
+- se la prima struttura e' una **piega con le sue due guide**, la saldatura
+  non e' disegnata: e' il film su scatola (Brioss), e la testata arriva alla
+  piega. Da li' in fuori la gola la decide lo spessore, come prima.
+
+I due lati devono dire la stessa cosa. Se non la dicono, la pinna prende il
+rientro piu' stretto - la regola di sempre - la gola non si usa, e la
+verifica delle UV lo grida (vedi *Le due verifiche*).
+
+Il margine non stampato resta come **ripiego**, dichiarato, solo dove il DT
+sulle testate non segna niente.
+
+Sul parco, pinna di testa prima e dopo, in mm:
+
+    |                        | dal margine | dal DT                 | quote della miniatura          |
+    | Colazione              | 41,2        | 20 + gola 37,5         | 20 | 37,5 | 215 | 37,5 | 20, testo |
+    | Kinder Paradiso T1     | 3,4         | 15 + gola 10           | 15 | 10 | 105 | 10 | 15, a occhio |
+    | K Brioss STD           | 32,6        | piega a 37,6           | -                              |
+    | K Brioss Latte e Cacao | 32,6        | piega a 37,6           | -                              |
+    | KMS T1                 | 6,9         | 8,0 + gola 10          | -                              |
+    | K Tronky T1            | 9,8         | 10,0                   | 10 | 124 | 10, a occhio        |
+    | KP T1, KCF T1, Kinder Country: uguali, 8,0 - 6,0 - 7,0                                    |
+
+Dove le quote ci sono, danno ragione al DT, e al decimo. Il Paradiso e' il
+caso peggiore di prima: la grafica sborda di una decina di millimetri dentro
+la saldatura, il margine non stampato era di 3,4 mm, e il pack usciva con un
+corpo di 148 mm e le pinne da 3 invece di 125 e 15 - ventitre millimetri di
+prodotto in piu'. Sul Brioss la piega a 37,6 e' **esattamente** la misura su
+cui la gola e' stata tarata - "37,6 = 22,8 di gola piu' 14,8 di pinna",
+scritto sotto in *Il film su scatola* - mentre il margine dava 32,6 e la pinna
+usciva 9,8: la taratura era rimasta giusta e la misura sotto era scivolata,
+senza che niente lo dicesse.
+
+Le quote del file la costruzione le legge da sola quando sono testo
+(`quote.riscontro_testate`): una CATENA di numeri allineati sullo stesso asse
+che somma al passo, e **simmetrica**, perche' lungo il passo il pack lo e'. Un
+numero solo non conferma niente - un "20" lo scrive anche la tabella
+nutrizionale - e con una quarantina di numeri sul foglio una fila che somma al
+passo si trova anche per caso: su Colazione `7 | 135 | 7 | 57 | 7 | 71,5 | 40
+| 5` fa 330 ed e' fatta di pezzi del nastro. Una fila simmetrica per caso no.
+
+Se la catena del file non torna con le testate lette dal DT, la costruzione lo
+**grida**: vuol dire che il disegno e' stato letto male. Provato rimettendo la
+lettura dal margine su Colazione: `QUOTE DEL FILE DIVERSE DALLE TESTATE LETTE:
+il file scrive 20 | 37,5 | 215 | 37,5 | 20 = 330, dal disegno esce 41,2 |
+247,6 | 41,2`.
+
 ### La falda dice se la soluzione e' sbagliata
 
 La falda non scala col nastro: e' il lembo che schiacciano le ganasce, e le
@@ -1914,6 +2154,13 @@ Astucci, con la quota letta due volte che chiude il conto:
 | K Pingui T6 BOX | verticale, aperto | 140,5 x 125,0 x 40,5 | cielo e fondo 40,5, fianchi 40,3 |
 
 ## Assunzioni non verificate
+
+- La **gola** e' la zona fra la saldatura e la seconda linea del DT dalla
+  testata. Confermata dalle quote su Colazione (37,5) e sul Paradiso (10), e
+  coerente con la zona grinze di KMS e KP; sul Tronky le due testate non
+  tornano (8 e 4 mm) e non si usa. Un DT dove la seconda linea sia un'altra
+  cosa - un limite di stampa, un riferimento grafico - aspetta un pack che lo
+  mostri.
 
 - Il livello **Medio** di gonfiore e' interpolato fra Rigido e Morbido: manca un
   caso reale.

@@ -12,14 +12,12 @@ Misurato sul solo parsing:
 pypdfium2 e' gia' una dipendenza - ci rasterizziamo le pagine - e la sua
 licenza e' permissiva, a differenza di PyMuPDF che e' AGPL.
 
-Il modulo serve a due mestieri, tutti e due misurati nel telaio della
-MediaBox con la y contata dall'alto - lo stesso in cui rasterizza
-dieline.render_page e in cui contava pdfplumber (vedi _telaio):
-
-- `segmenti`, per il solutore: segmenti orizzontali e verticali con
-  spessore e colore del tratto, nel formato di dieline._segments;
-- `tecnici`, per la texture: gli elementi del disegno tecnico da togliere
-  dalla grafica - tratti di fustella, retini print-free, quote.
+Tutto e' misurato nel telaio della MediaBox con la y contata dall'alto - lo
+stesso in cui rasterizza dieline.render_page e in cui contava pdfplumber
+(vedi _telaio). `segmenti` serve al solutore: segmenti orizzontali e
+verticali con spessore e colore del tratto, nel formato di
+dieline._segments. Il disegno tecnico da togliere dalla texture non si cerca
+piu' qui: lo spegne `strati.rendi`, oggetto per oggetto.
 
 Un avvertimento sui colori. pdfplumber li da' nello spazio originale del
 PDF (CMYK, RGB, grigio); pdfium li da' sempre convertiti in RGB a 8 bit.
@@ -33,7 +31,6 @@ import pypdfium2 as pdfium
 import pypdfium2.raw as raw
 
 _MOVE = raw.FPDF_SEGMENT_MOVETO
-_BEZIER = raw.FPDF_SEGMENT_BEZIERTO
 
 # pt: sotto questa soglia il tratto e' disegno tecnico, non grafica
 FILO = 0.8
@@ -181,11 +178,6 @@ def _stile(o):
     w = ctypes.c_float()
     raw.FPDFPageObj_GetStrokeWidth(o, ctypes.byref(w))
     return (round(w.value, 2), _colore(o, raw.FPDFPageObj_GetStrokeColor))
-
-
-def _ingombro(sp):
-    return (min(x for x, _ in sp), min(y for _, y in sp),
-            max(x for x, _ in sp), max(y for _, y in sp))
 
 
 def _telaio(page):
@@ -368,84 +360,6 @@ def segmenti(pdf_path, page_no=0, tavolozza=None):
     return segs, larghezza, altezza
 
 
-# --------------------------------------------------------------------------- #
-# il disegno tecnico, per toglierlo dalla texture
-# --------------------------------------------------------------------------- #
-def _sottopercorsi(o, m):
-    """I sottopercorsi dell'oggetto, nel telaio di misura e con i
-    sottopercorsi chiusi richiusi sul primo punto.
-
-    Dei tre punti con cui pdfium memorizza una Bezier si tiene solo
-    l'estremo: gli altri due sono punti di controllo, per cui il tratto non
-    passa. E' la stessa scelta di pdfminer, quindi i punti che escono di
-    qui sono quelli che escono da pdfplumber.
-    """
-    a, b, c, d, e, f = m
-    fuori, sp, bez = [], [], 0
-    x, y = ctypes.c_float(), ctypes.c_float()
-    for k in range(raw.FPDFPath_CountSegments(o)):
-        seg = raw.FPDFPath_GetPathSegment(o, k)
-        if not seg:
-            continue
-        tipo = raw.FPDFPathSegment_GetType(seg)
-        if tipo == _MOVE:
-            if sp:
-                fuori.append(sp)
-            sp, bez = [], 0
-        if tipo == _BEZIER:
-            bez += 1
-            if bez % 3:
-                continue
-        else:
-            bez = 0
-        raw.FPDFPathSegment_GetPoint(seg, ctypes.byref(x), ctypes.byref(y))
-        px, py = x.value, y.value
-        sp.append((a * px + c * py + e, b * px + d * py + f))
-        if len(sp) > 1 and raw.FPDFPathSegment_GetClose(seg):
-            sp.append(sp[0])
-    if sp:
-        fuori.append(sp)
-    return fuori
-
-
-def _scritte(page, tinte_tec):
-    """Gli ingombri dei caratteri scritti in una tinta tecnica.
-
-    Le quote e le diciture si tolgono per ingombro, non per tratto: il
-    segno sottile del carattere lascerebbe in piedi mezza cifra.
-
-    Si passa dalla pagina di testo e non dagli oggetti perche' un oggetto
-    di testo e' un pezzo di riga intero, e il suo ingombro coprirebbe anche
-    gli spazi e i pezzi di grafica in mezzo. Costa un centesimo di secondo.
-
-    Il riquadro e' quello stretto, non quello "largo": il largo arriva fino
-    all'altezza del font e la fascia in piu' finisce sulla grafica sopra la
-    riga. Il margine lo mette chi disegna la maschera.
-    """
-    fuori = []
-    tp = raw.FPDFText_LoadPage(page.raw)
-    if not tp:
-        return fuori
-    try:
-        a, b, c, d, e, f = _telaio(page)
-        lati = [ctypes.c_double() for _ in range(4)]   # sx, dx, giu', su
-        canali = [ctypes.c_uint() for _ in range(4)]
-        for i in range(raw.FPDFText_CountChars(tp)):
-            raw.FPDFText_GetFillColor(tp, i, *(ctypes.byref(v) for v in canali))
-            if ("(%d, %d, %d)" % tuple(v.value for v in canali[:3])) not in tinte_tec:
-                continue
-            if not raw.FPDFText_GetCharBox(
-                    tp, i, *(ctypes.byref(v) for v in lati)):
-                continue
-            sx, dx, giu, su = (v.value for v in lati)
-            xs = [a * px + c * py + e for px, py in ((sx, giu), (dx, su))]
-            ys = [b * px + d * py + f for px, py in ((sx, giu), (dx, su))]
-            fuori.append((min(xs), min(ys), max(xs), max(ys)))
-    finally:
-        raw.FPDFText_ClosePage(tp)
-    return fuori
-
-
 def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6):
     """Di quanto e' ruotata la grafica in ciascun riquadro, in gradi.
 
@@ -505,65 +419,3 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6):
     finally:
         doc.close()
     return fuori
-
-
-def tecnici(pdf_path, page_no=0, penne=(), tinte_tec=(), filo=FILO,
-            minuto=25.0):
-    """Gli elementi del disegno tecnico della pagina, gia' scremati.
-
-    Torna (tratti, pieni, scritte):
-
-      tratti   [(punti, spessore)]   fustella, quote, retini: da ripassare
-      pieni    [(riquadro, punti)]   aree piene in una tinta tecnica; i
-                                     punti solo per le figure non
-                                     rettangolari piu' grandi di `minuto`
-      scritte  [riquadro]            quote e diciture in una tinta tecnica
-
-    Il filtro sta qui dentro e non nel chiamante, ed e' una questione di
-    memoria: un impaginato ha decine di migliaia di percorsi e al disegno
-    tecnico ne servono qualche migliaio. Quelli che non passano non
-    diventano mai un oggetto Python - non se ne leggono nemmeno i punti.
-    """
-    penne, tinte_tec = set(penne), set(tinte_tec)
-    tratti, pieni, scritte = [], [], []
-    doc = pdfium.PdfDocument(pdf_path)
-    try:
-        page = doc[page_no]
-
-        scritte.extend(_scritte(page, tinte_tec))
-
-        def visita(o, t, m):
-            if t != raw.FPDF_PAGEOBJ_PATH or not raw.FPDFPath_CountSegments(o):
-                return
-            fill, stroke = ctypes.c_int(), ctypes.c_int()
-            raw.FPDFPath_GetDrawMode(o, ctypes.byref(fill), ctypes.byref(stroke))
-            fill, stroke = bool(fill.value), bool(stroke.value)
-            lw, col = _stile(o) if stroke else (0.0, None)
-            riga = stroke and (lw <= filo or (lw, col) in penne)
-            area = fill and _colore(o, raw.FPDFPageObj_GetFillColor) in tinte_tec
-            if not riga and not area:
-                return
-            for sp in _sottopercorsi(o, _componi(m, _matrice(o))):
-                r = _rettangolo(sp)
-                if riga:
-                    if r is not None:
-                        x0, y0, x1, y1 = r
-                        sp = [(x0, y0), (x1, y0), (x1, y1), (x0, y1), (x0, y0)]
-                    if len(sp) > 1:
-                        tratti.append((sp, lw))
-                elif r is not None:
-                    pieni.append((r, None))
-                else:
-                    b = _ingombro(sp)
-                    if max(b[2] - b[0], b[3] - b[1]) < minuto:
-                        # i simboli tecnici (frecce di orientamento) sono
-                        # piccoli e spesso fatti di piu' sottopercorsi: si
-                        # coprono per ingombro
-                        pieni.append((b, None))
-                    elif len(sp) > 2:
-                        pieni.append((b, sp))
-
-        _pagina(page, visita)
-    finally:
-        doc.close()
-    return tratti, pieni, scritte
