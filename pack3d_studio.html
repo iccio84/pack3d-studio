@@ -124,6 +124,11 @@
         pointer-events:none}
   #meta span{background:var(--surface);border:1px solid var(--border);
              border-radius:999px;padding:3px 10px}
+  /* un avviso che la costruzione GRIDA - una verifica non passata, un
+     ripiego - comincia in maiuscolo, e fra una dozzina di cartellini grigi
+     deve saltare all'occhio */
+  #meta span.grido{color:var(--destructive);font-weight:600;
+                   border-color:color-mix(in oklab,var(--destructive) 55%,transparent)}
 
   footer{padding:0 16px 18px}
 
@@ -475,10 +480,10 @@ const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagi
 // divergere
 const INVITO = document.querySelector('#empty div').textContent;
 
-/* Un servizio che si sveglia NON e' un servizio irraggiungibile, ed e' il
-   caso piu' comune di tutti: il piano gratuito di Render sospende dopo 15
-   minuti di inattivita', e a svegliarlo e' la prima richiesta che arriva -
-   un'attesa che si misura in decine di secondi. La sonda di `findBackend`
+/* Un servizio che si sveglia NON e' un servizio irraggiungibile: un servizio
+   ospitato si mette in pausa quando nessuno lo usa - quindici minuti sul
+   piano gratuito di Render, due giorni su uno Space - e a svegliarlo e' la
+   prima richiesta che arriva, un'attesa che si misura in decine di secondi. La sonda di `findBackend`
    scade dopo un secondo e mezzo, quindi scriveva "backend non raggiungibile"
    di un servizio che stava benissimo e si stava solo alzando; e per riprovare
    bisognava ricaricare la pagina.
@@ -574,8 +579,11 @@ function setTitolo(s){
   if (el) el.textContent = s ? s.replace(/\.pdf$/i,'').toUpperCase() : '';
 }
 function setMeta(items){
-  document.getElementById('meta').innerHTML =
-    (items||[]).map(t => '<span>'+t+'</span>').join('');
+  // prima le grida, poi il resto nell'ordine in cui arriva
+  const grida = t => /^[A-Z][A-Z' ]{7,}/.test(String(t));
+  const tutti = (items||[]).slice().sort((a, b) => grida(b) - grida(a));
+  document.getElementById('meta').innerHTML = tutti.map(t =>
+    '<span' + (grida(t) ? ' class="grido"' : '') + '>' + t + '</span>').join('');
 }
 
 /* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in

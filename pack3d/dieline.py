@@ -103,7 +103,7 @@ class Dieline:
 _RESA = {}
 
 
-def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
+def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
     """Rasterizza la pagina nel telaio del MediaBox, quello di pdfplumber.
 
     pdfium rende il CropBox, pdfplumber misura sul MediaBox. Finche' i due
@@ -112,6 +112,10 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
     MediaBox di 1332 x 958, spostato di (419, 471) — le coordinate dei segmenti
     indicizzano un raster che comincia da un'altra parte: nessuna eccezione,
     solo misure prese nel posto sbagliato.
+
+    `livello` e' None per la pagina com'e' - quella che serve a misurare - o
+    uno dei due livelli di `strati`: la texture si prende da
+    `strati.GRAFICA`, cioe' con il disegno tecnico spento oggetto per oggetto.
     """
     import pypdfium2 as pdfium
     from PIL import Image
@@ -125,7 +129,7 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
     # di pixel che ci sono gia', un ingrandimento sarebbe invenzione. Se
     # qualcuno chiede piu' risoluzione di quella in cassa si rasterizza di
     # nuovo e si sostituisce.
-    chiave = (pdf_path, page_no)
+    chiave = (pdf_path, page_no, livello)
     vecchia = _RESA.get(chiave)
     if vecchia is not None and vecchia[0] >= scale - 1e-9:
         avuta, im = vecchia
@@ -135,9 +139,13 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0):
         alt = max(1, int(round(im.height * scale / avuta)))
         return im.resize((larg, alt), Image.LANCZOS)
 
-    page = pdfium.PdfDocument(pdf_path)[page_no]
-    page.set_cropbox(*page.get_mediabox())
-    im = page.render(scale=scale).to_pil().convert("RGB")
+    if livello is None:
+        page = pdfium.PdfDocument(pdf_path)[page_no]
+        page.set_cropbox(*page.get_mediabox())
+        im = page.render(scale=scale).to_pil().convert("RGB")
+    else:
+        from . import strati
+        im = strati.rendi(pdf_path, page_no, scale, livello)
     # una sola pagina in cassa: il server costruisce un modello alla volta
     _RESA.clear()
     _RESA[chiave] = (scale, im)

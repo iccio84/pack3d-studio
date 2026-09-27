@@ -11,10 +11,9 @@ from __future__ import annotations
 import os
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 
-from . import colata, dieline, nero, strati, tracciati
-from .dieline import _technical_pens, render_page
+from . import colata, dieline, nero, strati
 
 Image.MAX_IMAGE_PIXELS = None
 
@@ -103,99 +102,32 @@ def _fascia(quad, a, b):
     return [mix(c0, c3, a), mix(c1, c2, a), mix(c1, c2, b), mix(c0, c3, b)]
 
 
-def disegno_tecnico(pdf_path, page_no=0):
-    """Gli elementi da togliere dalla texture: i TRATTI, e solo quelli.
-
-    Due passate leggere: la prima trova le penne della fustella, la seconda,
-    sapendo gia' cosa cercare, si tiene solo quello che serve. Su uno steso
-    curvo (coppe, settori) non ci sono segmenti dritti lunghi da cui dedurre
-    la penna: resta valida la regola del filo di capello, che vale anche
-    quando di penne non se ne trova nessuna.
-
-    Pieni e scritte NON si scelgono piu' per colore. La regola vecchia -
-    "tinta cromatica e non di una tinta piatta, quindi tecnica" - e' stata
-    misurata su tutto il parco: su sei file su nove non toglie niente che i
-    tratti non togliessero gia', e sugli altri tre cancella grafica, fra cui
-    il logo `Brioss` e il bollino "x6" del Pingui. Il perche' sta in
-    `strati.py`: una lastra tecnica usa colori che usa anche la grafica, e
-    nessuna soglia separa due cose dello stesso colore. Chi lo dice davvero
-    e' il livello, e quello si spegne prima di rasterizzare.
-    """
-    segs, larghezza, altezza = tracciati.segmenti(pdf_path, page_no)
-    penne = _technical_pens(segs, larghezza, altezza)
-    return tracciati.tecnici(pdf_path, page_no, penne, ())
-
-
-def _technical_mask(dt, box, scale, margin=1.2):
-    """Maschera del disegno tecnico dentro un pannello: tratti di fustella,
-    retini delle aree print-free, quote e diciture tecniche."""
-    tratti, pieni, scritte = dt
-    x0, y0, x1, y1 = box
-    W = max(1, round((x1 - x0) * scale))
-    H = max(1, round((y1 - y0) * scale))
-    m = Image.new("L", (W, H), 0)
-    dr = ImageDraw.Draw(m)
-
-    def pt(x, y):
-        return ((x - x0) * scale, (y - y0) * scale)
-
-    for punti, lw in tratti:
-        dr.line([pt(*q) for q in punti], fill=255, joint="curve",
-                width=max(2, int(round(lw * scale + 2 * margin * scale))))
-    for (a, b, c, d), punti in pieni:
-        if punti is None:
-            dr.rectangle([pt(a, b), pt(c, d)], fill=255)
-        else:
-            dr.polygon([pt(*q) for q in punti], fill=255)
-    for a, b, c, d in scritte:
-        dr.rectangle([pt(a - 0.5, b - 0.5), pt(c + 0.5, d + 0.5)], fill=255)
-    return np.asarray(m) > 127
-
-
-def _inpaint(rgb, mask):
-    """Riempie le zone mascherate col pixel valido piu' vicino: adatto a tratti
-    sottili e a retini, dove l'intorno e' gia' il colore di fondo."""
-    from scipy.ndimage import distance_transform_edt
-    if not mask.any():
-        return rgb
-    # Le distanze non ci servono, servono solo gli indici del pixel valido
-    # piu' vicino. Chiederle comunque costa un array float64 grande quanto
-    # l'immagine: su un foglio come quello del Brioss sono decine di MB
-    # calcolati e buttati.
-    idx = distance_transform_edt(mask, return_distances=False,
-                                 return_indices=True)
-    return rgb[idx[0], idx[1]]
-
-
 def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                      inset_px: int = 4, page_no: int = 0, clean: bool = True,
                      note=None, nero_deciso=None, colata_riquadro=None) -> dict:
     """Ritaglia la grafica di ogni pannello da una rasterizzazione ad alta
-    risoluzione. Con `clean` il disegno tecnico viene tolto dalla texture:
-    sul modello 3D deve restare solo la grafica di stampa.
+    risoluzione. Con `clean` il foglio si prende dal solo livello della
+    GRAFICA: sul modello 3D deve restare solo quello che si stampa.
 
     In `note`, se passata, finiscono le righe da dichiarare a chi guarda il
-    modello: e' il punto da cui passano tutte le texture - astucci e flowpack,
-    server e riga di comando - quindi e' qui che il disegno tecnico si toglie
-    e la colata si sostituisce.
+    modello: e' il punto da cui passano tutte le texture - astucci, flowpack e
+    vassoi, server e riga di comando - quindi e' qui che il disegno tecnico si
+    spegne e la colata si sostituisce.
 
-    Prima cosa: se il file ha LIVELLI che dicono cosa e' tecnico, si spengono.
-    E' l'unico modo che non sbaglia - vedi `strati.py` - e quello che resta da
-    togliere a mano sono solo i tratti."""
+    Il disegno tecnico non si toglie piu' DOPO la resa. Prima si spengono i
+    livelli che il file dichiara tecnici - l'unico modo che non sbaglia, vedi
+    `strati.py` - e poi quello che resta del DT si spegne oggetto per oggetto,
+    in pdfium, prima di rendere: e' il livello che il file non aveva, fatto
+    dalla costruzione. La maschera sui pixel con il riempimento dal pixel
+    vicino, che c'era prima, lungo ogni cordonatura mangiava un millimetro di
+    grafica e lo rifaceva coi bordi: era la texture "ritagliata in piu'
+    punti". Spento l'oggetto, sotto resta quello che il file ci ha messo.
+    """
     scale = dpi / 72.0
     pulito, spenti = (strati.senza_tecnici(pdf_path, page_no) if clean
                       else (pdf_path, []))
+    livello = strati.GRAFICA if clean else None
     try:
-        if note is not None:
-            if spenti:
-                note.append("livelli tecnici spenti: %s" % ", ".join(spenti))
-            else:
-                # Detto qui e non solo nelle regole: e' l'unica riga che
-                # distingue un file preparato bene da uno su cui la pulizia
-                # e' a stima, e chi guarda il modello deve saperlo.
-                note.append("nessun livello per il disegno tecnico: la "
-                            "pulizia e' a stima, sui soli tratti a filo di "
-                            "capello. Chiedere il DT su un livello suo")
         # `nero_deciso` arriva da chi costruisce, che la lastra se l'e'
         # presa all'inizio di tutto: Ghostscript parte con un fork, e
         # forkare a memoria piena la fa contare due volte. Vedi `nero.spia`.
@@ -203,23 +135,38 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
         deciso_nero = (nero_deciso if nero_deciso is not None
                        else nero.spia(pulito, page_no, scale))
         sheet = colata.foglio(pulito, scale, page_no, note,
-                              riquadro=colata_riquadro)
+                              riquadro=colata_riquadro, livello=livello)
+        if note is not None and clean:
+            c = strati.CONTI
+            stima = "%d tratti%s" % (
+                c.get("tratti", 0), " e %d contorni" % c["contorni"]
+                if c.get("contorni") else "")
+            if spenti:
+                note.append("livello DT: i livelli tecnici del file (%s)%s"
+                            % (", ".join(spenti),
+                               ", piu' %s a filo di capello o di fustella "
+                               "fuori da quei livelli" % stima
+                               if c.get("tratti") or c.get("contorni") else ""))
+            else:
+                # Detto qui e non solo nelle regole: e' l'unica riga che
+                # distingue un file preparato bene da uno su cui il livello
+                # del DT e' a stima, e chi guarda il modello deve saperlo.
+                note.append("nessun livello per il disegno tecnico nel file: "
+                            "il livello DT l'ho fatto io, %s a filo di "
+                            "capello o di fustella spenti e la grafica sotto "
+                            "intera. E' una stima: chiedere il DT su un "
+                            "livello suo" % stima)
         # Preso il foglio, la pagina in cassa non serve piu' a NESSUNO: `nero`
-        # la sua resa se la fa da se', fuori dalla cassa, e da qui in giu' si
-        # alloca la maschera e la texture.
-        #
-        # Buttarla QUI e non dopo il nero: quando la colata si sostituisce, il
-        # foglio che torna e' un'immagine nuova, e quella in cassa e' un
-        # secondo foglio intero che resta vivo per niente. Sul Kinder Pingui
-        # T6 BOX sono 6516 x 3923 px, 76 MB, e il picco della costruzione
-        # passava da 351 a 456 MB - dentro il tetto di 512 del piano Free, ma
-        # per un margine che non vale la pena di spendere.
+        # la sua resa se la fa da se', fuori dalla cassa. Buttarla qui e non
+        # dopo il nero: quando la colata si sostituisce il foglio che torna e'
+        # un'immagine nuova, e quella in cassa sarebbe un secondo foglio intero
+        # vivo per niente.
         dieline.scarta_resa()
         # La `k` di `kinder` e' nera, e pdfium la fa azzurra perche' ignora la
         # sovrastampa. Si rimette il nero dove la lastra lo dichiara, e solo
         # li': vedi `nero.py` per perche' non si puo' rendere tutto con gs.
-        sheet = nero.riporta(pulito, sheet, scale, page_no, note, deciso_nero)
-        dt = disegno_tecnico(pulito, page_no) if clean else None
+        sheet = nero.riporta(pulito, sheet, scale, page_no, note, deciso_nero,
+                             livello=livello)
     finally:
         if pulito != pdf_path:
             try:
@@ -232,17 +179,13 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
         box = (round(p.x0 * scale), round(p.y0 * scale),
                round(p.x1 * scale), round(p.y1 * scale))
         im = sheet.crop(box)
-        if clean:
-            arr = np.asarray(im).copy()
-            mask = _technical_mask(dt, (p.x0, p.y0, p.x1, p.y1), scale)
-            mask = mask[:arr.shape[0], :arr.shape[1]]
-            if mask.shape != arr.shape[:2]:
-                pad = np.zeros(arr.shape[:2], bool)
-                pad[:mask.shape[0], :mask.shape[1]] = mask
-                mask = pad
-            im = Image.fromarray(_inpaint(arr, mask))
         w, h = im.size
-        if inset_px and w > 4 * inset_px and h > 4 * inset_px:
+        # Il margine serviva a non portarsi sul bordo della faccia la
+        # cordonatura dipinta; ingrandire il ritaglio per coprirla stirava
+        # pero' la grafica di qualche pixel. Col livello della grafica la
+        # cordonatura non c'e', e sul bordo resta quello che ci va: la grafica
+        # che gira sullo spigolo.
+        if not clean and inset_px and w > 4 * inset_px and h > 4 * inset_px:
             im = im.crop((inset_px, inset_px, w - inset_px, h - inset_px))
             im = im.resize((w, h), Image.LANCZOS)
         out[name] = im

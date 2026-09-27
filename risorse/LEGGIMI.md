@@ -44,11 +44,13 @@ pdfium la rende come un azzurro normale e opaco. Vedi in REGOLE.md
 ### Il limite che ha: la risoluzione
 
 Portata al passo dell'artwork la risorsa sta attorno ai **110 dpi** (109 sul
-KP T1 Mandarino), mentre la texture si costruisce a 200 dpi in qualita' web e a
-300 in qualita' alta. Viene quindi ingrandita di circa 1,8 volte.
+KP T1 Mandarino), mentre la texture si costruisce a 300 dpi, di serie, e a 200
+in qualita' web. Viene quindi ingrandita di circa 2,7 volte - 1,8 in web.
 
 Su questo disegno si puo' fare, e non e' una scusa: la colata e' fatta di campi
 pieni e di bordi morbidi, senza dettaglio fine, e un ingrandimento LANCZOS di
 1,8 su una cosa cosi' non si vede - mentre l'alone che toglie si vedeva eccome.
 Ma resta un limite: **una risorsa alla risoluzione di stampa sarebbe meglio**,
-e su un pack piu' grande, dove l'ingrandimento crescerebbe, servirebbe.
+e su un pack piu' grande, dove l'ingrandimento crescerebbe, servirebbe. Con la
+texture HD la differenza si vede di piu': il resto del foglio e' a 300 dpi e
+la colata sostituita a 110.
