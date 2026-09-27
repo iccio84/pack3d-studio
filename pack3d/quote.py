@@ -275,3 +275,132 @@ def riscontro_vassoio(pdf, v, d, page_no=0):
     attese = [("in larghezza", [round((b - a) * PT2MM, 1) for a, b in zip(xs, xs[1:])]),
               ("in altezza", [round((b - a) * PT2MM, 1) for a, b in zip(ys, ys[1:])])]
     return _riscontro(pdf, "fondo e pareti", attese, v.dims_mm, page_no)
+
+
+# --------------------------------------------------------------------------- #
+# la miniatura vettoriale: quando le quote non sono testo
+# --------------------------------------------------------------------------- #
+# Una tavola porta spesso il disegno tecnico piu' volte: le copie per i
+# tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,
+# aree coperte - e la miniatura del cartiglio. Sono lo STESSO disegno in
+# scala, e quando le quote sono vettorializzate, come sul Kinder Cards T2, sono
+# l'unico riscontro che il codice sappia leggere: "forma e proporzioni dalla
+# miniatura, scala dal disegno grande".
+#
+# Una copia si riconosce dal contorno: due orizzontali e due verticali che
+# chiudono un rettangolo con le proporzioni del DT letto, fra l'8 e il 92%
+# della sua taglia, fuori da lui. Dentro ci devono essere le sue linee.
+#
+# Solo per confermare, mai per gridare. Di rettangoli con le proporzioni giuste
+# una tavola ne ha anche altri: sul Kinder Country sono le cornici delle lastre
+# di separazione, sul Paradiso i riquadri della legenda, e dentro non c'e' il
+# disegno. Una copia che non torna non dice che il DT e' stato letto male: puo'
+# non essere una copia. E le radici delle pinne non si chiedono, perche' non
+# tutte le miniature le disegnano - sul Milch-Schnitte e sul Paradiso no.
+MINIATURA_SCALA = (0.08, 0.92)
+# mm alla scala del DT grande, ma mai sotto 0,6 punti sulla copia
+MINIATURA_TOL_MM = 0.8
+MINIATURA_TOL_PT = 0.6
+# un tratto piu' corto di questa frazione del lato e' una scritta, non una linea
+MINIATURA_LUNGA = 0.25
+MINIATURA_SPESSO = 1.2
+
+
+def _catena(v):
+    return " | ".join(("%.1f" % x).rstrip("0").rstrip(".").replace(".", ",")
+                      for x in v)
+
+
+def riscontro_miniature(pdf, fp, page_no=0):
+    """Pieghe e testate lette sul DT contro le sue copie in scala. Una riga o None.
+
+    `fp` e' il Flowpack com'e' uscito dall'analisi, con `sheet` e `ruotato`:
+    il nastro corre in x se lo steso e' ruotato, in y se no. E' un riscontro:
+    qualunque cosa vada storta qui, il modello si costruisce lo stesso.
+    """
+    if not getattr(fp, "sheet", None):
+        return None
+    try:
+        return _riscontro_miniature(pdf, fp, page_no)
+    except Exception:
+        return None
+
+
+def _riscontro_miniature(pdf, fp, page_no):
+    from .tracciati import segmenti
+    segs, _w, _h = segmenti(pdf, page_no)
+    sx0, sy0, sx1, sy1 = fp.sheet
+    PX0, PY0, PX1, PY1 = (sy0, sx0, sy1, sx1) if fp.ruotato else fp.sheet
+    W, H = PX1 - PX0, PY1 - PY0
+    if W <= 0 or H <= 0:
+        return None
+    # le linee attese, in mm dall'inizio: lungo il nastro le quattro pieghe
+    # del corpo (a sovrapposizione solo i due bordi), lungo il passo le
+    # testate del DT e i due tagli
+    passo = [0.0] + [float(v) for v in fp.linee_passo] + [float(fp.step_mm)]
+    bordi = [0.0, float(fp.web_mm)]
+    if fp.pillow:
+        pieghe = bordi
+    else:
+        a = float(fp.side_fin) + float(fp.back_a)
+        pieghe = bordi + [a, a + fp.T, a + fp.T + fp.W, a + 2 * fp.T + fp.W]
+    Hs = [(c, a, b, st) for k, c, a, b, st in segs if k == "H"
+          and st[0] <= MINIATURA_SPESSO]
+    Vs = [(c, a, b, st) for k, c, a, b, st in segs if k == "V"
+          and st[0] <= MINIATURA_SPESSO]
+
+    def lato(lista, c, a, b, tol):
+        """Un tratto in `c` che copre da a a b."""
+        return any(abs(cc - c) <= tol and a0 <= a + tol and b0 >= b - tol
+                   for cc, a0, b0, _st in lista)
+
+    copie = []
+    for y, a, b, _st in Hs:
+        s = (b - a) / W
+        if not (MINIATURA_SCALA[0] <= s <= MINIATURA_SCALA[1]):
+            continue
+        tol = max(0.5, 0.01 * (b - a))
+        for y0, y1 in ((y, y + s * H), (y - s * H, y)):
+            r = (a, y0, b, y1)
+            if not (r[2] < PX0 or r[0] > PX1 or r[3] < PY0 or r[1] > PY1):
+                continue
+            if any(max(abs(p - q) for p, q in zip(r, c[0])) < 1.0 for c in copie):
+                continue
+            if (lato(Vs, a, y0, y1, tol) and lato(Vs, b, y0, y1, tol)
+                    and lato(Hs, y1 if y0 == y else y0, a, b, tol)):
+                copie.append((r, s))
+
+    tornano = []
+    for (x0, y0, x1, y1), s in copie:
+        tol = max(MINIATURA_TOL_PT, MINIATURA_TOL_MM / PT2MM * s)
+        # nastro in x -> pieghe verticali e testate orizzontali, e viceversa
+        assi = (((Vs, x0, y0, y1, pieghe), (Hs, y0, x0, x1, passo))
+                if fp.ruotato else
+                ((Hs, y0, x0, x1, pieghe), (Vs, x0, y0, y1, passo)))
+        ok = True
+        for lista, o, t0, t1, posizioni in assi:
+            lungo = MINIATURA_LUNGA * (t1 - t0)
+            for mm in posizioni:
+                p = o + mm / PT2MM * s
+                if not any(abs(c - p) <= tol and b - a >= lungo
+                           and a >= t0 - tol and b <= t1 + tol
+                           for c, a, b, _st in lista):
+                    ok = False
+                    break
+            if not ok:
+                break
+        if ok:
+            tornano.append(s)
+    if not tornano:
+        return None
+    if fp.pillow:
+        nastro = "nastro %s" % _catena([fp.web_mm])
+    else:
+        nastro = "nastro %s" % _catena([fp.side_fin, fp.back_a, fp.T, fp.W,
+                                        fp.T, fp.back_b, fp.side_fin])
+    scale = sorted({round(1.0 / s, 1) for s in tornano})
+    return ("miniatura: le pieghe e le testate lette sul DT (%s, passo %s) "
+            "tornano su %d %s del disegno in scala %s"
+            % (nastro, _catena([b - a for a, b in zip(passo, passo[1:])]),
+               len(tornano), "copia" if len(tornano) == 1 else "copie",
+               ", ".join(("1:%.1f" % v).replace(".", ",") for v in scale)))

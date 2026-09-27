@@ -296,8 +296,11 @@ def quadricromia(pdf, page_no, scala, riq, sovrastampa="simulate"):
         destinazione.close()
         with open(sorgente.name, "wb") as fh:
             w.write(fh)
+        # solo la pagina della banda: la copia porta tutte le pagine del
+        # file, e senza limiti Ghostscript le rende tutte nello stesso PNG
         esito = subprocess.run(
             [GS, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER",
+             "-dFirstPage=%d" % (page_no + 1), "-dLastPage=%d" % (page_no + 1),
              "-sOverprint=" + sovrastampa, "-sDEVICE=png16m",
              "-r%g" % (scala * 72.0), "-dTextAlphaBits=4",
              "-dGraphicsAlphaBits=4", "-sOutputFile=" + destinazione.name,

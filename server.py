@@ -201,6 +201,31 @@ def avviso_quadricromia(pdf, page_no=0):
         return None
 
 
+def avviso_pagine(pdf):
+    """La riga sulle pagine, se il file ne ha piu' di una.
+
+    Si lavora sempre e solo sulla PRIMA pagina: un artwork su piu' pagine e'
+    quasi sempre lo stesso pack ripetuto per lingua - sul Kinder Cards T2
+    "64-GERMANY" e "01-ITALY", identici tranne il piede - e mescolarle vuol
+    dire misurare un pack su una pagina e stamparne un altro. Lo si dice,
+    perche' chi ha caricato il file sappia quale pagina e' diventata il
+    modello.
+    """
+    try:
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf)
+        try:
+            n = len(doc)
+        finally:
+            doc.close()
+    except Exception:
+        return None
+    if n <= 1:
+        return None
+    return ("il PDF ha %d pagine: si usa solo la prima, le altre di solito "
+            "sono lo stesso pack in altre lingue" % n)
+
+
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                  colata_riquadro=None):
     dpi, tmax = risoluzione(quality)
@@ -234,6 +259,9 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     rgb = avviso_quadricromia(pdf)
     if rgb:
         meta.insert(0, rgb)
+    pagine = avviso_pagine(pdf)
+    if pagine:
+        meta.insert(0, pagine)
     return (meta + avvisi_tex + verifiche + ([riscontro] if riscontro else [])
             + [w for w in dl.check(d)])
 
@@ -304,6 +332,9 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
             "%d vertici sul profilo della fustella, cartoncino %.1f mm"
             % (len(V), vassoio.SPESSORE)]
+    pagine = avviso_pagine(pdf)
+    if pagine:
+        meta.insert(0, pagine)
     return (meta + avvisi_sagoma + avvisi_tex + list(v.warnings) + avvisi_fronte
             + verifiche + ([riscontro] if riscontro else []))
 
@@ -568,6 +599,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # l'analisi com'e' uscita dal DT, prima che la sezione dell'agente la
     # cambi: e' su questa che si controlla il fronte
     analisi = fp0 if case is None else None
+    pagine = avviso_pagine(pdf)
+    if pagine:
+        avvisi_sez.append(pagine)
     rgb = avviso_quadricromia(pdf)
     if rgb:
         avvisi_sez.append(rgb)
@@ -807,6 +841,13 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                                             fp0.end_fin, fp0.gola)
     if riscontro:
         avvisi_sez.append(riscontro)
+    # e la miniatura, che e' il riscontro quando le quote sono in curve: sul
+    # DT come l'ha letto l'analisi, non sulla sezione ritoccata dall'agente
+    letto = analisi if case is None else linee
+    miniatura = (quotature.riscontro_miniature(pdf, letto)
+                 if letto is not None else None)
+    if miniatura:
+        avvisi_sez.append(miniatura)
 
     grid = V.reshape(-1, nv + 1, 3)
     # (4) le pinne restano saldate e piatte: nessuna manipolazione dei lembi.
@@ -964,7 +1005,18 @@ KIND_NOTI = ("carton", "flowpack", "vassoio")
 def analyze_pdf(pdf, kind=None):
     """`kind` arriva dall'utente: la tipologia si dichiara, non si indovina.
     Il riconoscimento automatico sbaglia (il solutore astuccio risolve anche
-    certi flowpack) e sbagliare qui compromette tutto il resto."""
+    certi flowpack) e sbagliare qui compromette tutto il resto.
+
+    Tutte le famiglie si misurano sulla prima pagina sola: se ce ne sono
+    altre, il primo cartellino lo dice. Vedi `avviso_pagine`."""
+    info = _analyze_pdf(pdf, kind)
+    pagine = avviso_pagine(pdf)
+    if pagine and isinstance(info.get("meta"), list):
+        info["meta"].insert(0, pagine)
+    return info
+
+
+def _analyze_pdf(pdf, kind=None):
     kind = normalizza_kind(kind)
     if kind is not None and kind not in KIND_NOTI:
         # Cadere nel ramo flowpack e' peggio che fermarsi: e' lo stesso difetto
