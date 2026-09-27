@@ -737,25 +737,44 @@ def merito(b):
     """Quanto e' credibile una soluzione. Piu' piccolo, meglio e'.
 
     Prima la falda: una falda fuori scala non e' una falda, e nessuno scarto
-    numerico puo' valere quanto quella. Poi la simmetria, poi il fronte piu'
-    largo.
+    numerico puo' valere quanto quella. Poi la simmetria, poi quanto passo
+    attraversano le quattro pieghe, poi il fronte piu' largo.
+
+    Il passo attraversato viene prima del fronte per via delle guide
+    dell'area di stampa. Una piega corre lungo tutto il tubo; una guida si
+    ferma alle saldature, perche' li' la stampa finisce. Sul Kinder Cards T2
+    le pieghe sono lunghe 108 mm (il passo) e le guide, a 1,5 mm da ogni
+    piega, 88: prendendo le guide al posto delle pieghe i conti chiudono lo
+    stesso - con la cucitura centrata la simmetria e' zero comunque - e il
+    fronte largo vinceva con 46,5 x 15,7 e falda 11,8 invece di 45 x 15 e
+    14. La miniatura del file le disegna in due colori, pieghe e area di
+    stampa, e le pieghe sono proprio quelle che attraversano il passo.
+
+    Conta la piega PIU' CORTA delle quattro, arrotondata al 5%: un gruppo di
+    linee dello stesso tipo ha tutto la stessa lunghezza, e un centesimo di
+    rumore non deve decidere. Dove tutte le pieghe sono uguali - Colazione,
+    Paradiso, Brioss - il criterio pareggia e decide il fronte come prima.
     """
-    return (b["side_fin"] > FALDA_LIMITE, b["simmetria"], -b["front"])
+    return (b["side_fin"] > FALDA_LIMITE, b["simmetria"],
+            -b.get("copertura", 0.0), -b["front"])
 
 
-def solve_bands(web_mm, folds_mm, tol=1.5):
+def solve_bands(web_mm, folds_mm, tol=1.5, copertura=None):
     """Vedi solve_bands_any: la simmetria non vale su tutti i pack.
 
     `folds_mm` puo' essere una lista di pieghe o piu' LETTURE alternative
     dello stesso disegno (una lista di liste): si risolvono tutte e vince la
     piu' credibile. Serve a non far decidere a un decimo di millimetro quale
     lettura e' giusta - vedi _collapse_guides.
+
+    `copertura` e' `{piega: frazione del passo che la linea attraversa}`,
+    con le stesse chiavi di `folds_mm`: vedi `merito`.
     """
     if folds_mm and isinstance(folds_mm[0], (list, tuple)):
-        sol = [b for b in (solve_bands_any(web_mm, f, tol)
+        sol = [b for b in (solve_bands_any(web_mm, f, tol, copertura)
                            for f in folds_mm) if b]
         return min(sol, key=merito) if sol else None
-    return solve_bands_any(web_mm, folds_mm, tol)
+    return solve_bands_any(web_mm, folds_mm, tol, copertura)
 
 
 # Falde misurate su tutti i pack coperti: 4,1 (K Brioss T10) 12,5 (Paradiso)
@@ -767,7 +786,7 @@ def solve_bands(web_mm, folds_mm, tol=1.5):
 FALDA_LIMITE = 24.0
 
 
-def solve_bands_any(web_mm, folds_mm, tol=2.0):
+def solve_bands_any(web_mm, folds_mm, tol=2.0, copertura=None):
     """Ricava fronte, fianco e falda enumerando tutte le quaterne di pieghe.
 
     La versione precedente cercava coppie speculari rispetto alla mezzeria del
@@ -776,6 +795,7 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0):
     sempre e' un altro: retro = fronte, fianchi uguali, perimetro + 2 falde =
     nastro.
     """
+    copertura = copertura or {}
     import itertools
     best = None
     for y1, y2, y3, y4 in itertools.combinations(sorted(set(folds_mm)), 4):
@@ -791,7 +811,9 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0):
         cand = dict(front=round(front, 2), thick=round((sa + sb) / 2, 2),
                     side_fin=round(fin, 2), back_a=round(ba, 2),
                     back_b=round(bb, 2), folds=(y1, y2, y3, y4),
-                    simmetria=round(abs(ba - bb), 2))
+                    simmetria=round(abs(ba - bb), 2),
+                    copertura=round(20.0 * min(copertura.get(y, 0.0)
+                                               for y in (y1, y2, y3, y4))) / 20.0)
         # Prima la falda, poi la simmetria. Su K Brioss STD le due quaterne in
         # gara erano queste:
         #
@@ -1090,6 +1112,23 @@ def testate_dal_dt(vs, x0, x1):
     return pinna, gola, righe
 
 
+def _copre(linee, c, a0, a1, tol=3.0):
+    """Frazione di `[a0, a1]` coperta dalle `linee` `(c, a, b)` vicine a `c`.
+
+    Si misura l'UNIONE dei tratti, non la somma: una piega disegnata due
+    volte non attraversa il passo due volte. `tol` e' quella di `_cluster`
+    che ha raccolto il gruppo.
+    """
+    tratti = sorted((max(a, a0), min(b, a1)) for cc, a, b in linee
+                    if abs(cc - c) <= tol and min(b, a1) > max(a, a0))
+    tot, fine = 0.0, a0
+    for a, b in tratti:
+        if b > fine:
+            tot += b - max(a, fine)
+            fine = b
+    return tot / (a1 - a0) if a1 > a0 else 0.0
+
+
 def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
     from .dieline import _cluster
@@ -1128,9 +1167,13 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     x0, x1 = min(vs), max(vs)
     web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM
     folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
+    # quanto passo attraversa ogni piega: separa le pieghe dalle guide
+    # dell'area di stampa, che si fermano alle saldature. Vedi `merito`.
+    lunghe = [(c, a, b) for k, c, a, b, st in S if k == "H" and b - a > seg_h]
+    copertura = {(c - y0) * PT2MM: _copre(lunghe, c, x0, x1) for c in hs}
     avvisi = []
     if modo == "pinna":
-        b = solve_bands(web, folds)
+        b = solve_bands(web, folds, copertura=copertura)
         if b is None:
             raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
         lembo, inizio = 0.0, b["side_fin"]

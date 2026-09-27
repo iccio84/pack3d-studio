@@ -56,15 +56,23 @@ def risoluzione(quality):
     return TEXTURE["web" if qualita(quality) == "web" else "hd"]
 
 
-def strip_separations(src, dst, drop):
+def strip_separations(src, dst, drop, riquadri=None, variabili=None):
     """Toglie le lastre tecniche eliminando le operazioni di disegno.
 
     Colorarle di bianco non basta: un tratto tecnico sopra la grafica
     lascerebbe una riga bianca. Il filtro scende anche dentro i Form XObject,
     dove spesso stanno cold seal e bianco coprente.
+
+    Se `riquadri` e' una lista, ci finiscono i riquadri delle aree riservate
+    ai dati variabili che si sono tolte - le lastre `variabili`, o se non
+    vengono date quelle il cui nome lo dice (`techink.DATI_VARIABILI`) - nel
+    telaio di misura (punti, MediaBox, y in giu'): sono i posti dove la loro
+    didascalia sta, e chi rende la texture la spegne. Vedi
+    `strati.segna_riservate`.
     """
     import pypdf
     from pypdf.generic import ContentStream
+    from .techink import DATI_VARIABILI
 
     # `clone_from` e non `append`: append PERDE /OCProperties, e con quello
     # perde i livelli. Un astuccio che ha insieme una vernice e la colata su un
@@ -73,8 +81,14 @@ def strip_separations(src, dst, drop):
     # c'era piu' davvero.
     w = pypdf.PdfWriter(clone_from=src)
     drop = {d.lower() for d in drop}
+    if riquadri is None:
+        variabili = set()
+    elif variabili is None:
+        variabili = {d for d in drop if DATI_VARIABILI.search(d)}
+    else:
+        variabili = {v.lower() for v in variabili} & drop
 
-    def names(res):
+    def names(res, quali=drop):
         out = set()
         cs = res.get("/ColorSpace")
         if not cs:
@@ -83,11 +97,11 @@ def strip_separations(src, dst, drop):
             try:
                 o = v.get_object()
                 if o[0] == "/Separation":
-                    if str(o[1]).lstrip("/").replace("#20", " ").lower() in drop:
+                    if str(o[1]).lstrip("/").replace("#20", " ").lower() in quali:
                         out.add(str(k))
                 elif o[0] == "/DeviceN":
                     nm = [str(x).lstrip("/").replace("#20", " ").lower() for x in o[1]]
-                    if nm and all(n in drop for n in nm):
+                    if nm and all(n in quali for n in nm):
                         out.add(str(k))
             except Exception:
                 pass
@@ -95,17 +109,83 @@ def strip_separations(src, dst, drop):
 
     FILL, STROKE = {b"f", b"F", b"f*"}, {b"S", b"s"}
     BOTH = {b"B", b"B*", b"b", b"b*"}
+    # Lo spazio colore e' STATO GRAFICO, come la matrice: lo cambiano anche
+    # g, rg e k - che dipingono in grigio, RGB e quadricromia - e Q lo
+    # riporta a com'era al q. Seguendo solo `cs`, dopo il riempimento di
+    # un'area riservata tutto quello che veniva in quadricromia con `k` era
+    # ancora "di quella lastra" e veniva tolto: sul Kinder Cards T2 106
+    # riempimenti su 112, per fortuna tutti fuori dal DT - il fondo del
+    # cartiglio, le pastiglie della legenda - ma sulla grafica sarebbe stato
+    # lo stesso.
+    DISPOSITIVO = {b"g": "/DeviceGray", b"rg": "/DeviceRGB",
+                   b"k": "/DeviceCMYK"}
+    DISPOSITIVO_TRATTO = {b"G": "/DeviceGray", b"RG": "/DeviceRGB",
+                          b"K": "/DeviceCMYK"}
+    PERCORSO = {b"m", b"l", b"c", b"v", b"y", b"re"}
+    # dove i form sono disegnati: matrice al momento del Do, per i riquadri
+    matrici = {}
 
-    def filt(obj, res):
+    def per(m, n):
+        """m e poi n, come compone il PDF."""
+        a1, b1, c1, d1, e1, f1 = m
+        a2, b2, c2, d2, e2, f2 = n
+        return (a1 * a2 + b1 * c2, a1 * b2 + b1 * d2,
+                c1 * a2 + d1 * c2, c1 * b2 + d1 * d2,
+                e1 * a2 + f1 * c2 + e2, e1 * b2 + f1 * d2 + f2)
+
+    def punti(ops, op, m):
+        v = [float(x) for x in ops]
+        if op == b"re":
+            x, y, a, b = v
+            v = [x, y, x + a, y, x, y + b, x + a, y + b]
+        return [(m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5])
+                for x, y in zip(v[0::2], v[1::2])]
+
+    def filt(obj, res, base=None):
         bad = names(res)
+        var = names(res, variabili) if base is not None and variabili else set()
         cs = ContentStream(obj, w)
         ncs = scs = None
+        pila = []
+        ctm, tracciato = base, []
         out = []
         for ops, op in cs.operations:
             if op == b"cs":
                 ncs = str(ops[0])
             elif op == b"CS":
                 scs = str(ops[0])
+            elif op in DISPOSITIVO:
+                ncs = DISPOSITIVO[op]
+            elif op in DISPOSITIVO_TRATTO:
+                scs = DISPOSITIVO_TRATTO[op]
+            elif op == b"q":
+                pila.append((ncs, scs, ctm))
+            elif op == b"Q":
+                if pila:
+                    ncs, scs, ctm = pila.pop()
+            elif ctm is not None:
+                if op == b"cm":
+                    ctm = per(tuple(float(x) for x in ops), ctm)
+                elif op in PERCORSO and var:
+                    try:
+                        tracciato.extend(punti(ops, op, ctm))
+                    except (TypeError, ValueError):
+                        pass
+                elif op == b"Do":
+                    try:
+                        o = res["/XObject"].get_object()[str(ops[0])].get_object()
+                        mat = tuple(float(x) for x in
+                                    o.get("/Matrix", (1, 0, 0, 1, 0, 0)))
+                        matrici.setdefault(id(o), per(mat, ctm))
+                    except Exception:
+                        pass
+            if op in FILL or op in BOTH or op in STROKE or op == b"n":
+                if ncs in var and op not in STROKE and op != b"n" and tracciato:
+                    xs = [p[0] for p in tracciato]
+                    ys = [p[1] for p in tracciato]
+                    riquadri.append((min(xs) - mx0, my1 - max(ys),
+                                     max(xs) - mx0, my1 - min(ys)))
+                tracciato = []
             if op in FILL and ncs in bad:
                 out.append(([], b"n")); continue
             if op in STROKE and scs in bad:
@@ -136,12 +216,18 @@ def strip_separations(src, dst, drop):
             sub = o.get("/Resources")
             if sub is None:
                 continue
-            o.set_data(filt(o, sub.get_object()).get_data())
+            o.set_data(filt(o, sub.get_object(), matrici.get(id(o))).get_data())
             walk(sub.get_object(), seen)
 
     page = w.pages[0]
+    mb = page.mediabox
+    mx0, my1 = float(mb.left), float(mb.top)
     res = page["/Resources"]
-    page.replace_contents(filt(page.get_contents(), res))
+    # la matrice si segue solo se c'e' un'area riservata da cercare: su un
+    # foglio come Colazione il flusso sono centinaia di migliaia di operazioni
+    page.replace_contents(filt(page.get_contents(), res,
+                               (1.0, 0.0, 0.0, 1.0, 0.0, 0.0)
+                               if variabili else None))
     walk(res, set())
     with open(dst, "wb") as fh:
         w.write(fh)
@@ -248,9 +334,14 @@ def senza_coperture(pdf, page_no=0, extra=()):
             pagina, prova=techink.copertura).values())
     except Exception:
         return pdf, []
+    # {lastra: didascalia} delle aree riservate trovate leggendo la scritta:
+    # si chiamano con un numero di Pantone, e se servono i dati variabili lo
+    # dice solo la didascalia
+    etichettate = {}
     try:
         if not strati.tecnici(pdf, page_no):
-            lastre |= set(techink.aree_riservate(pdf, page_no))
+            etichettate = techink.aree_riservate(pdf, page_no)
+            lastre |= set(etichettate)
     except Exception:
         pass
     lastre |= {techink._norm(n) for n in (extra or ()) if str(n).strip()}
@@ -260,7 +351,20 @@ def senza_coperture(pdf, page_no=0, extra=()):
     try:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
-        return strip_separations(pdf, tmp.name, lastre), lastre
+        # Tolta l'area riservata resta la sua ETICHETTA, se non e' scritta in
+        # bianco: sul Kinder Cards T2 "Best Before Area" e "POSITIONING AREA
+        # FOR EAN CODE (if requested)", marrone scuro, restavano stampate sui
+        # fianchi del pack. I riquadri delle aree tolte vanno a chi rende la
+        # texture, che dentro spegne le scritte: vedi `strati.dividi`.
+        riquadri = []
+        variabili = {n for n in lastre
+                     if techink.DATI_VARIABILI.search(n)
+                     or techink.DATI_VARIABILI.search(etichettate.get(n, ""))}
+        pulito = strip_separations(pdf, tmp.name, lastre, riquadri=riquadri,
+                                   variabili=variabili)
+        if riquadri:
+            strati.segna_riservate(pulito, riquadri)
+        return pulito, lastre
     except Exception:
         # meglio una texture con un residuo tecnico che nessun modello
         return pdf, []

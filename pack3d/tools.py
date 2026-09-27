@@ -124,12 +124,26 @@ def analyze_vassoio(pdf):
 
 
 def analyze_flowpack(pdf):
-    """Fasce del nastro, perimetro e saldature di un flowpack."""
+    """Fasce del nastro, perimetro e saldature di un flowpack.
+
+    Sul blocco dell'artwork, come la costruzione, e non sulla pagina intera:
+    sul Kinder Cards T2 la pagina porta il DT con la grafica e quattro sue
+    copie tecniche, e misurate insieme davano nastro 260 x passo 168 invece di
+    148 x 108. Se sul blocco le fasce non chiudono si riprova sul riquadro
+    della fustella, come fa `server.analisi_flowpack`.
+    """
     from . import quote
+    box = riquadro_artwork(pdf)
     try:
-        fp = fpk.analyze_auto(pdf)
+        fp = fpk.analyze_auto(pdf, bbox=box)
     except Exception as e:
-        return {"errore": str(e)[:160]}
+        riq = fpk.riquadro_fustella(pdf, stampato=box) if box else None
+        try:
+            if not riq or riq == box:
+                raise
+            fp = fpk.analyze_auto(pdf, bbox=riq)
+        except Exception:
+            return {"errore": str(e)[:160]}
     return dict(nastro_mm=fp.web_mm, passo_mm=fp.step_mm,
                 fronte=fp.W, spessore=fp.T, corpo=fp.L,
                 pinna_testa=fp.end_fin, gola=fp.gola,
@@ -138,7 +152,8 @@ def analyze_flowpack(pdf):
                 verifica_perimetro_piu_falde=round(fp.girth + 2 * fp.side_fin, 1),
                 letture=list(fp.warnings),
                 quote_del_file=quote.riscontro_testate(pdf, fp.step_mm,
-                                                       fp.end_fin, fp.gola))
+                                                       fp.end_fin, fp.gola),
+                miniatura=quote.riscontro_miniature(pdf, fp))
 
 
 def measure_region(pdf, x_mm, y_mm, w_mm, h_mm, dpi: int = 200):
@@ -687,6 +702,51 @@ _RAW["reconstruct_area"] = reconstruct_area
 RUN = {k: (lambda f: lambda *a, **kw: _plain(f(*a, **kw)))(v) for k, v in _RAW.items()}
 
 
+def riquadro_artwork(pdf):
+    """Il blocco dell'artwork in punti `(x0, y0, x1, y1)`, o None.
+
+    E' il primo blocco stampato di `find_blocks`: quello da cui si misura il
+    pack e fuori dal quale i testi sono note.
+    """
+    try:
+        b = [x for x in find_blocks(pdf)["blocchi"] if x["tipo"] == "stampato"]
+    except Exception:
+        return None
+    if not b:
+        return None
+    b = b[0]
+    return (b["x_mm"] / PT2MM, b["y_mm"] / PT2MM,
+            (b["x_mm"] + b["w_mm"]) / PT2MM, (b["y_mm"] + b["h_mm"]) / PT2MM)
+
+
+def dt_principale(pdf, page_no=0):
+    """Il riquadro del DT piu' grande della tavola, `(x, y, w, h)` in mm.
+
+    Una tavola porta spesso lo STESSO disegno tecnico piu' volte: quello con
+    la grafica e, accanto, le copie per i tecnicismi di stampa - supporto
+    trasparente, alluminio, battuta di bianco, aree coperte - piu' la
+    miniatura nel cartiglio. Quello con la grafica e' di norma il piu' grosso,
+    e il DT piu' grosso e' il gruppo di linee tecniche collegate con la
+    lunghezza totale maggiore: la stessa scelta che `dieline` fa sugli
+    astucci con `_largest_cluster`. None se il file non ha tratti tecnici.
+    """
+    from .tracciati import segmenti
+    try:
+        segs, pw, ph = segmenti(pdf, page_no)
+    except Exception:
+        return None
+    penne = dl._technical_pens(segs, pw, ph)
+    S = dl._largest_cluster([s for s in segs if s[4] in penne])
+    if not S:
+        return None
+    xs = [c for k, c, a, b, st in S if k == "V"]
+    xs += [v for k, c, a, b, st in S if k == "H" for v in (a, b)]
+    ys = [c for k, c, a, b, st in S if k == "H"]
+    ys += [v for k, c, a, b, st in S if k == "V" for v in (a, b)]
+    return (min(xs) * PT2MM, min(ys) * PT2MM,
+            (max(xs) - min(xs)) * PT2MM, (max(ys) - min(ys)) * PT2MM)
+
+
 def find_blocks(pdf, dpi=100, min_mm=60.0):
     """Elenca i blocchi della tavola, distinguendo lo stampato dal tecnico.
 
@@ -734,6 +794,26 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
             # 83% di superficie colorata sulla vista stampata contro 13% su
             # quella tecnica: la soglia sta comoda in mezzo
             tipo="stampato" if colore > 0.35 else "tecnico"))
+    # Nessun blocco passa la soglia del colore, ma la grafica c'e': e'
+    # argento, metallizzato, bianco. Sul Kinder Cards T2 la vista stampata e'
+    # colorata al 34% - il resto e' film argentato - e senza blocco stampato
+    # l'analisi misurava tutta la tavola: il DT con la grafica piu' le sue
+    # quattro copie tecniche sotto, nastro 260 x passo 168 invece di 148 x
+    # 108. Allora si prende il blocco che contiene il DT piu' grosso, che e'
+    # quello con la grafica: vedi `dt_principale`.
+    if out and not any(b["tipo"] == "stampato" for b in out):
+        dt = dt_principale(pdf)
+        if dt is not None:
+            def dentro(b):
+                ix = max(0.0, min(b["x_mm"] + b["w_mm"], dt[0] + dt[2])
+                         - max(b["x_mm"], dt[0]))
+                iy = max(0.0, min(b["y_mm"] + b["h_mm"], dt[1] + dt[3])
+                         - max(b["y_mm"], dt[1]))
+                return ix * iy / max(dt[2] * dt[3], 1e-6)
+            b = max(out, key=dentro)
+            if dentro(b) >= 0.5:
+                b["tipo"] = "stampato"
+                b["dt_principale"] = True
     # L'artwork e' il blocco piu' vario, non il piu' grande: su Kinder Country
     # le tre lastre di separazione sono piu' larghe della OUTSIDE VIEW e la
     # scaletta per ingombro metteva davanti la lastra del bianco.
@@ -755,7 +835,12 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
                       "separazione o un cartiglio sono colorati quanto una "
                       "grafica ma con pochi colori. I blocchi 'tecnico' con lo "
                       "stesso ingombro sono viste del disegno da usare come "
-                      "maschera in clean_artwork."))
+                      "maschera in clean_artwork. Un blocco con "
+                      "dt_principale e' stato promosso a stampato: nessun "
+                      "blocco aveva abbastanza colore - grafica argento o "
+                      "metallizzata - e quello contiene il DT piu' grosso "
+                      "della pagina, che e' quello con la grafica; le copie "
+                      "piu' piccole sono tecnicismi di stampa o miniature."))
 
 
 TOOLS.insert(1, dict(
@@ -808,15 +893,7 @@ def livelli(pdf, x_mm=None, y_mm=None, w_mm=None, h_mm=None):
     # i testi fuori dall'artwork stampato sono note: quote delle miniature,
     # legenda, cartiglio. Il riquadro dell'artwork e' il primo blocco
     # stampato, quello che find_blocks mette in cima.
-    stampato = None
-    try:
-        b = [x for x in find_blocks(pdf)["blocchi"] if x["tipo"] == "stampato"]
-        if b:
-            stampato = (b[0]["x_mm"] / PT2MM, b[0]["y_mm"] / PT2MM,
-                        (b[0]["x_mm"] + b[0]["w_mm"]) / PT2MM,
-                        (b[0]["y_mm"] + b[0]["h_mm"]) / PT2MM)
-    except Exception:
-        pass
+    stampato = riquadro_artwork(pdf)
     dt = strati.rendi(pdf, 0, s, strati.DT, riq, stampato=stampato)
     gr = strati.rendi(pdf, 0, s, strati.GRAFICA, riq, stampato=stampato)
     c = strati.CONTI

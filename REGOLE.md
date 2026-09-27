@@ -35,7 +35,9 @@ costruzione:
   (`quote.riscontro_testate`, `riscontro_astuccio`, `riscontro_vassoio`): una
   catena di quote che torna le conferma, una catena o una terna del cartiglio
   che parla di questo pack e dice altro si **grida**, e quando le quote sono
-  vettorializzate lo si dice e l'occhio le guarda sulla miniatura;
+  vettorializzate lo si dice e l'occhio le guarda sulla miniatura; sul
+  flowpack, allora, pieghe e testate si ritrovano anche sulle copie in scala
+  del DT (`quote.riscontro_miniature`, vedi *Prima delle tre regole*);
 - **prima della mappatura**, le UV sul DT: le linee del modello sulle linee
   del disegno;
 - **dopo**, il fronte sul fronte: centrato, normale verso chi guarda, niente
@@ -49,6 +51,69 @@ misura sul film dal centro del fronte, la spalla e' lunga quanto serve al film
 per coprire il calo del tubo, e sulla spalla il film si stende sulla
 superficie. Senza ritagliare niente dalla texture. La terza verifica dice
 quanto si stira. Vedi *La grafica sulle pinne: il film non si allunga*.
+
+## Prima delle tre regole: una pagina, un DT
+
+Prima di misurare qualunque cosa si sceglie **cosa** misurare. Vale per tutte
+le famiglie.
+
+**Solo la prima pagina.** Un PDF su piu' pagine e' quasi sempre lo stesso pack
+ripetuto per lingua: il Kinder Cards T2 ne ha due, `64-GERMANY` e `01-ITALY`,
+identiche tranne il piede; il Kinder Country tre. Tutto il codice lavora sulla
+pagina 0 - anche Ghostscript, che in `colata.quadricromia` rendeva tutte le
+pagine della copia nello stesso PNG e adesso ha `-dFirstPage`/`-dLastPage` -
+e il primo cartellino dice quante pagine ha il file (`server.avviso_pagine`),
+perche' chi l'ha caricato sappia quale e' diventata il modello.
+
+**Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
+stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
+tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,
+aree coperte - e la miniatura nel cartiglio. Si misura solo quello con la
+grafica.
+
+- `find_blocks` lo sceglie per colori: l'artwork e' il blocco piu' vario, non
+  il piu' grande (vedi *L'artwork e' il blocco piu' vario*);
+- ma una grafica **argento o metallizzata** ha poco colore. Sul Kinder Cards
+  la vista stampata e' colorata al 34%, contro il 35% che serve per dirsi
+  stampato: nessun blocco passava, e l'analisi misurava **tutta la tavola** -
+  il DT con la grafica piu' le quattro copie tecniche sotto - con **nastro 260
+  x passo 168** invece di **148 x 108**, sezione 42,9 x 84,1 e il fronte fuori
+  dal fronte. Adesso, quando nessun blocco e' stampato, si prende il blocco
+  che contiene il **DT piu' grosso** (`tools.dt_principale`: il gruppo di
+  linee tecniche collegate con la lunghezza totale maggiore, la stessa scelta
+  di `_largest_cluster` sugli astucci) e lo si marca `dt_principale`;
+- lo strumento dell'agente `analyze_flowpack` misura sullo stesso blocco
+  della costruzione (`tools.riquadro_artwork`), e non piu' sulla pagina
+  intera, dove sul Kinder Cards dava gli stessi 260 x 168.
+
+Sul parco la promozione non tocca niente: tutti gli altri file hanno un
+blocco stampato. Sulla vernice del Nutella Donut, che la grafica non ce l'ha,
+promuove il DT e non la legenda: solo la vista dell'agente, perche' gli
+astucci si misurano da `dieline`.
+
+**La miniatura come riferimento.** "Forma e proporzioni dalla miniatura, scala
+dal disegno grande" (vedi *Cercare sempre il disegno tecnico in miniatura*).
+Quando le quote sono in curve e il codice non le legge - sul Kinder Cards anche
+il 148 e il 108 - il riscontro e' la miniatura stessa, e le copie tecniche
+valgono quanto lei: sono lo stesso disegno in scala. `quote.riscontro_miniature`
+cerca i contorni chiusi con le proporzioni del DT letto, fra l'8 e il 92% della
+sua taglia, fuori da lui, e controlla che le pieghe e le testate lette ci
+cadano sopra:
+
+    Kinder Cards T2     5 copie, 1:2 (le quattro tecniche) e 1:5,3
+    Milch-Schnitte T1   1 copia, 1:4,0
+    Kinder Paradiso T1  1 copia, 1:11,0
+    K Tronky T1         1 copia, 1:4,6
+    K Brioss T10        1 copia, 1:7,2
+
+Serve a **confermare**, mai a gridare. Di rettangoli con le proporzioni giuste
+una tavola ne ha anche altri - sul Kinder Country le cornici delle lastre, sul
+Paradiso i riquadri della legenda - e dentro non c'e' il disegno: una copia
+che non torna puo' non essere una copia. Le radici delle pinne non si
+chiedono, perche' non tutte le miniature le disegnano (Milch-Schnitte e
+Paradiso no). E conferma che le linee **ci sono**, non che siano pieghe: una
+guida dell'area di stampa sta nella copia quanto una piega. Quella scelta la
+fa il solutore, vedi *Pieghe e guide: la piega attraversa il passo*.
 
 ## Domande all'utente
 
@@ -667,6 +732,48 @@ Sul Pingui T6 sparisce il 9,7% della texture — i blocchi sulle falde e il
 riquadro nella fascia rossa — e restano interi il logo, i due bollini `x6`, il
 `FATTO CON LATTE FRESCO`, la bustina e il QR code. Che e' esattamente quello
 che il registro di lastre note portava via.
+
+##### Tolta l'area, via anche la sua didascalia
+
+Tolta la lastra resta la **scritta**, quando non e' in bianco. Sul Kinder
+Cards T2 `Best Before Area` e `POSITIONING AREA FOR EAN CODE (if requested)`
+sono in marrone scuro, CMYK 0/81/100/77: via i riquadri verdi, le due scritte
+restavano stampate sui fianchi del pack.
+
+Mentre `strip_separations` toglie le aree dei **dati variabili** - scadenza,
+lotto, codice a barre (`techink.DATI_VARIABILI`, sul nome della lastra o
+sulla sua didascalia) - ne misura il riquadro, seguendo la matrice e i form,
+e lo passa a chi rende la texture (`strati.segna_riservate`). Dentro un
+riquadro tolto `strati.dividi` manda nel livello DT:
+
+- il testo che dice il nome di un'area riservata (`techink.NOME_RISERVATA`):
+  lo dice quello che c'e' scritto, non il colore;
+- e cio' che ha il **colore di una di quelle scritte**, perche' non tutte le
+  didascalie sono testo: quella del codice a barre del Kinder Cards e' in
+  curve, 38 tracciati. Un codice a barre vero, nero, resta dov'e'; e senza
+  una didascalia scritta non si impara nessun colore e non si toglie niente.
+
+Solo dentro i riquadri **tolti**. Sul Kinder Country le aree sono dipinte con
+Pantone qualsiasi, e siccome il file ha livelli tecnici la ricerca per
+etichetta non parte: i riquadri verdi restano, e con loro le scritte - un
+riquadro verde senza nome sembrerebbe grafica. Che restino e' un limite gia'
+noto, non un effetto di questa regola. Le aree coperte e senza stampa sono
+fuori per un'altra ragione: sotto possono avere grafica - la fascia coperta
+dalla pinna del Kinder Cards porta la cialda e la banda rossa - e li' non si
+toglie niente.
+
+##### Lo spazio colore e' stato grafico
+
+`strip_separations` riconosceva la lastra da togliere solo dall'operatore
+`cs`. Ma lo spazio colore lo cambiano anche `g`, `rg` e `k` - che dipingono in
+grigio, RGB e quadricromia - e lo rimette `Q` a com'era al `q`. Dopo il
+riempimento di un'area riservata tutto quello che veniva in quadricromia con
+`k` risultava ancora di quella lastra, e veniva tolto: **106 riempimenti su 112**
+sul Kinder Cards, 41 su 51 su Colazione, 5 su 7 sulla vernice del Nutella
+Donut. Per fortuna tutti fuori dal DT - il fondo del cartiglio, le pastiglie
+della legenda - e infatti sul parco nessuna texture cambia; ma su un file con
+la grafica dopo l'area riservata sarebbe sparita la grafica. Adesso lo stato
+si segue come lo segue il PDF.
 
 #### La GDA sta nel disegno tecnico, e si scarta
 
@@ -2283,6 +2390,32 @@ risolvono entrambe e vince quella con la falda plausibile. Verificato
 spostando la linea di mezzo attraverso la vecchia soglia, da 0,00 a 1,80 mm di
 scarto: il pack non cambia mai.
 
+### Pieghe e guide: la piega attraversa il passo
+
+Tre linee ravvicinate sono una piega con le sue guide o tre pieghe, e il
+solutore prova tutte e due le letture. Sul Kinder Cards T2 c'e' un caso che
+le due letture non bastano a decidere: ogni piega ha due guide dell'area di
+stampa a 1,5 mm, e prendendo le guide al posto delle pieghe i conti chiudono
+lo stesso. Con la cucitura centrata la simmetria e' zero in tutti e due i
+casi, e a parita' vinceva il fronte piu' largo:
+
+    guide     fronte 46,5  fianchi 15,0 e 16,5   falda 11,8
+    pieghe    fronte 45,0  fianchi 15,0 e 15,0   falda 14,0
+
+La differenza la dice la lunghezza. Una **piega** corre lungo tutto il tubo e
+attraversa il passo, 108 mm; una **guida** dell'area di stampa si ferma alle
+saldature, dove la stampa finisce: 88 mm. La miniatura del file lo conferma
+coi colori - pieghe in rosso a tutta altezza, area di stampa in arancio - e le
+pieghe lette sono proprio quelle rosse.
+
+Quindi `merito` guarda, dopo la simmetria e prima del fronte, **quanto passo
+attraversa la piega piu' corta delle quattro** (`_copre`: l'unione dei tratti,
+non la somma, arrotondata al 5%). Dove tutte le pieghe sono uguali - Colazione,
+Paradiso, i Brioss - pareggia e decide il fronte come prima: sul parco nessun
+altro file cambia. Non vale come regola assoluta, e per questo viene dopo la
+simmetria: sul Milch-Schnitte e sul Kinder Bueno Dark una piega vera e' piu'
+corta delle altre (0,59 e 0,38 del passo).
+
 ## Coppe e contenitori conici
 
 Lo steso e' un **settore anulare**. Il contorno va letto appiattendo le bezier
@@ -2357,6 +2490,23 @@ Astucci, con la quota letta due volte che chiude il conto:
   tornano (8 e 4 mm) e non si usa. Un DT dove la seconda linea sia un'altra
   cosa - un limite di stampa, un riferimento grafico - aspetta un pack che lo
   mostri.
+
+- Il **DT piu' grosso come DT con la grafica** e' stato visto su un file solo,
+  il Kinder Cards T2, e vale solo quando nessun blocco supera la soglia del
+  colore. Una pagina dove le copie tecniche siano grandi quanto l'originale e
+  la grafica sia argento su tutte e due non e' ancora passata: li' deciderebbe
+  la lunghezza delle linee, non la grafica.
+
+- Il **colore della didascalia** come chiave per le didascalie in curve e'
+  stato visto su un file solo, il Kinder Cards. Se la didascalia scritta fosse
+  nera come un codice a barre vero dentro lo stesso riquadro, il codice a
+  barre se ne andrebbe con lei.
+
+- La **tacca di fotocentratura** del Kinder Cards resta sulla texture col suo
+  contorno verde e la diagonale: sono tratti da 1 pt nel colore del DT, ma lo
+  spessore non e' quello delle penne della fustella (0,35 e 0,7). La tacca
+  nera si stampa davvero; il contorno no, ed e' sulla pinna dentro la
+  saldatura.
 
 - Che il **fronte di un vassoio sia la testata piu' bassa** e' la logica di un
   espositore, non una misura: sul parco le due testate sono alte uguali, e un

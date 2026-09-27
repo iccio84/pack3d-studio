@@ -469,6 +469,25 @@ ETICHETTA_RISERVATA = _re.compile(
     r"(?i)\b(gda|covered|text|best\s*before|bar\s*code|barcode|"
     r"print\s*free|printfree|neutral|reserved)\s*area\b")
 
+# Il NOME di un'area riservata scritto sull'artwork: e' la didascalia del
+# posto, non la cosa che ci andra', e sul pack non si stampa mai. Sono le
+# etichette qui sopra piu' il posto del codice a barre scritto per esteso -
+# "POSITIONING AREA FOR EAN CODE (if requested)" sul Kinder Cards T2.
+NOME_RISERVATA = _re.compile(
+    r"(?i)\b(gda|covered|text|best\s*before|bar\s*code|barcode|"
+    r"print\s*free|printfree|neutral|reserved|positioning)\s*area\b"
+    r"|\bean\s*code\b")
+
+# Le aree riservate ai DATI VARIABILI - scadenza, lotto, codice a barre - che
+# la stampa lascia vuote e la confezionatrice riempie dopo. Dentro l'artwork
+# c'e' solo il loro nome: e' per queste, e solo per queste, che si spegne
+# anche quello che ci sta dentro. Un'area coperta o senza stampa puo' avere
+# grafica sotto - sul Kinder Cards T2 la fascia coperta dalla pinna porta la
+# cialda e la banda rossa - e li' non si tocca niente.
+DATI_VARIABILI = _re.compile(
+    r"(?i)best\s*before|bar\s*code|barcode|\bean\b|\blot(to)?\b|"
+    r"scadenza|expir")
+
 # quanto inchiostro deve esserci sotto l'etichetta perche' sia un'area piena e
 # non una scritta appoggiata sulla grafica
 INCHIOSTRO_MINIMO = 0.5   # quota di lastra su quel pixel

@@ -34,6 +34,8 @@ vengono prima di tutto il resto (le trovi in testa alle Regole del progetto):
   dice quanto si stira. Astucci e vassoi non hanno pinne.
 
 Metodo:
+- Si lavora sulla PRIMA PAGINA sola. Un PDF su piu' pagine e' quasi sempre lo
+  stesso pack ripetuto per lingua; gli strumenti guardano gia' solo la prima.
 - Chiama find_blocks per PRIMA cosa. Una tavola contiene quasi sempre piu' viste
   dello stesso pack: quella stampata, quella tecnica, le miniature, i cartigli.
   Scegli il blocco stampato che porta l'artwork e lavora solo su quello: misurare
@@ -42,6 +44,16 @@ Metodo:
   lastra di separazione e' colorata al 99% ma porta una ventina di colori,
   una grafica vera ne porta centinaia. L'elenco parte gia' dal piu' probabile.
   Il blocco tecnico di pari ingombro e' la maschera da passare a clean_artwork.
+- Lo stesso DT puo' comparire piu' volte sulla pagina: le copie per i
+  tecnicismi di stampa (alluminio, battuta di bianco, supporto trasparente,
+  aree coperte) e la miniatura. Conta solo quello con la grafica, che di norma
+  e' il piu' grosso. Quando la grafica ha poco colore - argento, metallizzato -
+  nessun blocco supera la soglia dello stampato, e find_blocks promuove il
+  blocco che contiene il DT piu' grosso (dt_principale: true).
+- Se le dimensioni non si capiscono, il riferimento e' la MINIATURA: forma e
+  proporzioni dalla miniatura, scala dal disegno grande. analyze_flowpack
+  riporta in `miniatura` se pieghe e testate lette tornano sulle copie in
+  scala del DT; quando non dice niente, guarda tu la miniatura con livelli.
 - Il pack si costruisce dal DISEGNO TECNICO, e solo dopo si guarda la grafica.
   Subito dopo find_blocks chiama livelli: a sinistra il livello DT/note -
   fustella, cordonature, quote, miniature - e a destra la grafica come finira'

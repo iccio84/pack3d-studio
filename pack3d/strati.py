@@ -112,6 +112,38 @@ def tecnici(pdf, page_no=0):
     return fuori
 
 
+# I riquadri delle aree riservate ai dati variabili che la costruzione ha tolto,
+# per file: chi rende la texture ci spegne dentro le didascalie. Li scrive
+# `artwork.senza_coperture`, che e' l'unico che li conosce - li misura mentre
+# toglie la lastra - e li legge `rendi`, che la lastra non la vede piu'.
+# Chiave come per le penne: un file temporaneo puo' riprendere il nome di uno
+# cancellato.
+_RISERVATE = {}
+
+
+def _chiave(pdf):
+    try:
+        st = os.stat(pdf)
+    except OSError:
+        return None
+    return (pdf, st.st_mtime_ns, st.st_size)
+
+
+def segna_riservate(pdf, riquadri):
+    """Registra i riquadri riservati di `pdf`: vedi `dividi`."""
+    k = _chiave(pdf)
+    if k is None:
+        return
+    while len(_RISERVATE) >= 8:
+        _RISERVATE.pop(next(iter(_RISERVATE)))
+    _RISERVATE[k] = [tuple(float(v) for v in r) for r in riquadri]
+
+
+def riservate(pdf):
+    """I riquadri riservati registrati per `pdf`, o lista vuota."""
+    return _RISERVATE.get(_chiave(pdf), [])
+
+
 def senza_tecnici(pdf, page_no=0):
     """`(pdf da cui ritagliare la texture, nomi dei livelli spenti)`.
 
@@ -128,6 +160,9 @@ def senza_tecnici(pdf, page_no=0):
         if not spenti:
             os.unlink(tmp.name)
             return pdf, []
+        # la copia coi livelli spenti ha le stesse aree riservate
+        if riservate(pdf):
+            segna_riservate(tmp.name, riservate(pdf))
         return tmp.name, spenti
     except Exception:
         try:
@@ -228,8 +263,48 @@ def _fuori(o, m, riquadro):
     return max(xs) < x0 or min(xs) > x1 or max(ys) < y0 or min(ys) > y1
 
 
-def dividi(page, penne_dt, nomi_tecnici, stampato=None):
-    """`(dt, contorni, grafica, dai_livelli)`: gli oggetti nei due livelli.
+def _riquadro(o, m):
+    """Il riquadro dell'oggetto nel telaio di misura, o None."""
+    import pypdfium2.raw as raw
+    lati = [ctypes.c_float() for _ in range(4)]
+    if not raw.FPDFPageObj_GetBounds(o, *(ctypes.byref(v) for v in lati)):
+        return None
+    sx, giu, dx, su = (v.value for v in lati)
+    a, b, c, d, e, f = m
+    xs = [a * x + c * y + e for x, y in ((sx, giu), (dx, su))]
+    ys = [b * x + d * y + f for x, y in ((sx, giu), (dx, su))]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _testo(o, tp):
+    """Il testo di un oggetto testo, o stringa vuota."""
+    import pypdfium2.raw as raw
+    n = raw.FPDFTextObj_GetText(o, tp, None, 0)
+    if n <= 2:
+        return ""
+    buf = (ctypes.c_ushort * (n // 2 + 1))()
+    raw.FPDFTextObj_GetText(o, tp, buf, n)
+    return bytes(buf)[:n].decode("utf-16-le", "ignore").rstrip("\x00")
+
+
+def _colore(o):
+    import pypdfium2.raw as raw
+    v = [ctypes.c_uint() for _ in range(4)]
+    raw.FPDFPageObj_GetFillColor(o, *(ctypes.byref(c) for c in v))
+    return tuple(c.value for c in v[:3])
+
+
+# Quanto puo' sbordare un'etichetta dal suo riquadro, in punti, e quanto del
+# riquadro puo' coprire: il fondo bianco che sta sotto un'area riservata e'
+# grande quanto lei, ed e' grafica - il posto bianco dove si stampera' il
+# codice - non la sua didascalia.
+SBORDO_ETICHETTA = 1.0
+QUOTA_ETICHETTA = 0.8
+
+
+def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
+    """`(dt, contorni, grafica, dai_livelli, etichette)`: gli oggetti nei due
+    livelli.
 
     `contorni` sono coppie `(oggetto, modo di riempimento)`: percorsi pieni
     con un contorno tecnico, di cui e' tecnico solo il contorno.
@@ -242,11 +317,53 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None):
     cartiglio - e vanno nel livello DT. Dentro no: li' il testo e' grafica
     anche quando e' dello stesso colore di una quota, e il colore non si
     guarda mai.
+
+    Con un'eccezione, per le aree riservate ai dati variabili che la
+    costruzione ha tolto (`riservate`, i loro riquadri: vedi
+    `artwork.strip_separations`). Tolta l'area resta la sua DIDASCALIA - sul
+    Kinder Cards T2 "Best Before Area" e "POSITIONING AREA FOR EAN CODE (if
+    requested)" in marrone scuro, stampate sui fianchi del pack - e la
+    didascalia e' il nome del posto, non si stampa mai. Dentro un riquadro
+    tolto:
+
+    - un testo che dice il nome di un'area riservata (`techink.NOME_RISERVATA`)
+      e' una didascalia: lo dice quello che c'e' scritto, non il colore;
+    - ma non tutte sono testo: quella del codice a barre del Kinder Cards e'
+      in curve, 38 tracciati. Un oggetto tutto dentro il riquadro e del
+      COLORE di una didascalia scritta e' una didascalia anche lui. Un codice a
+      barre vero - nero, e la didascalia e' di un'altra tinta - resta dov'e';
+      e senza nessuna didascalia scritta non si impara nessun colore e non si
+      toglie niente.
+
+    Fuori dai riquadri tolti non si tocca niente: dove l'area riservata resta
+    - succede, sul Kinder Country e' dipinta con una Pantone qualsiasi - la
+    sua scritta resta con lei, e un riquadro verde senza nome sembrerebbe
+    grafica. `etichette` e' quante didascalie sono finite nel DT.
     """
     import pypdfium2.raw as raw
+    from .techink import NOME_RISERVATA
     from .tracciati import FILO, _componi, _matrice, _stile, _telaio
     dt, contorni, grafica = [], [], []
     dai_livelli = [0]
+    etichette = [0]
+    # (oggetto, colore) tutti dentro un riquadro riservato, e i colori delle
+    # didascalie scritte dentro un riquadro riservato
+    dentro, tinte = [], set()
+    tp = raw.FPDFText_LoadPage(page.raw) if riservate else None
+
+    def nel_riservato(o, m):
+        r = _riquadro(o, m) if riservate else None
+        if r is None:
+            return False
+        x0, y0, x1, y1 = r
+        for a0, b0, a1, b1 in riservate:
+            if (x0 >= a0 - SBORDO_ETICHETTA and y0 >= b0 - SBORDO_ETICHETTA
+                    and x1 <= a1 + SBORDO_ETICHETTA
+                    and y1 <= b1 + SBORDO_ETICHETTA
+                    and (x1 - x0) * (y1 - y0)
+                    < QUOTA_ETICHETTA * (a1 - a0) * (b1 - b0)):
+                return True
+        return False
 
     def giro(cont, quanti, prendi, ereditati, m):
         for i in range(quanti(cont)):
@@ -277,11 +394,34 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None):
                         else:
                             dt.append(o)
                         continue
+            # sarebbe grafica: se sta dentro un'area riservata tolta, puo'
+            # essere la sua didascalia, e si decide alla fine
+            if (riservate and t in (raw.FPDF_PAGEOBJ_TEXT,
+                                    raw.FPDF_PAGEOBJ_PATH)
+                    and nel_riservato(o, m)):
+                if (t == raw.FPDF_PAGEOBJ_TEXT
+                        and NOME_RISERVATA.search(_testo(o, tp))):
+                    dt.append(o)
+                    etichette[0] += 1
+                    tinte.add(_colore(o))
+                else:
+                    dentro.append((o, _colore(o)))
+                continue
             grafica.append(o)
 
-    giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject, set(),
-         _telaio(page))
-    return dt, contorni, grafica, dai_livelli[0]
+    try:
+        giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject,
+             set(), _telaio(page))
+    finally:
+        if tp is not None:
+            raw.FPDFText_ClosePage(tp)
+    for o, colore in dentro:
+        if colore in tinte:
+            dt.append(o)
+            etichette[0] += 1
+        else:
+            grafica.append(o)
+    return dt, contorni, grafica, dai_livelli[0], etichette[0]
 
 
 # L'ultimo conteggio fatto: lo legge chi scrive gli avvisi, senza una seconda
@@ -314,9 +454,11 @@ def rendi(pdf, page_no=0, scala=1.0, livello=GRAFICA, riquadro=None,
     try:
         page = doc[page_no]
         page.set_cropbox(*page.get_mediabox())
-        dt, contorni, grafica, dai_livelli = dividi(page, pen, nomi, stampato)
+        dt, contorni, grafica, dai_livelli, etichette = dividi(
+            page, pen, nomi, stampato, riservate(pdf))
         CONTI.clear()
-        CONTI.update(livelli=dai_livelli, tratti=len(dt) - dai_livelli,
+        CONTI.update(livelli=dai_livelli, etichette=etichette,
+                     tratti=len(dt) - dai_livelli - etichette,
                      contorni=len(contorni), grafica=len(grafica))
         if livello == GRAFICA:
             for o in dt:
