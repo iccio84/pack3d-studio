@@ -90,6 +90,7 @@ def fit_sector(pdf, path_index: int):
 
 def analyze_carton(pdf):
     """Griglia della fustella, verso di fasciatura e quote di un astuccio."""
+    from . import quote
     try:
         d = dl.analyze(pdf)
     except Exception as e:
@@ -99,7 +100,27 @@ def analyze_carton(pdf):
     return dict(layout=d.layout, dims_mm=list(d.dims_mm),
                 pannelli={k: [round(p.w_mm, 1), round(p.h_mm, 1)]
                           for k, p in sorted(d.panels.items())},
-                avvisi=dl.check(d))
+                avvisi=dl.check(d),
+                quote_del_file=quote.riscontro_astuccio(pdf, d))
+
+
+def analyze_vassoio(pdf):
+    """Fondo e pareti di un vassoio espositore, dalla griglia della fustella."""
+    from . import quote, vassoio
+    try:
+        d = dl.extract(pdf)
+        v = vassoio.riconosci(d)
+    except Exception as e:
+        return {"errore": str(e)[:120]}
+    finally:
+        dl.scarta_resa()
+    if v is None:
+        return {"errore": "la griglia non ha cinque colonne e tre fasce: non "
+                          "e' un vassoio"}
+    return dict(fondo_mm=[v.fondo_w, v.fondo_h], pareti_mm=dict(v.pareti),
+                testata_davanti=vassoio.testata_davanti(v),
+                avvisi=list(v.warnings),
+                quote_del_file=quote.riscontro_vassoio(pdf, v, d))
 
 
 def analyze_flowpack(pdf):
@@ -168,7 +189,13 @@ TOOLS = [
                        "required": ["path_index"]}),
     dict(name="analyze_carton",
          description="Griglia della fustella, verso di fasciatura e quote L/H/P "
-                     "di un astuccio, con avvisi di coerenza.",
+                     "di un astuccio, con avvisi di coerenza e il riscontro con "
+                     "le quote scritte nel file.",
+         input_schema={"type": "object", "properties": {}}),
+    dict(name="analyze_vassoio",
+         description="Fondo e quattro pareti di un vassoio espositore dalla "
+                     "griglia della fustella, quale testata va davanti e il "
+                     "riscontro con le quote scritte nel file.",
          input_schema={"type": "object", "properties": {}}),
     dict(name="analyze_flowpack",
          description="Fasce del nastro, sezione, corpo e saldature di un flowpack. "
@@ -189,6 +216,7 @@ TOOLS = [
 
 _RAW = dict(classify_technical=classify_technical, list_paths=list_paths,
             fit_sector=fit_sector, analyze_carton=analyze_carton,
+            analyze_vassoio=analyze_vassoio,
             analyze_flowpack=analyze_flowpack, measure_region=measure_region)
 
 RUN = {k: (lambda f: lambda *a, **kw: _plain(f(*a, **kw)))(v) for k, v in _RAW.items()}

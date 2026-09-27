@@ -159,6 +159,28 @@ TAGLIO = (212, 203, 188)
 CODA = 6
 
 
+def testata_davanti(v: Vassoio):
+    """Quale testata va davanti: la piu' bassa.
+
+    Su un espositore il davanti e' basso perche' il prodotto si deve vedere,
+    e il dietro, se e' piu' alto, regge il cartello. E' una misura del DT,
+    non una scelta: quando le due testate sono alte uguali - entro due
+    millimetri, come sul Milch-Schnitte - resta la nord, che e' quella che la
+    maglia mette davanti.
+    """
+    n, s = v.pareti["nord"], v.pareti["sud"]
+    return "sud" if s < n - 2.0 else "nord"
+
+
+def gira(V):
+    """Mezzo giro attorno alla verticale: la testata sud passa davanti."""
+    import numpy as np
+    W = np.array(V, float, copy=True)
+    W[:, 0] *= -1.0
+    W[:, 2] *= -1.0
+    return W
+
+
 def con_coda(steso):
     """Lo steso con in fondo due strisce: colore dell'interno e del taglio."""
     import numpy as np
@@ -173,7 +195,7 @@ def con_coda(steso):
 
 
 def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
-         alt_texture=None):
+         alt_texture=None, parti=None):
     """La maglia del vassoio piegato: vertici, UV sullo steso, triangoli.
 
     I NOMI, come li chiama chi il display ce l'ha in mano: **base** al
@@ -196,6 +218,10 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
     interna spostata lungo la normale entrante e avvolta al contrario, e la
     costa sui bordi che confinano col taglio - non su quelli che confinano
     con una cordonatura, dove il cartoncino continua.
+
+    `parti`, se c'e', si riempie con i triangoli di ogni pezzo - `{nome:
+    (primo, ultimo + 1)}` con i nomi della griglia, fondo, nord, est, sud,
+    ovest e le alette - perche' le verifiche li possano confrontare col DT.
     """
     import numpy as np
 
@@ -237,7 +263,7 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
         T.append((k, k + 2, k + 1))
         T.append((k, k + 3, k + 2))
 
-    def pezzo(masc, verso, punto, dentro, su_cordone):
+    def pezzo(masc, verso, punto, dentro, su_cordone, nome=None):
         """Un pezzo col suo spessore: esterna, interna e coste.
 
         Si procede a FASCE: due righe vicine e il cartoncino che hanno in
@@ -247,6 +273,7 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
         m = masc if verso == "righe" else masc.T
         if m.shape[0] < 2:
             return
+        primo = len(T)
         d = np.array(dentro, float) * spessore
         # Il verso dell'avvolgimento non si indovina: si MISURA. La faccia
         # esterna deve guardare dalla parte opposta a `dentro`, e il piano lo
@@ -312,6 +339,8 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
             aperta, inizio = sola, i - 1
         if aperta is not None:
             stendi(aperta, inizio, m.shape[0] - 1)
+        if parti is not None and nome:
+            parti[nome] = (primo, len(T))
 
     def cella(y0, y1, x0, x1):
         m = np.zeros((H, W), bool)
@@ -324,34 +353,34 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
     # base: il bordo e' tutto cordonatura, niente coste
     pezzo(cella(cyT, cyB, cxL, cxR), "righe",
           lambda X, Y: (mx(X), 0.0, mz(Y)), (0, 1, 0),
-          lambda X, Y: True)
+          lambda X, Y: True, "fondo")
     # laterali: la cordonatura e' quella verticale
     pezzo(cella(cyT, cyB, 0, cxL), "righe",
           lambda X, Y: (xL, (cxL - X) / px_mm, mz(Y)), (1, 0, 0),
-          lambda X, Y: vicino(X, cxL))
+          lambda X, Y: vicino(X, cxL), "ovest")
     pezzo(cella(cyT, cyB, cxR, W), "righe",
           lambda X, Y: (xR, (X - cxR) / px_mm, mz(Y)), (-1, 0, 0),
-          lambda X, Y: vicino(X, cxR))
+          lambda X, Y: vicino(X, cxR), "est")
     # retro e fronte: la cordonatura e' quella orizzontale
     pezzo(cella(0, cyT, cxL, cxR), "colonne",
           lambda X, Y: (mx(X), (cyT - Y) / px_mm, zT), (0, 0, -1),
-          lambda X, Y: vicino(Y, cyT))
+          lambda X, Y: vicino(Y, cyT), "nord")
     pezzo(cella(cyB, H, cxL, cxR), "colonne",
           lambda X, Y: (mx(X), (Y - cyB) / px_mm, zB), (0, 0, 1),
-          lambda X, Y: vicino(Y, cyB))
+          lambda X, Y: vicino(Y, cyB), "sud")
     # le alette: piegate sul laterale, finiscono nel piano di retro e fronte
     pezzo(cella(0, cyT, 0, cxL), "righe",
           lambda X, Y: (xL + (cyT - Y) / px_mm, (cxL - X) / px_mm, zT - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, cyT))
+          (0, 0, -1), lambda X, Y: vicino(Y, cyT), "aletta nord-ovest")
     pezzo(cella(0, cyT, cxR, W), "righe",
           lambda X, Y: (xR - (cyT - Y) / px_mm, (X - cxR) / px_mm, zT - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, cyT))
+          (0, 0, -1), lambda X, Y: vicino(Y, cyT), "aletta nord-est")
     pezzo(cella(cyB, H, 0, cxL), "righe",
           lambda X, Y: (xL + (Y - cyB) / px_mm, (cxL - X) / px_mm, zB + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, cyB))
+          (0, 0, 1), lambda X, Y: vicino(Y, cyB), "aletta sud-ovest")
     pezzo(cella(cyB, H, cxR, W), "righe",
           lambda X, Y: (xR - (Y - cyB) / px_mm, (X - cxR) / px_mm, zB + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, cyB))
+          (0, 0, 1), lambda X, Y: vicino(Y, cyB), "aletta sud-est")
 
     return (np.array(V, float), np.array(UV, float), np.array(T, np.uint32))
 
@@ -413,6 +442,15 @@ def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None):
     dim = np.bincount(lab.ravel())
     dim[0] = 0
     sagoma = binary_fill_holes(lab == int(np.argmax(dim)))
+    # Mai oltre il taglio: la forma la da' l'impronta, l'ingombro la fustella.
+    # Prima le misure, poi il contenuto - e un'ombra o una sbavatura fuori
+    # dalla fustella non e' cartoncino, per quanto sia attaccata alla stampa.
+    marg = 0.5 * px_mm
+    x0, y0, x1, y1 = (int(round(d.bbox[0] * scala - marg)), int(round(d.bbox[1] * scala - marg)),
+                      int(round(d.bbox[2] * scala + marg)), int(round(d.bbox[3] * scala + marg)))
+    dentro = np.zeros_like(sagoma)
+    dentro[max(y0, 0):max(y1, 0), max(x0, 0):max(x1, 0)] = True
+    sagoma &= dentro
     if note is not None:
         ys, xs = np.nonzero(sagoma)
         mis = ((xs.max() - xs.min() + 1) / px_mm, (ys.max() - ys.min() + 1) / px_mm)

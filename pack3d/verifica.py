@@ -359,3 +359,110 @@ def testate_flowpack(V, UV, T, fp, spalla, dente, aperte):
     if guai:
         return False, "GRAFICA STIRATA SULLE TESTATE - " + "; ".join(guai)
     return True, riga
+
+
+# --------------------------------------------------------------------------- #
+# il vassoio: le due verifiche di sempre
+# --------------------------------------------------------------------------- #
+# quanto puo' scostarsi dalla sua linea del DT il bordo esterno di una parete
+# del modello, in mm: la penna della fustella e' larga tre decimi
+TOL_PARETE = 1.0
+
+
+def _normale_e_verso(V, UV, T):
+    """Normale media (area) di un gruppo di triangoli e quanti sono specchiati.
+
+    Specchiato vuol dire `du x dv` che punta FUORI: con la v in giu', come
+    conta glTF, sulla faccia esterna punta dentro (vedi la regola di mano in
+    testa al modulo).
+    """
+    P0, P1, P2 = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
+    n = np.cross(P1 - P0, P2 - P0)
+    area = np.linalg.norm(n, axis=1)
+    ok = area > 1e-9
+    media = n[ok].sum(0)
+    media = media / max(np.linalg.norm(media), 1e-12)
+    U0, U1, U2 = UV[T[:, 0]], UV[T[:, 1]], UV[T[:, 2]]
+    dP = np.stack([P1 - P0, P2 - P0], 2)
+    dU = np.stack([U1 - U0, U2 - U0], 2)
+    det = dU[:, 0, 0] * dU[:, 1, 1] - dU[:, 0, 1] * dU[:, 1, 0]
+    buoni = ok & (np.abs(det) > 1e-12)
+    if not buoni.any():
+        return media, 0, 0
+    inv = np.linalg.inv(dU[buoni])
+    J = dP[buoni] @ inv
+    verso = np.einsum("ij,ij->i", np.cross(J[:, :, 0], J[:, :, 1]), n[buoni])
+    return media, int((verso > 0).sum()), int(buoni.sum())
+
+
+def vassoio(V, UV, T, parti, v, d, lato_tex, px_mm_tex, coda):
+    """Le pareti del vassoio contro il DT, e il fronte sul fronte. `(ok, righe)`.
+
+    Le UV del vassoio sono la posizione sullo steso, quindi la prima verifica
+    si fa sulle UV stesse: per ogni parete il bordo esterno, riportato in mm
+    con la scala vera della texture, deve cadere sulla linea della sua fascia
+    del DT. E' li' che si vede se l'impronta di stampa - da cui viene la
+    sagoma - e' andata oltre il taglio o non ci arriva, e se le UV sono
+    registrate sulla texture giusta.
+
+    La seconda: la testata che guarda davanti deve avere la normale verso chi
+    guarda, e nessuna parete deve essere specchiata.
+    """
+    W_t, H_t = lato_tex
+    alto = (H_t - coda) / float(H_t)
+    xs = sorted({round(t, 2) for t in d.xs})
+    ys = sorted({round(t, 2) for t in d.ys})
+    X = [x * PT2MM for x in xs]
+    Y = [y * PT2MM for y in ys]
+    # la linea esterna di ogni parete sul DT, e da che parte sta
+    esterni = {"ovest": (0, X[0], -1), "est": (0, X[5], +1),
+               "nord": (1, Y[0], -1), "sud": (1, Y[3], +1)}
+    righe, ok, peggio = [], True, 0.0
+    for nome, (asse, linea, lato) in esterni.items():
+        if nome not in parti:
+            ok = False
+            righe.append("UVW NON CORRISPONDE AL DT - manca la parete %s" % nome)
+            continue
+        a, b = parti[nome]
+        idx = np.unique(T[a:b].ravel())
+        uv = UV[idx]
+        fuori = uv[uv[:, 1] < alto - 1e-6]
+        if not len(fuori):
+            continue
+        mm = fuori[:, asse] * (W_t if asse == 0 else H_t) / px_mm_tex
+        bordo = float(mm.min() if lato < 0 else mm.max())
+        scarto = abs(bordo - linea)
+        peggio = max(peggio, scarto)
+        if scarto > TOL_PARETE:
+            ok = False
+            righe.append("UVW NON CORRISPONDE AL DT - parete %s: il bordo cade "
+                         "%.1f mm %s la linea del disegno, l'impronta di "
+                         "stampa o le UV non stanno sul DT"
+                         % (nome, scarto, "oltre" if (bordo - linea) * lato > 0
+                            else "dentro"))
+    # fronte sul fronte: delle due testate, quella che guarda davanti
+    davanti, specchiate = None, []
+    for nome in ("nord", "sud", "ovest", "est", "fondo"):
+        if nome not in parti:
+            continue
+        a, b = parti[nome]
+        t = T[a:b]
+        est = t[(UV[t][:, :, 1] < alto - 1e-6).all(1)]
+        if not len(est):
+            continue
+        n, rovesci, tot = _normale_e_verso(V, UV, est)
+        if tot and rovesci * 2 > tot:
+            specchiate.append(nome)
+        if nome in ("nord", "sud") and n[2] > 0.97:
+            davanti = nome
+    if specchiate:
+        ok = False
+        righe.append("FACCIA SPECCHIATA: %s" % ", ".join(specchiate))
+    if davanti is None:
+        ok = False
+        righe.append("FRONTE NON SUL FRONTE: nessuna testata guarda davanti")
+    if ok:
+        righe.insert(0, "UVW sul DT e fronte sul fronte: le pareti cadono "
+                        "sulle loro fasce entro %.1f mm, la testata %s guarda "
+                        "davanti, nessuna parete specchiata" % (peggio, davanti))
+    return ok, righe

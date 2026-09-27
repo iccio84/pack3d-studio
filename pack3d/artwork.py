@@ -11,6 +11,11 @@ Tre passaggi, e sono tre REGOLE, non tre comodita':
 3. **la grafica non si distorce mai**, che e' il limite della seconda: dove
    girare stirerebbe il pannello non si gira, e lo si dichiara.
 
+E due regole che valgono per tutte le famiglie - flowpack, astucci, vassoi:
+la grafica si prende dal suo livello, col disegno tecnico spento oggetto per
+oggetto (`folding.rasterize_panels` con `clean`, vedi `strati.py`), e la
+texture e' HD (`risoluzione`).
+
 Stanno qui, e non nel server, perche' non sono questioni di HTTP: sono
 dell'artwork. Finche' stavano nel server le applicava solo lui, e la riga di
 comando consegnava astucci diversi da quelli del prodotto - sul Nutella Donut
@@ -24,6 +29,31 @@ import tempfile
 from PIL import Image
 
 from .dieline import PT2MM
+
+
+# La risoluzione della texture, (dpi, lato massimo in px), per qualita'.
+#
+# Di serie e' HD, per tutte le famiglie. Sul piano Free di Render la texture
+# di un flowpack stava in 1700 px, e un foglio come Colazione - 460 mm di
+# nastro - usciva a 3,7 px/mm, meno di 100 dpi: sgranato appena ci si
+# avvicinava. Il limite era la memoria, e sugli Spaces non c'e' piu' (vedi
+# DEPLOY.md). A 300 dpi quel foglio fa 5433 px di lato; il tetto a 8192 e'
+# quello che le schede video da scrivania reggono tutte, e sotto il quale
+# three.js non deve ridimensionare niente.
+#
+# "web" resta per chi vuole un GLB leggero, e sono i numeri di prima.
+TEXTURE = {"web": (200, 1700), "hd": (300, 8192)}
+
+
+def qualita(q):
+    """"web", "hd" o "alta" - che e' HD con la maglia piu' fitta."""
+    q = str(q or "").strip().lower()
+    return q if q in ("web", "hd", "alta") else "hd"
+
+
+def risoluzione(quality):
+    """(dpi, lato massimo) della texture per quella qualita'."""
+    return TEXTURE["web" if qualita(quality) == "web" else "hd"]
 
 
 def strip_separations(src, dst, drop):
