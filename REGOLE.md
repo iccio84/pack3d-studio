@@ -962,10 +962,12 @@ che il fronte dell'AW stia sul fronte del modello. Le due verifiche stanno in
 `verifica.py`, girano su ogni costruzione, e il loro esito va negli avvisi.
 
 **1. Le UV sul DT, prima della mappatura.** Per un flowpack lungo il passo le
-UV sono lineari per costruzione - `L/2 + end_fin` non cambia mai - quindi
+UV non si muovono mai ai confini - `L/2 + end_fin` non cambia, e sulla spalla
+il film si ridistribuisce solo fra la saldatura e la sezione piena - quindi
 quello che puo' sbagliare sono i due confini delle testate: dove comincia la
-pinna e dove comincia il prodotto a sezione piena. Tutti e due devono cadere
-su una linea del DT, dai due lati. Lungo il giro c'era gia' la misura degli
+pinna e dove comincia il prodotto. Tutti e due devono cadere su una linea del
+DT, dai due lati. Quando la spalla comincia dentro il prodotto la riga lo
+dice, e non e' uno scarto: le linee restano sulle loro. Lungo il giro c'era gia' la misura degli
 spigoli contro le pieghe del disegno (*Verificare il modello mappato contro
 l'AW*). Per un astuccio le UV sono i quattro angoli del ritaglio, e il
 confronto e' sulle proporzioni: la faccia e il pannello del DT devono avere
@@ -1003,6 +1005,10 @@ vera:
 Nessuna delle due cambia il modello: dicono se e' giusto, e quando non lo e'
 lo gridano. Un modello plausibile e sbagliato e' il difetto peggiore che
 questo progetto possa avere.
+
+Sul flowpack ce n'e' una terza, dopo: **il film sulle testate**, quanto la
+grafica si stira su pinne e spalle. Sta con la regola che la chiede, in *La
+grafica sulle pinne: il film non si allunga*.
 
 ## Quando la pulizia deterministica non basta
 
@@ -1911,7 +1917,10 @@ Regole di forma, da applicare senza chiedere:
   superellisse piena comprime il fronte del 17%. Serve **curvatura continua
   agli spigoli con centro piano**;
 - l'apertura della pinna va concentrata vicino alla saldatura (rampa di quinto
-  grado): con una rampa corta il gonfiore invade il corpo e deforma i bollini.
+  grado): con una rampa corta il gonfiore invade il corpo e deforma i bollini;
+- la grafica **non segue lo svaso**: sulla pinna e sulla spalla il giro si
+  misura sul film dal centro del fronte, e lungo il passo il film si stende
+  sulla spalla (vedi *La grafica sulle pinne*).
 ### Prima le misure, poi il contenuto
 
 Il pack si costruisce dal **disegno tecnico**, e il disegno tecnico si
@@ -1927,7 +1936,8 @@ verso l'interno, entro un terzo del passo:
 - la **seconda** e' dove finisce il prodotto, e fra le due c'e' la **gola**, il
   tubo che si schiaccia verso la pinna. E' la zona che il DT chiama "grinze"
   (KMS, KP: 10 mm) o "superficie inclinata verso saldatura" e quota a parte
-  (Colazione: 37,5). E' li' che il modello si rastrema;
+  (Colazione: 37,5). E' li' che il modello si rastrema, o da prima quando il
+  calo del tubo vuole piu' film (vedi *La grafica sulle pinne*);
 - se la prima struttura e' una **piega con le sue due guide**, la saldatura
   non e' disegnata: e' il film su scatola (Brioss), e la testata arriva alla
   piega. Da li' in fuori la gola la decide lo spessore, come prima.
@@ -1973,6 +1983,81 @@ Se la catena del file non torna con le testate lette dal DT, la costruzione lo
 lettura dal margine su Colazione: `QUOTE DEL FILE DIVERSE DALLE TESTATE LETTE:
 il file scrive 20 | 37,5 | 215 | 37,5 | 20 = 330, dal disegno esce 41,2 |
 247,6 | 41,2`.
+
+### La grafica sulle pinne: il film non si allunga
+
+Sul Paradiso e sul Pingui la grafica vicino alle pinne **sterzava**: il bollino
+"Fatta con latte fresco", che parte sulla pinna e passa sulla spalla, girava
+verso il bordo lungo la gola e sulla pinna arrivava allargato. Succedeva su
+ogni pack con scritte o elementi grafici sulle testate, e le cause erano due,
+tutte e due nella UVW e nessuna nella texture.
+
+**1. Lungo il giro.** La pinna si otteneva scalando la sezione: stretta in
+altezza, allargata in larghezza fino al bordo della pinna. Le fasce del film
+seguivano la scala, quindi il fronte si allargava con la pinna - del 46% sul
+Paradiso - e i fianchi si schiacciavano a zero sul bordo. Ma la pinna e' il
+**tubo appiattito**: il film non si allunga, un punto del fronte a 20 mm dal
+centro sta a 20 mm dal centro anche sulla pinna, e le pieghe del bordo cadono a
+meta' dei fianchi. Adesso ogni anello della gola e della pinna si rimisura sul
+film a partire dal centro del fronte e da quello del retro
+(`flowpack._GiroSulFilm`): la forma non cambia, i vertici scorrono
+sull'anello. La differenza di lunghezza fra anello e film la prende la fascia
+della piega: poca a pinne aperte, tutto il fianco a pinne strette, dove il
+fianco si ripiega **a soffietto** - che e' quello che fa il film vero con una
+scatola dentro. Nel corpo resta la mappatura per pannello, e il passaggio e'
+graduale lungo la gola.
+
+**2. Lungo il passo.** Dalla sezione piena alla saldatura il tubo cala di mezzo
+spessore, e il film deve bastare a coprire la discesa. Sul Paradiso la gola
+del DT e' 10 mm e il calo 14,1: dieci millimetri di film su una discesa di
+quattordici sono la scritta LATTE stirata fino a 3,7 volte. Due correzioni:
+
+- la **spalla** e' lunga almeno 1,7 volte il calo (`SPALLA_SU_CALO`, regolabile
+  con `PACK3D_SPALLA`), e se la gola del DT non basta comincia **dentro il
+  prodotto**, come un prodotto morbido che il film tira giu' sugli spigoli. La
+  saldatura resta sulla sua linea, e con lei tutte le linee del DT. Con una
+  scatola no: li' la sezione la tiene la scatola fino alla sua faccia;
+- sulla spalla il film si **stende sulla superficie** (`_stendi_spalla`):
+  colonna per colonna, fra l'ultimo anello a sezione piena e la saldatura, in
+  proporzione alla lunghezza vera. I due capi restano fermi, quindi della
+  texture non si perde niente, e lo stiro che il film non puo' evitare diventa
+  uguale su tutta la spalla invece di fare picco dove scende di piu'.
+
+La falda longitudinale prende la u dal tubo sotto di lei, perche' e' lo stesso
+film.
+
+Il bollino del Paradiso, triangolo per triangolo:
+
+| | pinna, giro | spalla, passo | anisotropia massima |
+|---|---|---|---|
+| prima | 1,51 | 2,47 in media, 3,67 di punta | 6,1 |
+| dopo | 1,00 | 1,21 in media, 1,22 di punta | 1,3 |
+
+E sul parco, con la misura della terza verifica: pinne e spalle meno i denti,
+la stessa zona prima e dopo, fra il 5 e il 95% dei triangoli:
+
+| pack | giro prima | giro dopo | passo prima | passo dopo |
+|---|---|---|---|---|
+| Kinder Paradiso T1 | 0,05 - 1,55 | 0,82 - 1,07 | 2,97 | 1,23 |
+| KP T1 Mandarino | 0,06 - 1,68 | 0,83 - 1,14 | 2,28 | 1,23 |
+| KMS T1 | 0,07 - 1,32 | 0,84 - 1,06 | 1,87 | 1,22 |
+| K Tronky T1 | 0,33 - 1,32 | 0,89 - 1,05 | 1,70 | 1,22 |
+| KCF T1 | 0,46 - 1,34 | 0,83 - 1,05 | 2,53 | 1,22 |
+| Kinder Country | 0,08 - 1,30 | 0,84 - 1,07 | 1,79 | 1,23 |
+| Colazione | 0,07 - 1,39 | 0,81 - 1,07 | 2,11 | 1,22 |
+| K Brioss STD, scatola | 0,04 - 1,05 | 0,24 - 1,05 | 2,49 | 1,67 |
+
+Sul Brioss il giro si chiude ancora a 0,24: e' il soffietto dei fianchi a
+pinne strette, voluto. E il passo resta a 1,67 perche' con la scatola la spalla
+non si allunga: il film vero li' fa le orecchie, che una superficie liscia non
+sa fare. Restano fuori i denti, che il film lo tagliano davvero.
+
+La misura gira da sola su ogni costruzione (`verifica.testate_flowpack`, la
+terza verifica) e ha i denti: sul vecchio modo di mappare grida `GRAFICA
+STIRATA SULLE TESTATE - 3,10 lungo il passo, la spalla e' troppo ripida per il
+film che ha; 1,55 lungo il giro, la grafica si allarga con la pinna; il giro si
+chiude a 0,05, i fianchi spariscono sul bordo della pinna` sul Paradiso, e
+grida su KP, Tronky e Brioss.
 
 ### La falda dice se la soluzione e' sbagliata
 
@@ -2161,6 +2246,13 @@ Astucci, con la quota letta due volte che chiude il conto:
   tornano (8 e 4 mm) e non si usa. Un DT dove la seconda linea sia un'altra
   cosa - un limite di stampa, un riferimento grafico - aspetta un pack che lo
   mostri.
+
+- La **spalla lunga 1,7 volte il calo** e' tarata su un bollino solo, quello
+  del Paradiso: e' il punto in cui la discesa piu' ripida sta sui 48 gradi e
+  il film si stira di 1,2 in modo uniforme. Che la spalla cominci dentro il
+  prodotto quando la gola del DT non basta e' fisica - il film non si allunga
+  - ma di quanto lo faccia un pack vero, a seconda di quanto e' morbido il
+  prodotto, manca una foto che lo misuri.
 
 - Il livello **Medio** di gonfiore e' interpolato fra Rigido e Morbido: manca un
   caso reale.

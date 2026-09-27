@@ -1,5 +1,5 @@
 """
-Le due verifiche della costruzione, nell'ordine in cui si fanno a mano.
+Le verifiche della costruzione, nell'ordine in cui si fanno a mano.
 
 1. **Prima della mappatura, le UV contro il disegno tecnico.** Il modello si
    costruisce dal DT, e le sue UV sono il DT steso: dove la pinna finisce, dove
@@ -15,7 +15,12 @@ Le due verifiche della costruzione, nell'ordine in cui si fanno a mano.
    grafica dell'AW in quel punto: e' la prova che rotazioni e trasposizioni
    fra pagina, steso e texture si compongono giuste.
 
-Nessuna delle due cambia il modello. Dicono se e' giusto, e quando non lo e'
+3. **Dopo, il film sulle testate.** Sul flowpack pinne e spalle non sono un
+   piano: la grafica ci deve cadere come ci cade il film, che non si allunga.
+   Si misura quanto un millimetro di film diventa lungo sul modello, lungo il
+   passo e lungo il giro, triangolo per triangolo.
+
+Nessuna delle tre cambia il modello. Dicono se e' giusto, e quando non lo e'
 lo gridano negli avvisi: un modello plausibile e sbagliato e' il difetto
 peggiore che questo progetto possa avere, e l'unica difesa e' dirlo.
 
@@ -55,12 +60,17 @@ SONDA_MM = 2.0
 # --------------------------------------------------------------------------- #
 # 1. le UV contro il DT
 # --------------------------------------------------------------------------- #
-def uvw_flowpack(fp0, fp, rastremo, scatola):
+def uvw_flowpack(fp0, fp, rastremo, scatola, spalla=None):
     """Le testate del modello contro le linee del DT. `(ok, riga)`.
 
     Il modello, da ogni taglio verso l'interno, ha due confini: dove comincia
-    la pinna (`fp.end_fin`) e dove comincia il prodotto a sezione piena
-    (`fp.end_fin + rastremo`). Il DT ha le sue linee, raccolte nell'analisi.
+    la pinna (`fp.end_fin`) e dove comincia il prodotto (`fp.end_fin +
+    rastremo`). Il DT ha le sue linee, raccolte nell'analisi.
+
+    `spalla` e' quanto e' lunga davvero la discesa verso la saldatura, se il
+    calo del tubo l'ha voluta piu' lunga della gola: allora comincia dentro
+    il prodotto, e la riga lo dice. Non e' uno scarto dal DT - saldatura e
+    fine del prodotto restano sulle loro linee, la spalla ci passa sopra.
 
     - a pinna, la prima linea del DT e' la saldatura e deve essere il confine
       della pinna; la seconda, se la gola e' stata letta, l'inizio del
@@ -69,8 +79,10 @@ def uvw_flowpack(fp0, fp, rastremo, scatola):
       la piega della scatola, e deve essere l'inizio del prodotto - la pinna
       sta oltre, dove la mette la gola.
 
-    Lungo il passo le UV sono lineari per costruzione - `L/2 + end_fin` non
-    cambia mai - quindi queste due quote sono tutto quello che puo' sbagliare.
+    Lungo il passo le UV non si muovono mai ai confini - `L/2 + end_fin` non
+    cambia, e sulla spalla il film si ridistribuisce solo fra la saldatura e
+    la sezione piena, che restano ferme - quindi queste due quote sono tutto
+    quello che puo' sbagliare.
     """
     from .flowpack import TESTATA_MAX, _strutture
     if not fp0.linee_passo:
@@ -103,9 +115,12 @@ def uvw_flowpack(fp0, fp, rastremo, scatola):
                      "disegnata corta o manca, e il modello ha preso il "
                      "rientro piu' stretto. Controllare quel lato sul DT")
     if ok:
-        return True, ("UVW sul DT: pinna da %.1f mm, prodotto da %.1f, "
-                      "entro %.1f mm dalle linee del disegno"
-                      % (modello[0], modello[1], peggio))
+        riga = ("UVW sul DT: pinna da %.1f mm, prodotto da %.1f, entro %.1f mm "
+                "dalle linee del disegno" % (modello[0], modello[1], peggio))
+        if spalla is not None and spalla > rastremo + TOL_MM:
+            riga += ("; la spalla comincia a %.1f mm dal taglio, dentro il "
+                     "prodotto" % (fp.end_fin + spalla))
+        return True, riga
     return False, "UVW NON CORRISPONDE AL DT - " + "; ".join(righe)
 
 
@@ -273,3 +288,74 @@ def facce_astuccio(faces, panels):
                         "dei loro pannelli, nessuna specchiata, il fronte "
                         "guarda davanti")
     return ok, righe
+
+
+# --------------------------------------------------------------------------- #
+# 3. il film sulle testate
+# --------------------------------------------------------------------------- #
+# Oltre quanto si grida, sul 95% dei triangoli di pinne e spalle. Lungo il
+# giro il film sulla pinna non ha motivo di stirarsi: e' il tubo appiattito.
+# Lungo il passo un po' si', perche' la spalla scende e il film non si
+# allunga: 1,2 a pinne aperte, 1,67 sul Brioss, dove la scatola tiene la
+# sezione fino alla faccia e la gola e' quella che e' - il film vero li' fa
+# le orecchie, che una superficie liscia non sa fare.
+STIRO_GIRO = 1.25
+STIRO_PASSO = 1.8
+# sotto quanto il giro si chiude, a pinne aperte: e' il fianco che spariva sul
+# bordo della pinna, 0,06 sul Paradiso prima della correzione
+CHIUSO_GIRO = 0.6
+
+
+def testate_flowpack(V, UV, T, fp, spalla, dente, aperte):
+    """Quanto la grafica si stira su pinne e spalle. `(ok, riga)`.
+
+    Per ogni triangolo lo jacobiano fra il film - u per il passo, v per il
+    nastro, in mm - e la superficie, in mm: le sue due colonne dicono quanto
+    diventa lungo un millimetro di film lungo il passo e lungo il giro. Uno e
+    uno e' il film com'e'. Si guardano le testate fino a dove la spalla
+    comincia, meno i denti, che il film lo tagliano davvero.
+
+    `aperte`: pinne aperte a meta' perimetro. Con le pinne piu' strette il
+    fianco si ripiega a soffietto sul bordo, e li' il giro si chiude apposta.
+    """
+    passo = fp.L + 2.0 * fp.end_fin
+    nastro = (fp.sheet[3] - fp.sheet[1]) * PT2MM
+    F = np.stack([UV[:, 0] * passo, UV[:, 1] * nastro], 1)
+    P0, P1, P2 = V[T[:, 0]], V[T[:, 1]], V[T[:, 2]]
+    F0, F1, F2 = F[T[:, 0]], F[T[:, 1]], F[T[:, 2]]
+    dP = np.stack([P1 - P0, P2 - P0], 2)
+    dF = np.stack([F1 - F0, F2 - F0], 2)
+    det = dF[:, 0, 0] * dF[:, 1, 1] - dF[:, 0, 1] * dF[:, 1, 0]
+    area = 0.5 * np.linalg.norm(np.cross(P1 - P0, P2 - P0), axis=1)
+    uc = (F0[:, 0] + F1[:, 0] + F2[:, 0]) / 3.0
+    d = np.minimum(uc, passo - uc)
+    testa = ((np.abs(det) > 1e-9) & (area > 1e-6) & (d > dente + 0.5)
+             & (d < fp.end_fin + spalla))
+    if testa.sum() < 20:
+        return True, "testate: troppo poche per misurarle"
+    inv = np.zeros((int(testa.sum()), 2, 2))
+    dt, dFt = det[testa], dF[testa]
+    inv[:, 0, 0] = dFt[:, 1, 1] / dt
+    inv[:, 1, 1] = dFt[:, 0, 0] / dt
+    inv[:, 0, 1] = -dFt[:, 0, 1] / dt
+    inv[:, 1, 0] = -dFt[:, 1, 0] / dt
+    J = dP[testa] @ inv
+    lungo = float(np.percentile(np.linalg.norm(J[:, :, 0], axis=1), 95))
+    giro = np.linalg.norm(J[:, :, 1], axis=1)
+    g_alto, g_basso = float(np.percentile(giro, 95)), float(np.percentile(giro, 5))
+    riga = ("pinne e spalle: il film si stira fino a %.2f lungo il passo e "
+            "%.2f lungo il giro, su 95 triangoli su cento"
+            % (lungo, g_alto))
+    guai = []
+    if lungo > STIRO_PASSO:
+        guai.append("%.2f lungo il passo, la spalla e' troppo ripida per il "
+                    "film che ha" % lungo)
+    if g_alto > STIRO_GIRO:
+        guai.append("%.2f lungo il giro, la grafica si allarga con la pinna"
+                    % g_alto)
+    if aperte and g_basso < CHIUSO_GIRO:
+        guai.append("il giro si chiude a %.2f, i fianchi spariscono sul bordo "
+                    "della pinna" % g_basso)
+    if guai:
+        return False, "GRAFICA STIRATA SULLE TESTATE - " + "; ".join(guai)
+    return True, riga

@@ -716,17 +716,40 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # prodotto, quando la segna uguale dai due lati - e solo dove tace la
     # regola di sempre, mai piu' corta della pinna.
     rastremo = gola if scatola else (fp0.gola or max(fp0.end_fin, 6.0))
+    # E la spalla deve starci col film. Dalla sezione piena alla saldatura il
+    # tubo cala di mezzo spessore, e il film, che non si allunga, quel calo lo
+    # copre solo se la spalla e' abbastanza lunga: sul Paradiso la gola del
+    # DT e' 10 mm e il calo 14,1, e dieci millimetri di film su una discesa
+    # di quattordici sono una grafica stirata fino a 3,7 volte - la scritta
+    # LATTE del bollino. Allora la spalla comincia prima, dentro il prodotto,
+    # come fa un prodotto morbido che il film tira giu' sugli spigoli: la
+    # saldatura resta dov'e' e con lei tutte le linee del DT. Con una scatola
+    # no: li' la sezione la tiene la scatola fino alla sua faccia.
+    calo = 0.5 * scala * fp.T * (1.0 - FLAT_END)
+    spalla = rastremo
+    # mai oltre meta' del mezzo corpo: una sezione piena deve restare
+    voluta = min(SPALLA_SU_CALO * calo, fp.L / 4.0)
+    if not scatola and voluta > rastremo + 0.5:
+        spalla = round(voluta, 1)
+        avvisi_sez.append("spalla di %.1f mm invece di %.1f: il tubo cala di "
+                          "%.1f mm fino alla saldatura e il film, che non si "
+                          "allunga, lo copre solo cosi'; la spalla comincia "
+                          "%.1f mm dentro il prodotto"
+                          % (spalla, rastremo, calo, spalla - rastremo))
+    # (2) mappatura per pannello: gli spigoli della sezione fanno da nodi. Si
+    # calcolano prima della mesh perche' servono anche a lei: nella gola e
+    # nella pinna il giro si rimisura sul film, e il film lo dicono i nodi.
+    knots = _panel_knots(Ps, d, G, fp0)
     V, UV, T = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
         width_end=fin_open / sw,
-        taper=rastremo, flare_pow=3.0, soft=True,
+        taper=spalla, flat_end=FLAT_END, flare_pow=3.0, soft=True,
         serration=teeth > 0, serr_teeth=max(int(teeth), 1),
         fin_stations=36 if quality == "alta" else 26,
         bulge=par["bulge"], crimp_period=1.4, crimp_mm=0.32,
-        wrinkle_mm=par["wrinkle_mm"])
+        wrinkle_mm=par["wrinkle_mm"], giro=_giro_film(knots, G, fp0),
+        spalla_sul_film=True)
 
-    # (2) mappatura per pannello: gli spigoli della sezione fanno da nodi
-    knots = _panel_knots(Ps, d, G, fp0)
     if knots:
         ks, kf = knots
         # La regola dice di verificare il modello mappato contro l'AW con una
@@ -754,11 +777,18 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                               % (rotazione, peggio, G))
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
+    # il film sulle testate: pinne e spalle non sono un piano, e la grafica ci
+    # deve cadere come ci cade il film. Dopo i nodi e il riporto sullo steso,
+    # perche' e' il film vero che si misura.
+    dente = (fin_open / max(int(teeth), 1)) * math.sqrt(3.0) / 2.0 if teeth > 0 else 0.0
+    avvisi_sez.append(verifica.testate_flowpack(V, UV, T, fp, spalla, dente,
+                                                ap >= 3.0)[1])
     if case is None:
         # PRIMA della mappatura: le UV sono il DT steso, e se le testate non
         # cadono sulle sue linee la grafica andra' fuori posto comunque la si
         # mappi. E le misure del disegno contro le quote che il file scrive.
-        avvisi_sez.append(verifica.uvw_flowpack(fp0, fp, rastremo, scatola)[1])
+        avvisi_sez.append(verifica.uvw_flowpack(fp0, fp, rastremo, scatola,
+                                                spalla)[1])
         riscontro = quotature.riscontro_testate(pdf, fp0.step_mm,
                                                 fp0.end_fin, fp0.gola)
         if riscontro:
@@ -776,7 +806,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # falda a spessore zero uscirebbe come una lamina degenere.
         Vm, UVm, Tm = V, UV, T
     else:
-        V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0)
+        V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0,
+                                     u_tubo=UV.reshape(-1, nv + 1, 2)[:, :, 0])
         Vm = np.vstack([V, V2])
         UVm = np.vstack([UV, UV2])
         Tm = np.vstack([T, T2 + len(V)])
@@ -829,6 +860,23 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
              "%d denti equilateri, base %.2f altezza %.2f mm"
              % (teeth, base, base * math.sqrt(3) / 2)),
             "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
+
+
+def _giro_film(knots, G, fp):
+    """Nodi e larghezze di fronte e retro, sul film, per `build_mesh`.
+
+    Le larghezze vengono dai nodi stessi, che sono gia' riportati sul giro
+    della sezione: prese dal Flowpack sarebbero in un'altra scala appena il
+    perimetro della fasciatura non torna al decimo con quello della sezione.
+    """
+    if not knots:
+        tot = fp.W + 2.0 * fp.T + fp.back_a + fp.back_b
+        s = G / tot if tot > 0 else 1.0
+        return None, None, fp.W * s, (fp.back_a + fp.back_b) * s
+    ks, kf = knots
+    if len(kf) == 4:        # tubo piatto: cucitura, piega, piega, cucitura
+        return ks, kf, kf[2] - kf[1], kf[1] + (G - kf[2])
+    return ks, kf, kf[3] - kf[2], kf[1] + (G - kf[4])
 
 
 def _panel_knots(Ps, d, G, fp):
@@ -1205,6 +1253,15 @@ FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
 # bassa. 0,40 e' quella che riproduce le foto del Brioss: 37,6 = 22,8 di gola
 # piu' 14,8 di pinna. Tarata su un pack solo.
 GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
+# La spalla, fuori dalla scatola, lunga almeno tante volte il calo del tubo
+# dalla sezione piena alla saldatura. Con la rampa morbida della mesh il punto
+# piu' ripido ha pendenza 1,87 volte il calo sulla lunghezza: a 1,7 e' 1,1,
+# cioe' 48 gradi, e il film ci si stende stirato di 1,2 in modo uniforme
+# (misurato sul bollino del Paradiso: era 2,5 in media e 3,7 di punta).
+SPALLA_SU_CALO = float(os.environ.get("PACK3D_SPALLA", "1.7"))
+# Quanto resta dello spessore sulla pinna: e' il parametro di build_mesh, qui
+# perche' serve anche a calcolare il calo.
+FLAT_END = 0.035
 
 MAX_UPLOAD = 60 * 1024 * 1024
 # Uno, e non e' un numero da tarare sulla macchina: pdfium non e' thread-safe

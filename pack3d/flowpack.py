@@ -283,6 +283,116 @@ def sezione_rigonfiata(fp: Flowpack, n: float, npts: int = 1600):
     return fp.girth / per
 
 
+def _incrocio(P, d, asse, segno):
+    """Arco `d` dove la coordinata `asse` del contorno passa per zero mentre
+    l'altra ha il segno `segno`: y = 0 sopra e' il centro del fronte, y = 0
+    sotto quello del retro, z = 0 la meta' di un fianco."""
+    a, b = P[:, asse], P[:, 1 - asse]
+    ok = (a[:-1] * a[1:] <= 0) & ((b[:-1] + b[1:]) * segno > 0)
+    k = int(np.flatnonzero(ok)[0])
+    den = a[k] - a[k + 1]
+    t = a[k] / den if abs(den) > 1e-12 else 0.5
+    return float(d[k] + t * (d[k + 1] - d[k]))
+
+
+class _GiroSulFilm:
+    """Dove mettere i vertici di un anello perche' il giro sia quello del film.
+
+    Nel corpo i vertici stanno dove li mette la sezione, e i nodi dei pannelli
+    fanno cadere ogni fascia sulla sua faccia. Verso la pinna la sezione si
+    schiaccia e si allarga, e scalarla, come si faceva, porta con se' le
+    fasce: il fronte si allargava con la pinna, del 46% sul Paradiso, e i
+    fianchi si chiudevano a zero sul bordo. La grafica sterzava verso fuori
+    lungo la gola e sulla pinna arrivava stirata.
+
+    La pinna invece e' il tubo appiattito: il film non si allunga, quindi un
+    punto del fronte a 20 mm dal centro sta a 20 mm dal centro anche sulla
+    pinna, e le pieghe dei bordi cadono a meta' dei fianchi. Qui ogni anello
+    si rimisura sul film a partire dal centro del fronte e da quello del
+    retro, e la differenza di lunghezza fra anello e film - poca con la pinna
+    aperta, tutto il fianco con una scatola dentro, dove il fianco si
+    ripiega a soffietto - la prende la fascia della piega. Il peso `w` passa
+    dalla sezione (0) al film (1) lungo la gola, e la forma non cambia: i
+    vertici scorrono sull'anello, non ne escono.
+    """
+    MARGINE = 2.0     # mm di film ai due lati della piega che fanno da cerniera
+
+    def __init__(self, P, d, G, v, giro):
+        ks, kf, fronte, retro = giro
+        self.P, self.d, self.G = P, d, G
+        if ks is not None:
+            film = lambda s: np.interp(s, ks, kf)
+        else:
+            film = lambda s: np.asarray(s, float)
+        self.sF = _incrocio(P, d, 0, +1)
+        self.sB = _incrocio(P, d, 0, -1)
+        avanti = lambda s: (s - self.sF) % G
+        self.sP, self.sM = sorted([_incrocio(P, d, 1, +1), _incrocio(P, d, 1, -1)],
+                                  key=avanti)
+        fF = film(self.sF)
+        self.o = (film(v * G) - fF) % G          # film dal centro del fronte
+        self.oB = float((film(self.sB) - fF) % G)
+        self.fronte, self.retro = fronte / 2.0, retro / 2.0
+        self.sg = self.sF + d                    # un giro a partire dal fronte
+        self.nat = v * G
+
+    def anello(self, sy, sz, w):
+        """Punti della sezione (non scalata) su cui cadono i vertici."""
+        P, d, G = self.P, self.d, self.G
+        Q = P * np.array([sy, sz])
+        c = np.r_[0.0, np.cumsum(np.linalg.norm(np.diff(Q, axis=0), axis=1))]
+        per = float(c[-1])
+        C = lambda s: np.interp(np.mod(s, G), d, c) + np.floor_divide(s, G) * per
+        Cg = C(self.sg) - C(self.sF)
+        R = lambda s: np.interp(self.sF + np.mod(s - self.sF, G), self.sg, Cg)
+        Ap, H, Am = float(R(self.sP)), float(R(self.sB)), float(R(self.sM))
+        g = self.MARGINE
+        f1p = max(0.0, min(self.fronte - g, Ap - g))
+        b1p = max(0.0, min(self.retro - g, H - Ap - g))
+        b1m = max(0.0, min(self.retro - g, Am - H - g))
+        f1m = max(0.0, min(self.fronte - g, per - Am - g))
+        oB = self.oB
+        film = np.maximum.accumulate([0.0, f1p, oB - b1p, oB, oB + b1m, G - f1m, G])
+        giro = np.maximum.accumulate([0.0, f1p, H - b1p, H, H + b1m, per - f1m, per])
+        r_film = np.interp(self.o, film, giro)
+        r_sez = R(self.nat)
+        r_film = r_film - per * np.round((r_film - r_sez) / per)
+        r = np.mod((1.0 - w) * r_sez + w * r_film, per)
+        s = np.mod(np.interp(r, Cg, self.sg), G)
+        return np.stack([np.interp(s, d, P[:, 0]), np.interp(s, d, P[:, 1])], 1)
+
+
+def _stendi_spalla(verts, uvs, u, half, taper):
+    """Lungo il passo, sulla spalla, il film si stende sulla superficie.
+
+    Con u proporzionale a x la spalla prende tanto film quanto e' lunga in
+    pianta, ma in pianta e' piu' corta che in superficie, perche' scende: la
+    grafica si stirava dove la discesa e' ripida e restava giusta dove e'
+    piana, e una scritta a cavallo usciva con le lettere di larghezze diverse.
+    Qui, colonna per colonna, il film fra l'ultimo anello a sezione piena e
+    la saldatura si distribuisce in proporzione alla lunghezza vera: i due
+    capi restano dove sono - saldatura e corpo non si muovono, e della
+    texture non si perde niente - e lo stiro, che il film non puo' evitare,
+    diventa uguale su tutta la spalla invece di fare picco.
+    """
+    for lato in (-1.0, 1.0):
+        dentro = [i for i, ui in enumerate(u) if lato * ui <= half - taper + 1e-9
+                  and lato * ui >= 0]
+        fuori = [i for i, ui in enumerate(u) if abs(lato * ui - half) < 1e-9]
+        if not dentro or not fuori:
+            continue
+        i0 = max(dentro, key=lambda i: lato * u[i])      # ultimo a sezione piena
+        i1 = fuori[0]                                     # la saldatura
+        sel = sorted(range(min(i0, i1), max(i0, i1) + 1), key=lambda i: lato * u[i])
+        if len(sel) < 3:
+            continue
+        tratti = np.linalg.norm(np.diff(verts[sel], axis=0), axis=2)
+        s = np.vstack([np.zeros((1, verts.shape[1])), np.cumsum(tratti, axis=0)])
+        f = s / np.maximum(s[-1:], 1e-9)
+        u0, u1 = uvs[sel[0], :, 0], uvs[sel[-1], :, 0]
+        uvs[sel, :, 0] = u0 + (u1 - u0) * f
+
+
 def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                taper: float = 24.0, flat_end: float = 0.035, width_end: float = 0.93,
                section_w=None,
@@ -292,12 +402,21 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                serr_teeth: int = 0, fin_stations: int = 44,
                sec_exp: float = 0.0, sec_thickness=None, soft: bool = False,
                soft_r: float = 0.0, soft_n: float = 3.0, flare_pow: float = 2.0,
-               wrinkle_mm: float = 0.0, wrinkle_v: float = 3.0, wrinkle_u: float = 2.5):
+               wrinkle_mm: float = 0.0, wrinkle_v: float = 3.0, wrinkle_u: float = 2.5,
+               giro=None, spalla_sul_film: bool = False):
     """Mesh del flowpack con UV riferite allo steso.
 
     u percorre la lunghezza (comprese le pinne di testa), v il perimetro. Dove
-    la sezione si schiaccia la stampa si comprime da sola, perche' le UV restano
-    quelle del piano: e' esattamente quello che succede sul pack reale.
+    la sezione si schiaccia non basta lasciare le UV quelle del piano: scalando
+    la sezione le fasce del film la seguono, e la grafica si allarga con la
+    pinna. Il film non si allunga, e sulle testate i vertici vanno rimessi
+    dove il film li porta.
+
+    `giro` = (ks, kf, fronte, retro): i nodi dei pannelli (arco della sezione
+    -> film, o None) e le larghezze di film di fronte e retro. Se c'e', nella
+    gola e nella pinna i vertici si rimettono sull'anello misurandoli sul
+    film, vedi `_GiroSulFilm`. `spalla_sul_film` fa la stessa cosa lungo il
+    passo, sulla spalla: vedi `_stendi_spalla`.
     """
     if soft_r > 0:
         P, d, section_w = soft_section_fit(fp, soft_r, soft_n)
@@ -308,6 +427,16 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
     G = d[-1]
     v = np.linspace(0.0, 1.0, nv + 1)
     sec = np.stack([np.interp(v * G, d, P[:, 0]), np.interp(v * G, d, P[:, 1])], 1)
+    sul_film = None
+    if giro is not None:
+        try:
+            sul_film = _GiroSulFilm(P, d, G, v, giro)
+        except IndexError:
+            # una sezione senza centri o fianchi da trovare non esiste fra
+            # quelle che si costruiscono; se arrivasse, meglio la mappatura
+            # di prima - che la terza verifica grida - che niente modello
+            sul_film = None
+    sec_pinna = sul_film.anello(width_end, flat_end, 1.0) if sul_film else sec
 
     half = fp.L / 2.0
     total = half + fp.end_fin
@@ -322,7 +451,7 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
         # Il dente va contato sul bordo della pinna, non sul perimetro della
         # sezione: la pinna e' schiacciata, quindi il suo bordo misura due
         # volte l'apertura. Passo e altezza danno triangoli equilateri.
-        y_fin = sec[:, 0] * width_end
+        y_fin = sec_pinna[:, 0] * width_end
         hy = float(np.max(np.abs(y_fin)))
         base = 2.0 * hy / serr_teeth
         depth = base * math.sqrt(3.0) / 2.0
@@ -338,11 +467,12 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
 
     # normale 2D del contorno: serve per le grinze, che vanno date lungo la
     # normale, non in verticale, altrimenti la sezione si deforma
-    tang = np.gradient(sec, axis=0)
-    tang /= np.maximum(np.linalg.norm(tang, axis=1, keepdims=True), 1e-9)
-    nrm = np.stack([tang[:, 1], -tang[:, 0]], 1)
-    if float(np.sum(nrm * sec)) < 0:
-        nrm = -nrm
+    def normali(s):
+        tang = np.gradient(s, axis=0)
+        tang /= np.maximum(np.linalg.norm(tang, axis=1, keepdims=True), 1e-9)
+        n = np.stack([tang[:, 1], -tang[:, 0]], 1)
+        return -n if float(np.sum(n * s)) < 0 else n
+    nrm = normali(sec)
 
     verts = np.zeros((len(u), nv + 1, 3))
     uvs = np.zeros((len(u), nv + 1, 2))
@@ -357,14 +487,21 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
         else:
             k = 1.0
         sz = (1.0 - k * k) * (1.0 - flat_end) + flat_end
+        # l'apertura della pinna si concentra vicino alla saldatura: con una
+        # rampa quadratica il gonfiore invade il corpo e deforma la grafica
+        sy = 1.0 - (1.0 - width_end) * k ** flare_pow
+        sec_i, nrm_i = sec, nrm
+        if sul_film is not None and k > 0:
+            # l'anello si misura sulla sua forma senza nervature, cosi' tutte
+            # le stazioni della pinna tengono gli stessi vertici e le colonne
+            # restano dritte
+            sec_i = sec_pinna if a > half else sul_film.anello(sy, sz, k)
+            nrm_i = normali(sec_i)
         if a > half and crimp_mm > 0:
             # nervature delle ganasce: sono loro a dare alla pinna il grigio
             # rigato che la stacca dal fondo, altrimenti resta bianco su bianco
             ridge = abs(np.sin(np.pi * (a - half) / crimp_period))
             sz += (crimp_mm / max(fp.T / 2.0, 1e-6)) * ridge
-        # l'apertura della pinna si concentra vicino alla saldatura: con una
-        # rampa quadratica il gonfiore invade il corpo e deforma la grafica
-        sy = 1.0 - (1.0 - width_end) * k ** flare_pow
         # leggera pancia al centro
         sw = 1.0 + bulge * (1.0 - (ui / max(total, 1e-6)) ** 2)
         uu = ui
@@ -372,8 +509,8 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
             # il taglio tocca solo il bordo: l'interno della pinna resta piano,
             # altrimenti il dente si trasforma in una scanalatura lunga 8 mm
             uu = np.sign(ui) * np.minimum(a, total - trim)
-        yy = sec[:, 0] * sy * (sw if a <= half else 1.0)
-        zz = sec[:, 1] * sz * (sw if a <= half else 1.0)
+        yy = sec_i[:, 0] * sy * (sw if a <= half else 1.0)
+        zz = sec_i[:, 1] * sz * (sw if a <= half else 1.0)
         if wrinkle_mm > 0 and a <= half:
             # il film e' lasco e si increspa soprattutto verso le saldature.
             # La grinza va data lungo la normale del contorno: spostando in
@@ -384,13 +521,16 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                    + 0.6 * np.sin(2.0 * np.pi * wrinkle_v * 1.9 * v - 1.1 * ph)
                    + 0.5 * np.sin(wrinkle_u * ph + 2.0 * np.pi * v))
             wv = wrinkle_mm * g * wob / 2.1
-            yy = yy + wv * nrm[:, 0]
-            zz = zz + wv * nrm[:, 1]
+            yy = yy + wv * nrm_i[:, 0]
+            zz = zz + wv * nrm_i[:, 1]
         verts[i, :, 0] = uu
         verts[i, :, 1] = yy
         verts[i, :, 2] = zz
         uvs[i, :, 0] = (ui + total) / (2 * total)
         uvs[i, :, 1] = v
+
+    if spalla_sul_film:
+        _stendi_spalla(verts, uvs, u, half, taper)
 
     V = verts.reshape(-1, 3)
     UV = uvs.reshape(-1, 2)
@@ -510,7 +650,7 @@ def soft_section_fit(fp: Flowpack, r: float, n_corner: float = 3.0):
 
 
 def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
-                   fade: float = 10.0):
+                   fade: float = 10.0, u_tubo=None):
     """Pinna longitudinale appoggiata sul retro, che ne segue la forma.
 
     La falda non e' un rettangolo piatto sospeso: e' film incollato sul retro,
@@ -540,6 +680,10 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
             UV[i, j] = (grid[i, j, 0] - grid[0, 0, 0]) / (grid[-1, 0, 0] - grid[0, 0, 0]), \
                        (g0 - y0s - s / PT2MM) / web
         UV[i, :, 0] = (x - grid[0, 0, 0]) / (grid[-1, 0, 0] - grid[0, 0, 0])
+        if u_tubo is not None:
+            # la falda e' lo stesso film del tubo sotto di lei: stessa u,
+            # anche sulla spalla dove il film non va piu' a passo costante
+            UV[i, :, 0] = u_tubo[i, :jmax + 1]
 
     Vf = V.reshape(-1, 3); UVf = UV.reshape(-1, 2)
     idx = lambda i, j: i * (jmax + 1) + j
