@@ -191,7 +191,8 @@ di Colazione, che su una macchina da 512 MB non lasciano spazio per costruire.
 ### In HD, di serie
 
 Dal 27 settembre 2026 la texture e' a 300 dpi con un tetto di 8192 px di lato
-(`TEXTURE` in `server.py`; `quality: "web"` rida' i 200 dpi e i 1700 px di
+(`TEXTURE` in `pack3d/artwork.py`, per tutte le famiglie e anche dalla riga di
+comando; `quality: "web"` rida' i 200 dpi e i 1700 px di
 prima). Costa tempo e memoria, e sugli Spaces l'uno e l'altra ci sono. Misurato
 su questo container, un file per processo, due processi alla volta sui quattro
 core:

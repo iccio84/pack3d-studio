@@ -2,10 +2,14 @@
 pack3d — da artwork PDF (disegno tecnico + grafica) a modello 3D mappato.
 
     python -m pack3d build ARTWORK.pdf --out DIR [--kind carton]
-                            [--reference RENDER.png] [--dpi 300]
+                            [--reference RENDER.png] [--quality hd|web]
 
 Se viene passato un render di riferimento, la camera viene ricavata da quello
 e il risultato e' direttamente confrontabile con il mockup esistente.
+
+Le regole sono quelle del server, non una versione ridotta: grafica dal suo
+livello e in HD, misure dal disegno tecnico, e le stesse verifiche - le facce
+sui pannelli del DT, il fronte sul fronte, le quote del file.
 """
 from __future__ import annotations
 
@@ -14,7 +18,7 @@ import json
 import os
 
 from . import dieline as dl
-from . import artwork, folding, exporters, studio, knowledge
+from . import artwork, folding, exporters, studio, knowledge, quote, verifica
 from .camera import preset_camera
 
 
@@ -32,11 +36,19 @@ def build(args):
 
     for m in dl.check(d):
         print("  avviso   :", m)
-    tex, avvisi_tex = artwork.texture_astuccio(args.pdf, d.panels, args.dpi)
+    dpi, tmax = artwork.risoluzione(args.quality)
+    if args.dpi:
+        dpi = args.dpi
+    tex, avvisi_tex = artwork.texture_astuccio(args.pdf, d.panels, dpi)
     for m in avvisi_tex:
         print("  avviso   :", m)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso)
+    _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
+    riscontro = quote.riscontro_astuccio(args.pdf, d)
+    verifiche = verifiche + ([riscontro] if riscontro else [])
+    for m in verifiche:
+        print("  verifica :", m)
 
     err = None
     if args.reference:
@@ -60,7 +72,8 @@ def build(args):
 
     objdir = os.path.join(args.out, "obj")
     obj = exporters.write_obj(faces, objdir, basename=base)
-    glb = exporters.write_glb(faces, os.path.join(args.out, f"{base}.glb"))
+    glb = exporters.write_glb(faces, os.path.join(args.out, f"{base}.glb"),
+                              tex_max=tmax)
     print("obj         :", obj)
     print("glb         :", glb)
 
@@ -74,7 +87,7 @@ def build(args):
                        "bbox_pt": [round(v, 2) for v in p.bbox()]}
                    for k, p in sorted(d.panels.items())},
         "layout": d.layout,
-        "warnings": dl.check(d) + avvisi_tex,
+        "warnings": dl.check(d) + avvisi_tex + verifiche,
         "camera_fit_error_px": err,
     }
     with open(os.path.join(args.out, f"{base}_report.json"), "w") as fh:
@@ -97,7 +110,9 @@ def main(argv=None):
                    choices=[None, "carton", "flowpack", "tray"])
     b.add_argument("--reference", default=None)
     b.add_argument("--preset", default="hero-left")
-    b.add_argument("--dpi", type=int, default=300)
+    b.add_argument("--quality", default="hd", choices=["hd", "web"])
+    b.add_argument("--dpi", type=int, default=None,
+                   help="forza i dpi della texture; di serie quelli della qualita'")
     b.add_argument("--size", type=int, default=2000)
     b.add_argument("--learn", action="store_true")
     b.set_defaults(func=build)

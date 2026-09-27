@@ -3,6 +3,53 @@
 Regole accumulate caso per caso, con il punto del codice che le applica e i
 controesempi che le giustificano.
 
+## Tre regole, per tutte le famiglie
+
+Vengono prima di ogni altra regola di questo file, e valgono per **flowpack,
+astucci e vassoi** su ogni percorso: l'interfaccia, la riga di comando,
+l'agente AI e i casi tarati a mano. Nessuna famiglia e nessun percorso ha una
+versione ridotta.
+
+| regola | flowpack | astuccio | vassoio |
+|---|---|---|---|
+| **Grafica** | si' | si' | si' |
+| **Testate dal DT** | pinna e gola | pannelli e alette | fondo, testate e laterali |
+| **Pinne** | si' | - | - |
+
+**1. Grafica.** La grafica si prende dal suo livello: disegno tecnico e note
+si spengono oggetto per oggetto, in pdfium, prima di rendere, e sotto resta la
+grafica intera (`strati.py`, `folding.rasterize_panels` con `clean`). La
+texture e' **HD** di serie, 300 dpi fino a 8192 px (`artwork.risoluzione`, la
+stessa per server e riga di comando). Colata in sovrastampa e `k` nera del
+marchio `kinder` restano quelle del file. Vedi *I due livelli li fa la
+costruzione, oggetto per oggetto* e *La texture e' HD di serie*.
+
+**2. Testate dal DT.** Il pack si misura dal **disegno tecnico**, e il
+contenuto - dove c'e' inchiostro - viene per ultimo e non misura niente: la
+grafica puo' avere del bianco. Le testate sono le estremita' di ogni famiglia:
+pinna e gola del flowpack, le alette di testa dell'astuccio con i suoi
+pannelli, fronte e retro del vassoio con i laterali. Poi tre controlli, a ogni
+costruzione:
+
+- le misure contro le **quote scritte** nel file, quando si leggono come testo
+  (`quote.riscontro_testate`, `riscontro_astuccio`, `riscontro_vassoio`): una
+  catena di quote che torna le conferma, una catena o una terna del cartiglio
+  che parla di questo pack e dice altro si **grida**, e quando le quote sono
+  vettorializzate lo si dice e l'occhio le guarda sulla miniatura;
+- **prima della mappatura**, le UV sul DT: le linee del modello sulle linee
+  del disegno;
+- **dopo**, il fronte sul fronte: centrato, normale verso chi guarda, niente
+  di specchiato.
+
+Vedi *Prima le misure, poi il contenuto* e *Le verifiche*.
+
+**3. Pinne**, solo flowpack. La pinna e' il tubo appiattito: sulla pinna e
+sulla gola la grafica cade come il film, che non si allunga - il giro si
+misura sul film dal centro del fronte, la spalla e' lunga quanto serve al film
+per coprire il calo del tubo, e sulla spalla il film si stende sulla
+superficie. Senza ritagliare niente dalla texture. La terza verifica dice
+quanto si stira. Vedi *La grafica sulle pinne: il film non si allunga*.
+
 ## Domande all'utente
 
 | regola | dove |
@@ -214,6 +261,18 @@ della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
   `livelli` mostra il livello del DT con le miniature, ingrandibile. **Servono
   a verificare, non a costruire**: una quota si misura dal disegno, vedi *Prima
   le misure, poi il contenuto*.
+
+  Vale per tutte le famiglie. Sul flowpack la catena e' quella delle testate
+  lungo il passo; sull'astuccio sono la fila del fronte e la sua colonna con
+  le alette (`quote.riscontro_astuccio`), sul vassoio le cinque colonne e le
+  tre fasce della griglia (`riscontro_vassoio`); e su tutti e due anche la
+  terna del cartiglio, `70 x 40 x 150`, che torna entro 1,5 mm perche' fra
+  misure interne ed esterne c'e' lo spessore del cartoncino. Si grida solo
+  quando il file parla **di questo pack** e dice un'altra cosa - una catena
+  lunga uguale, con la stessa somma e almeno meta' dei pezzi uguali, o una
+  terna che ci somiglia entro il 20% ma non torna - perche' un numero preso a
+  caso dal foglio non ci arriva. Sul parco nessun astuccio e nessun vassoio
+  scrive le sue quote come testo: lo si dice, e le guarda l'occhio.
 
 ### Mezzo millimetro non puo' cambiare il pack
 
@@ -953,13 +1012,14 @@ sempre dopo `clean_artwork` e prima di costruire.
 Priorita' negli errori: **un logo perso e' grave, un residuo tecnico no.** Nel
 dubbio si toglie meno.
 
-## Le due verifiche: le UV sul DT prima, il fronte sul fronte dopo
+## Le verifiche: le UV sul DT prima, il fronte sul fronte dopo
 
 Il lavoro va nell'ordine in cui lo si fa a mano: si costruisce dal DT, si
 controlla che le UV del modello siano il DT steso, **poi** si spegne il livello
 del DT, si accende quello della grafica e si mappa, e alla fine si controlla
-che il fronte dell'AW stia sul fronte del modello. Le due verifiche stanno in
-`verifica.py`, girano su ogni costruzione, e il loro esito va negli avvisi.
+che il fronte dell'AW stia sul fronte del modello. Le verifiche stanno in
+`verifica.py`, girano su ogni costruzione di **tutte e tre le famiglie**, e
+il loro esito va negli avvisi.
 
 **1. Le UV sul DT, prima della mappatura.** Per un flowpack lungo il passo le
 UV non si muovono mai ai confini - `L/2 + end_fin` non cambia, e sulla spalla
@@ -967,11 +1027,14 @@ il film si ridistribuisce solo fra la saldatura e la sezione piena - quindi
 quello che puo' sbagliare sono i due confini delle testate: dove comincia la
 pinna e dove comincia il prodotto. Tutti e due devono cadere su una linea del
 DT, dai due lati. Quando la spalla comincia dentro il prodotto la riga lo
-dice, e non e' uno scarto: le linee restano sulle loro. Lungo il giro c'era gia' la misura degli
-spigoli contro le pieghe del disegno (*Verificare il modello mappato contro
-l'AW*). Per un astuccio le UV sono i quattro angoli del ritaglio, e il
-confronto e' sulle proporzioni: la faccia e il pannello del DT devono avere
-gli stessi lati.
+dice, e non e' uno scarto: le linee restano sulle loro. Lungo il giro c'era
+gia' la misura degli spigoli contro le pieghe del disegno (*Verificare il
+modello mappato contro l'AW*). Per un astuccio le UV sono i quattro angoli del
+ritaglio, e il confronto e' sulle proporzioni: la faccia e il pannello del DT
+devono avere gli stessi lati. Per un vassoio le UV sono la posizione sullo
+steso, e si confrontano direttamente: il bordo esterno di ogni parete,
+riportato in mm con la scala vera della texture, deve cadere sulla linea della
+sua fascia del DT (`verifica.vassoio`).
 
 **2. Il fronte sul fronte, dopo.** Il centro del pannello fronte dell'AW - dove
 lo dice il DT - deve cadere al centro della faccia fronte del modello, con la
@@ -980,15 +1043,27 @@ fuori la texture ha la u a destra e la v in giu', perche' glTF conta le v
 dall'alto, quindi `du x dv` punta dentro; dove punta fuori, la grafica e'
 specchiata. E in quel punto, e in quattro attorno, la texture deve essere la
 grafica dell'AW: un giro di troppo fra pagina e texture lo tradisce subito,
-perche' una grafica non e' mai uguale a se stessa girata.
+perche' una grafica non e' mai uguale a se stessa girata. Sul vassoio il
+fronte e' la testata che guarda davanti - la piu' bassa, vedi *Le testate del
+vassoio* - e nessuna parete deve essere specchiata.
 
-**Tutte e due hanno i denti, e sono stati provati.** Rimettendo la pinna dal
-margine su KMS T1 la prima grida `UVW NON CORRISPONDE AL DT - il DT segna 8,0
-mm, il modello 6,9`. Girando la texture di 90 gradi invece che di 270 su KP T1
-la seconda grida `FRONTE NON SUL FRONTE`, con uno scarto di colore di 166
-contro i 5 della mappatura giusta. Le sonde del colore mediano su due
-millimetri: a cinque pixel un gradiente con mezzo pixel di sfasamento dava 33
-anche a mappatura giusta.
+**E le quote scritte**, su tutte e tre: le misure del disegno contro le
+catene di quote e la terna del cartiglio, quando si leggono come testo. Vedi
+*Regole comuni a tutte le tipologie*.
+
+**Hanno i denti, e sono stati provati.** Rimettendo la pinna dal margine su
+KMS T1 la prima grida `UVW NON CORRISPONDE AL DT - il DT segna 8,0 mm, il
+modello 6,9`. Girando la texture di 90 gradi invece che di 270 su KP T1 la
+seconda grida `FRONTE NON SUL FRONTE`, con uno scarto di colore di 166 contro
+i 5 della mappatura giusta. Le sonde del colore mediano su due millimetri: a
+cinque pixel un gradiente con mezzo pixel di sfasamento dava 33 anche a
+mappatura giusta. Sul display Milch-Schnitte, giusto, le pareti cadono sulle
+loro fasce entro 0,3 mm; spostando le UV di 3 mm grida `UVW NON CORRISPONDE AL
+DT - parete nord: il bordo cade 2,7 mm dentro la linea del disegno`,
+specchiandole grida `FACCIA SPECCHIATA`, e girando il vassoio di 90 gradi
+`FRONTE NON SUL FRONTE: nessuna testata guarda davanti`. Delle quote, provate
+su catene e terne costruite apposta, grida la catena che somma giusto ma ha
+pezzi diversi, e tace su quella che somma per caso.
 
 Sul parco passano tutte e due quasi dappertutto, e dove no dicono una cosa
 vera:
@@ -1002,8 +1077,8 @@ vera:
   38,1. La grafica di quelle falde si stira del 3%, e prima nessuno lo
   vedeva.
 
-Nessuna delle due cambia il modello: dicono se e' giusto, e quando non lo e'
-lo gridano. Un modello plausibile e sbagliato e' il difetto peggiore che
+Nessuna cambia il modello: dicono se e' giusto, e quando non lo e' lo
+gridano. Un modello plausibile e sbagliato e' il difetto peggiore che
 questo progetto possa avere.
 
 Sul flowpack ce n'e' una terza, dopo: **il film sulle testate**, quanto la
@@ -1220,6 +1295,25 @@ incollano — le macchie tratteggiate che il DT disegna agli angoli sono proprio
 quegli incollaggi. E' il modo in cui un vassoio sta in piedi, e sbagliarlo vuol
 dire costruire quattro pareti che non si tengono.
 
+### Le testate del vassoio
+
+Le testate sono **fronte e retro**, le due pareti sulle fasce nord e sud della
+griglia; le colonne sono i laterali. Valgono le regole di tutte le famiglie:
+
+- **le misure dal DT.** Fondo e pareti si leggono dalla griglia della
+  fustella, e la sagoma - che viene dall'impronta di stampa, vedi sotto - non
+  va mai oltre la fustella: un'ombra o una sbavatura fuori dal taglio non e'
+  cartoncino (`sagoma_e_creste`);
+- **il fronte e' la testata piu' bassa**, perche' su un espositore il davanti
+  lascia vedere il prodotto e il dietro, se e' piu' alto, regge il cartello
+  (`vassoio.testata_davanti`). Se la bassa e' la sud il vassoio si gira di
+  mezzo giro, e lo si dice. Con le due testate alte uguali entro 2 mm - il
+  Milch-Schnitte, 40,5 e 40,6 - davanti resta la nord;
+- **le verifiche**: ogni parete sulla sua fascia del DT e il fronte sul
+  fronte (`verifica.vassoio`), e le quote scritte (`quote.riscontro_vassoio`).
+  Sul Milch-Schnitte le pareti cadono sulle loro fasce entro 0,3 mm; le quote
+  sono vettorializzate e non si leggono come testo, e lo si dice.
+
 ### Il contorno non e' un rettangolo, e il DT lo dice
 
 La prima versione del vassoio faceva quattro rettangoli dalla griglia. Era
@@ -1340,6 +1434,15 @@ dritti); valida le cordonature fascia per fascia, altrimenti le alette di presa
 del cielo vengono scambiate per fianchi. Il verso di fasciatura, verticale o
 orizzontale, si deduce dalla struttura, e cosi' la **famiglia**: chiuso o
 aperto, vedi sotto.
+
+Le tre regole di tutte le famiglie valgono anche qui, meno le pinne. Le
+**testate** dell'astuccio sono le alette di chiusura sopra e sotto: si
+prendono dalla fustella - il bordo piu' esterno compatibile con la profondita'
+della scatola - e mai da dove finisce la stampa. La grafica decide una cosa
+sola, quale dei due pannelli larghi e' il fronte, e non misura niente. Poi le
+facce contro i pannelli del DT e il fronte sul fronte (`verifica.facce_astuccio`)
+e le quote scritte (`quote.riscontro_astuccio`), dal server come dalla riga di
+comando, che fa gli stessi controlli e la stessa texture HD.
 
 ### La griglia non tollera un intruso
 
@@ -1944,7 +2047,7 @@ verso l'interno, entro un terzo del passo:
 
 I due lati devono dire la stessa cosa. Se non la dicono, la pinna prende il
 rientro piu' stretto - la regola di sempre - la gola non si usa, e la
-verifica delle UV lo grida (vedi *Le due verifiche*).
+verifica delle UV lo grida (vedi *Le verifiche*).
 
 Il margine non stampato resta come **ripiego**, dichiarato, solo dove il DT
 sulle testate non segna niente.
@@ -2210,6 +2313,14 @@ Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel
 registro `CASI` in `server.py`, riconosciuti dalla firma della pagina. Oggi
 contiene FULFIL Chocolate Hazelnut Whip.
 
+Un caso tarato segue le tre regole come gli altri. Prima ne era fuori: la
+grafica si prendeva senza spegnere il disegno tecnico, e le UV non si
+confrontavano col DT. Adesso la grafica viene dal suo livello, e le testate
+del caso si verificano sulle linee che l'analisi legge nel suo DT; se il
+disegno non si legge in automatico - spesso e' il motivo per cui il caso e'
+stato tarato - lo si dice, e le testate si controllano sulla miniatura. Il
+FULFIL non e' nel parco: su di lui questo non e' stato ancora provato.
+
 Risolti dall'analisi automatica, con l'invariante che chiude:
 
 | | nastro | passo | fronte | spessore | falda |
@@ -2246,6 +2357,10 @@ Astucci, con la quota letta due volte che chiude il conto:
   tornano (8 e 4 mm) e non si usa. Un DT dove la seconda linea sia un'altra
   cosa - un limite di stampa, un riferimento grafico - aspetta un pack che lo
   mostri.
+
+- Che il **fronte di un vassoio sia la testata piu' bassa** e' la logica di un
+  espositore, non una misura: sul parco le due testate sono alte uguali, e un
+  display con fronte e retro diversi non e' ancora passato.
 
 - La **spalla lunga 1,7 volte il calo** e' tarata su un bollino solo, quello
   del Paradiso: e' il punto in cui la discesa piu' ripida sta sui 48 gradi e

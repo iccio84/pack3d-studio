@@ -143,3 +143,135 @@ def riscontro_testate(pdf, passo, pinna, gola, page_no=0):
             "%g, dal disegno esce %s. Controllare il DT"
             % (" | ".join("%g" % v for v in c), passo,
                " | ".join("%.1f" % v for v in attesa)))
+
+
+# --------------------------------------------------------------------------- #
+# astucci e vassoi: stessa regola, altre catene
+# --------------------------------------------------------------------------- #
+# "70 x 40 x 150" nel cartiglio: la terna delle dimensioni, come la scrive chi
+# prepara la tavola. Vale per l'astuccio montato e per il vassoio.
+TERNA = re.compile(r"(?<![\w.,])(\d{1,4}(?:[.,]\d{1,2})?)\s*[xX×*]\s*"
+                   r"(\d{1,4}(?:[.,]\d{1,2})?)\s*[xX×*]\s*"
+                   r"(\d{1,4}(?:[.,]\d{1,2})?)(?![\w.,])")
+# Interne o esterne: fra le due c'e' lo spessore del cartoncino, un millimetro
+# o poco piu' per parte. Una terna del cartiglio entro questo torna.
+CARTIGLIO = 1.5
+# Oltre questo scarto relativo una terna scritta non parla di questo pack: e'
+# un altro numero del foglio, e non si grida.
+ESTRANEA = 0.2
+
+
+def terne(pdf, page_no=0):
+    """Le terne `a x b x c` scritte come testo, ordinate: `[(a, b, c)]`."""
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        tp = doc[page_no].get_textpage()
+        testo = tp.get_text_range()
+        tp.close()
+    finally:
+        doc.close()
+    fuori = []
+    for m in TERNA.finditer(testo):
+        try:
+            fuori.append(tuple(sorted(float(g.replace(",", "."))
+                                      for g in m.groups())))
+        except ValueError:
+            continue
+    return fuori
+
+
+def _riscontro(pdf, cosa, attese, dimensioni, page_no=0):
+    """Le misure lette dal DT contro le quote scritte. Una riga, o None.
+
+    `attese` sono le catene che il DT fa aspettare, `[(nome, [mm, ...])]`;
+    `dimensioni` la terna del pack montato. Si cerca prima la terna nel
+    cartiglio, poi le catene lungo gli assi, e si grida solo quando il file
+    parla DI QUESTO pack e dice un'altra cosa: una catena lunga uguale, con la
+    stessa somma, e almeno meta' dei pezzi uguali ai nostri - un numero preso
+    a caso dal foglio non ci arriva - oppure una terna che ci somiglia entro
+    il 20% ma non torna.
+    """
+    try:
+        nums = numeri(pdf, page_no)
+        scritte = terne(pdf, page_no)
+    except Exception:
+        return None
+    if not nums:
+        return ("quote del file non leggibili come testo (vettorializzate?): "
+                "%s solo dal disegno, da controllare sulla miniatura" % cosa)
+    confermate, diverse = [], []
+    nostra = tuple(sorted(dimensioni))
+    for t in scritte:
+        scarti = [abs(a - b) for a, b in zip(t, nostra)]
+        if max(scarti) <= CARTIGLIO:
+            confermate.append("cartiglio %s" % " x ".join("%g" % v for v in t))
+        elif all(s <= ESTRANEA * max(b, 1.0) for s, b in zip(scarti, nostra)):
+            diverse.append("il cartiglio scrive %s, dal disegno esce %s"
+                           % (" x ".join("%g" % v for v in t),
+                              " x ".join("%.1f" % v for v in nostra)))
+    for nome, attesa in attese:
+        if len(attesa) < 2:
+            continue
+        totale = sum(attesa)
+        for c in catene(nums, totale):
+            if len(c) != len(attesa):
+                continue
+            for verso in (attesa, list(reversed(attesa))):
+                uguali = sum(abs(a - b) <= SCARTO for a, b in zip(c, verso))
+                if uguali == len(c):
+                    confermate.append("%s %s = %g" % (
+                        nome, " | ".join("%g" % v for v in c), totale))
+                    break
+                if uguali * 2 >= len(c):
+                    diverse.append("%s: il file scrive %s, dal disegno esce %s"
+                                   % (nome, " | ".join("%g" % v for v in c),
+                                      " | ".join("%.1f" % v for v in verso)))
+                    break
+    if diverse:
+        return ("QUOTE DEL FILE DIVERSE DAL DISEGNO: %s. Controllare il DT"
+                % "; ".join(dict.fromkeys(diverse)))
+    if confermate:
+        return ("%s confermati dalle quote del file: %s"
+                % (cosa[0].upper() + cosa[1:], "; ".join(dict.fromkeys(confermate))))
+    return ("nessuna quota del file che torni con %s: misure solo dal "
+            "disegno, da controllare sulla miniatura" % cosa)
+
+
+def riscontro_astuccio(pdf, d, page_no=0):
+    """Pannelli e alette dell'astuccio contro le quote scritte.
+
+    Le catene attese sono la fila del fronte - i pannelli che gli stanno
+    accanto, da sinistra a destra - e la sua colonna, con le alette sopra e
+    sotto: sono le due righe di quote che un DT d'astuccio porta quasi
+    sempre, e il cartiglio aggiunge la terna L x P x H.
+    """
+    P = d.panels or {}
+    f = P.get("front")
+    if f is None:
+        return None
+
+    def sovrapposti(a0, a1, b0, b1):
+        return min(a1, b1) - max(a0, b0) > 0.5 * min(a1 - a0, b1 - b0)
+
+    riga = sorted((p for p in P.values() if sovrapposti(p.y0, p.y1, f.y0, f.y1)),
+                  key=lambda p: p.x0)
+    colonna = sorted((p for p in P.values() if sovrapposti(p.x0, p.x1, f.x0, f.x1)),
+                     key=lambda p: p.y0)
+    attese = [("in larghezza", [round(p.w_mm, 1) for p in riga]),
+              ("in altezza", [round(p.h_mm, 1) for p in colonna])]
+    return _riscontro(pdf, "pannelli e alette", attese, d.dims_mm, page_no)
+
+
+def riscontro_vassoio(pdf, v, d, page_no=0):
+    """Fondo e pareti del vassoio contro le quote scritte.
+
+    Le catene attese sono le cinque colonne e le tre fasce della griglia -
+    parete, cordonatura, fondo, cordonatura, parete - e la terna e' quella del
+    vassoio montato.
+    """
+    xs = sorted({round(t, 2) for t in d.xs})
+    ys = sorted({round(t, 2) for t in d.ys})
+    attese = [("in larghezza", [round((b - a) * PT2MM, 1) for a, b in zip(xs, xs[1:])]),
+              ("in altezza", [round((b - a) * PT2MM, 1) for a, b in zip(ys, ys[1:])])]
+    return _riscontro(pdf, "fondo e pareti", attese, v.dims_mm, page_no)

@@ -41,6 +41,10 @@ from pack3d import quote as quotature
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
 from pack3d.flowpack import Flowpack, fin_on_surface
+# La risoluzione della texture per qualita' - HD di serie, per tutte le
+# famiglie - sta in `pack3d.artwork`, perche' la applichi anche la riga di
+# comando: finche' stava qui, gli astucci fatti da li' uscivano a 2048 px.
+from pack3d.artwork import qualita, risoluzione
 from pack3d.exporters import _normals
 
 # gonfiore: raccordo, esponente spigolo, grinza, pancia, rastremazione
@@ -197,30 +201,6 @@ def avviso_quadricromia(pdf, page_no=0):
         return None
 
 
-# La risoluzione della texture, (dpi, lato massimo in px), per qualita'.
-#
-# Di serie e' HD. Sul piano Free di Render la texture di un flowpack stava in
-# 1700 px, e un foglio come Colazione - 460 mm di nastro - usciva a 3,7 px/mm,
-# meno di 100 dpi: sgranato appena ci si avvicinava. Il limite era la memoria,
-# e sugli Spaces non c'e' piu' (vedi DEPLOY.md). A 300 dpi quel foglio fa 5433
-# px di lato; il tetto a 8192 e' quello che le schede video da scrivania
-# reggono tutte, e sotto il quale three.js non deve ridimensionare niente.
-#
-# "web" resta per chi vuole un GLB leggero, e sono i numeri di prima.
-TEXTURE = {"web": (200, 1700), "hd": (300, 8192)}
-
-
-def qualita(q):
-    """"web", "hd" o "alta" - che e' HD con la maglia piu' fitta."""
-    q = str(q or "").strip().lower()
-    return q if q in ("web", "hd", "alta") else "hd"
-
-
-def risoluzione(quality):
-    """(dpi, lato massimo) della texture per quella qualita'."""
-    return TEXTURE["web" if qualita(quality) == "web" else "hd"]
-
-
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                  colata_riquadro=None):
     dpi, tmax = risoluzione(quality)
@@ -245,13 +225,17 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
+    # e le misure del disegno contro le quote che il file scrive, come per le
+    # testate del flowpack: le quote non costruiscono, confermano
+    riscontro = quotature.riscontro_astuccio(pdf, d)
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm]
     rgb = avviso_quadricromia(pdf)
     if rgb:
         meta.insert(0, rgb)
-    return meta + avvisi_tex + verifiche + [w for w in dl.check(d)]
+    return (meta + avvisi_tex + verifiche + ([riscontro] if riscontro else [])
+            + [w for w in dl.check(d)])
 
 
 def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
@@ -298,7 +282,21 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     # si misurano sull'altezza che la texture ha davvero, non su quella della
     # sagoma, che e' un'altra griglia
     steso = vassoio.con_coda(tex["steso"])
-    V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste, alt_texture=steso.height)
+    parti = {}
+    V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste, alt_texture=steso.height,
+                            parti=parti)
+    avvisi_fronte = []
+    if vassoio.testata_davanti(v) == "sud":
+        # il davanti e' la testata bassa, e la maglia mette davanti la nord
+        V = vassoio.gira(V)
+        avvisi_fronte.append("il fronte e' la testata sud, piu' bassa della "
+                             "nord (%.1f contro %.1f mm): vassoio girato perche' "
+                             "guardi davanti" % (v.pareti["sud"], v.pareti["nord"]))
+    # le due verifiche di sempre: le pareti sulle loro fasce del DT, con la
+    # scala vera della texture, e il fronte sul fronte
+    _ok, verifiche = verifica.vassoio(V, UV, T, parti, v, d, steso.size,
+                                      dpi_tex / 25.4, vassoio.CODA)
+    riscontro = quotature.riscontro_vassoio(pdf, v, d)
     exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax)
     meta = ["vassoio espositore",
             "base %.1f x %.1f mm, pareti %s mm"
@@ -306,7 +304,8 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
             "%d vertici sul profilo della fustella, cartoncino %.1f mm"
             % (len(V), vassoio.SPESSORE)]
-    return meta + avvisi_sagoma + avvisi_tex + list(v.warnings)
+    return (meta + avvisi_sagoma + avvisi_tex + list(v.warnings) + avvisi_fronte
+            + verifiche + ([riscontro] if riscontro else []))
 
 
 def _flowpack_from_case(case):
@@ -783,16 +782,31 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     dente = (fin_open / max(int(teeth), 1)) * math.sqrt(3.0) / 2.0 if teeth > 0 else 0.0
     avvisi_sez.append(verifica.testate_flowpack(V, UV, T, fp, spalla, dente,
                                                 ap >= 3.0)[1])
-    if case is None:
-        # PRIMA della mappatura: le UV sono il DT steso, e se le testate non
-        # cadono sulle sue linee la grafica andra' fuori posto comunque la si
-        # mappi. E le misure del disegno contro le quote che il file scrive.
-        avvisi_sez.append(verifica.uvw_flowpack(fp0, fp, rastremo, scatola,
+    # PRIMA della mappatura: le UV sono il DT steso, e se le testate non
+    # cadono sulle sue linee la grafica andra' fuori posto comunque la si
+    # mappi. E le misure del disegno contro le quote che il file scrive.
+    #
+    # Anche per un caso tarato a mano: le sue misure sono state prese una
+    # volta, su quel file, e il DT e' ancora li' per confermarle. Le linee
+    # vengono dall'analisi del disegno; se il disegno non si legge - ed e'
+    # spesso il motivo per cui un caso e' stato tarato - lo si dice.
+    linee = fp0
+    if case is not None:
+        try:
+            _box, linee, _rip = analisi_flowpack(pdf)
+        except Exception:
+            linee = None
+    if linee is not None:
+        avvisi_sez.append(verifica.uvw_flowpack(linee, fp, rastremo, scatola,
                                                 spalla)[1])
-        riscontro = quotature.riscontro_testate(pdf, fp0.step_mm,
-                                                fp0.end_fin, fp0.gola)
-        if riscontro:
-            avvisi_sez.append(riscontro)
+    else:
+        avvisi_sez.append("UVW contro il DT: il disegno di questo file non si "
+                          "legge in automatico, le testate sono quelle del "
+                          "caso tarato: da controllare sulla miniatura")
+    riscontro = quotature.riscontro_testate(pdf, fp0.step_mm,
+                                            fp0.end_fin, fp0.gola)
+    if riscontro:
+        avvisi_sez.append(riscontro)
 
     grid = V.reshape(-1, nv + 1, 3)
     # (4) le pinne restano saldate e piatte: nessuna manipolazione dei lembi.
@@ -828,7 +842,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
     tex = folding.rasterize_panels(
         clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
-        dpi=dpi_tex, inset_px=0, clean=(case is None),
+        dpi=dpi_tex, inset_px=0, clean=True,
         note=avvisi_sez, nero_deciso=deciso_nero,
         colata_riquadro=colata_riquadro)["film"]
     foglio = tex
