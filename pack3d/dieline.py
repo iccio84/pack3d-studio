@@ -228,11 +228,15 @@ def _technical_pens(segs, page_w, page_h, min_segs=4, keep=0.15):
 ATTACCATO = 50.0
 
 
-def _largest_cluster(segs, gap=25.0):
-    """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
-    cartigli, legende e disegni di riepilogo posti a lato della fustella."""
+def _gruppi(segs, gap=25.0):
+    """I gruppi di segmenti spazialmente connessi: `[[(segmento, riquadro)]]`.
+
+    Due segmenti stanno nello stesso gruppo se i loro riquadri distano meno
+    di `gap` punti. Un DT e le sue copie tecniche, la legenda, il cartiglio
+    e le miniature vengono fuori come gruppi separati.
+    """
     if not segs:
-        return segs
+        return []
     boxes = []
     for kind, c, a, b, st in segs:
         boxes.append((c - 1, a, c + 1, b) if kind == "V" else (a, c - 1, b, c + 1))
@@ -260,6 +264,15 @@ def _largest_cluster(segs, gap=25.0):
     groups = {}
     for i, sg in enumerate(segs):
         groups.setdefault(find(i), []).append((sg, boxes[i]))
+    return list(groups.values())
+
+
+def _largest_cluster(segs, gap=25.0):
+    """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
+    cartigli, legende e disegni di riepilogo posti a lato della fustella."""
+    if not segs:
+        return segs
+    groups = {id(g): g for g in _gruppi(segs, gap)}
     main = max(groups.values(), key=lambda g: sum(x[0][3] - x[0][2] for x in g))
     mx0 = min(b[0] for _, b in main); my0 = min(b[1] for _, b in main)
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)

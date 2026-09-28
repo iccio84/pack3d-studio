@@ -388,9 +388,16 @@ def immagini_rgb(page, minimo=RGB_MINIMO_PX, dentro_i_form=True):
     return [(k, w, h) for _, k, w, h in out]
 
 
-def avviso_rgb(page):
-    """La riga da mostrare a chi costruisce, o niente se il file e' a posto."""
+def avviso_rgb(page, dentro=None):
+    """La riga da mostrare a chi costruisce, o niente se il file e' a posto.
+
+    `dentro`, se c'e', e' l'insieme delle misure in pixel delle immagini che
+    stanno sul DT (`tracciati.immagini_nel_riquadro`): le altre sono note -
+    il logo dello studio nel cartiglio - e non si contano.
+    """
     im = immagini_rgb(page)
+    if dentro is not None:
+        im = [x for x in im if (x[1], x[2]) in dentro]
     if not im:
         return None
     k, w, h = im[0]

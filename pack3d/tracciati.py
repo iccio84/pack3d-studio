@@ -194,6 +194,53 @@ def _telaio(page):
     return (1.0, 0.0, 0.0, -1.0, -x0, y1)
 
 
+def immagini_nel_riquadro(pdf_path, riquadro, page_no=0):
+    """Le misure in pixel `(w, h)` delle immagini disegnate dentro `riquadro`.
+
+    `riquadro` e' nel telaio di misura; basta che l'immagine lo tocchi. Serve
+    a dire quali immagini sono dell'artwork e quali delle note: un logo RGB
+    nel cartiglio non e' grafica del pack, e un avviso sull'RGB per lui
+    sarebbe rumore.
+    """
+    x0, y0, x1, y1 = riquadro
+    fuori = set()
+    doc = pdfium.PdfDocument(pdf_path)
+    try:
+        page = doc[page_no]
+
+        def giro(cont, quanti, prendi, m):
+            for i in range(quanti(cont)):
+                o = prendi(cont, i)
+                t = raw.FPDFPageObj_GetType(o)
+                if t == raw.FPDF_PAGEOBJ_FORM:
+                    giro(o, raw.FPDFFormObj_CountObjects,
+                         raw.FPDFFormObj_GetObject, _componi(m, _matrice(o)))
+                    continue
+                if t != raw.FPDF_PAGEOBJ_IMAGE:
+                    continue
+                lati = [ctypes.c_float() for _ in range(4)]
+                if not raw.FPDFPageObj_GetBounds(
+                        o, *(ctypes.byref(v) for v in lati)):
+                    continue
+                sx, giu, dx, su = (v.value for v in lati)
+                a, b, c, d, e, f = m
+                pt = ((sx, giu), (dx, su), (sx, su), (dx, giu))
+                xs = [a * x + c * y + e for x, y in pt]
+                ys = [b * x + d * y + f for x, y in pt]
+                if max(xs) < x0 or min(xs) > x1 or max(ys) < y0 or min(ys) > y1:
+                    continue
+                w, h = ctypes.c_uint(), ctypes.c_uint()
+                if raw.FPDFImageObj_GetImagePixelSize(o, ctypes.byref(w),
+                                                      ctypes.byref(h)):
+                    fuori.add((w.value, h.value))
+
+        giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject,
+             _telaio(page))
+    finally:
+        doc.close()
+    return fuori
+
+
 def _misure(page):
     x0, y0, x1, y1 = page.get_mediabox()
     return x1 - x0, y1 - y0
