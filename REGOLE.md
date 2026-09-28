@@ -854,13 +854,27 @@ riquadro `BEST BEFORE AREA` a destra: via quelle due, e restano interi il logo
 `100% LATTE ITALIANO`. Sei GLB su otto non cambiano di un byte, e i due che
 cambiano sono esattamente questi.
 
-**Il prefiltro.** Prima di estrarre il testo si guarda se nel flusso della
-pagina compare la parola `AREA`: costa da 0,00 a 0,05 secondi e divide netto -
-zero occorrenze sui sei file del parco senza etichette, 2, 6 e 11 sui tre che
-le hanno. Senza, l'estrazione del testo sarebbero 2,9 secondi buttati su ogni
-K Brioss STD. Se un file scrivesse `AREA` in una codifica che il prefiltro non
-vede si resterebbe alla pulizia di prima: puo' far perdere un'occasione, non
-puo' far strappare la lastra sbagliata.
+**Il prefiltro.** Prima di estrarre il testo con pypdf si guarda se nel testo
+della pagina compare la parola `area`. Il testo lo legge **pdfium**, che
+decodifica i font e scende nei form: costa da 0,01 a 0,15 secondi, contro i
+2,9 che l'estrazione di pypdf costa su ogni K Brioss STD. Prima si cercava
+`AREA` nei byte grezzi del flusso della pagina, e un font a glifi codificati
+la nascondeva: sul **Kinder Paradiso T1** la legenda dice "Covered Area",
+"Print Free Area", "Best Before Area", "Bar Code Area" e "Pin code area", il
+prefiltro diceva di no, e i cinque box - la fascia verde acqua, quella
+arancione, i due verdi e il quadratino rosa - restavano stampati sul pack.
+Stessa cosa sull'astuccio **Pingui T6**, che ha "Neutral Area" e "Best Before
+Area" in legenda. La parola si cerca anche dentro altre, perche' pdfium su una
+didascalia girata e spezzata restituisce "BESAREA": un falso si' costa una
+lettura, un falso no costa un box stampato.
+
+Adesso il Paradiso impara dalla legenda Covered = 1565 C, Print Free = 571 C,
+Best Before = 346 C, Bar Code = 3405 C, Pin code = 7436 C, e il Pingui T6
+Neutral = 571 C - la stessa lastra che l'agente toglieva a occhio, vedi
+sotto - e Best Before = 346 C. Sul Paradiso spariscono tutti i box, e logo,
+prodotto, "FATTA CON LATTE FRESCO" e l'icona del riciclo restano interi; sul
+Pingui T6 sparisce il box verde nella fascia rossa del retro, e il fronte -
+logo, bollino `x6`, QR code - non cambia di un pixel.
 
 **Su ogni file, anche con i livelli tecnici.** All'inizio la ricerca partiva
 solo sui file senza livelli tecnici, per risparmiare la lettura del testo. Sul
@@ -914,16 +928,17 @@ Si guarda il campione solo se sotto la scritta non c'e' una lastra piena, e
 solo per le scritte che dicono un box area. Sul parco da' quello che l'occhio
 da': Country `COVERED Area` = 1565 C, `Best Before Area` = 346 C, `Bar Code
 Area` = 3405 C; Colazione e K Brioss `TEXT AREA` = 1595 C, `COVERED AREA` =
-1565 C. Le legende del B-ready e del Kinder Cards danno le lastre che gia' si
-chiamano area. Una legenda col campione dietro la scritta, o lontano, non da'
+1565 C; Paradiso e Pingui T6 come sopra, nel prefiltro. Le legende del
+B-ready e del Kinder Cards danno le lastre che gia' si chiamano area. Una legenda col campione dietro la scritta, o lontano, non da'
 niente: si perde un'occasione, non si strappa la lastra sbagliata.
 
 ##### Quando il file non le scrive nemmeno: allora si guarda
 
 Se il nome dell'area non si legge ne' sopra il riquadro ne' in un campione di
 legenda, non c'e' piu' niente da leggere. Era il caso del Kinder Bueno Dark T2
-e del cartotecnico Pingui T6 prima che si leggesse il campione; quei due file
-non sono nel parco di prova, e se ora il campione li prenda non e' verificato.
+e del cartotecnico Pingui T6 prima che si leggesse il campione: il Pingui T6
+adesso lo prende (vedi *Il prefiltro*), il Bueno Dark T2 non e' nel parco di
+prova e non e' verificato.
 A **occhio** pero' sono ovvie: un rettangolo pieno, verde o arancione,
 appoggiato sulle falde.
 
