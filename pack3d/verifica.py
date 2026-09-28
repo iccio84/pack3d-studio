@@ -75,9 +75,11 @@ def uvw_flowpack(fp0, fp, rastremo, scatola, spalla=None):
     - a pinna, la prima linea del DT e' la saldatura e deve essere il confine
       della pinna; la seconda, se la gola e' stata letta, l'inizio del
       prodotto;
-    - con una scatola dentro la saldatura non e' disegnata: la prima linea e'
-      la piega della scatola, e deve essere l'inizio del prodotto - la pinna
-      sta oltre, dove la mette la gola.
+    - con una scatola dentro, se il DT non dice la gola - la saldatura non e'
+      disegnata, come sul Brioss - la prima linea e' la piega della scatola,
+      e deve essere l'inizio del prodotto: la pinna sta oltre, dove la mette
+      la gola stimata. Se la gola la dice - K Colazione Piu' - si controlla
+      come a pinna.
 
     Lungo il passo le UV non si muovono mai ai confini - `L/2 + end_fin` non
     cambia, e sulla spalla il film si ridistribuisce solo fra la saldatura e
@@ -97,7 +99,7 @@ def uvw_flowpack(fp0, fp, rastremo, scatola, spalla=None):
         st = _strutture([d for d in dist if 0.3 < d <= lim])
         if not st:
             continue
-        if scatola:
+        if scatola and not fp0.gola:
             attese = [(st[0][0], modello[1])]
         else:
             attese = [(st[0][0], modello[0])]

@@ -2330,6 +2330,20 @@ Dal PDF non si vede: e' il prodotto a dirlo. Va riportato in
   faccia: il pack resta squadrato fino in fondo e poi salda subito. Nel modello
   si sposta massa da `end_fin` a `L` tenendo ferma la somma `L/2 + end_fin`,
   cosi' le UV non cambiano e la grafica non si muove.
+- **Ma se la gola la disegna il DT, vale quella.** La stima dallo spessore
+  serve quando la saldatura non e' disegnata e la testata arriva alla piega
+  (Brioss). Quando il DT disegna la saldatura E dove finisce il prodotto, la
+  testata e' gia' divisa: pinna fino alla saldatura, gola fino al prodotto, e
+  il corpo la comprende. Su **K Colazione Piu' T10** le quote del file sono
+  `20 | 37,5 | 215 | 37,5 | 20`, e il ramo della scatola divideva lo stesso
+  la pinna da 20 mm: 18 di gola in piu' e **2 mm di pinna**. Il pack usciva
+  una scatola senza pinne, con la grafica delle testate stirata di 2,07 volte,
+  e nessun errore. Era cosi' dal 27 settembre, da quando le testate si
+  leggono dal DT (vedi *Prima le misure, poi il contenuto*), e nessun
+  controllo lo prendeva: la verifica delle UV con la scatola cercava la
+  piega, e sul Colazione la prima linea e' la saldatura. Adesso: gola dal DT,
+  pinna 20, verifica UV a 0,0 mm, film stirato 1,38 invece di 2,07. I due
+  Brioss restano identici al byte.
 
 Resta fuori dal modello il fatto che su questi pack la pinna, oltre a non
 allargarsi, viene **ripiegata sulla testata** invece di sporgere: nelle foto
@@ -2449,7 +2463,9 @@ verso l'interno, entro un terzo del passo:
   calo del tubo vuole piu' film (vedi *La grafica sulle pinne*);
 - se la prima struttura e' una **piega con le sue due guide**, la saldatura
   non e' disegnata: e' il film su scatola (Brioss), e la testata arriva alla
-  piega. Da li' in fuori la gola la decide lo spessore, come prima.
+  piega. Da li' in fuori la gola la decide lo spessore, come prima. Se invece
+  il DT disegna saldatura e gola e il film avvolge una scatola (K Colazione
+  Piu'), la gola resta quella del DT: vedi *Il film su scatola*.
 
 I due lati devono dire la stessa cosa. Se non la dicono, la pinna prende il
 rientro piu' stretto - la regola di sempre - la gola non si usa, e la

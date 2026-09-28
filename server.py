@@ -754,8 +754,21 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # Brioss: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
     # La somma L/2 + end_fin non cambia, quindi le UV restano quelle e la
     # grafica non si sposta di un pixel.
+    #
+    # Ma solo se la gola non la dice gia' il DT. Quando disegna la saldatura
+    # E dove finisce il prodotto, la testata e' gia' divisa: la pinna finisce
+    # alla saldatura, la gola sta fra lei e il prodotto, e il corpo la
+    # comprende. Su K Colazione Piu' T10 le quote del file sono 20 | 37,5 |
+    # 215 | 37,5 | 20: corpo 290 con la gola, pinna 20. Dividendo la pinna
+    # un'altra volta ne restavano 2 mm, e il pack usciva una scatola senza
+    # pinne con la grafica delle testate stirata di 2,07 volte.
     gola = 0.0
-    if scatola:
+    if scatola and fp0.gola > 0:
+        gola = fp0.gola
+        avvisi_sez.append("oltre la scatola %.1f mm: %.1f di gola piu' %.1f di "
+                          "pinna, come li disegna il DT"
+                          % (fp0.gola + fp0.end_fin, gola, fp.end_fin))
+    elif scatola:
         gola = min(GOLA_SU_SPESSORE * fp0.T, max(fp0.end_fin - 2.0, 0.0))
         fp = replace(fp, L=round(fp0.L + 2.0 * gola, 2),
                      end_fin=round(fp0.end_fin - gola, 2))
