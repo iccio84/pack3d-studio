@@ -13,6 +13,7 @@ versione ridotta.
 | regola | flowpack | astuccio | vassoio |
 |---|---|---|---|
 | **Grafica** | si' | si' | si' |
+| ↳ **box area via, come la GDA** | si' | si' | si' |
 | **Testate dal DT** | pinna e gola | pannelli e alette | fondo, testate e laterali |
 | **Pinne** | si' | - | - |
 
@@ -23,6 +24,17 @@ texture e' **HD** di serie, 300 dpi fino a 8192 px (`artwork.risoluzione`, la
 stessa per server e riga di comando). Colata in sovrastampa e `k` nera del
 marchio `kinder` restano quelle del file. Vedi *I due livelli li fa la
 costruzione, oggetto per oggetto* e *La texture e' HD di serie*.
+
+**I box area si tolgono sempre, come la GDA** - anche quelli verdi - su ogni
+modello 3D, flowpack e astucci compresi: `TEXT AREA`, `GDA`, `BEST BEFORE`,
+`BAR CODE`/`EAN`, `COVERED`, `PIN CODE`, `PRINT FREE`, `NEUTRAL` e ogni altra
+lastra che si chiama area, **insieme alle loro didascalie** - il nome del box e
+le scritte segnaposto che ci stanno dentro, "INGREDIENTS", "WEIGHT", "F8 LEGAL
+TEXT". Sotto resta la grafica che il file ci ha messo. Si riconoscono dal nome
+della lastra, e quando la lastra ha per nome un numero di Pantone dalla
+didascalia scritta sul box o dalla legenda. Resta solo l'`AREA PROMO`, che e'
+la grafica della promo e si stampa. Vedi *Le aree riservate non compaiono mai
+nel render*.
 
 **2. Testate dal DT.** Il pack si misura dal **disegno tecnico**, e il
 contenuto - dove c'e' inchiostro - viene per ultimo e non misura niente: la
@@ -228,8 +240,9 @@ dell'area di stampa, sul Choco Fresh il tratteggio sotto la pinna).
   grafica. Un pieno piccolo (fino a 3 mm) sulla punta interna di un tratto
   che esce dal DT - basta un millimetro - e' la testa di un richiamo, e va
   via con la nota: sul B-ready 9 pallini neri da 0,7 mm. Se il pallino non
-  sta sulla punta di nessun tratto non si tocca: sul B-ready ne resta uno,
-  orfano nel template.
+  sta sulla punta di nessun tratto non si tocca: sul B-ready ne restava uno,
+  orfano nel template, e adesso va via con le didascalie del box area in cui
+  sta (vedi *Tolto il box, via anche la sua didascalia*).
 
 Costa una passata di pypdf sul flusso, la stessa delle coperture: da 0,2 a
 6 secondi, Colazione il piu' caro. E visto che la passata c'e' comunque, per
@@ -771,9 +784,21 @@ e restituisce gia' scritti gli avvisi da mostrare.
 #### Le aree riservate non compaiono mai nel render
 
 La **GDA** non e' sola. `COVERED AREA`, `TEXT AREA`, `BEST BEFORE AREA`, `BAR
-CODE AREA`, `PRINT FREE AREA`, `NEUTRAL AREA` sono la stessa cosa fatta per
-un'altra ragione: **posto tenuto**, non grafica. Nessuna di loro si stampa, e
-**nessuna deve comparire nel render finale**.
+CODE AREA`, `PRINT FREE AREA`, `NEUTRAL AREA`, `PIN CODE AREA` sono la stessa
+cosa fatta per un'altra ragione: **posto tenuto**, non grafica. Nessuna di
+loro si stampa, e **nessuna deve comparire nel render finale**: i box area si
+tolgono **sempre**, come la GDA, e su **tutti i modelli 3D** - flowpack,
+astucci e vassoi, e anche i casi tarati a mano (`senza_coperture` con
+`fisse`). E' la regola come l'ha detta l'utente dopo il Nutella B-ready T2:
+"i box area vanno sempre tolti come la gda, anche quelli verdi".
+
+**Per nome e' un box area ogni lastra che si chiama area** (`techink.area`,
+la parola `area` intera), non solo le frasi di un elenco: sul B-ready c'e'
+`PIN CODE Area`, che nell'elenco non c'era e restava. Nessun inchiostro si
+chiama cosi'. L'unica eccezione e' la **promo**: l'`AREA PROMO` della legenda
+del K Brioss (FERRERO_1765...) e' tutta la fascia gialla con "Scopri il mondo
+di Quelli della COLAZIONE" e "VINCI l'esclusivo SET COLAZIONE", cioe' la
+grafica della promo, che si stampa.
 
 Stanno fra le **coperture** e non fra i soli nomi tecnici, per la ragione che
 vale per la GDA: sono PIENI grandi quanto la casella, non tratti, e l'euristica
@@ -837,27 +862,70 @@ K Brioss STD. Se un file scrivesse `AREA` in una codifica che il prefiltro non
 vede si resterebbe alla pulizia di prima: puo' far perdere un'occasione, non
 puo' far strappare la lastra sbagliata.
 
-**Il costo, detto per intero.** La ricerca parte solo se il file **non ha
-livelli tecnici**: dove i livelli ci sono la pulizia e' gia' esatta e non si
-paga niente. Sul parco i sei file senza etichette restano al loro tempo — K
-Brioss STD 1,9 -> 2,0 s, crt_nuovo 2,4 -> 2,4, vernice 4,1 -> 3,8 — mentre i
-due che le hanno pagano: **Brioss Latte e cacao 0,9 -> 4,5 s**, **Colazione
-2,1 -> 19,7 s**. Quei diciotto secondi sono quasi tutti lo strappo delle tre
-lastre, che su un flusso da 3,6 MB e' la parte cara; la lettura del testo ne
-vale 3,8 e la passata `tiffsep` uno.
+**Su ogni file, anche con i livelli tecnici.** All'inizio la ricerca partiva
+solo sui file senza livelli tecnici, per risparmiare la lettura del testo. Sul
+Kinder Country e' stato un errore: i suoi livelli tecnici sono `Check` e
+`Guides and grids`, i box non ci stanno, e i due box verdi `Best Before Area`
+e `Bar Code Area` - PANTONE 346 C e 3405 C - restavano stampati con le loro
+scritte. Adesso la ricerca parte sempre; il prefiltro sulla parola `AREA` la
+tiene a zero sui file che non la scrivono, e sul parco costa 1,3-2,2 secondi
+ai quattro che la scrivono e hanno i livelli.
+
+**Si guarda al centro della scritta, non dove comincia.** "Bar Code Area" sul
+Kinder Country e' girata e comincia a un millimetro dal bordo del suo box: i
+2 mm attorno all'inizio erano pieni al 57%, sotto la soglia del 60, e il box
+restava. La posizione, la direzione e il corpo si leggono dalle due matrici
+del testo (`cm` e `tm`, non la sola `tm`), la lunghezza si stima a 0,55 corpi
+per carattere: basta a trovare il centro, e li' il box e' pieno all'81%.
+
+**E si controlla pypdf.** A volte ripete una scritta con la posizione di
+un'altra: sul Kinder Cards T2 "Best Before Area" torna una seconda volta sulla
+banda rossa, dove non c'e' scritto niente, e sotto c'era il **Kinder ORANGE**
+- la grafica. Una didascalia vale solo se pdfium vede davvero un oggetto testo
+dove pypdf dice che comincia (`techink._oggetti`).
+
+**Il costo, detto per intero.** Sul parco i file senza etichette restano al
+loro tempo — K Brioss STD 1,9 -> 2,0 s, crt_nuovo 2,4 -> 2,4, vernice 4,1 ->
+3,8 — mentre quelli che le hanno pagano: **Brioss Latte e cacao 0,9 -> 4,5
+s**, **Colazione 2,1 -> 19,7 s**. Quei diciotto secondi sono quasi tutti lo
+strappo delle tre lastre, che su un flusso da 3,6 MB e' la parte cara; la
+lettura del testo ne vale 3,8 e la passata `tiffsep` uno.
 
 E' tanto, e su un piano Free a 0,1 CPU si sente. In cambio il pack non esce
 con `TEXT AREA` scritto sopra, e la memoria **scende**: sul solo Colazione il
 picco va da **613 a 473 MB**, cioe' da sopra a sotto il tetto dei 512 —
 togliere tre lastre piene dal flusso costa meno di quanto costi renderle.
 
+##### Quando il nome sta solo in legenda: il campione davanti alla scritta
+
+Sul Kinder Country la fascia arancione a tratteggio sotto la pinna non ha
+nessuna scritta sopra. Il suo nome sta solo in legenda: "COVERED Area", e
+davanti un quadrato di 14 punti di PANTONE 1565 C. Leggere la legenda in
+generale e' un accostamento di posizione, e sbagliare accostamento vuol dire
+strappare la lastra della grafica; ma il **campione** di una voce e' una cosa
+stretta, e si legge solo quella (`techink._campione`):
+
+- un percorso **pieno**, grande da 0,8 a 10 corpi della scritta per lato;
+- **davanti** alla scritta, sulla sua riga - copre almeno un terzo del corpo
+  del testo - e staccato al piu' di 4 corpi: il piu' vicino;
+- e la lastra deve riempirlo al **60%**, come sotto una didascalia.
+
+Si guarda il campione solo se sotto la scritta non c'e' una lastra piena, e
+solo per le scritte che dicono un box area. Sul parco da' quello che l'occhio
+da': Country `COVERED Area` = 1565 C, `Best Before Area` = 346 C, `Bar Code
+Area` = 3405 C; Colazione e K Brioss `TEXT AREA` = 1595 C, `COVERED AREA` =
+1565 C. Le legende del B-ready e del Kinder Cards danno le lastre che gia' si
+chiamano area. Una legenda col campione dietro la scritta, o lontano, non da'
+niente: si perde un'occasione, non si strappa la lastra sbagliata.
+
 ##### Quando il file non le scrive nemmeno: allora si guarda
 
-Se il nome dell'area sta solo nella legenda e non sopra il riquadro — Kinder
-Bueno Dark T2, il cartotecnico Pingui T6 — non c'e' piu' niente da leggere: la
-legenda e' un accostamento di posizione, e sbagliare accostamento vuol dire
-strappare la lastra della grafica. A **occhio** pero' sono ovvie: un rettangolo
-pieno, verde o arancione, appoggiato sulle falde.
+Se il nome dell'area non si legge ne' sopra il riquadro ne' in un campione di
+legenda, non c'e' piu' niente da leggere. Era il caso del Kinder Bueno Dark T2
+e del cartotecnico Pingui T6 prima che si leggesse il campione; quei due file
+non sono nel parco di prova, e se ora il campione li prenda non e' verificato.
+A **occhio** pero' sono ovvie: un rettangolo pieno, verde o arancione,
+appoggiato sulle falde.
 
 Quindi si guarda, ed e' lavoro dell'agente — *il modello dice DOVE, il codice
 fa COSA*, vedi *Cosa passare al modello, e cosa no*. Lo strumento e'
@@ -888,34 +956,52 @@ riquadro nella fascia rossa — e restano interi il logo, i due bollini `x6`, il
 `FATTO CON LATTE FRESCO`, la bustina e il QR code. Che e' esattamente quello
 che il registro di lastre note portava via.
 
-##### Tolta l'area, via anche la sua didascalia
+##### Tolto il box, via anche la sua didascalia
 
 Tolta la lastra resta la **scritta**, quando non e' in bianco. Sul Kinder
 Cards T2 `Best Before Area` e `POSITIONING AREA FOR EAN CODE (if requested)`
 sono in marrone scuro, CMYK 0/81/100/77: via i riquadri verdi, le due scritte
-restavano stampate sui fianchi del pack.
+restavano stampate sui fianchi del pack. Sul Nutella B-ready T2, tolti i box
+arancioni `TEXT Area`, sul retro restavano "INGREDIENTS", "F8 LEGAL TEXT",
+"Text Area TABELLA NUTRIZIONALE", "WEIGHT", "COMMERCIAL DESCRIPTION" e, sul
+fronte, "TEXT AREA" e "GDA".
 
-Mentre `strip_separations` toglie le aree dei **dati variabili** - scadenza,
-lotto, codice a barre (`techink.DATI_VARIABILI`, sul nome della lastra o
-sulla sua didascalia) - ne misura il riquadro, seguendo la matrice e i form,
-e lo passa a chi rende la texture (`strati.segna_riservate`). Dentro un
+Mentre `strip_separations` toglie un **box area** - uno qualunque: prima erano
+solo quelli dei dati variabili, scadenza, lotto e codice a barre - ne misura
+il riquadro, seguendo la matrice e i form, e lo passa a chi rende la texture
+(`strati.segna_riservate`), con un segno se l'area e' **coperta**. Dentro un
 riquadro tolto `strati.dividi` manda nel livello DT:
 
-- il testo che dice il nome di un'area riservata (`techink.NOME_RISERVATA`):
-  lo dice quello che c'e' scritto, non il colore;
+- il testo che dice il nome di un'area riservata (`techink.NOME_RISERVATA`,
+  che conosce anche "EAN CODE" da solo): lo dice quello che c'e' scritto, non
+  il colore;
 - e cio' che ha il **colore di una di quelle scritte**, perche' non tutte le
-  didascalie sono testo: quella del codice a barre del Kinder Cards e' in
-  curve, 38 tracciati. Un codice a barre vero, nero, resta dov'e'; e senza
-  una didascalia scritta non si impara nessun colore e non si toglie niente.
+  didascalie dicono "area": "INGREDIENTS" e "WEIGHT" sono solo il nome della
+  casella, e quella del codice a barre del Kinder Cards e' in curve, 38
+  tracciati. Una scritta, o un **segno** - un tracciato che copre meno di un
+  quarto del box (`QUOTA_SEGNO`): una lettera in curve, il pallino di un
+  richiamo - tutto dentro il riquadro e di quel colore. Un tracciato piu'
+  grande e' un fondo, e resta: sul K Brioss (FERRERO_1765...) le didascalie
+  sono bianche, e dentro la Best Before Area c'e' il riquadro bianco dove si
+  stampera' la data. Un codice a barre vero, nero, resta dov'e' se la
+  didascalia e' di un'altra tinta; e senza una didascalia scritta non si
+  impara nessun colore e non si toglie niente.
 
-Solo dentro i riquadri **tolti**. Sul Kinder Country le aree sono dipinte con
-Pantone qualsiasi, e siccome il file ha livelli tecnici la ricerca per
-etichetta non parte: i riquadri verdi restano, e con loro le scritte - un
-riquadro verde senza nome sembrerebbe grafica. Che restino e' un limite gia'
-noto, non un effetto di questa regola. Le aree coperte e senza stampa sono
-fuori per un'altra ragione: sotto possono avere grafica - la fascia coperta
-dalla pinna del Kinder Cards porta la cialda e la banda rossa - e li' non si
-toglie niente.
+L'area **coperta** e' l'eccezione: e' la fascia che la pinna nasconde, e sotto
+la grafica continua - sul Kinder Cards la cialda e la banda rossa. Si toglie
+come le altre, ma dentro si spegne solo il testo che dice il suo nome, e il
+colore si impara solo dai box **vuoti per definizione** (`techink.vuota`):
+il posto di un testo, di un codice, di una data, o dove non si stampa - TEXT,
+GDA, BEST BEFORE, BAR CODE, EAN, PIN CODE, LOT, PRINT FREE, NEUTRAL. Ogni
+altra area, anche una che non si conosce - una `Emboss Area`, una `Varnish
+Free Area` - si tratta come la coperta: puo' avere grafica sotto.
+
+Sul B-ready vanno nel livello DT 15 oggetti: le dodici scritte rosso bruno,
+"BEST BEFORE AREA", "EAN CODE" e il pallino nero orfano, che ha il colore di
+quelle due. Sul Kinder Country 2, "Best Before Area" e "Bar Code Area"; sul
+Kinder Cards restano le 39 di prima. Solo dentro i riquadri **tolti**: la
+didascalia di un box che nessuno ha riconosciuto resta con lui, perche' un
+riquadro senza nome sembrerebbe grafica.
 
 ##### Lo spazio colore e' stato grafico
 
@@ -2684,10 +2770,20 @@ Astucci, con la quota letta due volte che chiude il conto:
   font con glifi piu' larghi, che parta fuori dal DT e ci entri, verrebbe
   tolto. Non e' ancora passato.
 
-- Il **colore della didascalia** come chiave per le didascalie in curve e'
-  stato visto su un file solo, il Kinder Cards. Se la didascalia scritta fosse
-  nera come un codice a barre vero dentro lo stesso riquadro, il codice a
-  barre se ne andrebbe con lei.
+- Il **colore della didascalia** come chiave per le didascalie che non dicono
+  "area" e' stato visto su due file: il Kinder Cards (in curve) e il B-ready
+  ("INGREDIENTS", "WEIGHT", "F8 LEGAL TEXT", tutte nel colore di "Text Area").
+  Se la didascalia scritta fosse nera come un codice a barre vero dentro lo
+  stesso riquadro, il codice a barre se ne andrebbe con lei; e se un file
+  finito avesse il testo legale vero dentro il box `TEXT AREA` e nello
+  stesso colore della sua didascalia, se ne andrebbe il testo. Sul B-ready
+  "BEST BEFORE AREA" ed "EAN CODE" sono nere, e i box non hanno codici veri.
+- La **promo** e' l'unica area che resta, ed e' una scelta su un file solo:
+  l'`AREA PROMO` del K Brioss (FERRERO_1765...) e' grafica. Un file con un
+  box promo vuoto, segnaposto, lo lascerebbe stampato.
+- Il **campione di legenda** e' letto solo DAVANTI alla scritta, sulla sua
+  riga: le legende del parco sono tutte cosi'. Una legenda col campione
+  dietro, sopra o in una colonna lontana non insegna niente.
 
 - La **tacca di fotocentratura** del Kinder Cards restava sulla texture col
   suo contorno verde e la diagonale, tratti da 1 pt che le penne della

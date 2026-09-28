@@ -112,8 +112,8 @@ def tecnici(pdf, page_no=0):
     return fuori
 
 
-# I riquadri delle aree riservate ai dati variabili che la costruzione ha tolto,
-# per file: chi rende la texture ci spegne dentro le didascalie. Li scrive
+# I riquadri dei box area che la costruzione ha tolto, per file: chi rende la
+# texture ci spegne dentro le didascalie. Li scrive
 # `artwork.senza_coperture`, che e' l'unico che li conosce - li misura mentre
 # toglie la lastra - e li legge `rendi`, che la lastra non la vede piu'.
 # Chiave come per le penne: un file temporaneo puo' riprendere il nome di uno
@@ -297,9 +297,14 @@ def _colore(o):
 # Quanto puo' sbordare un'etichetta dal suo riquadro, in punti, e quanto del
 # riquadro puo' coprire: il fondo bianco che sta sotto un'area riservata e'
 # grande quanto lei, ed e' grafica - il posto bianco dove si stampera' il
-# codice - non la sua didascalia.
+# codice - non la sua didascalia. Per una scritta basta che non lo riempia;
+# un tracciato deve essere un SEGNO - una lettera in curve, il punto di un
+# richiamo - e non un fondo: sul K Brioss (FERRERO_1765...) le didascalie
+# sono bianche, e dentro la Best Before Area c'e' il riquadro bianco dove si
+# stampera' la data.
 SBORDO_ETICHETTA = 1.0
 QUOTA_ETICHETTA = 0.8
+QUOTA_SEGNO = 0.25
 
 
 def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
@@ -318,27 +323,33 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
     anche quando e' dello stesso colore di una quota, e il colore non si
     guarda mai.
 
-    Con un'eccezione, per le aree riservate ai dati variabili che la
-    costruzione ha tolto (`riservate`, i loro riquadri: vedi
-    `artwork.strip_separations`). Tolta l'area resta la sua DIDASCALIA - sul
-    Kinder Cards T2 "Best Before Area" e "POSITIONING AREA FOR EAN CODE (if
-    requested)" in marrone scuro, stampate sui fianchi del pack - e la
+    Con un'eccezione, per i BOX AREA che la costruzione ha tolto
+    (`riservate`, i loro riquadri: vedi `artwork.strip_separations`). Tolto
+    il box resta la sua DIDASCALIA - sul Kinder Cards T2 "Best Before Area" e
+    "POSITIONING AREA FOR EAN CODE (if requested)" in marrone scuro, sul
+    Nutella B-ready T2 "INGREDIENTS", "WEIGHT", "GDA", "F8 LEGAL TEXT" - e la
     didascalia e' il nome del posto, non si stampa mai. Dentro un riquadro
     tolto:
 
     - un testo che dice il nome di un'area riservata (`techink.NOME_RISERVATA`)
       e' una didascalia: lo dice quello che c'e' scritto, non il colore;
-    - ma non tutte sono testo: quella del codice a barre del Kinder Cards e'
-      in curve, 38 tracciati. Un oggetto tutto dentro il riquadro e del
-      COLORE di una didascalia scritta e' una didascalia anche lui. Un codice a
-      barre vero - nero, e la didascalia e' di un'altra tinta - resta dov'e';
-      e senza nessuna didascalia scritta non si impara nessun colore e non si
-      toglie niente.
+    - ma non tutte dicono "area": sul B-ready "INGREDIENTS" e "WEIGHT" sono
+      il nome della casella e basta, e quella del codice a barre del Kinder
+      Cards e' in curve, 38 tracciati. Una scritta, o un SEGNO piccolo (vedi
+      `QUOTA_SEGNO`), tutto dentro il riquadro e del COLORE di una didascalia
+      scritta e' una didascalia anche lui. Un codice a barre vero - nero, e la
+      didascalia e' di un'altra tinta - resta dov'e'; e senza nessuna
+      didascalia scritta non si impara nessun colore e non si toglie niente.
 
-    Fuori dai riquadri tolti non si tocca niente: dove l'area riservata resta
-    - succede, sul Kinder Country e' dipinta con una Pantone qualsiasi - la
-    sua scritta resta con lei, e un riquadro verde senza nome sembrerebbe
-    grafica. `etichette` e' quante didascalie sono finite nel DT.
+    Nell'area COPERTA no: sotto la pinna la grafica continua - sul Kinder
+    Cards T2 la cialda e la banda rossa - e li' si spegne solo il testo che
+    dice il nome dell'area. Coperta, per prudenza, e' ogni area che non e'
+    vuota per definizione (`techink.vuota`): una che non si conosce puo'
+    avere grafica sotto. Il colore si impara solo dai box vuoti.
+
+    Fuori dai riquadri tolti non si tocca niente: la didascalia di un box
+    che nessuno ha riconosciuto resta con lui, e un riquadro senza nome
+    sembrerebbe grafica. `etichette` e' quante didascalie sono finite nel DT.
     """
     import pypdfium2.raw as raw
     from .techink import NOME_RISERVATA
@@ -346,24 +357,29 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
     dt, contorni, grafica = [], [], []
     dai_livelli = [0]
     etichette = [0]
-    # (oggetto, colore) tutti dentro un riquadro riservato, e i colori delle
-    # didascalie scritte dentro un riquadro riservato
+    # (oggetto, colore) tutti dentro un box tolto dove sotto non c'e'
+    # grafica, e i colori delle didascalie scritte dentro uno di quei box
     dentro, tinte = [], set()
     tp = raw.FPDFText_LoadPage(page.raw) if riservate else None
 
-    def nel_riservato(o, m):
+    def nel_riservato(o, m, testo):
+        """None fuori dai box tolti; "coperta" se sta solo in aree coperte;
+        "vuota" se sta in un box dove sotto non c'e' grafica."""
         r = _riquadro(o, m) if riservate else None
         if r is None:
-            return False
+            return None
         x0, y0, x1, y1 = r
-        for a0, b0, a1, b1 in riservate:
+        quota = QUOTA_ETICHETTA if testo else QUOTA_SEGNO
+        dove = None
+        for a0, b0, a1, b1, *resto in riservate:
             if (x0 >= a0 - SBORDO_ETICHETTA and y0 >= b0 - SBORDO_ETICHETTA
                     and x1 <= a1 + SBORDO_ETICHETTA
                     and y1 <= b1 + SBORDO_ETICHETTA
-                    and (x1 - x0) * (y1 - y0)
-                    < QUOTA_ETICHETTA * (a1 - a0) * (b1 - b0)):
-                return True
-        return False
+                    and (x1 - x0) * (y1 - y0) < quota * (a1 - a0) * (b1 - b0)):
+                if not (resto and resto[0]):
+                    return "vuota"
+                dove = "coperta"
+        return dove
 
     def giro(cont, quanti, prendi, ereditati, m):
         for i in range(quanti(cont)):
@@ -394,18 +410,22 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
                         else:
                             dt.append(o)
                         continue
-            # sarebbe grafica: se sta dentro un'area riservata tolta, puo'
-            # essere la sua didascalia, e si decide alla fine
-            if (riservate and t in (raw.FPDF_PAGEOBJ_TEXT,
-                                    raw.FPDF_PAGEOBJ_PATH)
-                    and nel_riservato(o, m)):
+            # sarebbe grafica: se sta dentro un box tolto, puo' essere la sua
+            # didascalia, e si decide alla fine
+            dove = (nel_riservato(o, m, t == raw.FPDF_PAGEOBJ_TEXT)
+                    if riservate and t in (raw.FPDF_PAGEOBJ_TEXT,
+                                           raw.FPDF_PAGEOBJ_PATH) else None)
+            if dove is not None:
                 if (t == raw.FPDF_PAGEOBJ_TEXT
                         and NOME_RISERVATA.search(_testo(o, tp))):
                     dt.append(o)
                     etichette[0] += 1
-                    tinte.add(_colore(o))
-                else:
+                    if dove == "vuota":
+                        tinte.add(_colore(o))
+                elif dove == "vuota":
                     dentro.append((o, _colore(o)))
+                else:
+                    grafica.append(o)
                 continue
             grafica.append(o)
 

@@ -133,20 +133,20 @@ TESTA_RICHIAMO = 8.5
 GLIFO_MAX = 1.5
 
 
-def strip_separations(src, dst, drop, riquadri=None, variabili=None,
-                      regione=None, conti=None):
+def strip_separations(src, dst, drop, riquadri=None, aree=None,
+                      regione=None, conti=None, coperte=None):
     """Toglie le lastre tecniche eliminando le operazioni di disegno.
 
     Colorarle di bianco non basta: un tratto tecnico sopra la grafica
     lascerebbe una riga bianca. Il filtro scende anche dentro i Form XObject,
     dove spesso stanno cold seal e bianco coprente.
 
-    Se `riquadri` e' una lista, ci finiscono i riquadri delle aree riservate
-    ai dati variabili che si sono tolte - le lastre `variabili`, o se non
-    vengono date quelle il cui nome lo dice (`techink.DATI_VARIABILI`) - nel
-    telaio di misura (punti, MediaBox, y in giu'): sono i posti dove la loro
-    didascalia sta, e chi rende la texture la spegne. Vedi
-    `strati.segna_riservate`.
+    Se `riquadri` e' una lista, ci finiscono i riquadri dei BOX AREA che si
+    sono tolti - le lastre `aree`, o se non vengono date quelle il cui nome lo
+    dice (`techink.area`) - nel telaio di misura (punti, MediaBox, y in giu'),
+    piu' un quinto numero: 1 se l'area e' fra le `coperte`, 0 se no. Sono i
+    posti dove la loro didascalia sta, e chi rende la texture la spegne. Vedi
+    `strati.segna_riservate` e `strati.dividi`.
 
     Con `regione` - il riquadro del DT, `(x0, y0, x1, y1)` nello stesso
     telaio - nella stessa passata va via anche tutto quello che sta TUTTO
@@ -158,7 +158,7 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
     """
     import pypdf
     from pypdf.generic import ContentStream, NumberObject
-    from .techink import DATI_VARIABILI
+    from .techink import area
 
     # `clone_from` e non `append`: append PERDE /OCProperties, e con quello
     # perde i livelli. Un astuccio che ha insieme una vernice e la colata su un
@@ -168,11 +168,12 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
     w = pypdf.PdfWriter(clone_from=src)
     drop = {d.lower() for d in drop}
     if riquadri is None:
-        variabili = set()
-    elif variabili is None:
-        variabili = {d for d in drop if DATI_VARIABILI.search(d)}
+        aree = set()
+    elif aree is None:
+        aree = {d for d in drop if area(d)}
     else:
-        variabili = {v.lower() for v in variabili} & drop
+        aree = {v.lower() for v in aree} & drop
+    coperte = {v.lower() for v in (coperte or ())} & aree
     if conti is None:
         conti = {}
 
@@ -277,7 +278,8 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
 
     def filt(obj, res, base=None, regione=None, pagina=False, singolo=True):
         bad = names(res)
-        var = names(res, variabili) if base is not None and variabili else set()
+        var = names(res, aree) if base is not None and aree else set()
+        cop = names(res, coperte) if var and coperte else set()
         cs = ContentStream(obj, w)
         ncs = scs = None
         # Anche il testo e lo spessore del tratto sono stato grafico: q li
@@ -468,7 +470,8 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
                     xs = [p[0] for p in tracciato]
                     ys = [p[1] for p in tracciato]
                     riquadri.append((min(xs) - mx0, my1 - max(ys),
-                                     max(xs) - mx0, my1 - min(ys)))
+                                     max(xs) - mx0, my1 - min(ys),
+                                     1.0 if ncs in cop else 0.0))
                 via = richiamo = False
                 coda = out[inizio:] if inizio is not None else []
                 solo_percorso = bool(coda) and all(o in PERCORSO or o == b"h"
@@ -623,7 +626,7 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
     # fuori dal quale togliere: su un foglio come Colazione il flusso sono
     # centinaia di migliaia di operazioni
     page.replace_contents(filt(page.get_contents(), res,
-                               IDENTITA if variabili or regione is not None
+                               IDENTITA if aree or regione is not None
                                else None, regione, pagina=True))
     walk(res, set())
     with open(dst, "wb") as fh:
@@ -688,7 +691,8 @@ def gira_sulla_grafica(tex, panels, verso):
     return fatte, no
 
 
-def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None):
+def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
+                    fisse=None):
     """(pdf da cui ritagliare la texture, nomi delle coperture togliute).
 
     Le lastre tecniche dichiarate per nome sono l'informazione piu' attendibile
@@ -712,11 +716,16 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None):
     quello che fa misurare il pack, e togliendolo prima non si misura piu'
     niente.
 
-    Alle coperture dichiarate per nome si aggiungono le **aree riservate che
-    il file scrive ma non nomina** - vedi `techink.aree_riservate`. Si cercano
-    solo quando il file non ha livelli tecnici: se i livelli ci sono la
-    pulizia e' gia' esatta, e quella ricerca costa una passata di testo che
-    sul K Brioss STD sono 2,9 secondi buttati.
+    I **BOX AREA** si tolgono sempre, come la GDA, su ogni modello: quelli che
+    si chiamano area sono gia' fra le coperture (`techink.area`), e a loro si
+    aggiungono quelli che il file scrive ma non nomina - una Pantone per
+    nome, e una didascalia sul disegno o in legenda: vedi
+    `techink.aree_riservate`. Si cercano su OGNI file. Prima solo su quelli
+    senza livelli tecnici, per risparmiare una passata di testo, e sul Kinder
+    Country i due box verdi e la fascia coperta restavano stampati: i suoi
+    livelli tecnici sono `Check` e `Guides and grids`, e i box non ci sono.
+    Il prefiltro sulla parola AREA tiene il costo a zero sui file che non la
+    scrivono.
 
     `extra` sono le lastre che l'agente ha riconosciuto GUARDANDO, per i file
     che l'area riservata non la scrivono da nessuna parte - vedi
@@ -729,6 +738,10 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None):
     informazioni si leggono PRIMA, sul file intero: le coperture per nome e
     le aree riservate, la cui didascalia puo' stare nella legenda. `conti`
     riceve quanti oggetti sono andati via.
+
+    `fisse` sono le lastre di un caso calibrato: prendono il posto di quelle
+    scelte per nome, ma i box area si aggiungono lo stesso, perche' la
+    regola vale per tutti i modelli.
     """
     from . import strati, techink
     try:
@@ -738,40 +751,49 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None):
         # e allora vanno via per nome anche le lastre che DISEGNANO il DT, non
         # solo le coperture: il limite era il costo della passata. Vedi
         # `techink.disegno` per quali, e perche' non tutte le tecniche.
-        lastre = set(techink.technical_separations(
-            pagina, prova=techink.disegno if regione is not None
-            else techink.copertura).values())
+        if fisse is not None:
+            lastre = {techink._norm(n) for n in fisse if str(n).strip()}
+            lastre |= set(techink.technical_separations(
+                pagina, prova=techink.area).values())
+        else:
+            lastre = set(techink.technical_separations(
+                pagina, prova=techink.disegno if regione is not None
+                else techink.copertura).values())
     except Exception:
         return pdf, []
-    # {lastra: didascalia} delle aree riservate trovate leggendo la scritta:
-    # si chiamano con un numero di Pantone, e se servono i dati variabili lo
-    # dice solo la didascalia
+    # {lastra: didascalia} dei box area trovati leggendo la scritta: si
+    # chiamano con un numero di Pantone, e che cosa siano lo dice solo la
+    # didascalia
     etichettate = {}
     try:
-        if not strati.tecnici(pdf, page_no):
-            etichettate = techink.aree_riservate(pdf, page_no)
-            lastre |= set(etichettate)
+        etichettate = techink.aree_riservate(pdf, page_no)
     except Exception:
         pass
-    lastre |= {techink._norm(n) for n in (extra or ()) if str(n).strip()}
+    lastre |= set(etichettate)
+    confermate = {techink._norm(n) for n in (extra or ()) if str(n).strip()}
+    lastre |= confermate
     lastre = sorted(lastre)
     if not lastre and regione is None:
         return pdf, []
     try:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
-        # Tolta l'area riservata resta la sua ETICHETTA, se non e' scritta in
-        # bianco: sul Kinder Cards T2 "Best Before Area" e "POSITIONING AREA
-        # FOR EAN CODE (if requested)", marrone scuro, restavano stampate sui
-        # fianchi del pack. I riquadri delle aree tolte vanno a chi rende la
-        # texture, che dentro spegne le scritte: vedi `strati.dividi`.
+        # Tolto il box resta la sua DIDASCALIA, se non e' scritta in bianco:
+        # sul Kinder Cards T2 "Best Before Area" e "POSITIONING AREA FOR EAN
+        # CODE (if requested)", marrone scuro, restavano stampate sui fianchi
+        # del pack; sul Nutella B-ready T2 "INGREDIENTS", "WEIGHT", "GDA",
+        # "F8 LEGAL TEXT" sul retro. I riquadri dei box tolti vanno a chi
+        # rende la texture, che dentro spegne le scritte: vedi `strati.dividi`.
         riquadri = []
-        variabili = {n for n in lastre
-                     if techink.DATI_VARIABILI.search(n)
-                     or techink.DATI_VARIABILI.search(etichettate.get(n, ""))}
+        aree = ({n for n in lastre if techink.area(n)} | set(etichettate)
+                | confermate)
+        # coperte: le aree che possono avere grafica sotto, cioe' tutte
+        # quelle che non sono vuote per definizione (`techink.vuota`)
+        coperte = {n for n in aree if not (
+            techink.vuota(n) or techink.vuota(etichettate.get(n, "")))}
         pulito = strip_separations(pdf, tmp.name, lastre, riquadri=riquadri,
-                                   variabili=variabili, regione=regione,
-                                   conti=conti)
+                                   aree=aree, regione=regione, conti=conti,
+                                   coperte=coperte)
         if riquadri:
             strati.segna_riservate(pulito, riquadri)
         return pulito, lastre

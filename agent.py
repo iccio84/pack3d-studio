@@ -116,11 +116,16 @@ Pulizia dell'artwork:
 - Se reconstruct_area non e' disponibile o fallisce, dichiaralo negli avvisi
   invece di lasciare il residuo senza spiegazione.
 - Le aree riservate - GDA, COVERED AREA, TEXT AREA, BEST BEFORE AREA, BAR CODE
-  AREA, PRINT FREE AREA, NEUTRAL AREA - non devono MAI comparire nel render:
-  sono il posto tenuto per una cosa, non la cosa. Sono rettangoli pieni con il
-  proprio nome scritto dentro in bianco, quindi a guardarle si riconoscono
-  subito. Quasi sempre le toglie gia' la costruzione, da sola; quando non ci
-  riesce le vedi restare, e allora tocca a te.
+  AREA, PIN CODE AREA, PRINT FREE AREA, NEUTRAL AREA - non devono MAI comparire
+  nel render, su nessun modello, flowpack o astuccio: i box area si tolgono
+  SEMPRE, come la GDA, anche quelli verdi, e con loro le didascalie - il nome
+  del box e le scritte segnaposto dentro ("INGREDIENTS", "WEIGHT", "F8 LEGAL
+  TEXT"). Sono il posto tenuto per una cosa, non la cosa. Sono rettangoli
+  pieni con il proprio nome scritto dentro, quindi a guardarle si riconoscono
+  subito. Quasi sempre le toglie gia' la costruzione, da sola - per nome della
+  lastra, per la didascalia scritta sul box o per il campione della legenda;
+  quando non ci riesce le vedi restare, e allora tocca a te. Resta solo
+  l'AREA PROMO, che e' la grafica della promo e si stampa.
 - Per toglierle chiama area_riservata con il riquadro in mm: non serve che sia
   preciso, il bordo vero lo trova il codice guardando quale lastra ci mette
   l'inchiostro. Poi GUARDA l'immagine che torna: in rosso c'e' tutto quello che
