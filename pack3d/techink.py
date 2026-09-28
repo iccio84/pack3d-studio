@@ -21,6 +21,8 @@ spessore.
 """
 from __future__ import annotations
 
+import re as _re
+
 # gruppi ISO 19593-1 che non vanno mai stampati sul modello 3D
 ISO_GROUPS = {
     "structural", "dimensions", "braille", "legend",
@@ -187,13 +189,82 @@ COPERTURE_FRASI = (
 # nessun inchiostro.
 COPERTURE_SIGLE = {"white", "bianco", "gda"}
 
+# I BOX AREA si tolgono sempre, come la GDA, su ogni modello 3D: flowpack,
+# astucci e vassoi. E' la regola, detta cosi' dopo il Nutella B-ready T2 e il
+# Kinder Country. Per nome e' un box area ogni lastra che si CHIAMA area,
+# anche se la frase non e' fra quelle qui sopra: sul B-ready c'e' `PIN CODE
+# Area`, che non c'era, e domani ci sara' un `LOT Area`. Nessun inchiostro si
+# chiama cosi'.
+#
+# Tranne la promo. L'`AREA PROMO` della legenda del K Brioss (FERRERO_1765...)
+# e' tutta la fascia gialla con "Scopri il mondo di Quelli della COLAZIONE" e
+# "VINCI l'esclusivo SET COLAZIONE": e' la grafica della promo, e si stampa.
+AREA_NOME = _re.compile(r"\barea\b")
+
+
+def area(nome):
+    """Vero se questa lastra e' un box area: si toglie sempre, come la GDA."""
+    n = _norm(nome)
+    if n in RESERVED or "promo" in n:
+        return False
+    return n == "gda" or n.startswith("gda ") or bool(AREA_NOME.search(n))
+
+
+# I box area che sono VUOTI per definizione: il posto di un testo, di un
+# codice, di una data, o un posto dove non si stampa. Dentro c'e' solo la
+# didascalia. Gli altri possono avere grafica sotto: la COVERED AREA e' la
+# fascia che la pinna nasconde, e sul Kinder Cards T2 porta la cialda e la
+# banda rossa; e un'area che non si conosce - una `Emboss Area`, una
+# `Varnish Free Area` - si tratta come lei.
+_VUOTE = _re.compile(
+    r"\b(gda|text|best\s*before|bar\s*code|barcode|ean|pin\s*code|pincode|"
+    r"alphanumeric|lot|print\s*free|printfree|neutral|reserved|"
+    r"riservata|testo|codice|lotto|scadenza)\b")
+
+
+def vuota(nome):
+    """Vero se questo box area - per nome della lastra o per didascalia - e'
+    vuoto per definizione: dentro si spegne anche quello che ha il colore
+    della didascalia. Vedi `strati.dividi`."""
+    n = _norm(nome)
+    return ("covered" not in n and "coperta" not in n
+            and bool(_VUOTE.search(n)))
+
 
 def copertura(nome):
     """Vero se questa lastra copre la grafica invece di tracciarla."""
     n = _norm(nome)
     if n in RESERVED:
         return False
-    return n in COPERTURE_SIGLE or any(f in n for f in COPERTURE_FRASI)
+    return (n in COPERTURE_SIGLE or any(f in n for f in COPERTURE_FRASI)
+            or area(n))
+
+
+# Le lastre che DISEGNANO il disegno tecnico, per come si chiamano: il tratto
+# e anche i suoi pieni. Sul Nutella B-ready T2 la lastra "Technical Drawing
+# light" dipinge una banda piena di 2 mm sul fianco, che l'euristica sul
+# tratto non vede - e' un pieno - e che sul modello era una riga verde.
+#
+# Solo frasi che lo dicono. Niente sigle corte, niente tinte imparate da un
+# file (`LASTRE_NOTE`: il Pantone 346 e' le quote su un Kinder e grafica su
+# un altro, e toglierlo per nome cancellava il 9% di un pannello del Pingui
+# T6), niente `All`: il registro, che sul K Brioss STD dipinge anche testo e
+# toglierlo cambiava il 2% della texture. E niente tacca di fotocentratura,
+# che si stampa davvero.
+DISEGNO_FRASI = (
+    "technical", "tecnico", "dieline", "die line", "die-line",
+    "cutcontour", "cut contour", "thru-cut", "thrucut", "kiss cut", "kisscut",
+    "cutter", "cutting", "crease", "creasing", "cordonatura", "stanz",
+    "fustella", "dimension", "legend",
+)
+
+
+def disegno(nome):
+    """Vero se questa lastra traccia il DT o lo copre: si toglie per nome."""
+    n = _norm(nome)
+    if n in RESERVED:
+        return False
+    return copertura(n) or any(f in n for f in DISEGNO_FRASI)
 
 
 def tecnica(nome):
@@ -468,38 +539,43 @@ def classify(pdf_path, page_no: int = 0):
 # Niente colore, niente geometria, niente registro: l'etichetta e la lastra
 # sotto. Costa 1,1 s a 36 dpi su un foglio da 460 x 330 mm, e lo paga solo il
 # file che le etichette ce le ha davvero - sul parco sono tre su nove.
-import re as _re
-
 from .dieline import PT2MM
 
+# Le didascalie da cui si impara una lastra. Strette di proposito: dicono
+# "... AREA" per intero, perche' la lastra che sta sotto si toglie TUTTA. Un
+# "EAN CODE" scritto accanto al codice a barre vero, sulla grafica, non deve
+# far strappare il fondo. E niente promo: vedi `area`.
+_AREE = (r"gda|covered|text|best\s*before|bar\s*code|barcode|"
+         r"print\s*free|printfree|neutral|reserved|"
+         r"pin\s*code|pincode|alphanumeric(\s*code)?|lot(\s*code)?|ean(\s*code)?")
 ETICHETTA_RISERVATA = _re.compile(
-    r"(?i)\b(gda|covered|text|best\s*before|bar\s*code|barcode|"
-    r"print\s*free|printfree|neutral|reserved)\s*area\b")
+    r"(?i)\b(" + _AREE + r")\s*area\b"
+    r"|\barea\s+(gda|testo|riservata|codice|lotto|scadenza)\b")
 
 # Il NOME di un'area riservata scritto sull'artwork: e' la didascalia del
 # posto, non la cosa che ci andra', e sul pack non si stampa mai. Sono le
 # etichette qui sopra piu' il posto del codice a barre scritto per esteso -
-# "POSITIONING AREA FOR EAN CODE (if requested)" sul Kinder Cards T2.
+# "POSITIONING AREA FOR EAN CODE (if requested)" sul Kinder Cards T2 - e il
+# codice scritto da solo, "EAN CODE" sul Nutella B-ready T2. Qui si puo'
+# largheggiare: si spegne la scritta, e solo dentro un box area tolto.
 NOME_RISERVATA = _re.compile(
-    r"(?i)\b(gda|covered|text|best\s*before|bar\s*code|barcode|"
-    r"print\s*free|printfree|neutral|reserved|positioning)\s*area\b"
+    r"(?i)\b(" + _AREE + r"|positioning)\s*area\b"
+    r"|\barea\s+(gda|testo|riservata|codice|lotto|scadenza)\b"
     r"|\bean\s*code\b")
-
-# Le aree riservate ai DATI VARIABILI - scadenza, lotto, codice a barre - che
-# la stampa lascia vuote e la confezionatrice riempie dopo. Dentro l'artwork
-# c'e' solo il loro nome: e' per queste, e solo per queste, che si spegne
-# anche quello che ci sta dentro. Un'area coperta o senza stampa puo' avere
-# grafica sotto - sul Kinder Cards T2 la fascia coperta dalla pinna porta la
-# cialda e la banda rossa - e li' non si tocca niente.
-DATI_VARIABILI = _re.compile(
-    r"(?i)best\s*before|bar\s*code|barcode|\bean\b|\blot(to)?\b|"
-    r"scadenza|expir")
 
 # quanto inchiostro deve esserci sotto l'etichetta perche' sia un'area piena e
 # non una scritta appoggiata sulla grafica
 INCHIOSTRO_MINIMO = 0.5   # quota di lastra su quel pixel
 PIENO_MINIMO = 0.60       # quota di pixel pieni nell'intorno dell'etichetta
 VICINO = 150.0            # punti: quanto puo' stare lontana la riga di sopra
+# Il campione della legenda: un pieno davanti alla didascalia, grande da uno a
+# dieci corpi e staccato al piu' di quattro. Sul Kinder Country e' un
+# quadrato di 14 punti a 6,5 punti dalla scritta, che ha corpo 6,5.
+CAMPIONE_CORPI = (0.8, 10.0)
+CAMPIONE_STACCO = 4.0
+# larghezza media di un carattere, in corpi: basta a trovare il centro della
+# scritta, non a misurarla
+LARGHEZZA_CARATTERE = 0.55
 
 
 def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None):
@@ -580,7 +656,16 @@ def _forse_etichette(pdf, page_no=0):
 
 
 def _etichette(pdf, page_no=0):
-    """[(x, y, etichetta)] delle aree riservate scritte sulla pagina.
+    """[(x, y, dx, dy, corpo, lunghezza, etichetta)] delle aree riservate
+    scritte sulla pagina.
+
+    `(x, y)` e' dove comincia la scritta, nello spazio della pagina (y in su),
+    `(dx, dy)` la direzione in cui si legge, `corpo` l'altezza del carattere e
+    `lunghezza` quanto e' lunga, stimata: servono a trovarne il CENTRO e il
+    campione della legenda che le sta davanti. Prima si guardava solo dove
+    comincia, e senza la matrice della pagina: sul Kinder Country "Bar Code
+    Area" comincia a un millimetro dal bordo del suo riquadro, e li' attorno
+    la lastra piena era il 57%, sotto la soglia.
 
     Un'etichetta puo' essere spezzata su due righe, e su K Colazione Piu' lo
     e': `BEST BEFORE` e `AREA` arrivano come due frammenti. Si ricuce solo
@@ -588,6 +673,7 @@ def _etichette(pdf, page_no=0):
     coda di un'etichetta e' l'unica cosa che la soddisfa - e solo se il
     frammento prima e' li' accanto.
     """
+    import math
     import pypdf
     trovate = []
     precedente = [None]
@@ -596,20 +682,114 @@ def _etichette(pdf, page_no=0):
         testo = (testo or "").strip()
         if not testo:
             return
-        x, y = float(tm[4]), float(tm[5])
+        try:
+            a, b, c, d, e, f = (float(v) for v in cm)
+            ta, tb, tc, td, te, tf = (float(v) for v in tm)
+        except (TypeError, ValueError):
+            return
+        x, y = te * a + tf * c + e, te * b + tf * d + f
+        ux, uy = ta * a + tb * c, ta * b + tb * d
+        n = math.hypot(ux, uy) or 1.0
+        corpo = abs(float(size or 0.0)) * math.hypot(tc * a + td * c,
+                                                     tc * b + td * d)
+        riga = [x, y, ux / n, uy / n, corpo or 1.0,
+                LARGHEZZA_CARATTERE * (corpo or 1.0) * len(testo)]
         m = ETICHETTA_RISERVATA.search(testo)
         if m is None and testo.upper() == "AREA" and precedente[0]:
-            px, py, prima = precedente[0]
-            if abs(px - x) <= VICINO and abs(py - y) <= VICINO:
+            prima, dove = precedente[0]
+            if abs(dove[0] - x) <= VICINO and abs(dove[1] - y) <= VICINO:
                 m = ETICHETTA_RISERVATA.search(prima + " " + testo)
                 if m:
-                    x, y = px, py
+                    riga = list(dove)
         if m:
-            trovate.append((x, y, m.group(0).strip()))
-        precedente[0] = (x, y, testo)
+            trovate.append(tuple(riga) + (m.group(0).strip(),))
+        precedente[0] = (testo, riga)
 
     pypdf.PdfReader(pdf).pages[page_no].extract_text(visitor_text=vis)
     return trovate
+
+
+def _oggetti(pdf, page_no=0):
+    """`(scritte, pieni)`: i riquadri `(x0, y0, x1, y1)` degli oggetti testo e
+    dei percorsi pieni della pagina, nello spazio della pagina (y in su).
+
+    Le scritte servono a controllare pypdf, che a volte ripete un testo con
+    la posizione di un altro: sul Kinder Cards T2 "Best Before Area" torna
+    una seconda volta sulla banda rossa, dove non c'e' scritto niente, e
+    sotto c'e' il Kinder ORANGE. I pieni sono dove si cercano i campioni
+    della legenda.
+    """
+    import ctypes
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+    from .tracciati import _componi, _matrice
+
+    scritte, pieni = [], []
+    lati = [ctypes.c_float() for _ in range(4)]
+    pieno, tratto = ctypes.c_int(), ctypes.c_int()
+
+    def giro(cont, quanti, prendi, m):
+        for i in range(quanti(cont)):
+            o = prendi(cont, i)
+            t = raw.FPDFPageObj_GetType(o)
+            if t == raw.FPDF_PAGEOBJ_FORM:
+                giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject,
+                     _componi(m, _matrice(o)))
+                continue
+            if t == raw.FPDF_PAGEOBJ_TEXT:
+                dove = scritte
+            elif t == raw.FPDF_PAGEOBJ_PATH:
+                raw.FPDFPath_GetDrawMode(o, ctypes.byref(pieno),
+                                         ctypes.byref(tratto))
+                if not pieno.value:
+                    continue
+                dove = pieni
+            else:
+                continue
+            if not raw.FPDFPageObj_GetBounds(o, *(ctypes.byref(v) for v in lati)):
+                continue
+            sx, giu, dx, su = (v.value for v in lati)
+            xs = [m[0] * px + m[2] * py + m[4] for px in (sx, dx) for py in (giu, su)]
+            ys = [m[1] * px + m[3] * py + m[5] for px in (sx, dx) for py in (giu, su)]
+            dove.append((min(xs), min(ys), max(xs), max(ys)))
+
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        page = doc[page_no]
+        giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject,
+             (1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+    finally:
+        doc.close()
+    return scritte, pieni
+
+
+def _campione(x, y, dx, dy, corpo, pieni):
+    """Il pieno che sta davanti alla didascalia, sulla sua riga: il campione
+    di colore della legenda, o None.
+
+    Tutto si misura lungo la riga - la direzione della scritta e la sua
+    perpendicolare - cosi' vale anche per una legenda girata.
+    """
+    vx, vy = -dy, dx               # verso l'alto della scritta
+    lo, hi = CAMPIONE_CORPI
+    migliore, stacco_min = None, None
+    for x0, y0, x1, y1 in pieni:
+        w, h = x1 - x0, y1 - y0
+        if not (lo * corpo <= w <= hi * corpo and lo * corpo <= h <= hi * corpo):
+            continue
+        cx, cy = (x0 + x1) / 2.0 - x, (y0 + y1) / 2.0 - y
+        t, u = cx * dx + cy * dy, cx * vx + cy * vy
+        mt = (abs(dx) * w + abs(dy) * h) / 2.0
+        mu = (abs(vx) * w + abs(vy) * h) / 2.0
+        stacco = -(t + mt)          # quanto finisce prima della scritta
+        if not (-0.3 * corpo <= stacco <= CAMPIONE_STACCO * corpo):
+            continue
+        # sulla riga: il pieno copre almeno un terzo del corpo del testo
+        if min(u + mu, 0.8 * corpo) - max(u - mu, -0.2 * corpo) < 0.3 * corpo:
+            continue
+        if stacco_min is None or stacco < stacco_min:
+            migliore, stacco_min = (x0, y0, x1, y1), stacco
+    return migliore
 
 
 def aree_riservate(pdf, page_no=0, dpi=36):
@@ -620,10 +800,16 @@ def aree_riservate(pdf, page_no=0, dpi=36):
     scritta. Vedi il commento qui sopra per il perche' non si puo' fare in
     nessun altro modo.
 
-    Vuoto se Ghostscript non c'e', se il file non scrive niente, o se sotto
-    l'etichetta non c'e' una lastra piena: in tutti quei casi non si e'
-    imparato niente e non si tocca niente. Non costa nulla sui file senza
-    etichette, che e' la maggioranza.
+    E se sotto la scritta non c'e' niente, si guarda DAVANTI: e' la legenda,
+    col suo campione di colore. Sul Kinder Country la fascia arancione a
+    tratteggio sotto la pinna non ha nessuna scritta sopra; il suo nome sta
+    solo in legenda, "COVERED Area" accanto a un quadrato di PANTONE 1565 C.
+    Vedi `_campione`.
+
+    Vuoto se Ghostscript non c'e', se il file non scrive niente, o se ne'
+    sotto l'etichetta ne' nel suo campione c'e' una lastra piena: in tutti
+    quei casi non si e' imparato niente e non si tocca niente. Non costa
+    nulla sui file senza etichette, che e' la maggioranza.
     """
     import shutil
 
@@ -646,28 +832,47 @@ def aree_riservate(pdf, page_no=0, dpi=36):
         lastre = mappe_lastre(pdf, page_no, dpi)
         if not lastre:
             return {}
+        s = dpi / 72.0
 
-        raggio = max(2, int(round(dpi / 6.0)))   # ~2 mm attorno alla scritta
-        fuori = {}
-        for x, y, etichetta in etichette:
-            px = int(round((x - sx) * dpi / 72.0))
-            py = int(round((alto - (y - sy)) * dpi / 72.0))
+        def piena(x0, y0, x1, y1):
+            """La lastra piena nel riquadro (spazio della pagina), o None."""
+            a0 = int(np.floor((x0 - sx) * s))
+            a1 = int(np.ceil((x1 - sx) * s))
+            b0 = int(np.floor((alto - (y1 - sy)) * s))
+            b1 = int(np.ceil((alto - (y0 - sy)) * s))
             migliore, quota = None, 0.0
             for nome, mappa in lastre.items():
                 h, w = mappa.shape
-                if not (0 <= py < h and 0 <= px < w):
-                    continue
-                z = mappa[max(0, py - raggio):py + raggio + 1,
-                          max(0, px - raggio):px + raggio + 1]
+                z = mappa[max(0, b0):min(h, b1), max(0, a0):min(w, a1)]
                 if not z.size:
                     continue
                 # tiffsep: 255 = niente inchiostro, 0 = pieno
-                pieno = ((255 - z.astype(np.int16)) / 255.0 >= INCHIOSTRO_MINIMO)
-                q = float(pieno.mean())
+                q = float(((255 - z.astype(np.int16)) / 255.0
+                           >= INCHIOSTRO_MINIMO).mean())
                 if q > quota:
                     migliore, quota = nome, q
-            if migliore and quota >= PIENO_MINIMO:
-                fuori.setdefault(migliore, etichetta)
+            return migliore if quota >= PIENO_MINIMO else None
+
+        raggio = 72.0 / 6.0   # ~2 mm attorno al centro della scritta, in punti
+        scritte, pieni = _oggetti(pdf, page_no)
+        fuori = {}
+        for x, y, dx, dy, corpo, lung, etichetta in etichette:
+            # la scritta c'e' davvero, dove pypdf dice che comincia?
+            if not any(a0 - corpo <= x <= a1 + corpo
+                       and b0 - corpo <= y <= b1 + corpo
+                       for a0, b0, a1, b1 in scritte):
+                continue
+            cx = x + dx * lung / 2.0 - dy * 0.35 * corpo
+            cy = y + dy * lung / 2.0 + dx * 0.35 * corpo
+            nome = piena(cx - raggio, cy - raggio, cx + raggio, cy + raggio)
+            if nome is None:
+                c = _campione(x, y, dx, dy, corpo, pieni)
+                if c is not None:
+                    # un filo di margine: il bordo del campione e' mezzo pixel
+                    m = min(1.0, (c[2] - c[0]) / 4.0, (c[3] - c[1]) / 4.0)
+                    nome = piena(c[0] + m, c[1] + m, c[2] - m, c[3] - m)
+            if nome is not None:
+                fuori.setdefault(nome, etichetta)
         return fuori
     except Exception:
         return {}

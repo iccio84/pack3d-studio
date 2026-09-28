@@ -600,15 +600,14 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     pdf, n_pagine = artwork.pagina_unica(pdf)
     conti = {}
     if case:
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
-        tmp.close()
         # anche qui le lastre dell'agente: un caso calibrato elenca a mano
-        # quello che sapeva allora, non quello che si vede oggi guardando
-        lastre = sorted(set(case["drop_seps"]) | set(lastre_extra or ()))
+        # quello che sapeva allora, non quello che si vede oggi guardando. E
+        # anche qui i box area, che si tolgono su tutti i modelli: vedi
+        # `artwork.senza_coperture`.
         fp0 = _flowpack_from_case(case)
-        clean = artwork.strip_separations(pdf, tmp.name, lastre,
-                                          regione=fpk.foglio_in_pagina(fp0),
-                                          conti=conti)
+        clean, lastre = artwork.senza_coperture(
+            pdf, extra=lastre_extra, regione=fpk.foglio_in_pagina(fp0),
+            conti=conti, fisse=case["drop_seps"])
         box = None
         ripiego = None
     else:
@@ -652,7 +651,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # rientri diversi - finiva nel Flowpack e da li' da nessuna parte.
     avvisi_sez.extend(fp0.warnings)
     if lastre:
-        avvisi_sez.append("coperture togliute per nome: %s" % ", ".join(lastre))
+        avvisi_sez.append("lastre tecniche e coperture tolte per nome: %s"
+                          % ", ".join(lastre))
     sospetto = falda_sospetta(fp0)
     if sospetto:
         avvisi_sez.append(sospetto)

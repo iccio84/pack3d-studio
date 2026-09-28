@@ -734,6 +734,38 @@ DT_LUNGA = 0.4
 DT_PARI = 0.85
 
 
+def _griglia(G):
+    """`(x0, y0, x1, y1, righe, colonne)` se i segmenti `G` fanno una griglia,
+    o None. Il riquadro e' quello dei segmenti veri, non dei loro riquadri
+    allargati di un punto: una copia in scala 1:5 riportata sul DT lo
+    sposterebbe di cinque."""
+    xs = [c for k, c, a, b, st in G if k == "V"]
+    xs += [v for k, c, a, b, st in G if k == "H" for v in (a, b)]
+    ys = [c for k, c, a, b, st in G if k == "H"]
+    ys += [v for k, c, a, b, st in G if k == "V" for v in (a, b)]
+    if not xs or not ys:
+        return None
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    W, H = x1 - x0, y1 - y0
+    if W <= 0 or H <= 0 or min(W, H) * PT2MM < 15.0:
+        return None
+
+    def distinte(v):
+        n, ultima = 0, None
+        for x in sorted(v):
+            if ultima is None or x - ultima > 3.0:
+                n += 1
+            ultima = x
+        return n
+    righe = distinte(c for k, c, a, b, st in G
+                     if k == "H" and b - a >= DT_LUNGA * W)
+    colonne = distinte(c for k, c, a, b, st in G
+                       if k == "V" and b - a >= DT_LUNGA * H)
+    if righe < 2 or colonne < 2 or righe + colonne < DT_LINEE_MIN:
+        return None
+    return x0, y0, x1, y1, righe, colonne
+
+
 def dt_della_tavola(pdf, page_no=0, dpi=100):
     """I DT della tavola, dal piu' grosso: `[{x_mm, y_mm, w_mm, h_mm, righe,
     colonne, colori}]`.
@@ -742,9 +774,11 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
     la grafica e, accanto, le copie per i tecnicismi di stampa - supporto
     trasparente, alluminio, battuta di bianco, aree coperte - la vista
     interna, e la miniatura nel cartiglio. Ogni gruppo di linee tecniche
-    collegate che sia una griglia (`DT_LINEE_MIN`) e' uno di loro. `colori`
-    sono i colori distinti dentro il suo riquadro, contati come in
-    `find_blocks`: e' quanta grafica c'e' sopra.
+    collegate che sia una griglia (`DT_LINEE_MIN`) e' uno di loro; un gruppo
+    che non lo e' si riguarda penna per penna, perche' puo' essere un DT
+    fuso con le note dalle linee di richiamo. `colori` sono i colori distinti
+    dentro il suo riquadro, contati come in `find_blocks`: e' quanta grafica
+    c'e' sopra.
     """
     from .tracciati import segmenti
     try:
@@ -757,37 +791,27 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
         return []
     s = dpi / 72.0
     im = np.asarray(dl.render_page(pdf, page_no, s)).astype(np.int16)
-
-    def distinte(v):
-        n, ultima = 0, None
-        for x in sorted(v):
-            if ultima is None or x - ultima > 3.0:
-                n += 1
-            ultima = x
-        return n
-
-    out = []
+    griglie = []
     for g in gruppi:
         G = [sg for sg, _b in g]
-        # il riquadro dai segmenti veri, non dai loro riquadri allargati di
-        # un punto: una copia in scala 1:5 riportata sul DT lo sposterebbe
-        # di cinque
-        xs = [c for k, c, a, b, st in G if k == "V"]
-        xs += [v for k, c, a, b, st in G if k == "H" for v in (a, b)]
-        ys = [c for k, c, a, b, st in G if k == "H"]
-        ys += [v for k, c, a, b, st in G if k == "V" for v in (a, b)]
-        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
-        W, H = x1 - x0, y1 - y0
-        if W <= 0 or H <= 0:
+        trovata = _griglia(G)
+        if trovata is not None:
+            griglie.append(trovata)
             continue
-        if min(W, H) * PT2MM < 15.0:
-            continue
-        righe = distinte(c for k, c, a, b, st in G
-                         if k == "H" and b - a >= DT_LUNGA * W)
-        colonne = distinte(c for k, c, a, b, st in G
-                           if k == "V" and b - a >= DT_LUNGA * H)
-        if righe < 2 or colonne < 2 or righe + colonne < DT_LINEE_MIN:
-            continue
+        # Un gruppo che non fa griglia puo' essere un DT fuso con le note. Sul
+        # Nutella B-ready T2 le linee di richiamo delle note entrano nel DT da
+        # ogni lato, e vista esterna, vista interna e riquadri delle note
+        # venivano fuori come un gruppo solo largo 573 mm, in cui le pieghe da
+        # 226 non erano piu' "lunghe": restava come DT la sola copia per la
+        # vernice opaca, in scala 1:2. Le note pero' sono di un'altra penna -
+        # il richiamo nero, il DT verde - e penna per penna si separano.
+        for penna in {sg[4] for sg in G}:
+            for h in dl._gruppi([sg for sg in G if sg[4] == penna]):
+                trovata = _griglia([sg for sg, _b in h])
+                if trovata is not None:
+                    griglie.append(trovata)
+    out = []
+    for x0, y0, x1, y1, righe, colonne in griglie:
         reg = im[int(y0 * s):int(y1 * s) + 1, int(x0 * s):int(x1 * s) + 1]
         m = reg.max(2) < 248 if reg.size else np.zeros((0, 0), bool)
         if m.any():
@@ -796,7 +820,8 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
         else:
             colori = 0
         out.append(dict(x_mm=round(x0 * PT2MM, 2), y_mm=round(y0 * PT2MM, 2),
-                        w_mm=round(W * PT2MM, 2), h_mm=round(H * PT2MM, 2),
+                        w_mm=round((x1 - x0) * PT2MM, 2),
+                        h_mm=round((y1 - y0) * PT2MM, 2),
                         righe=righe, colonne=colonne, colori=colori))
     out.sort(key=lambda d: d["w_mm"] * d["h_mm"], reverse=True)
     return out
@@ -843,6 +868,40 @@ def dt_principale(pdf, page_no=0):
     ys += [v for k, c, a, b, st in S if k == "V" for v in (a, b)]
     return (min(xs) * PT2MM, min(ys) * PT2MM,
             (max(xs) - min(xs)) * PT2MM, (max(ys) - min(ys)) * PT2MM)
+
+
+# Sotto questa sovrapposizione su unione il blocco che porta il DT non e' il
+# DT: e' il DT fuso con le note, e si misura il DT. Sul parco il blocco e il
+# suo DT stanno tutti sopra 0,78 (Colazione, dove il blocco comprende la
+# cornice dello steso); sul Nutella B-ready T2 sono 0,22.
+DT_NEL_BLOCCO = 0.5
+
+
+def _riquadro_del_dt(pdf, dt, page_no=0):
+    """Dove si misura un DT fuso con le note: `(x, y, w, h)` in mm.
+
+    Il riquadro del DT viene dal suo gruppo di linee, che puo' non essere
+    tutto lo steso - un contorno di un'altra penna, come sul K Tronky, dove
+    il perimetro e' nero e le pieghe blu. Allora gli si unisce il rettangolo
+    chiuso della fustella che gli somiglia di piu' (`riquadro_fustella`),
+    se c'e'.
+    """
+    x, y, w, h = dt
+    riq = (x / PT2MM, y / PT2MM, (x + w) / PT2MM, (y + h) / PT2MM)
+    # la fustella si cerca attorno al DT, un quinto della sua taglia per lato
+    m = 0.2 * max(riq[2] - riq[0], riq[3] - riq[1])
+    try:
+        fus = fpk.riquadro_fustella(pdf, page_no, stampato=riq,
+                                    entro=(riq[0] - m, riq[1] - m,
+                                           riq[2] + m, riq[3] + m))
+    except Exception:
+        fus = None
+    if fus:
+        riq = (min(riq[0], fus[0]), min(riq[1], fus[1]),
+               max(riq[2], fus[2]), max(riq[3], fus[3]))
+    return [round(riq[0] * PT2MM, 1), round(riq[1] * PT2MM, 1),
+            round((riq[2] - riq[0]) * PT2MM, 1),
+            round((riq[3] - riq[1]) * PT2MM, 1)]
 
 
 # Quanto possono differire le proporzioni di una copia da quelle del DT.
@@ -970,6 +1029,16 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
                 b["tipo"] = "stampato"
                 b["promosso"] = True
             b["dt_principale"] = True
+            if somiglia(b) < DT_NEL_BLOCCO:
+                # Il blocco e' il DT fuso con le note dalle linee di richiamo:
+                # sul Nutella B-ready T2 un blocco solo di 573 x 350 mm con
+                # vista esterna, vista interna, riquadri delle note e legenda,
+                # e misurato cosi' il pack usciva 572 x 207 invece di 226 x
+                # 190. Si misura il DT, non il blocco.
+                b["blocco_mm"] = [b["x_mm"], b["y_mm"], b["w_mm"], b["h_mm"]]
+                (b["x_mm"], b["y_mm"],
+                 b["w_mm"], b["h_mm"]) = _riquadro_del_dt(pdf, dt)
+                b["ristretto_al_dt"] = True
     # Dopo il DT, l'artwork e' il blocco piu' vario, non il piu' grande: su
     # Kinder Country le tre lastre di separazione sono piu' larghe della
     # OUTSIDE VIEW e la scaletta per ingombro metteva davanti la lastra del
@@ -1001,7 +1070,10 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
                       "tecnicismi di stampa o miniature, la legenda e il "
                       "cartiglio sono note. Con promosso e' stato messo fra "
                       "gli stampati pur avendo poco colore: grafica argento "
-                      "o metallizzata."))
+                      "o metallizzata. Con ristretto_al_dt il blocco era il "
+                      "DT fuso con le note dalle linee di richiamo: il "
+                      "riquadro e' quello del DT, e blocco_mm quello di "
+                      "prima."))
 
 
 TOOLS.insert(1, dict(
