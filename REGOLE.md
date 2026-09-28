@@ -1867,7 +1867,9 @@ I controlli che decidono la famiglia:
   la stessa faccia vista da due parti. Il solutore prende come retro e fronte
   le due fasce piu' alte e ne fa la media: sul Pingui erano 40,5 e 125,0 e la
   media, 82,8, non e' l'altezza di niente. Quaranta contro centoventicinque
-  vuol dire che questa non e' la lettura giusta;
+  vuol dire che questa non e' la lettura giusta. Delle due, il **retro e'
+  quella che porta i fianchi**: vedi *Il retro e' la faccia che porta i
+  fianchi*;
 - **astuccio aperto**: cielo e fondo devono essere **uguali attorno a una
   faccia sola**, e i **fianchi devono tornare con la profondita'**;
 - in tutti i casi **cielo o fianco devono esistere**, altrimenti la profondita'
@@ -1885,6 +1887,7 @@ La firma in fustella di un astuccio aperto e' netta e non si confonde con
 quella di uno chiuso:
 
     chiuso   [aletta] RETRO | CIELO | FRONTE | FONDO     fianchi accanto al RETRO
+    chiuso   CIELO | FRONTE | FONDO | RETRO [colla]      fianchi accanto al RETRO
     aperto   [falda] CIELO | FRONTE | FONDO [falda]      fianchi accanto al FRONTE
 
 cioe' **una faccia grande sola**, con cielo e fondo **uguali** sopra e sotto, e
@@ -1898,6 +1901,38 @@ tiene fuori i flowpack: su Colazione la fascia grande e' il nastro, cielo e
 fondo sono due falde da 5 mm perfettamente uguali, e senza il controllo ne
 usciva un astuccio profondo cinque millimetri. I fianchi da 7 lo smentiscono, e
 il solutore si ferma.
+
+#### Il retro e' la faccia che porta i fianchi
+
+Un astuccio chiuso ha due facce alte uguali, e quale sia il retro non lo dice
+l'altezza. Il solutore prendeva sempre per retro **quella in alto** sul foglio,
+che e' lo schema `[aletta] RETRO | CIELO | FRONTE | FONDO`. Il **Kinder
+Cioccolato T8** (disegno 17435, KC_T8_GER) e' montato al contrario:
+
+    fasce (mm)   12 | 82 | 12,5 | 82 | 10
+                 cielo  fronte  fondo  retro  colla
+    fianchi      11,5 x 82 sulla faccia BASSA, con le alette colla da 10,5
+
+Letto alla solita maniera il modello usciva sbagliato senza nessun errore: sul
+fronte il pannello bianco, il bambino sul retro e capovolto, per fondo la
+linguetta della colla, i fianchi senza grafica, e la fascia del cielo con
+"kinder SCHOKOLADE" e il "100g" spariva.
+
+Quale e' il retro lo dice la fustella, senza guardare la grafica: **i fianchi
+stanno sul retro** - e' la stessa ipotesi su cui `FOLD_V` costruisce le pieghe.
+Se li porta solo la faccia bassa, il retro e' lei (`dieline._chiuso` con
+`_ha_fianchi`). Cielo e fondo restano quello che sono per il **fronte**: il
+cielo e' la fascia sopra il fronte, se e' profonda come il fondo, e il fondo
+quella fra fronte e retro. Le pieghe non cambiano: il cielo tocca il fronte col
+bordo basso, il fondo col bordo alto, e il retro ha comunque il bordo alto in
+fondo alla scatola - nello schema solito perche' scavalca il cielo, qui perche'
+risale dal fondo. La linguetta della colla non e' una faccia e resta fuori.
+
+Verificato guardando il modello: il cielo con "kinder SCHOKOLADE" si legge dal
+davanti, l'onda rossa del fronte gira sul fondo e si ricongiunge con quella in
+basso sul retro, e le verifiche - UV sul DT e fronte sul fronte - passano. Il
+cielo e' 12 mm e il fondo 12,5: la scatola esce profonda 12, e il fondo e i
+fianchi da 11,5 si stirano del 4-5%.
 
 #### Le falde del retro sono fasce, non facce
 

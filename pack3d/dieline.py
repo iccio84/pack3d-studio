@@ -483,21 +483,59 @@ def _fasce_del_corpo(d):
     return [(ys[i], ys[i + 1], ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
 
 
-def _chiuso(rows, tol=3.0):
+def _ha_fianchi(d, riga, minimo_mm=3.0):
+    """Se la fascia porta i fianchi: una colonna per parte accanto a quella
+    del corpo, attraversata da cordonature che tagliano davvero la fascia."""
+    xs = d.cols_in_row(riga[0], riga[1])
+    if len(xs) < 4:
+        return False
+    larghe = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    c = max(range(len(larghe)), key=lambda i: larghe[i])
+    return (c >= 1 and c + 1 < len(larghe)
+            and larghe[c - 1] * PT2MM >= minimo_mm
+            and larghe[c + 1] * PT2MM >= minimo_mm)
+
+
+def _chiuso(rows, tol=3.0, fianchi=None):
     """Ruoli di [aletta] RETRO - CIELO - FRONTE - FONDO, per indice di fascia.
 
     Retro e fronte sono la stessa faccia vista da due parti, e hanno la STESSA
     altezza: se le due fasce piu' alte non l'hanno, questa non e' la lettura
     giusta. Su un Kinder Pingui T6 il solutore prendeva 40,5 e 125 e ne faceva
     la media, 82,8, che non e' l'altezza di niente.
+
+    Quale delle due e' il retro lo dice la fustella: **i fianchi stanno sul
+    retro**. Di solito e' quella in alto, ma il Kinder Cioccolato T8 e'
+    montato al contrario - CIELO - FRONTE - FONDO - RETRO - colla - e le
+    chiusure di testa sono attaccate alla faccia bassa. Leggendolo alla solita
+    maniera il bambino finiva sul retro, il fronte era il pannello bianco, il
+    fondo la linguetta della colla e il cielo con "kinder SCHOKOLADE" spariva.
+    `fianchi(i)` dice se la fascia `i` porta i fianchi; se li porta solo la
+    faccia bassa, il retro e' lei. Cielo e fondo restano quello che sono per
+    il fronte, sopra e sotto di lui: sono loro, non il retro, a dire da che
+    parte sta la grafica.
     """
     if len(rows) < 3:
         return None
     order = sorted(range(len(rows)), key=lambda i: -rows[i][2])
-    back_i, front_i = sorted(order[:2])
-    hb, hf = rows[back_i][2] * PT2MM, rows[front_i][2] * PT2MM
-    if abs(hb - hf) > max(tol, 0.08 * max(hb, hf)):
+    alta, bassa = sorted(order[:2])
+    ha, hb = rows[alta][2] * PT2MM, rows[bassa][2] * PT2MM
+    if abs(ha - hb) > max(tol, 0.08 * max(ha, hb)):
         return None
+    if fianchi is not None and fianchi(bassa) and not fianchi(alta):
+        # CIELO - FRONTE - FONDO - RETRO [- colla]
+        r = {"back": bassa, "front": alta, "fianchi": bassa}
+        if bassa - alta > 1:
+            r["bottom"] = max(range(alta + 1, bassa), key=lambda i: rows[i][2])
+            fondo = rows[r["bottom"]][2] * PT2MM
+            cielo = rows[alta - 1][2] * PT2MM if alta >= 1 else 0.0
+            # il cielo e' la fascia sopra il fronte, se e' profonda come il
+            # fondo: sopra potrebbe esserci un'aletta, e un'aletta non e' una
+            # faccia della scatola
+            if cielo > 0 and abs(cielo - fondo) <= max(tol, 0.25 * fondo):
+                r["top"] = alta - 1
+        return r
+    back_i, front_i = alta, bassa
     r = {"back": back_i, "front": front_i, "fianchi": back_i}
     if front_i - back_i > 1:
         r["top"] = max(range(back_i + 1, front_i), key=lambda i: rows[i][2])
@@ -542,7 +580,8 @@ def solve_carton(d: Dieline) -> Dieline:
     `_aperto`.
     """
     rows = _fasce_del_corpo(d)
-    ruoli = _chiuso(rows) or _aperto(rows)
+    ruoli = (_chiuso(rows, fianchi=lambda i: _ha_fianchi(d, rows[i]))
+             or _aperto(rows))
 
     def fasce():
         """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""
