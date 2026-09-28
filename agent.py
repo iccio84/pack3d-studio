@@ -58,7 +58,9 @@ Metodo:
   blocco che lo porta (dt_principale: true), anche quando la legenda o una
   copia tecnica sono piu' colorate. Con promosso: true quel blocco non
   arrivava alla soglia del colore - grafica argento o metallizzata - ed e'
-  stato messo fra gli stampati lo stesso.
+  stato messo fra gli stampati lo stesso. Con ristretto_al_dt: true il
+  blocco era il DT fuso con le note dalle linee di richiamo: il riquadro che
+  vedi e' gia' quello del DT, e blocco_mm quello di prima.
 - Se le dimensioni non si capiscono, il riferimento e' la MINIATURA: forma e
   proporzioni dalla miniatura, scala dal disegno grande. analyze_flowpack
   riporta in `miniatura` se pieghe e testate lette tornano sulle copie in

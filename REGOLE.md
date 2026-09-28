@@ -80,6 +80,16 @@ quello con la grafica, e lo si sceglie dal DISEGNO, non dal colore
   **griglia** - almeno due righe e due colonne lunghe, sei in tutto
   (`tools.dt_della_tavola`). Una cornice ne ha quattro: la legenda, il
   cartiglio, il bordo dell'area di stampa non sono DT;
+- un gruppo che non fa griglia si riguarda **penna per penna**, perche' puo'
+  essere un DT fuso con le note. Sul Nutella B-ready T2 le linee di richiamo
+  delle note entrano nel DT da ogni lato, e vista esterna, vista interna e
+  riquadri delle note venivano fuori come un gruppo solo largo 573 mm, in cui
+  le pieghe da 226 mm non erano piu' "lunghe": restava come DT la sola copia
+  per la vernice opaca, in scala 1:2, e il pack usciva **113 x 95** invece di
+  **226 x 190**. Il richiamo e' nero, il DT verde: penna per penna si
+  separano. Non basta cercare le griglie per estensione invece che per
+  contatto - le pieghe interne di un DT non cominciano e non finiscono tutte
+  insieme (K Tronky, Choco Fresh) - e il contatto resta il criterio;
 - fra i DT si prendono quelli **a pari scala col piu' grosso** (almeno l'85%
   della sua area), e fra questi quello **con piu' grafica**, cioe' con piu'
   colori distinti dentro. L'ordine conta: sul Kinder Country il DT con la
@@ -101,6 +111,15 @@ quello con la grafica, e lo si sceglie dal DISEGNO, non dal colore
 - fra un blocco e la cornice che lo racchiude - sul Brioss STD il bordo
   dell'area di stampa, 460 x 336 attorno ai 420 x 290 dello steso - vince il
   blocco piu' simile al DT, per sovrapposizione su unione;
+- se il blocco che porta il DT e' molto piu' grande di lui - sovrapposizione
+  su unione sotto 0,5 (`tools.DT_NEL_BLOCCO`) - non e' il DT: e' il DT fuso
+  con le note. Sul B-ready un blocco di 573 x 350 mm con vista esterna, vista
+  interna, riquadri delle note e legenda, e misurato cosi' il pack usciva
+  **572 x 207**, cioe' le note dentro il modello. Allora si misura il DT: il
+  suo riquadro, unito al rettangolo chiuso della fustella che gli somiglia
+  di piu', cercato solo attorno a lui (`tools._riquadro_del_dt`,
+  `riquadro_fustella(entro=...)` - sulla tavola intera la ricerca non
+  finiva). Sul parco il blocco e il suo DT stanno tutti sopra 0,78;
 - lo strumento dell'agente `analyze_flowpack` misura sullo stesso blocco
   della costruzione (`tools.riquadro_artwork`), e non piu' sulla pagina
   intera, dove sul Kinder Cards dava gli stessi 260 x 168.
@@ -204,9 +223,18 @@ dell'area di stampa, sul Choco Fresh il tratteggio sotto la pinna).
 - Un **form** si toglie se il suo riquadro dichiarato sta fuori; se sta a
   cavallo, dentro si pota solo se e' disegnato una volta sola e da un posto
   solo, perche' una seconda copia starebbe altrove.
+- Il **richiamo** di una nota tocca il DT, quindi resta: la sua linea la
+  spegne il livello DT come tratto, ma il pallino in fondo, un pieno, restava
+  grafica. Un pieno piccolo (fino a 3 mm) sulla punta interna di un tratto
+  che esce dal DT - basta un millimetro - e' la testa di un richiamo, e va
+  via con la nota: sul B-ready 9 pallini neri da 0,7 mm. Se il pallino non
+  sta sulla punta di nessun tratto non si tocca: sul B-ready ne resta uno,
+  orfano nel template.
 
 Costa una passata di pypdf sul flusso, la stessa delle coperture: da 0,2 a
-6 secondi, Colazione il piu' caro.
+6 secondi, Colazione il piu' caro. E visto che la passata c'e' comunque, per
+nome si tolgono anche le lastre che **disegnano** il DT, non piu' le sole
+coperture: vedi *Le coperture si tolgono per nome, non per euristica*.
 
 Sul parco, tredici file contro la versione di prima: **dodici GLB identici al
 byte**. Il tredicesimo, il KMS Display, cambia 6.483 pixel della texture e
@@ -693,6 +721,27 @@ del disegno tecnico prendeva gia'. Il giorno che un pack mostra una fustella
 che l'euristica non prende, si allarga con quello in mano. (Oggi quei tratti
 li spegne il livello DT in pdfium, oggetto per oggetto, e la passata di pypdf
 resta per i soli pieni: vedi *I due livelli li fa la costruzione*.)
+
+**Con la pulizia fuori dal DT la passata c'e' comunque**, e il costo non e'
+piu' una ragione: per nome si tolgono adesso anche le lastre che DISEGNANO il
+DT (`techink.disegno`: technical, dieline, cutter, crease, fustella,
+dimension, legend...). Il caso che l'ha chiesto: sul Nutella B-ready T2 la
+lastra `Technical Drawing light` dipinge anche una banda piena di 2 mm sul
+fianco, contornata da due tratti del DT. I tratti li spegneva il livello DT, la
+banda no - e' un pieno - e sul modello era una riga verde da un capo
+all'altro.
+
+Sul parco cambia un file solo, il Kinder Cards, e in meglio: dalla tacca di
+fotocentratura sparisce il contorno verde, della stessa lastra. Gli altri
+dodici escono identici al byte.
+
+Non tutte le tecniche, pero', e anche questo e' misurato. Con la lista intera
+di `techink.tecnica` sul parco cambiavano cinque texture: le **tinte imparate**
+da un file (`LASTRE_NOTE`: il Pantone 346 e' le quote su un Kinder e grafica
+su un altro) cancellavano il 9% di un pannello del Pingui T6 e mezzo punto del
+KP Mandarino, e il registro `All`, che sul K Brioss STD dipinge anche testo, il
+2% della sua texture. Restano fuori anche la tacca di fotocentratura, che si
+stampa, e le sigle corte.
 
 Attenzione a non leggerlo come "strappare costa memoria": dipende da cosa si
 strappa. Togliere **tratti** aggiunge una passata e non alleggerisce il
@@ -2640,11 +2689,12 @@ Astucci, con la quota letta due volte che chiude il conto:
   nera come un codice a barre vero dentro lo stesso riquadro, il codice a
   barre se ne andrebbe con lei.
 
-- La **tacca di fotocentratura** del Kinder Cards resta sulla texture col suo
-  contorno verde e la diagonale: sono tratti da 1 pt nel colore del DT, ma lo
-  spessore non e' quello delle penne della fustella (0,35 e 0,7). La tacca
-  nera si stampa davvero; il contorno no, ed e' sulla pinna dentro la
-  saldatura.
+- La **tacca di fotocentratura** del Kinder Cards restava sulla texture col
+  suo contorno verde e la diagonale, tratti da 1 pt che le penne della
+  fustella (0,35 e 0,7) non prendevano. Sono della lastra `Technical Drawing
+  light`, e adesso vanno via per nome con lei (`techink.disegno`). La tacca
+  nera, che si stampa davvero, resta; resta anche un filo chiaro lungo la
+  diagonale, dove si toccano i due triangoli neri che la diagonale copriva.
 
 - Che il **fronte di un vassoio sia la testata piu' bassa** e' la logica di un
   espositore, non una misura: sul parco le due testate sono alte uguali, e un

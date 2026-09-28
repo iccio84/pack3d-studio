@@ -652,7 +652,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # rientri diversi - finiva nel Flowpack e da li' da nessuna parte.
     avvisi_sez.extend(fp0.warnings)
     if lastre:
-        avvisi_sez.append("coperture togliute per nome: %s" % ", ".join(lastre))
+        avvisi_sez.append("lastre tecniche e coperture tolte per nome: %s"
+                          % ", ".join(lastre))
     sospetto = falda_sospetta(fp0)
     if sospetto:
         avvisi_sez.append(sospetto)

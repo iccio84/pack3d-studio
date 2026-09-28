@@ -1331,7 +1331,8 @@ def _testate_dallo_stampato(raster, sc, x0, x1, y0, inizio, b, spessore):
     return round(float((mm[idx[0]] + (mm[-1] - mm[idx[-1]])) / 2.0), 1)
 
 
-def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.0):
+def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.0,
+                      entro=None):
     """Il rettangolo che la fustella CHIUDE, in punti PDF, o `None`.
 
     Serve quando l'ingombro dello stampato non e' la fustella. Sul Kinder
@@ -1362,6 +1363,16 @@ def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.
     except Exception:
         return None
 
+    if entro is not None:
+        # Solo i segmenti in quel riquadro: la ricerca prova ogni coppia di
+        # orizzontali con ogni coppia di verticali, e su una tavola piena di
+        # note - il Nutella B-ready T2 - sulla pagina intera non finiva.
+        ex0, ey0, ex1, ey1 = entro
+        S = [x for x in S
+             if (x[0] == "H" and ey0 <= x[1] <= ey1 and x[3] >= ex0
+                 and x[2] <= ex1)
+             or (x[0] == "V" and ex0 <= x[1] <= ex1 and x[3] >= ey0
+                 and x[2] <= ey1)]
     H = [(c, a, b) for k, c, a, b, st in S if k == "H"]
     V = [(c, a, b) for k, c, a, b, st in S if k == "V"]
     if len(H) < 2 or len(V) < 2:

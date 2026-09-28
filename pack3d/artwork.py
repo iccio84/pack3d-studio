@@ -122,6 +122,10 @@ def pagina_unica(pdf):
 # cartiglio e le miniature stanno piu' in la'.
 MARGINE_DT = 3.0 / PT2MM
 
+# Quanto e' grande al piu' la testa di un richiamo - il pallino in fondo alla
+# linea che porta una nota dentro il DT - in punti (3 mm).
+TESTA_RICHIAMO = 8.5
+
 # Quanto e' largo al piu' un glifo, in corpi, per dire se una scritta sta
 # tutta fuori dal DT senza leggere le larghezze del font. Largo apposta: una
 # nota stimata per eccesso resta sul file e non fa danni, una scritta della
@@ -241,9 +245,8 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
         return (min(xs) - allarga, min(ys) - allarga,
                 max(xs) + allarga, max(ys) + allarga)
 
-    def fuori(r):
+    def fuori(r, m=MARGINE_DT):
         x0, y0, x1, y1 = regione
-        m = MARGINE_DT
         return r[2] < x0 - m or r[0] > x1 + m or r[3] < y0 - m or r[1] > y1 + m
 
     def conta(chi, n=1):
@@ -294,6 +297,7 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
         scritte = []      # (indice in out, operatore, operandi, modo, riquadro)
         ritaglio = False  # una scritta del BT fa da tracciato di ritaglio
         tolti = set()     # XObject non piu' disegnati
+        teste = []        # dove finiscono, dentro il DT, i richiami delle note
         out = []
         for ops, op in cs.operations:
             if op in PERCORSO or op == b"h":
@@ -465,7 +469,7 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
                     ys = [p[1] for p in tracciato]
                     riquadri.append((min(xs) - mx0, my1 - max(ys),
                                      max(xs) - mx0, my1 - min(ys)))
-                via = False
+                via = richiamo = False
                 coda = out[inizio:] if inizio is not None else []
                 solo_percorso = bool(coda) and all(o in PERCORSO or o == b"h"
                                                    for _p, o in coda)
@@ -473,6 +477,31 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
                     grosso = (lw * max(abs(v) for v in ctm[:4]) / 2.0
                               if op not in FILL else 0.0)
                     via = fuori(riquadro(tracciato, grosso))
+                    if not via and op in STROKE:
+                        # Un tratto che esce dal DT e ci entra e' il richiamo
+                        # di una nota: la penna lo spegne come DT, ma il
+                        # pallino pieno sulla sua punta resterebbe grafica.
+                        # Si segna la punta che sta dentro.
+                        # Fuori basta un millimetro: sul B-ready un richiamo
+                        # finisce sul bordo del riquadro della sua nota, 2,5
+                        # mm oltre il DT, dentro il margine.
+                        a, z = tracciato[0], tracciato[-1]
+                        for punta, altra in ((a, z), (z, a)):
+                            if (not fuori(riquadro([punta]))
+                                    and fuori(riquadro([altra]), 1.0 / PT2MM)):
+                                teste.append(riquadro([punta]))
+                    elif not via and op in FILL and teste:
+                        # Sul Nutella B-ready T2 ogni richiamo delle note
+                        # finisce con un pallino di 0,7 mm, disegnato subito
+                        # dopo la sua linea: sulla texture erano punti neri
+                        # sparsi.
+                        r = riquadro(tracciato, 1.0)
+                        richiamo = (max(r[2] - r[0], r[3] - r[1])
+                                    <= TESTA_RICHIAMO + 2.0
+                                    and any(r[0] <= t[0] <= r[2]
+                                            and r[1] <= t[1] <= r[3]
+                                            for t in teste))
+                        via = richiamo
                     if not via and solo_percorso and len(pezzi) > 1:
                         # Un tracciato solo puo' disegnare il DT e, nello
                         # stesso colpo, la vista tecnica accanto o una quota:
@@ -491,7 +520,7 @@ def strip_separations(src, dst, drop, riquadri=None, variabili=None,
                 tracciato = []
                 pezzi = []
                 if via:
-                    conta("tracciati")
+                    conta("richiami" if richiamo else "tracciati")
                     inizio = None
                     if solo_percorso:
                         # via anche il tracciato, non solo il colore: meno
@@ -705,8 +734,13 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None):
     try:
         import pypdf
         pagina = pypdf.PdfReader(pdf).pages[page_no]
+        # Con la pulizia fuori dal DT la passata sul flusso si fa comunque,
+        # e allora vanno via per nome anche le lastre che DISEGNANO il DT, non
+        # solo le coperture: il limite era il costo della passata. Vedi
+        # `techink.disegno` per quali, e perche' non tutte le tecniche.
         lastre = set(techink.technical_separations(
-            pagina, prova=techink.copertura).values())
+            pagina, prova=techink.disegno if regione is not None
+            else techink.copertura).values())
     except Exception:
         return pdf, []
     # {lastra: didascalia} delle aree riservate trovate leggendo la scritta:
@@ -750,7 +784,7 @@ def avviso_fuori_dt(conti):
     """La riga su quello che e' andato via fuori dal DT, o None."""
     nomi = (("tracciati", "tracciati"), ("sottotracciati", "pezzi di tracciato"),
             ("scritte", "scritte"), ("immagini", "immagini"),
-            ("form", "gruppi"))
+            ("form", "gruppi"), ("richiami", "teste di richiamo"))
     parti = ["%d %s" % (conti[k], nome) for k, nome in nomi if conti.get(k)]
     if not parti:
         return None
@@ -795,7 +829,8 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     giri, storti = gira_sulla_grafica(
         tex, panels, verso_della_grafica(pulito, panels, page_no))
     if lastre:
-        avvisi.append("coperture togliute per nome: %s" % ", ".join(lastre))
+        avvisi.append("lastre tecniche e coperture tolte per nome: %s"
+                      % ", ".join(lastre))
     if giri:
         avvisi.append("girato sul verso della grafica: %s" % ", ".join(giri))
     if storti:

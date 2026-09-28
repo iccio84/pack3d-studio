@@ -196,6 +196,33 @@ def copertura(nome):
     return n in COPERTURE_SIGLE or any(f in n for f in COPERTURE_FRASI)
 
 
+# Le lastre che DISEGNANO il disegno tecnico, per come si chiamano: il tratto
+# e anche i suoi pieni. Sul Nutella B-ready T2 la lastra "Technical Drawing
+# light" dipinge una banda piena di 2 mm sul fianco, che l'euristica sul
+# tratto non vede - e' un pieno - e che sul modello era una riga verde.
+#
+# Solo frasi che lo dicono. Niente sigle corte, niente tinte imparate da un
+# file (`LASTRE_NOTE`: il Pantone 346 e' le quote su un Kinder e grafica su
+# un altro, e toglierlo per nome cancellava il 9% di un pannello del Pingui
+# T6), niente `All`: il registro, che sul K Brioss STD dipinge anche testo e
+# toglierlo cambiava il 2% della texture. E niente tacca di fotocentratura,
+# che si stampa davvero.
+DISEGNO_FRASI = (
+    "technical", "tecnico", "dieline", "die line", "die-line",
+    "cutcontour", "cut contour", "thru-cut", "thrucut", "kiss cut", "kisscut",
+    "cutter", "cutting", "crease", "creasing", "cordonatura", "stanz",
+    "fustella", "dimension", "legend",
+)
+
+
+def disegno(nome):
+    """Vero se questa lastra traccia il DT o lo copre: si toglie per nome."""
+    n = _norm(nome)
+    if n in RESERVED:
+        return False
+    return copertura(n) or any(f in n for f in DISEGNO_FRASI)
+
+
 def tecnica(nome):
     """Vero se il nome di questa separazione la colloca fra le lastre tecniche.
 
