@@ -249,6 +249,69 @@ def penne(pdf, page_no=0):
     return _PENNE[chiave]
 
 
+# Un VELO tecnico: un rettangolo pieno e semitrasparente che copre esattamente
+# una cella del DT, con i quattro lati sulle sue linee. Sul Kinder Pingui T1
+# Cheesecake le due gole da 10 mm e le due strisce coperte sono velate cosi',
+# bianco al 50% dentro quattro form, e non stanno su un livello: sul modello
+# le pinne e i fianchi uscivano sbiaditi. Sul T1 Mandarino, stesso DT, i veli
+# non ci sono. Una grafica semitrasparente - il fondino del bollino "LIMITED
+# EDITION" sullo stesso file - non ha i lati sulle linee del DT, e resta.
+VELO_TOLLERANZA = 1.0   # punti fra un lato del velo e la linea del DT
+VELO_LATO_MIN = 5.0     # punti: sotto e' un segno, non una zona
+_LINEE = {}
+
+
+def linee_dt(pdf, page_no=0, pen=None):
+    """`(xs, ys)`: dove stanno le linee verticali e orizzontali del DT, nel
+    telaio di misura. Sono i tratti delle penne del DT, piu' lunghi di un
+    centimetro: bastano a dire se un rettangolo ne ricalca una cella."""
+    from .tracciati import FILO, segmenti
+    st = os.stat(pdf)
+    chiave = (pdf, page_no, st.st_mtime_ns, st.st_size)
+    if chiave not in _LINEE:
+        pen = penne(pdf, page_no) if pen is None else pen
+        segs, _w, _h = segmenti(pdf, page_no)
+        xs, ys = set(), set()
+        for k, c, a, b, s in segs:
+            if b - a > 28.0 and (s in pen or s[0] <= FILO):
+                (xs if k == "V" else ys).add(round(c, 1))
+        _LINEE.clear()
+        _LINEE[chiave] = (sorted(xs), sorted(ys))
+    return _LINEE[chiave]
+
+
+def _velo(o, m, t, linee):
+    """Se l'oggetto e' un velo tecnico: vedi VELO_TOLLERANZA."""
+    import bisect
+    import pypdfium2.raw as raw
+    v = [ctypes.c_uint() for _ in range(4)]
+    raw.FPDFPageObj_GetFillColor(o, *(ctypes.byref(c) for c in v))
+    if v[3].value >= 255:
+        return False
+    if t == raw.FPDF_PAGEOBJ_FORM:
+        if raw.FPDFFormObj_CountObjects(o) != 1:
+            return False
+    else:
+        pieno, tratto = ctypes.c_int(), ctypes.c_int()
+        raw.FPDFPath_GetDrawMode(o, ctypes.byref(pieno), ctypes.byref(tratto))
+        if not pieno.value:
+            return False
+    r = _riquadro(o, m)
+    if r is None:
+        return False
+    x0, y0, x1, y1 = r
+    if x1 - x0 < VELO_LATO_MIN or y1 - y0 < VELO_LATO_MIN:
+        return False
+
+    def sulla_linea(val, linee_asse):
+        i = bisect.bisect_left(linee_asse, val - VELO_TOLLERANZA)
+        return i < len(linee_asse) and linee_asse[i] <= val + VELO_TOLLERANZA
+
+    xs, ys = linee
+    return (sulla_linea(x0, xs) and sulla_linea(x1, xs)
+            and sulla_linea(y0, ys) and sulla_linea(y1, ys))
+
+
 def _fuori(o, m, riquadro):
     """Se l'oggetto sta tutto fuori da `riquadro`, nel telaio di misura."""
     import pypdfium2.raw as raw
@@ -307,9 +370,10 @@ QUOTA_ETICHETTA = 0.8
 QUOTA_SEGNO = 0.25
 
 
-def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
-    """`(dt, contorni, grafica, dai_livelli, etichette)`: gli oggetti nei due
-    livelli.
+def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
+           linee=None):
+    """`(dt, contorni, grafica, dai_livelli, etichette, veli)`: gli oggetti
+    nei due livelli.
 
     `contorni` sono coppie `(oggetto, modo di riempimento)`: percorsi pieni
     con un contorno tecnico, di cui e' tecnico solo il contorno.
@@ -350,6 +414,10 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
     Fuori dai riquadri tolti non si tocca niente: la didascalia di un box
     che nessuno ha riconosciuto resta con lui, e un riquadro senza nome
     sembrerebbe grafica. `etichette` e' quante didascalie sono finite nel DT.
+
+    Con `linee` - le linee del DT, vedi `linee_dt` - vanno nel DT anche i
+    VELI: rettangoli semitrasparenti che ricalcano una cella del disegno.
+    `veli` e' quanti.
     """
     import pypdfium2.raw as raw
     from .techink import NOME_RISERVATA
@@ -357,6 +425,7 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
     dt, contorni, grafica = [], [], []
     dai_livelli = [0]
     etichette = [0]
+    veli = [0]
     # (oggetto, colore) tutti dentro un box tolto dove sotto non c'e'
     # grafica, e i colori delle didascalie scritte dentro uno di quei box
     dentro, tinte = [], set()
@@ -390,6 +459,12 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
                 dai_livelli[0] += 1
                 continue
             t = raw.FPDFPageObj_GetType(o)
+            if (linee is not None
+                    and t in (raw.FPDF_PAGEOBJ_FORM, raw.FPDF_PAGEOBJ_PATH)
+                    and _velo(o, m, t, linee)):
+                dt.append(o)
+                veli[0] += 1
+                continue
             if t == raw.FPDF_PAGEOBJ_FORM:
                 giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject,
                      liv, _componi(m, _matrice(o)))
@@ -441,7 +516,7 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=()):
             etichette[0] += 1
         else:
             grafica.append(o)
-    return dt, contorni, grafica, dai_livelli[0], etichette[0]
+    return dt, contorni, grafica, dai_livelli[0], etichette[0], veli[0]
 
 
 # L'ultimo conteggio fatto: lo legge chi scrive gli avvisi, senza una seconda
@@ -474,11 +549,12 @@ def rendi(pdf, page_no=0, scala=1.0, livello=GRAFICA, riquadro=None,
     try:
         page = doc[page_no]
         page.set_cropbox(*page.get_mediabox())
-        dt, contorni, grafica, dai_livelli, etichette = dividi(
-            page, pen, nomi, stampato, riservate(pdf))
+        dt, contorni, grafica, dai_livelli, etichette, veli = dividi(
+            page, pen, nomi, stampato, riservate(pdf),
+            linee_dt(pdf, page_no, pen))
         CONTI.clear()
-        CONTI.update(livelli=dai_livelli, etichette=etichette,
-                     tratti=len(dt) - dai_livelli - etichette,
+        CONTI.update(livelli=dai_livelli, etichette=etichette, veli=veli,
+                     tratti=len(dt) - dai_livelli - etichette - veli,
                      contorni=len(contorni), grafica=len(grafica))
         if livello == GRAFICA:
             for o in dt:

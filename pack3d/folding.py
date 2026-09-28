@@ -161,6 +161,11 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                             "alle aree: %d oggetti - sono il nome del posto "
                             "(Best Before, EAN...), non si stampano"
                             % c["etichette"])
+            if c.get("veli"):
+                note.append("veli tecnici spenti: %d rettangoli "
+                            "semitrasparenti che ricalcano celle del DT - "
+                            "gole, fasce coperte - e sul pack sbiadivano la "
+                            "grafica" % c["veli"])
         # Preso il foglio, la pagina in cassa non serve piu' a NESSUNO: `nero`
         # la sua resa se la fa da se', fuori dalla cassa. Buttarla qui e non
         # dopo il nero: quando la colata si sostituisce il foglio che torna e'

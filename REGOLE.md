@@ -658,7 +658,15 @@ quello che il file ci ha messo. Nel livello DT va:
   il pieno e' grafica;
 - i **testi fuori dall'artwork stampato** - quote delle miniature, legenda,
   cartiglio - ma solo nella vista del DT, e solo fuori: dentro l'artwork un
-  testo e' grafica anche quando ha il colore di una quota.
+  testo e' grafica anche quando ha il colore di una quota;
+- i **veli tecnici**: un rettangolo pieno, **semitrasparente**, con i quattro
+  lati sulle linee del DT - che ricalca una cella del disegno
+  (`strati._velo`, le linee da `strati.linee_dt`). Sul Kinder Pingui T1
+  Cheesecake le due gole da 10 mm e le fasce coperte sono velate cosi',
+  bianco al 50% dentro quattro form, senza nessun livello: sul modello pinne e
+  fianchi uscivano sbiaditi. Sul T1 Mandarino, stesso DT, i veli non ci sono.
+  Una grafica semitrasparente - il fondino del bollino "LIMITED EDITION" dello
+  stesso file - non ha i lati sulle linee del DT, e resta.
 
 Il colore non si guarda mai, come sempre.
 
@@ -2264,6 +2272,18 @@ la cordonatura a 108,5 mm, il cui gruppo sta giusto in mezzo. Senza quella
 piega `solve_bands` non chiude, la costruzione ripiega sul solutore vecchio e
 la grafica scivola. Le costanti restano la taratura buona sugli impaginati gia'
 coperti: si prende il **minimo** fra costante e frazione.
+
+**Una linea disegnata a pezzi e' una linea sola.** La soglia si applica ai
+tratti uno per uno, e un file puo' disegnare una linea in piu' pezzi di fila.
+Sul **Kinder Pingui T1 Cheesecake** il taglio in fondo allo steso e' nove
+segmenti consecutivi - il piu' lungo 96 punti contro una soglia di 135 - mentre
+sul T1 Mandarino, stesso identico disegno, e' uno solo da 340. Scartati i
+pezzi, lo steso si fermava sulla saldatura: passo **141 invece di 149**, corpo
+125 invece di 133, e la verifica delle UV che gridava "rientri diversi (8 e 10
+mm)". Prima della soglia, i tratti della stessa penna sullo stesso asse che si
+toccano si ricuciono (`flowpack._ricuci`): mezzo punto di vuoto al massimo,
+cosi' un tratteggio vero resta tratteggio. Col taglio ricucito il Cheesecake
+esce identico al Mandarino, 135,5 x 149, corpo 133, pinne 8 e gola 10.
 
 **Un ripiego non deve mai essere muto.** Se `analyze_auto` fallisce, la
 costruzione passa al solutore vecchio: il modello che ne esce non e' sbagliato

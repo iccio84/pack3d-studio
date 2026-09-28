@@ -955,6 +955,52 @@ class _StesoNonRisolto(ValueError):
 SCALA_ANALISI = 150 / 72.0
 
 
+# Quanto possono distare, in punti, due pezzi della stessa linea per essere
+# ricuciti: si toccano, al disegno. Un tratteggio vero ha i vuoti di un punto e
+# piu', e resta tratteggio.
+RICUCI_VUOTO = 0.5
+RICUCI_ASSE = 0.3
+
+
+def _ricuci(S):
+    """I tratti collineari e contigui della stessa penna, riuniti in uno.
+
+    Una linea del DT puo' essere disegnata a pezzi, e il solutore misura i
+    tratti uno per uno: sotto un terzo del contorno dello steso li scarta.
+    Sul Kinder Pingui T1 Cheesecake il taglio in fondo e' nove segmenti di fila
+    - il piu' lungo 96 punti contro una soglia di 135 - mentre sul T1
+    Mandarino, stesso disegno, e' uno da 340: lo steso si fermava sulla
+    saldatura, e il passo usciva 141 mm invece di 149.
+    """
+    per_penna = {}
+    for s in S:
+        per_penna.setdefault((s[0], s[4]), []).append(s)
+    fuori = []
+    for (k, st), tratti in per_penna.items():
+        tratti.sort(key=lambda s: s[1])
+        # le linee: tratti sullo stesso asse, entro RICUCI_ASSE
+        linee, corrente = [], [tratti[0]]
+        for s in tratti[1:]:
+            if s[1] - corrente[-1][1] <= RICUCI_ASSE:
+                corrente.append(s)
+            else:
+                linee.append(corrente)
+                corrente = [s]
+        linee.append(corrente)
+        for linea in linee:
+            linea.sort(key=lambda s: s[2])
+            c = linea[0][1]
+            a, b = linea[0][2], linea[0][3]
+            for s in linea[1:]:
+                if s[2] <= b + RICUCI_VUOTO:
+                    b = max(b, s[3])
+                else:
+                    fuori.append((k, c, a, b, st))
+                    a, b = s[2], s[3]
+            fuori.append((k, c, a, b, st))
+    return fuori
+
+
 def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
 
@@ -979,7 +1025,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
                 return bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3 and b0 <= by1 + 3
             segs = [sg for sg in segs if _in(sg)]
         pens = _technical_pens(segs, pagina_w, pagina_h)
-        S = [s for s in segs if s[4] in pens]
+        S = _ricuci([s for s in segs if s[4] in pens])
 
     # pdfplumber si tiene un oggetto Python per ogni tracciato della pagina, e
     # su un impaginato grande sono decine di migliaia: centinaia di MB che il
