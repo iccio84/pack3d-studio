@@ -35,7 +35,14 @@ vengono prima di tutto il resto (le trovi in testa alle Regole del progetto):
 
 Metodo:
 - Si lavora sulla PRIMA PAGINA sola. Un PDF su piu' pagine e' quasi sempre lo
-  stesso pack ripetuto per lingua; gli strumenti guardano gia' solo la prima.
+  stesso pack ripetuto per lingua; gli strumenti guardano gia' solo la prima,
+  e la costruzione le altre le toglie dal file.
+- L'ORDINE e' questo: prima le quote, lette sul file intero - DT, copie,
+  miniatura, cartiglio - poi la costruzione toglie TUTTO quello che sta fuori
+  dal DT (quote, copie tecniche, legenda, cartiglio, miniature) e costruisce
+  solo sul DT con la sua grafica. Lo fa da sola e lo dice in un avviso
+  ("fuori dal DT tolto tutto"): tu le note le usi per leggere e verificare le
+  quote, mai per costruire.
 - Chiama find_blocks per PRIMA cosa. Una tavola contiene quasi sempre piu' viste
   dello stesso pack: quella stampata, quella tecnica, le miniature, i cartigli.
   Scegli il blocco stampato che porta l'artwork e lavora solo su quello: misurare
@@ -46,14 +53,18 @@ Metodo:
   Il blocco tecnico di pari ingombro e' la maschera da passare a clean_artwork.
 - Lo stesso DT puo' comparire piu' volte sulla pagina: le copie per i
   tecnicismi di stampa (alluminio, battuta di bianco, supporto trasparente,
-  aree coperte) e la miniatura. Conta solo quello con la grafica, che di norma
-  e' il piu' grosso. Quando la grafica ha poco colore - argento, metallizzato -
-  nessun blocco supera la soglia dello stampato, e find_blocks promuove il
-  blocco che contiene il DT piu' grosso (dt_principale: true).
+  aree coperte), la vista interna e la miniatura. Conta solo quello con la
+  grafica, che di norma e' il piu' grosso: find_blocks mette sempre in cima il
+  blocco che lo porta (dt_principale: true), anche quando la legenda o una
+  copia tecnica sono piu' colorate. Con promosso: true quel blocco non
+  arrivava alla soglia del colore - grafica argento o metallizzata - ed e'
+  stato messo fra gli stampati lo stesso.
 - Se le dimensioni non si capiscono, il riferimento e' la MINIATURA: forma e
   proporzioni dalla miniatura, scala dal disegno grande. analyze_flowpack
   riporta in `miniatura` se pieghe e testate lette tornano sulle copie in
-  scala del DT; quando non dice niente, guarda tu la miniatura con livelli.
+  scala del DT; se il DT con la grafica non si legge proprio, legge le quote
+  su una sua copia e le riporta sul DT (letture: "QUOTE DALLA COPIA"). Quando
+  non dice niente, guarda tu la miniatura con livelli.
 - Il pack si costruisce dal DISEGNO TECNICO, e solo dopo si guarda la grafica.
   Subito dopo find_blocks chiama livelli: a sinistra il livello DT/note -
   fustella, cordonature, quote, miniature - e a destra la grafica come finira'

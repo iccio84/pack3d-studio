@@ -173,9 +173,21 @@ def analisi_flowpack(pdf):
         except Exception:
             fp = None
         if fp is None:
+            # Terzo tentativo, sulle COPIE del DT: le copie tecniche e la
+            # miniatura sono lo stesso disegno in scala, senza grafica sopra.
+            # E' la regola "se non capisci le dimensioni prendi come
+            # riferimento la miniatura". Vedi `tools.quote_dalla_copia`.
+            try:
+                from pack3d.tools import quote_dalla_copia
+                fp = quote_dalla_copia(pdf)
+            except Exception:
+                fp = None
+        if fp is None:
             # Il ripiego era muto, e un modello costruito da un'analisi
-            # peggiore non esce sbagliato: esce plausibile, che e' peggio.
-            fp = fpk.analyze(pdf)
+            # peggiore non esce sbagliato: esce plausibile, che e' peggio. E
+            # guarda solo il DT con la grafica: sulla pagina intera misurava
+            # anche quote, copie tecniche e cartiglio.
+            fp = fpk.analyze(pdf, bbox=box)
             ripiego = primo
     with _ANALISI_CHIAVE:
         _ANALISI[imp] = (box, fp, ripiego)
@@ -187,16 +199,22 @@ def analisi_flowpack(pdf):
 # --------------------------------------------------------------------------- #
 # costruzione
 # --------------------------------------------------------------------------- #
-def avviso_quadricromia(pdf, page_no=0):
+def avviso_quadricromia(pdf, page_no=0, regione=None):
     """La riga sulla quadricromia, se il file ne ha bisogno.
 
     Costa una lettura di pypdf e una passeggiata nei dizionari delle risorse:
     centesimi di secondo e niente in memoria, misurati su tutto il parco.
+
+    Con `regione` - il riquadro del DT - contano solo le immagini disegnate
+    sul DT: fuori ci sono le note, e il logo RGB dello studio nel cartiglio
+    non e' grafica del pack.
     """
-    from pack3d import techink
+    from pack3d import techink, tracciati
     try:
         import pypdf
-        return techink.avviso_rgb(pypdf.PdfReader(pdf).pages[page_no])
+        dentro = (None if regione is None else
+                  tracciati.immagini_nel_riquadro(pdf, regione, page_no))
+        return techink.avviso_rgb(pypdf.PdfReader(pdf).pages[page_no], dentro)
     except Exception:
         return None
 
@@ -209,17 +227,22 @@ def avviso_pagine(pdf):
     "64-GERMANY" e "01-ITALY", identici tranne il piede - e mescolarle vuol
     dire misurare un pack su una pagina e stamparne un altro. Lo si dice,
     perche' chi ha caricato il file sappia quale pagina e' diventata il
-    modello.
+    modello. Le altre la costruzione non le vede proprio: vedi
+    `artwork.pagina_unica`, che torna anche quante erano - ed e' quel numero
+    che si passa qui, perche' la copia di pagine ne ha una.
     """
-    try:
-        import pypdfium2 as pdfium
-        doc = pdfium.PdfDocument(pdf)
+    if isinstance(pdf, int):
+        n = pdf
+    else:
         try:
-            n = len(doc)
-        finally:
-            doc.close()
-    except Exception:
-        return None
+            import pypdfium2 as pdfium
+            doc = pdfium.PdfDocument(pdf)
+            try:
+                n = len(doc)
+            finally:
+                doc.close()
+        except Exception:
+            return None
     if n <= 1:
         return None
     return ("il PDF ha %d pagine: si usa solo la prima, le altre di solito "
@@ -229,22 +252,24 @@ def avviso_pagine(pdf):
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                  colata_riquadro=None):
     dpi, tmax = risoluzione(quality)
-    # PRIMA COSA, e il motivo e' la memoria. Ghostscript costa 105 MB fissi -
-    # li costa anche a vuoto, misurato con `nullpage` - e parte con un fork:
-    # chiamarlo a build avviato vuol dire duplicare quello che Python tiene
-    # in quel momento. Chiamato qui, che sono una cinquantina di MB, il picco
-    # del build non si sposta. Vedi `nero.spia`.
-    deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
+    # L'ordine e' quello delle regole: una pagina sola, poi le quote lette
+    # sul file intero - note e miniature comprese - poi via tutto quello che
+    # sta fuori dal DT, e solo allora la costruzione. Il nero si decide sul
+    # file pulito, dentro `texture_astuccio`: sugli Spaces la memoria per il
+    # fork di Ghostscript c'e' (16 GB), e le scritte nere della legenda non
+    # devono pesare sulla quota della `k`.
+    pdf, n_pagine = artwork.pagina_unica(pdf)
     d = dl.analyze(pdf)          # sull'originale: il DT e' quello che misura
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
     # Coperture via per nome e texture girate sul verso della grafica: sono
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
+    esito = {}
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
                                               lastre_extra=lastre_extra,
-                                              nero_deciso=deciso_nero,
-                                              colata_riquadro=colata_riquadro)
+                                              colata_riquadro=colata_riquadro,
+                                              regione=d.bbox, esito=esito)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso)
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
@@ -256,10 +281,10 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm]
-    rgb = avviso_quadricromia(pdf)
+    rgb = avviso_quadricromia(esito.get("pdf", pdf), regione=d.bbox)
     if rgb:
         meta.insert(0, rgb)
-    pagine = avviso_pagine(pdf)
+    pagine = avviso_pagine(n_pagine)
     if pagine:
         meta.insert(0, pagine)
     return (meta + avvisi_tex + verifiche + ([riscontro] if riscontro else [])
@@ -274,7 +299,8 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     tengono su, e un pannello che non si vede non vale la texture che costa.
     """
     dpi, tmax = risoluzione(quality)
-    deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
+    # una pagina sola, e il nero sul file pulito: vedi `build_carton`
+    pdf, n_pagine = artwork.pagina_unica(pdf)
     d = dl.extract(pdf)
     v = vassoio.riconosci(d)
     if v is None:
@@ -302,10 +328,13 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     # il picco andava a 682 MB.
     lato = max(d.page_w, d.page_h)
     dpi_tex = min(dpi, tmax * 72.0 / lato) if lato > 0 else dpi
+    # Le quote sono lette e la sagoma presa: fuori dalla fustella va via
+    # tutto prima di rendere, e lo steso resta intero perche' le UV sono la
+    # posizione nel piano.
     tex, avvisi_tex = artwork.texture_astuccio(pdf, {"steso": pagina}, dpi_tex,
                                                lastre_extra=lastre_extra,
-                                               nero_deciso=deciso_nero,
-                                               colata_riquadro=colata_riquadro)
+                                               colata_riquadro=colata_riquadro,
+                                               regione=d.bbox)
     # la coda va attaccata PRIMA della maglia: le UV dell'interno e del taglio
     # si misurano sull'altezza che la texture ha davvero, non su quella della
     # sagoma, che e' un'altra griglia
@@ -332,7 +361,7 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
             "%d vertici sul profilo della fustella, cartoncino %.1f mm"
             % (len(V), vassoio.SPESSORE)]
-    pagine = avviso_pagine(pdf)
+    pagine = avviso_pagine(n_pagine)
     if pagine:
         meta.insert(0, pagine)
     return (meta + avvisi_sagoma + avvisi_tex + list(v.warnings) + avvisi_fronte
@@ -566,18 +595,20 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     par = gonfiore(soft)
     nu, nv = (320, 420) if quality == "alta" else (190, 260)
     dpi, tmax = risoluzione(quality)
-    # come per l'astuccio: la lastra del nero prima dell'analisi, che e' il
-    # momento in cui Python pesa poco e il fork di Ghostscript non duplica
-    # niente. Vedi `nero.spia`.
-    deciso_nero = nero.spia(pdf, 0, dpi / 72.0)
+    # Una pagina sola: le altre sono lo stesso pack in altre lingue, e da qui
+    # in avanti non le vede nessuno. Vedi `artwork.pagina_unica`.
+    pdf, n_pagine = artwork.pagina_unica(pdf)
+    conti = {}
     if case:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
         tmp.close()
         # anche qui le lastre dell'agente: un caso calibrato elenca a mano
         # quello che sapeva allora, non quello che si vede oggi guardando
         lastre = sorted(set(case["drop_seps"]) | set(lastre_extra or ()))
-        clean = artwork.strip_separations(pdf, tmp.name, lastre)
         fp0 = _flowpack_from_case(case)
+        clean = artwork.strip_separations(pdf, tmp.name, lastre,
+                                          regione=fpk.foglio_in_pagina(fp0),
+                                          conti=conti)
         box = None
         ripiego = None
     else:
@@ -586,9 +617,18 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
         # dichiarato, perche' il motivo viaggia insieme alle quote.
         box, fp0, ripiego = analisi_flowpack(pdf)
-        # L'analisi e' fatta: ora, e non prima, si possono togliere le lastre
-        # tecniche dichiarate per nome.
-        clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra)
+        # L'analisi e' fatta, e con lei le quote: ora, e non prima, si tolgono
+        # le lastre tecniche dichiarate per nome e TUTTO quello che sta fuori
+        # dallo steso - quote, copie tecniche, legenda, cartiglio, miniature.
+        # Servivano a leggere le misure; alla costruzione darebbero solo
+        # penne tecniche contate male, un nero deciso sulle scritte della
+        # legenda, una colata misurata sulla pastiglia del cartiglio.
+        clean, lastre = artwork.senza_coperture(
+            pdf, extra=lastre_extra, regione=fpk.foglio_in_pagina(fp0),
+            conti=conti)
+    # Il nero sul file pulito, prima di rendere: vedi `nero.spia`. Sugli
+    # Spaces la memoria per il fork di Ghostscript c'e'.
+    deciso_nero = nero.spia(clean, 0, dpi / 72.0)
 
     # NB: l'UnboundLocalError su 'avvisi' non nasceva qui. Nasceva in
     # do_POST, che quel nome lo assegnava solo sul ramo flowpack e lo
@@ -599,10 +639,13 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # l'analisi com'e' uscita dal DT, prima che la sezione dell'agente la
     # cambi: e' su questa che si controlla il fronte
     analisi = fp0 if case is None else None
-    pagine = avviso_pagine(pdf)
+    pagine = avviso_pagine(n_pagine)
     if pagine:
         avvisi_sez.append(pagine)
-    rgb = avviso_quadricromia(pdf)
+    fuori = artwork.avviso_fuori_dt(conti)
+    if fuori:
+        avvisi_sez.append(fuori)
+    rgb = avviso_quadricromia(clean, regione=fpk.foglio_in_pagina(fp0))
     if rgb:
         avvisi_sez.append(rgb)
     # Quello che l'analisi ha da dire - testate dal DT, steso ruotato,
@@ -869,12 +912,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     if _normals(Vm, Tm)[int(np.argmax(Vm[:, 2]))][2] < 0:
         Tm = Tm[:, [0, 2, 1]]
 
-    sh = fp.sheet
-    if fp.ruotato:
-        # lo steso e' stato analizzato trasposto: per ritagliarlo serve il
-        # rettangolo vero della pagina, e la texture va rimessa nello stesso
-        # telaio della UV, con il perimetro sulle righe
-        sh = (sh[1], sh[0], sh[3], sh[2])
+    # lo steso analizzato trasposto si ritaglia dal rettangolo vero della
+    # pagina, e la texture va poi rimessa nello stesso telaio della UV, con il
+    # perimetro sulle righe
+    sh = fpk.foglio_in_pagina(fp)
     # Rasterizzare piu' fine di quanto write_glb_mesh poi terra' vuol dire
     # produrre pixel per buttarli. Il dpi si abbassa fino a quello che serve
     # davvero, mai piu' in su di quello chiesto - quindi sui fogli che stanno
@@ -1009,8 +1050,9 @@ def analyze_pdf(pdf, kind=None):
 
     Tutte le famiglie si misurano sulla prima pagina sola: se ce ne sono
     altre, il primo cartellino lo dice. Vedi `avviso_pagine`."""
+    pdf, n_pagine = artwork.pagina_unica(pdf)
     info = _analyze_pdf(pdf, kind)
-    pagine = avviso_pagine(pdf)
+    pagine = avviso_pagine(n_pagine)
     if pagine and isinstance(info.get("meta"), list):
         info["meta"].insert(0, pagine)
     return info
@@ -1080,7 +1122,7 @@ def _analyze_pdf(pdf, kind=None):
                 apertura = dl.dichiara_apertura(d)
                 if apertura:
                     meta.append(apertura)
-                rgb = avviso_quadricromia(pdf)
+                rgb = avviso_quadricromia(pdf, regione=d.bbox)
                 if rgb:
                     meta.insert(0, rgb)
                 return dict(kind="carton", title="Astuccio %s" % d.layout,
@@ -1104,7 +1146,7 @@ def _analyze_pdf(pdf, kind=None):
     if sospetto:
         # prima di costruire, non dopo: qui l'utente le quote le sta leggendo
         meta.insert(0, sospetto)
-    rgb = avviso_quadricromia(pdf)
+    rgb = avviso_quadricromia(pdf, regione=fpk.foglio_in_pagina(fp))
     if rgb:
         meta.insert(0, rgb)
     if ripiego is not None:

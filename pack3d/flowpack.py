@@ -69,9 +69,17 @@ class Flowpack:
         return 2.0 * (self.W + self.T)
 
 
-def _technical_segments(page, min_len=25.0):
-    """Il tracciato tecnico dello steso: tratti sottili, i piu' lunghi."""
+def _technical_segments(page, min_len=25.0, dentro=None):
+    """Il tracciato tecnico dello steso: tratti sottili, i piu' lunghi.
+
+    `dentro`, se c'e', dice quali segmenti guardare: la penna si sceglie fra
+    quelli, non sulla pagina intera dove possono vincere le copie tecniche.
+    """
     segs = [s for s in _segments(page) if s[3] - s[2] > min_len and s[4][0] <= 0.8]
+    if dentro is not None:
+        segs = [s for s in segs if dentro(s)]
+    if not segs:
+        return []
     score = {}
     for k, c, a, b, st in segs:
         score[st] = score.get(st, 0.0) + (b - a)
@@ -79,10 +87,27 @@ def _technical_segments(page, min_len=25.0):
     return [s for s in segs if s[4] == pen]
 
 
-def analyze(pdf_path: str, page_no: int = 0, tol: float = 0.02) -> Flowpack:
+def analyze(pdf_path: str, page_no: int = 0, tol: float = 0.02,
+            bbox=None) -> Flowpack:
+    """Il solutore vecchio: l'ultimo ripiego, quando `analyze_auto` non chiude.
+
+    Con `bbox` - il riquadro del DT con la grafica, in punti - guarda solo
+    li'. Senza, misurava la pagina intera: quote, copie tecniche, legenda e
+    cartiglio finivano nelle fasce, e ne usciva un pack plausibile e
+    sbagliato, il difetto peggiore che questo progetto possa avere.
+    """
     with pdfplumber.open(pdf_path) as pdf:
         page = pdf.pages[page_no]
-        segs = _technical_segments(page)
+
+        def _in(sg):
+            bx0, by0, bx1, by1 = bbox
+            k, c, a0, b0, _st = sg
+            if k == "H":
+                return (by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3
+                        and b0 <= bx1 + 3)
+            return (bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3
+                    and b0 <= by1 + 3)
+        segs = _technical_segments(page, dentro=_in if bbox else None)
 
         V = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "V"], 2.0)
         H = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "H"], 2.0)
@@ -1227,6 +1252,64 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
                                 if not lembo else
                                 (y0 + inizio / PT2MM,
                                  y0 + (inizio + giro) / PT2MM)))
+
+
+def riporta_da_copia(fp, copia, dt, riga=None):
+    """Un Flowpack letto su una COPIA del DT, riportato sul DT con la grafica.
+
+    `copia` e `dt` sono i riquadri `(x, y, w, h)` dei due disegni, in punti
+    nel telaio di misura. La copia e' lo stesso DT in scala - una copia
+    tecnica, la miniatura del cartiglio - e la stessa affinita' che porta il
+    suo riquadro su quello del DT porta le sue linee: le misure lungo il
+    nastro e lungo il passo si scalano ognuna col suo asse, e lo steso e il
+    perimetro utile finiscono sul DT, da dove si ritaglia la grafica.
+    """
+    from dataclasses import replace
+    cx, cy, cw, ch = copia
+    dx, dy, dw, dh = dt
+    kx, ky = dw / cw, dh / ch
+
+    def px(x):
+        return dx + (x - cx) * kx
+
+    def py(y):
+        return dy + (y - cy) * ky
+
+    s0, s1, s2, s3 = fp.sheet
+    g0, g1 = fp.girth_span
+    if fp.ruotato:
+        # nel telaio del solutore la x e' la y della pagina, e viceversa
+        sheet = (py(s0), px(s1), py(s2), px(s3))
+        girth = (px(g0), px(g1))
+        kn, kp = kx, ky
+    else:
+        sheet = (px(s0), py(s1), px(s2), py(s3))
+        girth = (py(g0), py(g1))
+        kn, kp = ky, kx
+    avvisi = list(fp.warnings)
+    if riga:
+        avvisi.append(riga)
+    return replace(
+        fp, W=round(fp.W * kn, 2), T=round(fp.T * kn, 2),
+        side_fin=round(fp.side_fin * kn, 2), back_a=round(fp.back_a * kn, 2),
+        back_b=round(fp.back_b * kn, 2),
+        sovrapposizione=round(fp.sovrapposizione * kn, 2),
+        web_mm=round(fp.web_mm * kn, 1),
+        L=round(fp.L * kp, 1), end_fin=round(fp.end_fin * kp, 1),
+        gola=round(fp.gola * kp, 1), step_mm=round(fp.step_mm * kp, 1),
+        linee_passo=tuple(round(v * kp, 2) for v in fp.linee_passo),
+        sheet=sheet, girth_span=girth, warnings=avvisi)
+
+
+def foglio_in_pagina(fp):
+    """Il riquadro dello steso nel telaio della pagina, `(x0, y0, x1, y1)`.
+
+    `fp.sheet` sta nel telaio del solutore, che per uno steso ruotato ha x e
+    y scambiate: e' da qui che si ritaglia la texture, ed e' il DT fuori dal
+    quale la costruzione toglie tutto.
+    """
+    sh = fp.sheet
+    return (sh[1], sh[0], sh[3], sh[2]) if fp.ruotato else tuple(sh)
 
 
 def _testate_dallo_stampato(raster, sc, x0, x1, y0, inizio, b, spessore):

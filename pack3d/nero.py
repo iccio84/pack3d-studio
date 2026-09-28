@@ -67,6 +67,13 @@ ORLO_CROMA = 25
 #
 # Sopra il cinque per cento non e' detto che serva, sotto e' detto che non
 # serve: e la passata sprecata su FERRERO 159013 erano quasi sei secondi.
+#
+# Adesso la quota si conta sull'INTERNO del pieno, e sul solo DT - la
+# costruzione le note fuori dal DT le toglie prima. Vedi `_traditi`: col
+# bordo dentro la quota dipendeva da quanta altra roba nera c'era sulla
+# tavola. Sull'interno, sul parco: K Brioss STD 15,9%, K Brioss T10 0,7%,
+# K Tronky 60,9% ma sono le linee del DT, che `riporta` esclude; tutti gli
+# altri sotto l'1%. La soglia sta larga in mezzo.
 QUOTA_MINIMA = 0.05
 # la lastra si prende a questa risoluzione e si ingrandisce: una `k` e' una
 # lettera grande, e prenderla a 300 dpi costerebbe secondi per nulla
@@ -109,12 +116,23 @@ def _lastra(pdf, page_no, dpi):
     return mappe.get("black")
 
 
-def _traditi(lastra, reso, orlo=False):
+def _traditi(lastra, reso, orlo=False, interno=False):
     """Maschera dei pixel che la lastra dice neri e il render fa colorati.
 
     La quota si conta sempre sul solo pieno: e' lei che decide se il difetto
     c'e'. Con `orlo` alla maschera si aggiunge l'orlo sfumato della lettera,
     vedi ORLO.
+
+    Con `interno` la quota si conta sull'INTERNO del pieno, un pixel dentro
+    dal bordo. E' la misura con cui decide `spia`: al bordo di ogni lettera
+    nera la lastra, presa piu' grossa e ingrandita, sborda di un pixel sul
+    colore accanto, e quel pixel risulta "tradito" senza che ci sia niente da
+    riparare. Contato col resto, il bordo decideva da solo: sul K Brioss T10,
+    tolte le note fuori dal DT - scritte nere che il render fa nere e che
+    tenevano bassa la quota - il 3,2% diventava 13,5% e la correzione
+    scalinava di nero i bordi delle scritte sul giallo. Sull'interno sono lo
+    0,1 e lo 0,7%. La `k` azzurra del K Brioss STD e' tradita anche dentro:
+    10,2% sul foglio intero, 15,9% sul DT.
     """
     h = min(lastra.shape[0], reso.shape[0])
     w = min(lastra.shape[1], reso.shape[1])
@@ -127,7 +145,13 @@ def _traditi(lastra, reso, orlo=False):
     px = reso[:h, :w].astype(np.int16)
     croma = px.max(2) - px.min(2)
     tradito = pieno & (px.mean(2) > CHIARO) & (croma > SATURO)
-    quota = float(tradito.sum()) / float(pieno.sum())
+    if interno:
+        from scipy.ndimage import binary_erosion
+        dentro = binary_erosion(pieno, iterations=1)
+        quota = (float((tradito & dentro).sum()) / float(dentro.sum())
+                 if dentro.any() else 0.0)
+    else:
+        quota = float(tradito.sum()) / float(pieno.sum())
     if orlo and tradito.any():
         from scipy.ndimage import (binary_dilation, binary_erosion,
                                    binary_propagation)
@@ -172,7 +196,7 @@ def spia(pdf, page_no=0, scala=None):
         pagina = _pagina(pdf, page_no, DPI_SPIA)
         piccolo = np.asarray(pagina.resize((bassa.shape[1], bassa.shape[0]),
                                            Image.BILINEAR))
-        _m, quota = _traditi(bassa, piccolo)
+        _m, quota = _traditi(bassa, piccolo, interno=True)
     except Exception:
         return None, 0.0
     if quota < QUOTA_MINIMA:
@@ -245,9 +269,10 @@ def riporta(pdf, foglio, scala, page_no=0, note=None, deciso=None,
         # lettera nera sul bianco
         arr[:h, :w][tradito] = grande[:h, :w][tradito][:, None]
         if note is not None:
-            note.append("nero riportato dalla lastra sul %.1f%% dei pixel che "
-                        "il file dichiara neri: il rasterizzatore ignora la "
-                        "sovrastampa e li faceva colorati" % (100 * quota))
+            note.append("nero riportato dalla lastra: il %.1f%% dell'interno "
+                        "dei pieni che il file dichiara neri usciva colorato, "
+                        "perche' il rasterizzatore ignora la sovrastampa"
+                        % (100 * quota))
         return Image.fromarray(arr)
     except Exception:
         # meglio la `k` azzurra che nessun modello

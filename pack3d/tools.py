@@ -143,7 +143,9 @@ def analyze_flowpack(pdf):
                 raise
             fp = fpk.analyze_auto(pdf, bbox=riq)
         except Exception:
-            return {"errore": str(e)[:160]}
+            fp = quote_dalla_copia(pdf)
+            if fp is None:
+                return {"errore": str(e)[:160]}
     return dict(nastro_mm=fp.web_mm, passo_mm=fp.step_mm,
                 fronte=fp.W, spessore=fp.T, corpo=fp.L,
                 pinna_testa=fp.end_fin, gola=fp.gola,
@@ -719,17 +721,113 @@ def riquadro_artwork(pdf):
             (b["x_mm"] + b["w_mm"]) / PT2MM, (b["y_mm"] + b["h_mm"]) / PT2MM)
 
 
-def dt_principale(pdf, page_no=0):
-    """Il riquadro del DT piu' grande della tavola, `(x, y, w, h)` in mm.
+# Un gruppo di linee tecniche e' un DT se e' una GRIGLIA: almeno due righe e
+# due colonne lunghe, e sei in tutto. Una cornice - la legenda, il cartiglio,
+# il bordo dell'area di stampa - ne ha quattro, e dentro puo' essere piu'
+# colorata del DT: sul Kinder Paradiso la cornice della legenda racchiude 233
+# colori, il DT con la grafica 177.
+DT_LINEE_MIN = 6
+# Una linea e' lunga se copre almeno questa frazione del gruppo.
+DT_LUNGA = 0.4
+# Quanto puo' essere piu' piccolo del piu' grosso un DT perche' conti come sua
+# copia a pari scala. Sotto e' una copia ridotta o una miniatura.
+DT_PARI = 0.85
+
+
+def dt_della_tavola(pdf, page_no=0, dpi=100):
+    """I DT della tavola, dal piu' grosso: `[{x_mm, y_mm, w_mm, h_mm, righe,
+    colonne, colori}]`.
 
     Una tavola porta spesso lo STESSO disegno tecnico piu' volte: quello con
     la grafica e, accanto, le copie per i tecnicismi di stampa - supporto
-    trasparente, alluminio, battuta di bianco, aree coperte - piu' la
-    miniatura nel cartiglio. Quello con la grafica e' di norma il piu' grosso,
-    e il DT piu' grosso e' il gruppo di linee tecniche collegate con la
-    lunghezza totale maggiore: la stessa scelta che `dieline` fa sugli
-    astucci con `_largest_cluster`. None se il file non ha tratti tecnici.
+    trasparente, alluminio, battuta di bianco, aree coperte - la vista
+    interna, e la miniatura nel cartiglio. Ogni gruppo di linee tecniche
+    collegate che sia una griglia (`DT_LINEE_MIN`) e' uno di loro. `colori`
+    sono i colori distinti dentro il suo riquadro, contati come in
+    `find_blocks`: e' quanta grafica c'e' sopra.
     """
+    from .tracciati import segmenti
+    try:
+        segs, pw, ph = segmenti(pdf, page_no)
+    except Exception:
+        return []
+    penne = dl._technical_pens(segs, pw, ph)
+    gruppi = dl._gruppi([s for s in segs if s[4] in penne])
+    if not gruppi:
+        return []
+    s = dpi / 72.0
+    im = np.asarray(dl.render_page(pdf, page_no, s)).astype(np.int16)
+
+    def distinte(v):
+        n, ultima = 0, None
+        for x in sorted(v):
+            if ultima is None or x - ultima > 3.0:
+                n += 1
+            ultima = x
+        return n
+
+    out = []
+    for g in gruppi:
+        G = [sg for sg, _b in g]
+        # il riquadro dai segmenti veri, non dai loro riquadri allargati di
+        # un punto: una copia in scala 1:5 riportata sul DT lo sposterebbe
+        # di cinque
+        xs = [c for k, c, a, b, st in G if k == "V"]
+        xs += [v for k, c, a, b, st in G if k == "H" for v in (a, b)]
+        ys = [c for k, c, a, b, st in G if k == "H"]
+        ys += [v for k, c, a, b, st in G if k == "V" for v in (a, b)]
+        x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+        W, H = x1 - x0, y1 - y0
+        if W <= 0 or H <= 0:
+            continue
+        if min(W, H) * PT2MM < 15.0:
+            continue
+        righe = distinte(c for k, c, a, b, st in G
+                         if k == "H" and b - a >= DT_LUNGA * W)
+        colonne = distinte(c for k, c, a, b, st in G
+                           if k == "V" and b - a >= DT_LUNGA * H)
+        if righe < 2 or colonne < 2 or righe + colonne < DT_LINEE_MIN:
+            continue
+        reg = im[int(y0 * s):int(y1 * s) + 1, int(x0 * s):int(x1 * s) + 1]
+        m = reg.max(2) < 248 if reg.size else np.zeros((0, 0), bool)
+        if m.any():
+            q = reg[m] // 32
+            colori = int(len(np.unique(q[:, 0] * 1024 + q[:, 1] * 32 + q[:, 2])))
+        else:
+            colori = 0
+        out.append(dict(x_mm=round(x0 * PT2MM, 2), y_mm=round(y0 * PT2MM, 2),
+                        w_mm=round(W * PT2MM, 2), h_mm=round(H * PT2MM, 2),
+                        righe=righe, colonne=colonne, colori=colori))
+    out.sort(key=lambda d: d["w_mm"] * d["h_mm"], reverse=True)
+    return out
+
+
+def _scegli_dt(dts):
+    """Fra i DT della tavola quello con la grafica: vedi `dt_principale`."""
+    grosso = dts[0]["w_mm"] * dts[0]["h_mm"]
+    pari = [d for d in dts if d["w_mm"] * d["h_mm"] >= DT_PARI * grosso]
+    return max(pari, key=lambda d: d["colori"])
+
+
+def dt_principale(pdf, page_no=0):
+    """Il riquadro del DT con la grafica, `(x, y, w, h)` in mm, o None.
+
+    La regola: fra i DT della tavola si prende QUELLO CON LA GRAFICA, che di
+    norma e' il piu' grosso. Nell'ordine inverso non funziona: sul Kinder
+    Country il DT con la grafica e le sue tre copie tecniche sono grandi
+    uguali, e la vista interna e' anche un po' piu' alta. Quindi prima la
+    taglia - i DT a pari scala col piu' grosso (`DT_PARI`), cosi' una
+    miniatura colorata non passa davanti - e fra quelli la grafica, cioe' i
+    colori: una copia tecnica e' una campitura piatta o niente.
+
+    Se nessun gruppo e' una griglia si torna al gruppo di linee tecniche con
+    la lunghezza totale maggiore, la scelta che `dieline` fa sugli astucci
+    con `_largest_cluster`. None se il file non ha tratti tecnici.
+    """
+    dts = dt_della_tavola(pdf, page_no)
+    if dts:
+        d = _scegli_dt(dts)
+        return (d["x_mm"], d["y_mm"], d["w_mm"], d["h_mm"])
     from .tracciati import segmenti
     try:
         segs, pw, ph = segmenti(pdf, page_no)
@@ -745,6 +843,51 @@ def dt_principale(pdf, page_no=0):
     ys += [v for k, c, a, b, st in S if k == "V" for v in (a, b)]
     return (min(xs) * PT2MM, min(ys) * PT2MM,
             (max(xs) - min(xs)) * PT2MM, (max(ys) - min(ys)) * PT2MM)
+
+
+# Quanto possono differire le proporzioni di una copia da quelle del DT.
+COPIA_PROPORZIONI = 0.03
+
+
+def quote_dalla_copia(pdf, page_no=0):
+    """Le quote del flowpack lette su una COPIA del DT con la grafica. Flowpack
+    riportato sul DT, o None.
+
+    E' la regola "se non capisci le dimensioni prendi come riferimento la
+    miniatura": il DT con la grafica e' quello da cui si costruisce, ma se
+    le sue linee non chiudono - grafica che copre, tratti spezzati - le copie
+    tecniche e la miniatura sono lo stesso disegno in scala, senza niente
+    sopra. Si legge la copia piu' grande che si lascia leggere, e la si
+    riporta sul DT: vedi `flowpack.riporta_da_copia`. Una copia e' un DT
+    della tavola con le stesse proporzioni (`COPIA_PROPORZIONI`) e piu'
+    piccolo.
+    """
+    dts = dt_della_tavola(pdf, page_no)
+    if len(dts) < 2:
+        return None
+    dt = _scegli_dt(dts)
+    rap = dt["w_mm"] / dt["h_mm"]
+
+    def punti(d):
+        return (d["x_mm"] / PT2MM, d["y_mm"] / PT2MM,
+                d["w_mm"] / PT2MM, d["h_mm"] / PT2MM)
+
+    for c in dts:
+        if (c is dt or c["w_mm"] >= 0.95 * dt["w_mm"]
+                or abs(c["w_mm"] / c["h_mm"] - rap) > COPIA_PROPORZIONI * rap):
+            continue
+        x, y, w, h = punti(c)
+        try:
+            fp = fpk.analyze_auto(pdf, page_no, bbox=(x, y, x + w, y + h))
+        except Exception:
+            continue
+        scala = dt["w_mm"] / c["w_mm"]
+        riga = ("QUOTE DALLA COPIA: il DT con la grafica non si legge, le "
+                "quote sono lette sulla sua copia in scala 1:%s a %.0f, %.0f "
+                "mm e riportate sul DT - da controllare"
+                % (("%.1f" % scala).replace(".", ","), c["x_mm"], c["y_mm"]))
+        return fpk.riporta_da_copia(fp, (x, y, w, h), punti(dt), riga)
+    return None
 
 
 def find_blocks(pdf, dpi=100, min_mm=60.0):
@@ -794,30 +937,45 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
             # 83% di superficie colorata sulla vista stampata contro 13% su
             # quella tecnica: la soglia sta comoda in mezzo
             tipo="stampato" if colore > 0.35 else "tecnico"))
-    # Nessun blocco passa la soglia del colore, ma la grafica c'e': e'
-    # argento, metallizzato, bianco. Sul Kinder Cards T2 la vista stampata e'
-    # colorata al 34% - il resto e' film argentato - e senza blocco stampato
-    # l'analisi misurava tutta la tavola: il DT con la grafica piu' le sue
-    # quattro copie tecniche sotto, nastro 260 x passo 168 invece di 148 x
-    # 108. Allora si prende il blocco che contiene il DT piu' grosso, che e'
-    # quello con la grafica: vedi `dt_principale`.
-    if out and not any(b["tipo"] == "stampato" for b in out):
-        dt = dt_principale(pdf)
-        if dt is not None:
-            def dentro(b):
-                ix = max(0.0, min(b["x_mm"] + b["w_mm"], dt[0] + dt[2])
-                         - max(b["x_mm"], dt[0]))
-                iy = max(0.0, min(b["y_mm"] + b["h_mm"], dt[1] + dt[3])
-                         - max(b["y_mm"], dt[1]))
-                return ix * iy / max(dt[2] * dt[3], 1e-6)
-            b = max(out, key=dentro)
-            if dentro(b) >= 0.5:
+    # L'artwork e' il blocco che porta il DT CON LA GRAFICA - vedi
+    # `dt_principale` - e non il piu' colorato. Il colore da solo sbaglia in
+    # due modi. Il primo: la grafica c'e' ma e' argento, metallizzato,
+    # bianco. Sul Kinder Cards T2 la vista stampata e' colorata al 34% - il
+    # resto e' film argentato - e senza blocco stampato l'analisi misurava
+    # tutta la tavola: il DT con la grafica piu' le sue quattro copie
+    # tecniche sotto, nastro 260 x passo 168 invece di 148 x 108. Il secondo:
+    # una legenda, un cartiglio o la copia per la battuta di bianco passano la
+    # soglia del colore anche loro, e con un artwork argento passerebbero
+    # davanti. Il blocco del DT si promuove a stampato se serve, e va primo.
+    dt = dt_principale(pdf) if out else None
+    if dt is not None:
+        def dentro(b):
+            ix = max(0.0, min(b["x_mm"] + b["w_mm"], dt[0] + dt[2])
+                     - max(b["x_mm"], dt[0]))
+            iy = max(0.0, min(b["y_mm"] + b["h_mm"], dt[1] + dt[3])
+                     - max(b["y_mm"], dt[1]))
+            return ix * iy / max(dt[2] * dt[3], 1e-6)
+
+        def somiglia(b):
+            """Sovrapposizione su unione: fra un blocco e la cornice che lo
+            racchiude - sul Brioss STD il bordo dell'area di stampa - vince
+            quello che e' il DT, non quello che lo contiene."""
+            inter = dentro(b) * dt[2] * dt[3]
+            unione = b["w_mm"] * b["h_mm"] + dt[2] * dt[3] - inter
+            return inter / unione if unione > 0 else 0.0
+        col_dt = [b for b in out if dentro(b) >= 0.5]
+        if col_dt:
+            b = max(col_dt, key=somiglia)
+            if b["tipo"] != "stampato":
                 b["tipo"] = "stampato"
-                b["dt_principale"] = True
-    # L'artwork e' il blocco piu' vario, non il piu' grande: su Kinder Country
-    # le tre lastre di separazione sono piu' larghe della OUTSIDE VIEW e la
-    # scaletta per ingombro metteva davanti la lastra del bianco.
-    out.sort(key=lambda b: (b["tipo"] == "stampato", b["colori_distinti"],
+                b["promosso"] = True
+            b["dt_principale"] = True
+    # Dopo il DT, l'artwork e' il blocco piu' vario, non il piu' grande: su
+    # Kinder Country le tre lastre di separazione sono piu' larghe della
+    # OUTSIDE VIEW e la scaletta per ingombro metteva davanti la lastra del
+    # bianco.
+    out.sort(key=lambda b: (b.get("dt_principale", False),
+                            b["tipo"] == "stampato", b["colori_distinti"],
                             b["w_mm"] * b["h_mm"]), reverse=True)
     # blocchi di pari ingombro sono viste dello stesso pack: quella tecnica
     # serve da maschera per quella stampata
@@ -835,12 +993,15 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
                       "separazione o un cartiglio sono colorati quanto una "
                       "grafica ma con pochi colori. I blocchi 'tecnico' con lo "
                       "stesso ingombro sono viste del disegno da usare come "
-                      "maschera in clean_artwork. Un blocco con "
-                      "dt_principale e' stato promosso a stampato: nessun "
-                      "blocco aveva abbastanza colore - grafica argento o "
-                      "metallizzata - e quello contiene il DT piu' grosso "
-                      "della pagina, che e' quello con la grafica; le copie "
-                      "piu' piccole sono tecnicismi di stampa o miniature."))
+                      "maschera in clean_artwork. Il blocco con "
+                      "dt_principale porta il DT con la grafica - fra i DT "
+                      "ripetuti sulla tavola, quello con la grafica, di "
+                      "norma il piu' grosso - e sta sempre in cima, anche se "
+                      "un altro blocco e' piu' colorato: le copie sono "
+                      "tecnicismi di stampa o miniature, la legenda e il "
+                      "cartiglio sono note. Con promosso e' stato messo fra "
+                      "gli stampati pur avendo poco colore: grafica argento "
+                      "o metallizzata."))
 
 
 TOOLS.insert(1, dict(

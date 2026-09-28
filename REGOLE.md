@@ -59,37 +59,56 @@ le famiglie.
 
 **Solo la prima pagina.** Un PDF su piu' pagine e' quasi sempre lo stesso pack
 ripetuto per lingua: il Kinder Cards T2 ne ha due, `64-GERMANY` e `01-ITALY`,
-identiche tranne il piede; il Kinder Country tre. Tutto il codice lavora sulla
-pagina 0 - anche Ghostscript, che in `colata.quadricromia` rendeva tutte le
-pagine della copia nello stesso PNG e adesso ha `-dFirstPage`/`-dLastPage` -
-e il primo cartellino dice quante pagine ha il file (`server.avviso_pagine`),
-perche' chi l'ha caricato sappia quale e' diventata il modello.
+identiche tranne il piede; il Kinder Country tre. Le altre pagine si
+**tolgono dal file** all'ingresso di analisi e costruzione, per tutte le
+famiglie (`artwork.pagina_unica`, che clona per tenere i livelli e ricorda la
+copia, cosi' l'analisi in memoria si ritrova fra /api/analyze e /api/build).
+Leggere sempre la pagina 0 non bastava: le altre restavano nel file, e chi lo
+passava tutto a Ghostscript senza limiti le rendeva tutte - `colata.quadricromia`
+le metteva nello stesso PNG. Il primo cartellino dice quante pagine aveva il
+file (`server.avviso_pagine`), perche' chi l'ha caricato sappia quale e'
+diventata il modello.
 
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
 tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,
-aree coperte - e la miniatura nel cartiglio. Si misura solo quello con la
-grafica.
+aree coperte - la vista interna, e la miniatura nel cartiglio. Si misura solo
+quello con la grafica, e lo si sceglie dal DISEGNO, non dal colore
+(`tools.dt_principale`):
 
-- `find_blocks` lo sceglie per colori: l'artwork e' il blocco piu' vario, non
-  il piu' grande (vedi *L'artwork e' il blocco piu' vario*);
-- ma una grafica **argento o metallizzata** ha poco colore. Sul Kinder Cards
-  la vista stampata e' colorata al 34%, contro il 35% che serve per dirsi
-  stampato: nessun blocco passava, e l'analisi misurava **tutta la tavola** -
-  il DT con la grafica piu' le quattro copie tecniche sotto - con **nastro 260
-  x passo 168** invece di **148 x 108**, sezione 42,9 x 84,1 e il fronte fuori
-  dal fronte. Adesso, quando nessun blocco e' stampato, si prende il blocco
-  che contiene il **DT piu' grosso** (`tools.dt_principale`: il gruppo di
-  linee tecniche collegate con la lunghezza totale maggiore, la stessa scelta
-  di `_largest_cluster` sugli astucci) e lo si marca `dt_principale`;
+- i DT della tavola sono i gruppi di linee tecniche collegate che fanno una
+  **griglia** - almeno due righe e due colonne lunghe, sei in tutto
+  (`tools.dt_della_tavola`). Una cornice ne ha quattro: la legenda, il
+  cartiglio, il bordo dell'area di stampa non sono DT;
+- fra i DT si prendono quelli **a pari scala col piu' grosso** (almeno l'85%
+  della sua area), e fra questi quello **con piu' grafica**, cioe' con piu'
+  colori distinti dentro. L'ordine conta: sul Kinder Country il DT con la
+  grafica e le sue tre copie tecniche sono grandi uguali (122 x 119 mm), e la
+  vista interna e' anche un po' piu' alta - vince la grafica, 148 colori contro
+  12-24; sul KMS T1 la miniatura ha piu' colori del DT (279 contro 183), ma e'
+  un diciassettesimo della sua area - vince la taglia;
+- `find_blocks` mette **sempre in cima** il blocco che porta quel DT
+  (`dt_principale`), anche quando un altro e' piu' colorato. Il colore da solo
+  sbaglia in due modi. Una grafica **argento o metallizzata** ha poco colore:
+  sul Kinder Cards la vista stampata e' colorata al 34%, contro il 35% che
+  serve per dirsi stampato, e l'analisi misurava **tutta la tavola** - il DT
+  con la grafica piu' le quattro copie tecniche sotto - con **nastro 260 x
+  passo 168** invece di **148 x 108**. E una legenda o una copia tecnica
+  colorate passano la soglia anche loro: sul Kinder Paradiso la cornice della
+  legenda racchiude 233 colori, il DT 177. Con un artwork argento sarebbero
+  passate davanti, e l'analisi sarebbe finita sulla legenda. Il blocco del DT
+  che non arriva alla soglia si promuove a stampato (`promosso`);
+- fra un blocco e la cornice che lo racchiude - sul Brioss STD il bordo
+  dell'area di stampa, 460 x 336 attorno ai 420 x 290 dello steso - vince il
+  blocco piu' simile al DT, per sovrapposizione su unione;
 - lo strumento dell'agente `analyze_flowpack` misura sullo stesso blocco
   della costruzione (`tools.riquadro_artwork`), e non piu' sulla pagina
   intera, dove sul Kinder Cards dava gli stessi 260 x 168.
 
-Sul parco la promozione non tocca niente: tutti gli altri file hanno un
-blocco stampato. Sulla vernice del Nutella Donut, che la grafica non ce l'ha,
-promuove il DT e non la legenda: solo la vista dell'agente, perche' gli
-astucci si misurano da `dieline`.
+Sul parco la scelta e' la stessa di prima su tutti i tredici file: quello che
+cambia e' che non dipende piu' dal colore. Sulla vernice del Nutella Donut,
+che la grafica non ce l'ha, prende il DT e non la miniatura colorata, che e'
+un quindicesimo dell'area.
 
 **La miniatura come riferimento.** "Forma e proporzioni dalla miniatura, scala
 dal disegno grande" (vedi *Cercare sempre il disegno tecnico in miniatura*).
@@ -114,6 +133,93 @@ chiedono, perche' non tutte le miniature le disegnano (Milch-Schnitte e
 Paradiso no). E conferma che le linee **ci sono**, non che siano pieghe: una
 guida dell'area di stampa sta nella copia quanto una piega. Quella scelta la
 fa il solutore, vedi *Pieghe e guide: la piega attraversa il passo*.
+
+**Se il DT con la grafica non si legge, le quote dalla copia.** "Se non capisci
+le dimensioni prendi come riferimento la miniatura": quando sul DT con la
+grafica le fasce non chiudono ne' sul blocco ne' sulla fustella, prima del
+solutore vecchio si leggono le quote su una sua **copia** - una copia tecnica
+o la miniatura, un DT della tavola con le stesse proporzioni e piu' piccolo -
+e si riportano sul DT con l'affinita' che porta un riquadro sull'altro
+(`tools.quote_dalla_copia`, `flowpack.riporta_da_copia`). Lo dice un avviso,
+"QUOTE DALLA COPIA ... da controllare": una copia e' disegnata con meno cura
+del DT, e sul Kinder Cards la copia 1:2 da' nastro 147,4 invece di 148. E il
+solutore vecchio, l'ultimo ripiego, guarda solo il blocco del DT: sulla
+pagina intera misurava anche quote, copie tecniche e cartiglio.
+
+### Prima le quote, poi via tutto quello che sta fuori dal DT
+
+L'ordine della costruzione, per tutte le famiglie:
+
+1. **una pagina sola** (vedi sopra);
+2. **le quote**, lette sul file intero: il DT con la grafica, le sue copie,
+   la miniatura, i numeri del cartiglio. E' li' che le note servono;
+3. **via tutto quello che sta TUTTO fuori dal DT**, nella stessa passata che
+   toglie le coperture per nome (`artwork.strip_separations` con `regione`):
+   quote, copie tecniche, legenda, cartiglio, miniature. Il DT e' lo steso del
+   flowpack (`flowpack.foglio_in_pagina`), il riquadro della fustella per
+   astucci e vassoi (`Dieline.bbox`), piu' 3 mm (`MARGINE_DT`);
+4. **la costruzione**, come prima, sul file cosi' pulito.
+
+Le informazioni si leggono PRIMA della pulizia, sul file intero: le
+coperture per nome, le aree riservate - la cui didascalia puo' stare nella
+legenda - e i riscontri con le quote e con la miniatura. Tutto il resto dopo.
+
+Perche' non bastava ritagliare la texture sullo steso: le note fuori dal DT
+entravano nella costruzione da altre porte.
+
+- **Le penne del disegno tecnico** si contano sulla pagina: sul Kinder Cards
+  i tratti spenti come DT erano 3734, quasi tutti delle quattro copie
+  tecniche; tolte le copie sono 9. Una penna che vince perche' traccia le
+  tabelle del cartiglio spegnerebbe, dentro il DT, la grafica disegnata con
+  lei.
+- **Il nero** si decide su una quota della pagina: le scritte nere della
+  legenda e del cartiglio sono nero pieno che il render fa nero, e abbassano
+  la quota della `k` tradita. Sul Brioss STD, senza note, la quota passa dal
+  6,6 al 12,7%: sopra la soglia del 5% in tutti e due i casi, ma un file al
+  limite la correzione l'avrebbe persa. Adesso `nero.spia` gira sul file
+  pulito.
+- **L'avviso sull'RGB** contava anche il logo dello studio nel cartiglio:
+  adesso contano solo le immagini disegnate sul DT
+  (`tracciati.immagini_nel_riquadro`), e dal file pulito le immagini tolte
+  spariscono anche dalle risorse.
+
+Cosa si toglie e cosa no, misurato sui dieci flowpack del parco: **dentro il
+DT la resa e' identica al pixel** su tutti, e fuori non resta niente oltre i
+5 mm, salvo le linee del DT che escono dallo steso (sul Brioss STD il bordo
+dell'area di stampa, sul Choco Fresh il tratteggio sotto la pinna).
+
+- Un oggetto che **tocca** il DT resta intero. Si toglie solo quello che sta
+  tutto fuori: tracciati, immagini, form, scritte.
+- Un tracciato solo puo' disegnare il DT e, nello stesso colpo, la vista
+  tecnica accanto: sul Kinder Country la penna del DT traccia anche la vista
+  interna. Si tolgono i **sottotracciati** tutti fuori - un sottotracciato non
+  tocca niente fuori dal suo riquadro, ne' col riempimento ne' col tratto -
+  e dentro non cambia un pixel.
+- Le **scritte** si stimano per eccesso, un glifo largo un corpo e mezzo,
+  senza leggere il font: una nota stimata troppo grande resta, una scritta
+  della grafica tolta sarebbe un danno. Se un blocco di testo ha scritte
+  dentro e fuori - sul Kinder Country "Bar Code Area" sul DT e le didascalie
+  delle copie tecniche sotto - quelle fuori non si tolgono ma si rendono
+  **invisibili** (modo 3), perche' togliendole le altre si sposterebbero.
+- Un **form** si toglie se il suo riquadro dichiarato sta fuori; se sta a
+  cavallo, dentro si pota solo se e' disegnato una volta sola e da un posto
+  solo, perche' una seconda copia starebbe altrove.
+
+Costa una passata di pypdf sul flusso, la stessa delle coperture: da 0,2 a
+6 secondi, Colazione il piu' caro.
+
+Sul parco, tredici file contro la versione di prima: **dodici GLB identici al
+byte**. Il tredicesimo, il KMS Display, cambia 6.483 pixel della texture e
+nessuno dentro la fustella: e' il logo FERRERO del cartiglio, che il vassoio
+si portava dietro perche' la sua texture e' il foglio intero. Quello che
+cambia davvero sono le penne del DT - sul Kinder Cards 9 tratti spenti invece
+di 3734, sul Choco Fresh 1 invece di 4942 - e la quota del nero, vedi *La `k`
+nera si rimette dalla lastra*.
+
+E il caso per cui e' nata, provato: il Kinder Cards col cartiglio riempito di
+colore. Col codice di prima il blocco piu' colorato era il cartiglio, e ne
+usciva un pack di **28 x 34 mm** con la texture della legenda; adesso esce il
+Kinder Cards, **148 x 108**.
 
 ## Domande all'utente
 
@@ -932,6 +1038,24 @@ rasterizzatore sfuma il bordo della lettera e quei pixel di frangia risultano
 difetto — su Colazione la riparazione muoverebbe 18 pixel, e su FERRERO
 159013 il GLB resta identico dopo quasi sei secondi di passata.
 
+**E la quota si conta sull'interno del pieno, sul solo DT.** Col bordo dentro
+la quota dipendeva da quanta altra roba nera c'era sulla tavola: le scritte
+nere della legenda e del cartiglio, che il render fa nere, la tenevano bassa.
+Tolte le note fuori dal DT (vedi *Prima le quote, poi via tutto quello che sta
+fuori dal DT*) sul K Brioss T10 il 3,2% e' diventato 13,5%, la correzione e'
+partita, e sui bordi delle scritte nere sul giallo ha messo pixel neri a
+scalini: la lastra, presa a 144 dpi e ingrandita, sborda di un pixel. Il
+difetto vero, la `k` azzurra, e' tradito anche DENTRO la lettera; il bordo
+no. Contata un pixel dentro dal bordo (`nero._traditi` con `interno`):
+
+    K Brioss STD     10,2% sul foglio intero, 15,9% sul DT: si ripara
+    K Brioss T10      0,1% e 0,7%: niente da riparare, GLB identico
+    K Tronky T1      60,9%: le linee del DT, nere piene, che la riparazione
+                     poi esclude col livello DT - GLB identico
+    tutti gli altri   sotto l'1%
+
+La soglia resta il cinque per cento, e adesso sta larga in mezzo.
+
 **Niente prefiltro sul flag di sovrastampa**, e non per dimenticanza: tutti e
 otto i file del parco la sovrastampa la dichiarano. Guardare `/OP` non scarta
 nessuno. Il costo e' quindi la passata spia a 36 dpi su ogni build, da mezzo
@@ -963,7 +1087,7 @@ La differenza e' tutta li':
     lastra presa PRIMA dell'analisi          python 345 + gs 105
 
 Per questo `nero.spia` decide **tutto** - lastra spia, confronto su un render
-piccolo di pdfium, ed eventualmente la lastra buona - e viene chiamata come
+piccolo di pdfium, ed eventualmente la lastra buona - e veniva chiamata come
 **prima riga** di `build_carton` e `build_flowpack`, prima ancora
 dell'analisi. Li' Python pesa 95 MB su un astuccio e 260 su un flowpack: gs
 finisce e rilascia molto prima che il foglio grande esista, quindi **il picco
@@ -972,6 +1096,11 @@ array da pochi MB, e `rasterize_panels` non fa piu' partire nessun processo.
 
 La lezione e' piu' larga della `k`: su un container da 512 MB, *quando* lanci
 un processo figlio conta quanto *cosa* gli fai fare.
+
+Adesso `spia` si chiama DOPO l'analisi, sul file senza le note fuori dal DT:
+e' la regola "prima le quote, poi via tutto il resto, poi la costruzione", e
+la quota del nero e' costruzione. Sugli Spaces (16 GB) il fork costa quello
+che costa: sul parco il picco massimo resta sotto 1,4 GB.
 
 ### La grafica va in quadricromia, non in RGB
 
@@ -2491,11 +2620,20 @@ Astucci, con la quota letta due volte che chiude il conto:
   cosa - un limite di stampa, un riferimento grafico - aspetta un pack che lo
   mostri.
 
-- Il **DT piu' grosso come DT con la grafica** e' stato visto su un file solo,
-  il Kinder Cards T2, e vale solo quando nessun blocco supera la soglia del
-  colore. Una pagina dove le copie tecniche siano grandi quanto l'originale e
-  la grafica sia argento su tutte e due non e' ancora passata: li' deciderebbe
-  la lunghezza delle linee, non la grafica.
+- Il **DT con la grafica** si sceglie per taglia e poi per colori distinti.
+  Le copie a pari scala sul parco sono tecniche - campiture piatte, 12-32
+  colori - contro i 142-261 dei DT con la grafica. Una copia a pari scala con
+  una grafica vera sopra - una prova colore, un'altra versione del pack -
+  non e' ancora passata: li' vincerebbe la piu' colorata, che puo' non essere
+  quella giusta. E un DT che non faccia griglia - meno di sei linee lunghe -
+  non conta come DT: si torna alla scelta per colore.
+
+- La **pulizia fuori dal DT** e' esatta quanto e' giusto il DT: se l'analisi
+  legge uno steso sbagliato, fuori va anche grafica vera. Ma quella grafica
+  non sarebbe finita comunque sul modello, che si ritaglia dallo stesso
+  steso. Le scritte si stimano larghe al piu' un corpo e mezzo a glifo: un
+  font con glifi piu' larghi, che parta fuori dal DT e ci entri, verrebbe
+  tolto. Non e' ancora passato.
 
 - Il **colore della didascalia** come chiave per le didascalie in curve e'
   stato visto su un file solo, il Kinder Cards. Se la didascalia scritta fosse
