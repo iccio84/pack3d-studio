@@ -336,13 +336,18 @@ def technical_separations(page, dentro_i_form=True, prova=None):
 # --------------------------------------------------------------------------- #
 # quadricromia o RGB
 # --------------------------------------------------------------------------- #
-# La regola e' della stampa, non del gusto: in RGB la SOVRASTAMPA non esiste, e
-# quindi non c'e' niente da simulare.
+# La regola e' della stampa, non del gusto: un'immagine RGB in macchina la
+# converte chi stampa, e il colore lo decide lui e non il file.
 #
-# Sul Kinder Pingui T6 la colata di latte e' una immagine indicizzata su base
-# ICC a tre canali, e la tavolozza e' fatta di ciano: nasce come una lastra di
-# ciano che sovrastampa il fondo e da' l'ombra alle gocce, e in RGB quell'ombra
-# non c'e' piu'. Esce una colata di ciano piatto.
+# Per la SOVRASTAMPA invece l'RGB non e' un problema, e qui si era creduto il
+# contrario. Un oggetto RGB in sovrastampa stampa la quadricromia e lascia
+# stare le tinte piatte che trova: sul Kinder Choco Fresh T1 e sul KP T1
+# Mandarino l'ombra della colata e' un'immagine RGB indicizzata, ciano, in
+# sovrastampa sul rosso in tinta piatta, e il rosso sotto resta - l'ombra
+# c'e'. Sembrava di no perche' Ghostscript, sotto un'immagine RGB con una
+# maschera morbida, la tinta piatta la cancella. Adesso la sovrastampa la
+# simula `strati` (vedi *la sovrastampa delle immagini*), e l'avviso sull'RGB
+# resta per il colore, non per la colata.
 #
 # Si guardano le IMMAGINI, non gli spazi colore dichiarati, e per un motivo
 # misurato: gli spazi RGB dichiarati ci sono quasi sempre - sul K Tronky T1 ce
@@ -475,9 +480,9 @@ def avviso_rgb(page, dentro=None):
     quali = ("l'immagine %s (%dx%d px) e' a tre canali" % (k, w, h) if len(im) == 1
              else "%d immagini sono in RGB, la piu' grande %s (%dx%d px)"
                   % (len(im), k, w, h))
-    return ("GRAFICA IN RGB: %s. In RGB la sovrastampa non viene simulata: "
-            "una colata Kinder esce in ciano piatto, senza l'ombra sulle "
-            "gocce. Va fornita in quadricromia." % quali)
+    return ("GRAFICA IN RGB: %s. Va fornita in quadricromia: un'immagine RGB "
+            "in macchina la converte chi stampa, e il colore lo decide lui e "
+            "non il file." % quali)
 
 
 def classify(pdf_path, page_no: int = 0):
@@ -578,7 +583,8 @@ CAMPIONE_STACCO = 4.0
 LARGHEZZA_CARATTERE = 0.55
 
 
-def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None):
+def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None,
+                 senza_immagini=False):
     """`{nome lastra: mappa d'inchiostro}` con una passata `tiffsep`.
 
     Nelle mappe 255 e' niente inchiostro e 0 e' il pieno. Le lastre di
@@ -590,6 +596,10 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None):
     un foglio ne ha una dozzina, e chi cerca il nero le altre undici le
     terrebbe in memoria per buttarle. Su un container da 512 MB quello e'
     il genere di spreco che fa fallire un build.
+
+    Con `senza_immagini` la pagina si rende senza le immagini
+    (`-dFILTERIMAGE`): e' quello che c'e' SOTTO un'immagine, e serve a chi
+    simula la sovrastampa, vedi `strati.sovrastampa`.
 
     Vuota se Ghostscript non c'e' o se la passata non riesce: chi chiama deve
     sapersela cavare senza, perche' il modello si costruisce comunque.
@@ -611,9 +621,10 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None):
         cartella = tempfile.mkdtemp(prefix="lastre_")
         esito = subprocess.run(
             [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-dMaxSpots=40",
-             "-sDEVICE=tiffsep", "-r%g" % dpi,
-             "-dFirstPage=%d" % (page_no + 1), "-dLastPage=%d" % (page_no + 1),
-             "-sOutputFile=" + os.path.join(cartella, "p.tif"), pdf],
+             "-sDEVICE=tiffsep", "-r%g" % dpi]
+            + (["-dFILTERIMAGE"] if senza_immagini else [])
+            + ["-dFirstPage=%d" % (page_no + 1), "-dLastPage=%d" % (page_no + 1),
+               "-sOutputFile=" + os.path.join(cartella, "p.tif"), pdf],
             capture_output=True, timeout=180)
         if esito.returncode != 0:
             return {}

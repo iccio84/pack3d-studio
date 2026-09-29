@@ -8,6 +8,15 @@ costruito apposta, un ciano sopra un magenta con `/OP true` e senza: esce
 identico, (0, 174, 239) tutte e due le volte. Il ciano copre il rosso invece
 di moltiplicarlo, e l'ombra diventa un alone azzurro piatto.
 
+**Adesso l'ombra la fa la resa della grafica**, e questo modulo di solito non
+serve piu': l'ombra della colata e' sempre un'IMMAGINE in sovrastampa - la
+banda e le due gocce - e `strati` le immagini in sovrastampa le rende a
+moltiplica, quando sotto non hanno i loro inchiostri. Vedi *la sovrastampa
+delle immagini* in `strati.py`: va su tutti i file, livello o no, e anche
+dove Ghostscript sbaglia. Quando la colata e' simulata cosi', qui non si tocca
+niente (`_gia_simulata`); quello che segue resta per le colate che la resa
+della grafica non copre, e per la pagina resa com'e'.
+
 Due strade, e la prima e' sempre meglio della seconda perche' usa
 **l'inchiostro del file** invece di roba portata da fuori:
 
@@ -449,6 +458,26 @@ def _impronta_dt(pdf, page_no, scala, riq, livello):
         return None
 
 
+def _gia_simulata(pdf, page_no, riq, livello):
+    """Vero se la resa della grafica l'ombra della colata la fa gia': vedi
+    *la sovrastampa delle immagini* in `strati`. `riq` e' (x0, x1, y0, y1) in
+    punti, y in giu'.
+
+    Allora qui non si tocca niente. Non e' solo risparmio: Ghostscript sotto
+    un'immagine RGB con una maschera morbida la tinta piatta la cancella, e
+    sul KP T1 Mandarino - ombra in RGB ICC sul PANTONE Warm Red - diceva
+    "fustellata" e faceva sostituire la colata del file con la risorsa. Vale
+    solo per il livello della grafica: la pagina resa com'e' la sovrastampa
+    non la simula.
+    """
+    if livello != strati.GRAFICA:
+        return False
+    try:
+        return strati.colata_simulata(pdf, page_no, riq)
+    except Exception:
+        return False
+
+
 def _a_occhio(pdf, scala, page_no, note, riquadro, livello=None):
     """La colata riparata dentro un riquadro indicato a occhio.
 
@@ -460,6 +489,12 @@ def _a_occhio(pdf, scala, page_no, note, riquadro, livello=None):
     x_mm, y_mm, w_mm, h_mm = riquadro
     riq = (x_mm / PT2MM, (x_mm + w_mm) / PT2MM,
            y_mm / PT2MM, (y_mm + h_mm) / PT2MM)
+    if _gia_simulata(pdf, page_no, riq, livello):
+        if note is not None:
+            note.append("colata indicata a occhio a %.0f,%.0f mm: l'ombra e' "
+                        "in sovrastampa e la simula gia' la resa della "
+                        "grafica, niente da rimettere" % (x_mm, y_mm))
+        return render_page(pdf, page_no, scala, livello)
     # Ghostscript prima del foglio, per l'abitudine di `nero.spia`: costa 105
     # MB fissi e parte con un fork, quindi il momento in cui lo chiami conta.
     # Qui non cambia il picco - la resa della pagina a questo punto e' gia' in
@@ -534,6 +569,13 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None, livello=None):
         larg = (mx1 - mx0) / MISURA * PT2MM
         alt = (my1 - my0) / MISURA * PT2MM
         riq = (mx0 / MISURA, mx1 / MISURA, my0 / MISURA, my1 / MISURA)
+        if _gia_simulata(pdf, page_no, riq, livello):
+            if note is not None:
+                note.append("colata dal livello '%s': l'ombra e' in "
+                            "sovrastampa e la simula gia' la resa della "
+                            "grafica, niente quadricromia e niente risorsa"
+                            % spenti[0])
+            return render_page(pdf, page_no, scala, livello)
 
         # l'impronta alla risoluzione della texture
         k = scala / MISURA
@@ -571,10 +613,11 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None, livello=None):
                 return fuori
             if note is not None:
                 note.append(
-                    "colata dal livello '%s': l'ombra e' FUSTELLATA, non in "
-                    "sovrastampa - delle %d zone azzurre la quadricromia ne "
-                    "recupera solo il %.1f%%, perche' sotto il fondo non c'e' "
-                    "da moltiplicare" % (spenti[0], quante, 100 * peso))
+                    "colata dal livello '%s': delle %d zone azzurre la "
+                    "sovrastampa di Ghostscript ne recupera solo il %.1f%% - "
+                    "l'ombra e' fustellata, oppure e' un'immagine RGB con "
+                    "una maschera, che lui non sa sovrastampare"
+                    % (spenti[0], quante, 100 * peso))
 
         # --- 2. ripiego: la risorsa -------------------------------------- #
         if not os.path.exists(RISORSA):

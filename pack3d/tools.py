@@ -612,10 +612,11 @@ def colata_a_occhio(pdf, x_mm, y_mm, w_mm, h_mm, scala=3.0):
     l'ombra diventa un alone azzurro piatto. L'ombra giusta e' gia' nel file:
     non va inventata, va letta, e a leggerla e' Ghostscript.
 
-    Quando il file mette la colata su un livello suo non serve niente: il
-    codice la trova da solo. Questo strumento e' per gli altri - sul parco di
-    prova otto file su nove - dove il livello non c'e' e nessuno puo' misurare
-    dove sta la colata. Li' serve un occhio.
+    Di solito non serve: l'ombra della colata e' un'immagine in sovrastampa, e
+    la costruzione le immagini in sovrastampa le rende a moltiplica da sola,
+    livello o no (vedi *la sovrastampa delle immagini* in `strati`). Questo
+    strumento resta per l'ombra che esce azzurra lo stesso: li' serve un
+    occhio.
 
     **Tu dici DOVE, l'inchiostro decide CHE COSA.** Dentro il riquadro si
     toccano solo i pixel azzurri che la sovrastampa cambia, non il riquadro
