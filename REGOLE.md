@@ -1411,6 +1411,55 @@ e' la regola "prima le quote, poi via tutto il resto, poi la costruzione", e
 la quota del nero e' costruzione. Sugli Spaces (16 GB) il fork costa quello
 che costa: sul parco il picco massimo resta sotto 1,4 GB.
 
+### Una tinta piatta in sovrastampa si somma a quello che trova
+
+Sul **Kinder Choco Fresh T1** la merendina nel file c'e', e sul modello no: al
+suo posto un rettangolo bianco, e del latte attorno solo la sagoma. La foto e'
+un'immagine RGB, e sopra, grande quanto lei, il file ci disegna un'immagine in
+**PANTONE Cool Gray 8 C in sovrastampa**: un canale in tinta piatta della foto,
+che in macchina va sulla sua lastra e lascia le altre come sono. pdfium la
+sovrastampa la ignora, come per la `k`, e la tinta la dipinge coprente: dove il
+grigio e' a zero viene bianco. Sul KCF sono tre immagini cosi', tutte sulla
+merendina e sul latte attorno.
+
+**Anche Ghostscript la copre**, ma per un motivo suo: la foto e il grigio stanno
+in gruppi di trasparenza in RGB - la pagina stessa e' un gruppo RGB - e li' la
+sua simulazione non arriva. Con gli stessi gruppi dichiarati in CMYK la
+merendina la fa vedere anche lui. Non e' il file a nasconderla.
+
+**Una tinta piatta in sovrastampa l'inchiostro lo aggiunge**, e a video e' la
+fusione **Moltiplica**: dove la tinta e' a zero non cambia niente, dove c'e'
+scurisce. `strati.rendi` la chiede a pdfium immagine per immagine
+(`FPDFPageObj_SetBlendMode`), sul solo livello della grafica, e solo per le
+immagini:
+
+- **di sole tinte piatte**: Separation, anche come base di un Indexed, o
+  DeviceN senza colori di processo. Un DeviceN che porta C, M, Y o K quei
+  canali in sovrastampa li **sostituisce**, non li somma: le onde della colata
+  sono cosi', e le rende `colata`. Neanche `/All`, che copre anche in macchina;
+- **disegnate con la sovrastampa accesa** (`/op`, o `/OP` quando `/op` manca) e
+  con la fusione normale: se il file ne dichiara un'altra vale la sua.
+
+**Il flag di sovrastampa pdfium non lo espone**: si legge dal flusso di
+contenuto, seguendo q/Q e gs anche dentro i form, e le immagini si accoppiano a
+quelle di pdfium nell'ordine in cui si disegnano. Se i due elenchi non tornano
+- quante sono, o le loro misure in pixel - non si tocca niente, e il modello lo
+dice. Su ventitre file provati tornano sempre.
+
+**Il flusso non si legge con pypdf.** Sul K Brioss STD sono 231.000 operazioni
+in 7 MB: tre secondi e mezzo solo per trovarne una manciata. Un'espressione
+regolare che cerca i soli operatori che servono - q, Q, gs, Do e le immagini
+in linea - e salta intere le stringhe, i commenti e i byte delle immagini da'
+lo stesso elenco su tutti e ventitre i file, in mezzo secondo sul Brioss STD.
+E chi immagini in tinta piatta non ne ha non la paga nemmeno.
+
+**Occhio ai booleani di pypdf**: `bool(BooleanObject(False))` e' `True`, perche'
+la classe non ha `__bool__`. La prima ricognizione li leggeva cosi', e dava in
+sovrastampa quasi tutte le immagini del parco: 20 su 21 su Colazione, 38 su 40
+sul crt. Letti per valore (`strati._vero`) sono 0 e 12, e di tinta piatta
+restano solo le tre del KCF: le altre immagini in tinta piatta del parco sono
+coprenti anche in macchina, e restano come sono.
+
 ### La grafica va in quadricromia, non in RGB
 
 **In RGB la sovrastampa non esiste**, quindi non c'e' niente da simulare: ne'

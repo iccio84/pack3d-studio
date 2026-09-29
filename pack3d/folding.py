@@ -166,6 +166,20 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                             "semitrasparenti che ricalcano celle del DT - "
                             "gole, fasce coperte - e sul pack sbiadivano la "
                             "grafica" % c["veli"])
+            # vedi *la sovrastampa delle tinte piatte* in `strati`
+            if c.get("moltiplica"):
+                note.append("tinte piatte in sovrastampa: %d immagini rese "
+                            "come si stampano, sommate a quello che hanno "
+                            "sotto. Il rasterizzatore la sovrastampa la "
+                            "ignora e le dipingeva coprenti: dove la tinta e' "
+                            "a zero veniva bianco, e copriva la grafica sotto"
+                            % c["moltiplica"])
+            elif c.get("spaiate"):
+                note.append("tinte piatte in sovrastampa: le immagini del "
+                            "file non tornano con quelle del rasterizzatore, "
+                            "e restano coprenti come le dipinge lui - "
+                            "quello che hanno sotto puo' non vedersi: "
+                            "controllare sul modello")
         # Preso il foglio, la pagina in cassa non serve piu' a NESSUNO: `nero`
         # la sua resa se la fa da se', fuori dalla cassa. Buttarla qui e non
         # dopo il nero: quando la colata si sostituisce il foglio che torna e'
