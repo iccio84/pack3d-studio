@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import ctypes
 import os
+import re
 import tempfile
 
 
@@ -519,6 +520,294 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
     return dt, contorni, grafica, dai_livelli[0], etichette[0], veli[0]
 
 
+# --------------------------------------------------------------------------- #
+# la sovrastampa delle tinte piatte
+# --------------------------------------------------------------------------- #
+#
+# Sul Kinder Choco Fresh T1 la merendina nel file c'e', e sul modello no. La
+# foto e' in RGB, e sopra, grande quanto lei, il file ci disegna un'immagine
+# in PANTONE Cool Gray 8 C IN SOVRASTAMPA: in macchina il grigio va sulla sua
+# lastra e le altre restano come sono, quindi la foto si vede, velata di
+# grigio dove il grigio c'e'. pdfium la sovrastampa la ignora - e' lo stesso
+# difetto della `k` di `nero` - e la tinta piatta la dipinge coprente: dove il
+# grigio e' a zero viene bianco, e un rettangolo bianco copre la merendina e
+# il latte. Anche Ghostscript con la sovrastampa simulata la copre, ma solo
+# perche' la foto e il grigio stanno in gruppi di trasparenza in RGB, dove la
+# sua simulazione non arriva: con gli stessi gruppi dichiarati in CMYK la
+# merendina la fa vedere anche lui. Non e' il file a nasconderla.
+#
+# Una tinta piatta in sovrastampa l'inchiostro lo AGGIUNGE a quello che trova:
+# a video e' la fusione Moltiplica - dove la tinta e' a zero non cambia niente,
+# dove c'e' scurisce. Si dice a pdfium immagine per immagine
+# (`FPDFPageObj_SetBlendMode`), e solo per quelle:
+#
+# - di sole tinte piatte: Separation, anche come base di un Indexed, o
+#   DeviceN senza colori di processo. Un DeviceN che porta anche C, M, Y o K
+#   in sovrastampa quei canali li SOSTITUISCE, non li somma: le onde della
+#   colata sono cosi', e le rende `colata`. Neanche /All, che va su tutte le
+#   lastre e copre come in macchina;
+# - disegnate con la sovrastampa accesa (`/op`, o `/OP` quando `/op` manca)
+#   e con la fusione normale: se il file ne dichiara un'altra vale la sua.
+#
+# pdfium il flag di sovrastampa non lo espone: lo si legge dal flusso di
+# contenuto, seguendo q/Q e gs anche dentro i form, e le immagini si
+# accoppiano a quelle di pdfium nell'ordine in cui si disegnano. Se i due
+# elenchi non tornano - quante sono, o le loro misure in pixel - non si tocca
+# niente. Il flusso si legge solo se fra le risorse c'e' almeno un'immagine in
+# tinta piatta. Su ventitre file provati ce l'hanno in sedici, sempre
+# accoppiate a quelle di pdfium, e solo il KCF le disegna in sovrastampa: le
+# altre sono coprenti anche in macchina, e restano come sono.
+
+_PROCESSO = frozenset(("/Cyan", "/Magenta", "/Yellow", "/Black"))
+# (file, mtime, taglia, pagina) -> disegni: il flusso si legge una volta sola
+_SOVRASTAMPE = {}
+
+
+def _oggetto(v):
+    return v.get_object() if hasattr(v, "get_object") else v
+
+
+def _vero(v):
+    """Il valore di verita' di un booleano pypdf: `bool(BooleanObject(False))`
+    e' True, perche' la classe non ha `__bool__`."""
+    v = _oggetto(v)
+    return bool(getattr(v, "value", v))
+
+
+def _tinta_piatta(cs, nominati=None, fondo=0):
+    """True se lo spazio colore `cs` stampa solo tinte piatte.
+
+    `nominati` e' il dizionario `/ColorSpace` delle risorse, per gli spazi
+    chiamati per nome (le immagini in linea, e i file che lo fanno anche
+    sulle XObject).
+    """
+    cs = _oggetto(cs)
+    if fondo > 4 or cs is None:
+        return False
+    if isinstance(cs, str):
+        if nominati and cs in nominati:
+            return _tinta_piatta(nominati[cs], None, fondo + 1)
+        return False
+    if not isinstance(cs, list) or len(cs) < 2:
+        return False
+    famiglia = _oggetto(cs[0])
+    if famiglia in ("/Indexed", "/I"):
+        return _tinta_piatta(cs[1], nominati, fondo + 1)
+    if famiglia == "/Separation":
+        return str(_oggetto(cs[1])) not in _PROCESSO | {"/All", "/None"}
+    if famiglia == "/DeviceN":
+        nomi = [str(_oggetto(n)) for n in _oggetto(cs[1]) or ()]
+        return (any(n != "/None" for n in nomi)
+                and not any(n in _PROCESSO or n == "/All" for n in nomi))
+    return False
+
+
+def _risorsa(risorse, nome):
+    v = _oggetto(risorse.get(nome)) if isinstance(risorse, dict) else None
+    return v if isinstance(v, dict) else {}
+
+
+def _con_tinte_piatte(risorse, visti, fondo=0):
+    """C'e' un'immagine in tinta piatta fra queste risorse, o nei form?"""
+    if fondo > 32:
+        return False
+    xo = _risorsa(risorse, "/XObject")
+    spazi = _risorsa(risorse, "/ColorSpace")
+    for rif in xo.values():
+        chiave = getattr(rif, "idnum", None)
+        if chiave is not None:
+            if chiave in visti:
+                continue
+            visti.add(chiave)
+        o = _oggetto(rif)
+        if not isinstance(o, dict):
+            continue
+        tipo = o.get("/Subtype")
+        if tipo == "/Image":
+            if _tinta_piatta(o.get("/ColorSpace"), spazi):
+                return True
+        elif tipo == "/Form" and _con_tinte_piatte(
+                o.get("/Resources", risorse), visti, fondo + 1):
+            return True
+    return False
+
+
+def sovrastampe(pdf, page_no=0):
+    """Le immagini della pagina nell'ordine in cui si disegnano, `[(larghezza,
+    altezza, a moltiplica)]`: vedi *la sovrastampa delle tinte piatte*.
+
+    None se sulla pagina non ce n'e' nessuna da moltiplicare, o se il flusso
+    di contenuto non si legge.
+    """
+    k = _chiave(pdf)
+    chiave = k + (page_no,) if k else None
+    if chiave is not None and chiave in _SOVRASTAMPE:
+        return _SOVRASTAMPE[chiave]
+    try:
+        disegni = _disegni(pdf, page_no)
+    except Exception:
+        disegni = None
+    if disegni is not None and not any(m for _w, _h, m in disegni):
+        disegni = None
+    if chiave is not None:
+        while len(_SOVRASTAMPE) >= 8:
+            _SOVRASTAMPE.pop(next(iter(_SOVRASTAMPE)))
+        _SOVRASTAMPE[chiave] = disegni
+    return disegni
+
+
+# Del flusso servono pochi operatori, e pypdf li leggerebbe tutti: sul K Brioss
+# STD sono 231.000 operazioni in 7 MB, tre secondi solo per trovare le poche
+# che contano. Qui li trova un'espressione regolare, che salta intero quello
+# dentro cui ci si confonderebbe - i commenti, le stringhe (annidate fino a
+# tre livelli) e i byte delle immagini in linea - e che dagli operandi prende
+# solo il nome che precede `gs` e `Do`. Il primo carattere si guarda prima di
+# tutto il resto: cinque volte piu' veloce, mezzo secondo sul Brioss STD.
+_DELIMITA = rb"(?![^\s()<>\[\]{}/%])"
+_FLUSSO = re.compile(
+    rb"(?=[%(B/qQ])(?:%[^\r\n]*"
+    rb"|\((?:[^()\\]|\\.|\((?:[^()\\]|\\.|\((?:[^()\\]|\\.)*\))*\))*\)"
+    rb"|(?<![^\s)>\]}])BI(?P<bi>[\s/].*?)\sID\s.*?\sEI" + _DELIMITA +
+    rb"|(?P<nome>/[^\s()<>\[\]{}/%]*)\s+(?P<op>gs|Do)" + _DELIMITA +
+    rb"|(?<![^\s)>\]}])(?P<qQ>[qQ])" + _DELIMITA + rb")", re.S)
+_VALORE_IN_LINEA = rb"\s*(\[[^\]]*\]|/[^\s()<>\[\]{}/%]*|[^\s()<>\[\]{}/%]+)"
+
+
+def _nome(b):
+    """Un nome PDF dal flusso, come lo scrive pypdf nelle chiavi: `#xx`
+    decodificato."""
+    b = re.sub(rb"#([0-9A-Fa-f]{2})", lambda m: bytes((int(m.group(1), 16),)), b)
+    return b.decode("utf-8", "replace")
+
+
+def _in_linea(testo, spazi):
+    """`(larghezza, altezza, tinta piatta)` di un'immagine in linea, dal suo
+    dizionario."""
+    def valore(*chiavi):
+        for k in chiavi:
+            m = re.search(re.escape(b"/" + k) + _DELIMITA + _VALORE_IN_LINEA,
+                          testo)
+            if m:
+                return m.group(1)
+        return None
+
+    def intero(v):
+        try:
+            return int(float(v))
+        except (TypeError, ValueError):
+            return 0
+
+    cs = valore(b"CS", b"ColorSpace") or b""
+    if cs.startswith(b"["):
+        parti = re.findall(rb"/[^\s()<>\[\]{}/%]*", cs)
+        # un Indexed in linea: la base e' il secondo nome
+        tinta = (len(parti) > 1 and _nome(parti[0]) in ("/I", "/Indexed")
+                 and _tinta_piatta(_nome(parti[1]), spazi))
+    else:
+        tinta = bool(cs) and _tinta_piatta(_nome(cs), spazi)
+    return (intero(valore(b"W", b"Width")), intero(valore(b"H", b"Height")),
+            bool(tinta))
+
+
+def _disegni(pdf, page_no):
+    import pypdf
+    r = pypdf.PdfReader(pdf)
+    pagina = r.pages[page_no]
+    if not _con_tinte_piatte(_oggetto(pagina.get("/Resources")), set()):
+        return None
+    fuori = []
+
+    def giro(dati, risorse, stato, fondo):
+        if fondo > 32:
+            raise ValueError("form annidati troppo a fondo")
+        risorse = _oggetto(risorse)
+        gs = _risorsa(risorse, "/ExtGState")
+        xo = _risorsa(risorse, "/XObject")
+        spazi = _risorsa(risorse, "/ColorSpace")
+        pila = []
+        st = dict(stato)
+        for m in _FLUSSO.finditer(dati):
+            q, op = m.group("qQ"), m.group("op")
+            if q == b"q":
+                pila.append(dict(st))
+            elif q == b"Q":
+                if pila:
+                    st = pila.pop()
+            elif op == b"gs":
+                g = _oggetto(gs.get(_nome(m.group("nome"))))
+                if not isinstance(g, dict):
+                    continue
+                if "/OP" in g:
+                    st["OP"] = _vero(g["/OP"])
+                if "/op" in g:
+                    st["op"] = _vero(g["/op"])
+                elif "/OP" in g:
+                    st["op"] = st["OP"]
+                if "/BM" in g:
+                    bm = _oggetto(g["/BM"])
+                    if isinstance(bm, list):
+                        bm = _oggetto(bm[0]) if bm else "/Normal"
+                    st["normale"] = str(bm) in ("/Normal", "/Compatible")
+            elif op == b"Do":
+                o = _oggetto(xo.get(_nome(m.group("nome"))))
+                if not isinstance(o, dict):
+                    continue
+                tipo = o.get("/Subtype")
+                if tipo == "/Image":
+                    # una maschera prende il colore corrente: non si segue
+                    tinta = (not _vero(o.get("/ImageMask"))
+                             and _tinta_piatta(o.get("/ColorSpace"), spazi))
+                    fuori.append((int(_oggetto(o.get("/Width", 0))),
+                                  int(_oggetto(o.get("/Height", 0))),
+                                  bool(tinta and st["op"] and st["normale"])))
+                elif tipo == "/Form":
+                    giro(o.get_data(), o.get("/Resources", risorse), st,
+                         fondo + 1)
+            elif m.group("bi") is not None:
+                larga, alta, tinta = _in_linea(m.group("bi"), spazi)
+                fuori.append((larga, alta,
+                              bool(tinta and st["op"] and st["normale"])))
+
+    contenuto = pagina.get_contents()
+    if contenuto is None:
+        return None
+    giro(contenuto.get_data(), pagina.get("/Resources"),
+         {"OP": False, "op": False, "normale": True}, 0)
+    return fuori
+
+
+def _moltiplica(page, disegni):
+    """Mette a Moltiplica le immagini che `disegni` segna. Torna quante, o
+    None se le immagini di pdfium non sono quelle del flusso."""
+    import pypdfium2.raw as raw
+    immagini = []
+
+    def giro(cont, quanti, prendi):
+        for i in range(quanti(cont)):
+            o = prendi(cont, i)
+            t = raw.FPDFPageObj_GetType(o)
+            if t == raw.FPDF_PAGEOBJ_IMAGE:
+                immagini.append(o)
+            elif t == raw.FPDF_PAGEOBJ_FORM:
+                giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject)
+
+    giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject)
+    if len(immagini) != len(disegni):
+        return None
+    w, h = ctypes.c_uint(), ctypes.c_uint()
+    for o, (larga, alta, _m) in zip(immagini, disegni):
+        if (not raw.FPDFImageObj_GetImagePixelSize(o, ctypes.byref(w),
+                                                   ctypes.byref(h))
+                or (w.value, h.value) != (larga, alta)):
+            return None
+    n = 0
+    for o, (_l, _a, moltiplica) in zip(immagini, disegni):
+        if moltiplica:
+            raw.FPDFPageObj_SetBlendMode(o, b"Multiply")
+            n += 1
+    return n
+
+
 # L'ultimo conteggio fatto: lo legge chi scrive gli avvisi, senza una seconda
 # passata sulla pagina. Uno solo e non uno per file, perche' la colata il
 # foglio lo puo' rendere da una COPIA del file - quella col suo livello
@@ -561,6 +850,11 @@ def rendi(pdf, page_no=0, scala=1.0, livello=GRAFICA, riquadro=None,
                 raw.FPDFPageObj_SetIsActive(o, False)
             for o, pieno in contorni:
                 raw.FPDFPath_SetDrawMode(o, pieno, False)
+            # le tinte piatte in sovrastampa: vedi sopra
+            disegni = sovrastampe(pdf, page_no)
+            if disegni:
+                n = _moltiplica(page, disegni)
+                CONTI.update(moltiplica=n or 0, spaiate=n is None)
         elif livello == DT:
             for o in grafica:
                 raw.FPDFPageObj_SetIsActive(o, False)
