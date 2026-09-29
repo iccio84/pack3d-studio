@@ -166,20 +166,37 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
                             "semitrasparenti che ricalcano celle del DT - "
                             "gole, fasce coperte - e sul pack sbiadivano la "
                             "grafica" % c["veli"])
-            # vedi *la sovrastampa delle tinte piatte* in `strati`
+            # vedi *la sovrastampa delle immagini* in `strati`
             if c.get("moltiplica"):
-                note.append("tinte piatte in sovrastampa: %d immagini rese "
-                            "come si stampano, sommate a quello che hanno "
-                            "sotto. Il rasterizzatore la sovrastampa la "
-                            "ignora e le dipingeva coprenti: dove la tinta e' "
-                            "a zero veniva bianco, e copriva la grafica sotto"
-                            % c["moltiplica"])
-            elif c.get("spaiate"):
-                note.append("tinte piatte in sovrastampa: le immagini del "
-                            "file non tornano con quelle del rasterizzatore, "
-                            "e restano coprenti come le dipinge lui - "
-                            "quello che hanno sotto puo' non vedersi: "
-                            "controllare sul modello")
+                quali = [q for q in (
+                    "%d nei colori di processo - l'ombra della colata esce "
+                    "rosso scuro e non azzurra" % c["processo"]
+                    if c.get("processo") else "",
+                    "%d in tinta piatta - una tinta a zero non copre piu' di "
+                    "bianco la grafica sotto" % c["tinta"]
+                    if c.get("tinta") else "") if q]
+                note.append("sovrastampa simulata: %d immagini in sovrastampa "
+                            "rese come si stampano, col loro inchiostro "
+                            "sommato a quello che trovano (%s). Il "
+                            "rasterizzatore la sovrastampa la ignora e le "
+                            "dipingeva coprenti"
+                            % (c["moltiplica"], "; ".join(quali)))
+            if c.get("coperte"):
+                note.append("sovrastampa: %d immagini in sovrastampa restano "
+                            "coprenti, perche' sotto hanno lo stesso "
+                            "inchiostro che stampano, e in macchina lo "
+                            "sostituiscono invece di sommarlo" % c["coperte"])
+            if c.get("spaiate"):
+                note.append("sovrastampa: le immagini del file non tornano con "
+                            "quelle del rasterizzatore, e restano coprenti come "
+                            "le dipinge lui - l'ombra della colata puo' uscire "
+                            "azzurra e una tinta piatta coprire la grafica "
+                            "sotto: controllare sul modello")
+            elif c.get("senza_gs"):
+                note.append("sovrastampa: senza Ghostscript non si vede cosa "
+                            "c'e' sotto le immagini, e vanno a moltiplica solo "
+                            "le Separation e i DeviceN; le altre restano "
+                            "coprenti")
         # Preso il foglio, la pagina in cassa non serve piu' a NESSUNO: `nero`
         # la sua resa se la fa da se', fuori dalla cassa. Buttarla qui e non
         # dopo il nero: quando la colata si sostituisce il foglio che torna e'

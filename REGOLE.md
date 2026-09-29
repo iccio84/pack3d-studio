@@ -1411,75 +1411,132 @@ e' la regola "prima le quote, poi via tutto il resto, poi la costruzione", e
 la quota del nero e' costruzione. Sugli Spaces (16 GB) il fork costa quello
 che costa: sul parco il picco massimo resta sotto 1,4 GB.
 
-### Una tinta piatta in sovrastampa si somma a quello che trova
+### Un'immagine in sovrastampa si somma a quello che trova
 
-Sul **Kinder Choco Fresh T1** la merendina nel file c'e', e sul modello no: al
-suo posto un rettangolo bianco, e del latte attorno solo la sagoma. La foto e'
-un'immagine RGB, e sopra, grande quanto lei, il file ci disegna un'immagine in
-**PANTONE Cool Gray 8 C in sovrastampa**: un canale in tinta piatta della foto,
-che in macchina va sulla sua lastra e lascia le altre come sono. pdfium la
-sovrastampa la ignora, come per la `k`, e la tinta la dipinge coprente: dove il
-grigio e' a zero viene bianco. Sul KCF sono tre immagini cosi', tutte sulla
-merendina e sul latte attorno.
+In macchina un oggetto in **sovrastampa** stampa solo sulle lastre dei suoi
+inchiostri, e le altre restano come sono: il suo inchiostro si aggiunge a
+quello che trova. pdfium la sovrastampa la ignora, come per la `k`, e dipinge
+ogni oggetto coprente. Sul parco questo rompeva due cose.
 
-**Anche Ghostscript la copre**, ma per un motivo suo: la foto e il grigio stanno
-in gruppi di trasparenza in RGB - la pagina stessa e' un gruppo RGB - e li' la
-sua simulazione non arriva. Con gli stessi gruppi dichiarati in CMYK la
-merendina la fa vedere anche lui. Non e' il file a nasconderla.
+**La colata Kinder.** L'ombra sotto l'onda del latte e le ombre delle gocce
+sono immagini di ciano in sovrastampa sul rosso: in stampa ciano sul rosso fa
+l'ombra rosso scuro, coprente esce un alone azzurro. Sul parco la colata e'
+sempre fatta cosi' - la banda lunga e le due gocce - e di spazio colore in tre
+modi diversi:
 
-**Una tinta piatta in sovrastampa l'inchiostro lo aggiunge**, e a video e' la
-fusione **Moltiplica**: dove la tinta e' a zero non cambia niente, dove c'e'
-scurisce. `strati.rendi` la chiede a pdfium immagine per immagine
-(`FPDFPageObj_SetBlendMode`), sul solo livello della grafica, e solo per le
-immagini:
+    DeviceN di solo Cyan      KMS, crt, Tronky, FERRERO 159/174/154/1742/1777,
+                              KP Cheesecake, KB Dark, KC T8
+    RGB indicizzato           Kinder Choco Fresh T1
+    RGB ICC indicizzato       KP T1 Mandarino
 
-- **di sole tinte piatte**: Separation, anche come base di un Indexed, o
-  DeviceN senza colori di processo. Un DeviceN che porta C, M, Y o K quei
-  canali in sovrastampa li **sostituisce**, non li somma: le onde della colata
-  sono cosi', e le rende `colata`. Neanche `/All`, che copre anche in macchina;
-- **disegnate con la sovrastampa accesa** (`/op`, o `/OP` quando `/op` manca) e
-  con la fusione normale: se il file ne dichiara un'altra vale la sua.
+Non e' LAB: lo spazio colore non c'entra, c'entra la sovrastampa. E prima
+l'ombra si riparava solo col livello `Colata` o col riquadro indicato a occhio
+(vedi *La colata si rimette con l'inchiostro del file*): sui file che non
+avevano ne' l'uno ne' l'altro - crt, Tronky, i FERRERO - restava azzurra.
+
+**La merendina del Kinder Choco Fresh T1.** La foto e' in RGB, e sopra, grande
+quanto lei, c'e' un'immagine in **PANTONE Cool Gray 8 C in sovrastampa**: un
+canale in tinta piatta della foto. Coprente, dove il grigio e' a zero viene
+bianco, e un rettangolo bianco copriva la merendina e il latte.
+
+**Ghostscript la sovrastampa la sa simulare, ma proprio qui sbaglia.**
+Misurato con PDF fatti apposta - un rosso in tinta piatta e sopra un ciano in
+sovrastampa in RGB, RGB indicizzato, CMYK e DeviceN - guardando la lastra del
+rosso sotto il ciano:
+
+                                   RGB   indicizzato   CMYK   DeviceN
+    senza maschera                resta     resta      resta   resta
+    con maschera morbida          via       via        resta   resta
+    con maschera, pagina in RGB   via       via        via     resta
+
+L'ombra del KCF e del Mandarino e' RGB con la maschera, e la pagina del KCF e'
+un gruppo di trasparenza RGB: Ghostscript il rosso sotto lo cancella, e l'ombra
+esce azzurra anche a lui. Per la stessa ragione la merendina: coi gruppi
+dichiarati in CMYK la fa vedere anche lui. Non si puo' prendere la sua resa: la
+sovrastampa si simula in `strati` (*la sovrastampa delle immagini*).
+
+**Dove sotto non ci sono i suoi inchiostri, la sovrastampa e' Moltiplica.**
+L'inchiostro dell'immagine si somma a quello che trova, dove l'immagine e'
+bianca non cambia niente, e con la trasparenza della maschera fa esattamente
+quello che fa la macchina. `strati.rendi` la chiede a pdfium immagine per
+immagine (`FPDFPageObj_SetBlendMode`), sul solo livello della grafica, per le
+immagini **disegnate con la sovrastampa accesa** (`/op`, o `/OP` quando `/op`
+manca) e la fusione normale - se il file ne dichiara un'altra vale la sua - e
+mai per `/All`, che copre anche in macchina. Separation e DeviceN stampano i
+loro inchiostri; RGB, CMYK, grigio, Lab e ICC in macchina diventano
+quadricromia.
+
+Sul KMS contro Ghostscript, che li' ha ragione perche' l'ombra e' DeviceN e
+la pagina CMYK, sui pixel d'ombra sul rosso:
+
+    Ghostscript (giusto)   (141, 68, 69)
+    Moltiplica             (123, 85, 77)
+    coprente, pdfium       (104, 196, 229)   l'alone azzurro
+
+**Dove sotto ci sono gli STESSI inchiostri, Moltiplica sbaglia**: in macchina
+l'immagine li sostituisce. Una foto in quadricromia in sovrastampa su un fondo
+in quadricromia copre, e a moltiplica il fondo si vedrebbe attraverso. Quindi
+prima si guarda sotto, dove l'immagine si vede:
+
+- le **lastre di Ghostscript rese senza immagini** (`-dFILTERIMAGE`, 36 dpi,
+  mezzo secondo): se c'e' il suo inchiostro sopra il 10%;
+- per chi stampa in quadricromia, anche le **altre immagini disegnate prima**
+  della prima in sovrastampa, che si presumono in quadricromia. Solo prima: la
+  prima versione contava tutte le immagini non in sovrastampa, e sopra la
+  colata c'e' sempre un'altra immagine - le sfumature del latte, disegnate
+  dopo l'ombra. La contava come fondo, e scartava la colata su tutti i file.
+
+Se ce l'ha sotto in piu' di un terzo dei pixel dove si vede resta coprente, e
+il modello lo dice. I due casi stanno lontani: su un PDF di prova la foto CMYK
+sul fondo CMYK e il ciano sul fondo ciano ce l'hanno sotto al 98% e restano
+coprenti, l'RGB sulla tinta piatta e il ciano sul rosso di magenta e giallo
+allo 0-2% e vanno a moltiplica. Sul parco la colata ce l'ha sotto quasi da
+nessuna parte, e va a moltiplica su tutti i file: il rosso sotto e' una tinta
+piatta o e' magenta e giallo, mai ciano. **Senza Ghostscript** vanno a
+moltiplica solo le Separation e i DeviceN, che in sovrastampa ci vanno apposta.
+
+**Quando la simula lei, `colata` non tocca niente** (`colata._gia_simulata`):
+niente banda di Ghostscript, niente risorsa. Non e' solo risparmio. Sul KP T1
+Mandarino Ghostscript diceva "ombra fustellata" e faceva sostituire la colata
+del file con la risorsa, ma sotto l'ombra il PANTONE Warm Red c'e' al 90%,
+nelle lastre senza immagini: era lui a cancellarlo, portandolo al 31%.
 
 **Il flag di sovrastampa pdfium non lo espone**: si legge dal flusso di
 contenuto, seguendo q/Q e gs anche dentro i form, e le immagini si accoppiano a
 quelle di pdfium nell'ordine in cui si disegnano. Se i due elenchi non tornano
 - quante sono, o le loro misure in pixel - non si tocca niente, e il modello lo
-dice. Su ventitre file provati tornano sempre.
+dice. Su ventitre file provati tornano sempre. Dentro un form pdfium da' i
+confini delle immagini nelle coordinate del form: il riquadro sulla pagina si
+fa componendo le matrici dei form, come in `dividi`.
 
 **Il flusso non si legge con pypdf.** Sul K Brioss STD sono 231.000 operazioni
 in 7 MB: tre secondi e mezzo solo per trovarne una manciata. Un'espressione
 regolare che cerca i soli operatori che servono - q, Q, gs, Do e le immagini
 in linea - e salta intere le stringhe, i commenti e i byte delle immagini da'
 lo stesso elenco su tutti e ventitre i file, in mezzo secondo sul Brioss STD.
-E chi immagini in tinta piatta non ne ha non la paga nemmeno.
+Un file senza nessuno stato grafico in sovrastampa non la paga nemmeno.
 
 **Occhio ai booleani di pypdf**: `bool(BooleanObject(False))` e' `True`, perche'
 la classe non ha `__bool__`. La prima ricognizione li leggeva cosi', e dava in
 sovrastampa quasi tutte le immagini del parco: 20 su 21 su Colazione, 38 su 40
-sul crt. Letti per valore (`strati._vero`) sono 0 e 12, e di tinta piatta
-restano solo le tre del KCF: le altre immagini in tinta piatta del parco sono
-coprenti anche in macchina, e restano come sono.
+sul crt. Letti per valore (`strati._vero`) sono 0 e 12, e sono le colate.
 
 ### La grafica va in quadricromia, non in RGB
 
-**In RGB la sovrastampa non esiste**, quindi non c'e' niente da simulare: ne'
-dal nostro rasterizzatore, ne' da quello di chi guardera' il file. E la
-sovrastampa non e' un effetto facoltativo, e' come sono costruite certe
-grafiche.
-
-Il caso che lo dimostra e' la **colata di latte Kinder**. Nasce come una lastra
-che sovrastampa il fondo: dove passa, moltiplica quello che c'e' sotto, e da
-quella moltiplicazione vengono l'ombra sulle gocce e il volume del getto. Sul
-Kinder Pingui T6 BOX quella colata e' arrivata come **immagine indicizzata su
-base ICC a tre canali, con la tavolozza fatta di ciano**: senza sovrastampa la
-moltiplicazione non avviene, le gocce perdono l'ombra e la colata esce come una
-macchia di **ciano piatto**.
-
-Non e' una cosa che si aggiusta a valle: reinventare l'ombra vorrebbe dire
-dipingere colore che nel file non c'e'. La regola e' sull'ingresso — **la colata
-va fornita in quadricromia** — e il nostro compito e' accorgersene e dirlo
-prima che l'utente guardi il modello e non capisca cosa e' andato storto
+Un'immagine RGB in macchina la **converte chi stampa**, e il colore lo decide
+lui e non il file. E' una regola della stampa, non del gusto, e il nostro
+compito e' accorgersene e dirlo prima che l'utente guardi il modello
 (`techink.avviso_rgb`, un decimo di secondo e niente in memoria).
+
+**Qui c'era scritto che in RGB la sovrastampa non esiste, e che per questo la
+colata usciva di ciano piatto. Era sbagliato.** Un oggetto RGB in sovrastampa
+stampa la quadricromia e lascia stare le tinte piatte che trova: sul Kinder
+Choco Fresh T1 e sul KP T1 Mandarino l'ombra della colata e' un'immagine RGB
+indicizzata in sovrastampa sul rosso in tinta piatta, e il rosso sotto resta.
+Sembrava di no perche' Ghostscript, sotto un'immagine RGB con una maschera
+morbida, la tinta piatta la cancella: vedi *Un'immagine in sovrastampa si somma
+a quello che trova*. L'avviso sull'RGB resta, ma per il colore: la colata non
+c'entra piu'.
 
 Si guardano le **immagini**, non gli spazi colore dichiarati, e per un motivo
 misurato: uno spazio RGB dichiarato c'e' quasi sempre — sul K Tronky T1 ce n'e'
@@ -2308,6 +2365,19 @@ stesso, perche' il difetto non stava nella geometria. Il controllo visivo
 
 ### La colata si rimette con l'inchiostro del file
 
+**Adesso di solito non serve.** L'ombra della colata e' sempre un'immagine in
+sovrastampa, e la simula il livello della grafica su tutti i file, livello
+`Colata` o no: vedi *Un'immagine in sovrastampa si somma a quello che trova*.
+Quando lo fa, qui non si tocca niente. Quello che segue resta per le colate che
+la grafica non copre e per la pagina resa com'e'.
+
+**E una correzione.** Il KP T1 Mandarino qui sotto e' dato per ombra
+"fustellata", e non lo e'. Le lastre erano quelle di Ghostscript, che sotto
+un'immagine RGB con una maschera morbida la tinta piatta la cancella: sulle
+lastre rese senza immagini, sotto l'ombra il PANTONE Warm Red c'e' al 90%.
+L'ombra e' in sovrastampa come sugli altri file, e il file non aveva niente
+da farsi perdonare.
+
 Il nostro rasterizzatore **non simula la sovrastampa**. Verificato con un PDF
 costruito apposta - un ciano sopra un magenta, disegnato due volte, una con
 `/OP true` e una senza:
@@ -2420,7 +2490,8 @@ colata costa **13 MB**, non 105.
 #### Il caso calibrato
 
     KP T1 Mandarino       livello `Colata`, 120,5 x 36,3 mm
-                          ombra fustellata: recupera lo 0,2% -> risorsa
+                          Ghostscript recupera lo 0,2% -> era la risorsa;
+                          adesso l'ombra la simula la grafica
     Kinder Pingui T6 BOX  ombra in sovrastampa: recupera il 49,6% -> quadricromia
 
 Il T6 BOX il livello `Colata` non ce l'ha, e per questo non lo prende: la

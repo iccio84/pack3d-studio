@@ -521,46 +521,78 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
 
 
 # --------------------------------------------------------------------------- #
-# la sovrastampa delle tinte piatte
+# la sovrastampa delle immagini
 # --------------------------------------------------------------------------- #
 #
-# Sul Kinder Choco Fresh T1 la merendina nel file c'e', e sul modello no. La
-# foto e' in RGB, e sopra, grande quanto lei, il file ci disegna un'immagine
-# in PANTONE Cool Gray 8 C IN SOVRASTAMPA: in macchina il grigio va sulla sua
-# lastra e le altre restano come sono, quindi la foto si vede, velata di
-# grigio dove il grigio c'e'. pdfium la sovrastampa la ignora - e' lo stesso
-# difetto della `k` di `nero` - e la tinta piatta la dipinge coprente: dove il
-# grigio e' a zero viene bianco, e un rettangolo bianco copre la merendina e
-# il latte. Anche Ghostscript con la sovrastampa simulata la copre, ma solo
-# perche' la foto e il grigio stanno in gruppi di trasparenza in RGB, dove la
-# sua simulazione non arriva: con gli stessi gruppi dichiarati in CMYK la
-# merendina la fa vedere anche lui. Non e' il file a nasconderla.
+# In macchina un oggetto in SOVRASTAMPA stampa solo sulle lastre dei suoi
+# inchiostri, e le altre restano come sono: il suo inchiostro si aggiunge a
+# quello che trova. pdfium la sovrastampa la ignora - e' lo stesso difetto
+# della `k` di `nero` - e dipinge ogni oggetto coprente. Due casi, misurati:
 #
-# Una tinta piatta in sovrastampa l'inchiostro lo AGGIUNGE a quello che trova:
-# a video e' la fusione Moltiplica - dove la tinta e' a zero non cambia niente,
-# dove c'e' scurisce. Si dice a pdfium immagine per immagine
-# (`FPDFPageObj_SetBlendMode`), e solo per quelle:
+# - la COLATA Kinder. L'ombra sotto l'onda del latte e' un'immagine di solo
+#   ciano in sovrastampa sul rosso, e in stampa ciano sul rosso fa l'ombra
+#   rosso scuro; coprente esce un alone azzurro. Sul parco la colata e' sempre
+#   fatta cosi' - la banda lunga e le due gocce - in DeviceN di solo Cyan su
+#   undici file, in RGB indicizzato sul Kinder Choco Fresh T1, in RGB ICC
+#   indicizzato sul KP T1 Mandarino;
+# - la MERENDINA del Kinder Choco Fresh T1. La foto e' in RGB, e sopra,
+#   grande quanto lei, c'e' un'immagine in PANTONE Cool Gray 8 C in
+#   sovrastampa: coprente, dove il grigio e' a zero viene bianco, e un
+#   rettangolo bianco copre la merendina e il latte.
 #
-# - di sole tinte piatte: Separation, anche come base di un Indexed, o
-#   DeviceN senza colori di processo. Un DeviceN che porta anche C, M, Y o K
-#   in sovrastampa quei canali li SOSTITUISCE, non li somma: le onde della
-#   colata sono cosi', e le rende `colata`. Neanche /All, che va su tutte le
-#   lastre e copre come in macchina;
-# - disegnate con la sovrastampa accesa (`/op`, o `/OP` quando `/op` manca)
-#   e con la fusione normale: se il file ne dichiara un'altra vale la sua.
+# Ghostscript la sovrastampa la sa simulare, ma proprio su questi casi
+# sbaglia. Sotto un'immagine RGB con una maschera morbida - l'ombra del KCF e
+# del Mandarino - la tinta piatta la cancella, e dentro un gruppo di
+# trasparenza RGB - la pagina del KCF - la cancella anche sotto il CMYK.
+# Provato con PDF fatti apposta: un rosso in tinta piatta, sopra un ciano in
+# sovrastampa in RGB, RGB indicizzato, CMYK e DeviceN. Senza maschera il rosso
+# resta sotto tutti e quattro; con la maschera solo sotto CMYK e DeviceN; in
+# un gruppo RGB solo sotto il DeviceN. Non si puo' prendere la sua resa: la
+# sovrastampa si simula qui.
+#
+# Dove sotto non ci sono gli inchiostri dell'immagine, la sovrastampa a video
+# e' la fusione MOLTIPLICA: l'inchiostro dell'immagine si somma a quello che
+# trova, dove l'immagine e' bianca non cambia niente, e con la trasparenza
+# della maschera fa esattamente quello che fa la macchina. Si dice a pdfium
+# immagine per immagine (`FPDFPageObj_SetBlendMode`), sul solo livello della
+# grafica, per le immagini disegnate con la sovrastampa accesa (`/op`, o `/OP`
+# quando `/op` manca) e la fusione normale - se il file ne dichiara un'altra
+# vale la sua - e mai per /All, che copre anche in macchina.
+#
+# Dove sotto ci sono gli STESSI inchiostri, invece, in macchina l'immagine li
+# sostituisce, e Moltiplica sbaglierebbe: una foto in quadricromia in
+# sovrastampa su un fondo in quadricromia copre, e a moltiplica il fondo si
+# vedrebbe attraverso. Quindi prima si guarda sotto: le lastre di Ghostscript
+# rese SENZA immagini (`-dFILTERIMAGE`), a bassa risoluzione, nei pixel dove
+# l'immagine si vede. Se sotto c'e' il suo inchiostro - o, per chi stampa
+# colori di processo, un'altra immagine disegnata prima, che si presume in
+# quadricromia - resta coprente, e il modello lo dice. Senza Ghostscript
+# vanno a moltiplica solo le Separation e i DeviceN, che in sovrastampa ci
+# vanno apposta.
 #
 # pdfium il flag di sovrastampa non lo espone: lo si legge dal flusso di
 # contenuto, seguendo q/Q e gs anche dentro i form, e le immagini si
 # accoppiano a quelle di pdfium nell'ordine in cui si disegnano. Se i due
 # elenchi non tornano - quante sono, o le loro misure in pixel - non si tocca
-# niente. Il flusso si legge solo se fra le risorse c'e' almeno un'immagine in
-# tinta piatta. Su ventitre file provati ce l'hanno in sedici, sempre
-# accoppiate a quelle di pdfium, e solo il KCF le disegna in sovrastampa: le
-# altre sono coprenti anche in macchina, e restano come sono.
+# niente. Su ventitre file provati tornano sempre.
 
-_PROCESSO = frozenset(("/Cyan", "/Magenta", "/Yellow", "/Black"))
-# (file, mtime, taglia, pagina) -> disegni: il flusso si legge una volta sola
+# gli inchiostri di processo, coi nomi delle lastre (`techink._norm`)
+_QUADRICROMIA = frozenset(("cyan", "magenta", "yellow", "black"))
+# (file, mtime, taglia, pagina) -> disegni, e -> scelte: il flusso si legge
+# una volta sola, e le lastre pure
 _SOVRASTAMPE = {}
+_SCELTE = {}
+# risoluzione a cui si guarda sotto le immagini: quella della spia del nero.
+# L'ombra della colata e' larga tre o quattro punti, e ci sta su due pixel.
+DPI_SOTTO = 36.0
+# una lastra c'e' se supera il 10%
+INCHIOSTRO = 25
+# L'immagine resta coprente se ha sotto il suo inchiostro in piu' di un terzo
+# dei pixel dove si vede. I due casi stanno lontani: una foto in sovrastampa
+# su un fondo in quadricromia ce l'ha sotto quasi ovunque, la colata quasi
+# da nessuna parte - l'ombra sta sul rosso, e il rosso o e' una tinta piatta
+# o e' magenta e giallo, mai ciano.
+QUOTA_SOTTO = 1.0 / 3.0
 
 
 def _oggetto(v):
@@ -574,32 +606,38 @@ def _vero(v):
     return bool(getattr(v, "value", v))
 
 
-def _tinta_piatta(cs, nominati=None, fondo=0):
-    """True se lo spazio colore `cs` stampa solo tinte piatte.
+def _inchiostri(cs, nominati=None, fondo=0):
+    """Le lastre su cui stampa un'immagine nello spazio colore `cs`, coi nomi
+    delle lastre di Ghostscript: frozenset, vuoto se non stampa niente
+    (/None), None se va su tutte (/All) o se lo spazio non si legge.
 
-    `nominati` e' il dizionario `/ColorSpace` delle risorse, per gli spazi
-    chiamati per nome (le immagini in linea, e i file che lo fanno anche
-    sulle XObject).
+    Separation e DeviceN stampano i loro inchiostri; tutto il resto - RGB,
+    CMYK, grigio, Lab, ICC - in macchina diventa quadricromia. `nominati` e'
+    il dizionario `/ColorSpace` delle risorse, per gli spazi chiamati per
+    nome (le immagini in linea, e i file che lo fanno anche sulle XObject).
     """
+    from .techink import _norm
     cs = _oggetto(cs)
     if fondo > 4 or cs is None:
-        return False
+        return None
     if isinstance(cs, str):
         if nominati and cs in nominati:
-            return _tinta_piatta(nominati[cs], None, fondo + 1)
-        return False
+            return _inchiostri(nominati[cs], None, fondo + 1)
+        return _QUADRICROMIA
     if not isinstance(cs, list) or len(cs) < 2:
-        return False
+        return None
     famiglia = _oggetto(cs[0])
     if famiglia in ("/Indexed", "/I"):
-        return _tinta_piatta(cs[1], nominati, fondo + 1)
+        return _inchiostri(cs[1], nominati, fondo + 1)
     if famiglia == "/Separation":
-        return str(_oggetto(cs[1])) not in _PROCESSO | {"/All", "/None"}
-    if famiglia == "/DeviceN":
+        nomi = [str(_oggetto(cs[1]))]
+    elif famiglia == "/DeviceN":
         nomi = [str(_oggetto(n)) for n in _oggetto(cs[1]) or ()]
-        return (any(n != "/None" for n in nomi)
-                and not any(n in _PROCESSO or n == "/All" for n in nomi))
-    return False
+    else:
+        return _QUADRICROMIA
+    if not nomi or "/All" in nomi:
+        return None
+    return frozenset(_norm(n) for n in nomi if n != "/None")
 
 
 def _risorsa(risorse, nome):
@@ -607,36 +645,36 @@ def _risorsa(risorse, nome):
     return v if isinstance(v, dict) else {}
 
 
-def _con_tinte_piatte(risorse, visti, fondo=0):
-    """C'e' un'immagine in tinta piatta fra queste risorse, o nei form?"""
+def _con_sovrastampa(risorse, visti, fondo=0):
+    """C'e' uno stato grafico con la sovrastampa accesa fra queste risorse, o
+    nei form? Senza, nessuna immagine puo' essere in sovrastampa."""
     if fondo > 32:
         return False
-    xo = _risorsa(risorse, "/XObject")
-    spazi = _risorsa(risorse, "/ColorSpace")
-    for rif in xo.values():
+    for g in _risorsa(risorse, "/ExtGState").values():
+        g = _oggetto(g)
+        if isinstance(g, dict) and (_vero(g.get("/op")) or _vero(g.get("/OP"))):
+            return True
+    for rif in _risorsa(risorse, "/XObject").values():
         chiave = getattr(rif, "idnum", None)
         if chiave is not None:
             if chiave in visti:
                 continue
             visti.add(chiave)
         o = _oggetto(rif)
-        if not isinstance(o, dict):
-            continue
-        tipo = o.get("/Subtype")
-        if tipo == "/Image":
-            if _tinta_piatta(o.get("/ColorSpace"), spazi):
-                return True
-        elif tipo == "/Form" and _con_tinte_piatte(
-                o.get("/Resources", risorse), visti, fondo + 1):
+        if (isinstance(o, dict) and o.get("/Subtype") == "/Form"
+                and _con_sovrastampa(o.get("/Resources", risorse), visti,
+                                     fondo + 1)):
             return True
     return False
 
 
 def sovrastampe(pdf, page_no=0):
-    """Le immagini della pagina nell'ordine in cui si disegnano, `[(larghezza,
-    altezza, a moltiplica)]`: vedi *la sovrastampa delle tinte piatte*.
+    """Le immagini della pagina nell'ordine in cui si disegnano,
+    `[(larghezza, altezza, inchiostri)]`: `inchiostri` sono quelli che
+    l'immagine stampa se e' in sovrastampa (vedi `_inchiostri`), None se non
+    lo e' - o se la fusione e' un'altra, o se va su tutte le lastre.
 
-    None se sulla pagina non ce n'e' nessuna da moltiplicare, o se il flusso
+    None se sulla pagina non ce n'e' nessuna in sovrastampa, o se il flusso
     di contenuto non si legge.
     """
     k = _chiave(pdf)
@@ -647,7 +685,7 @@ def sovrastampe(pdf, page_no=0):
         disegni = _disegni(pdf, page_no)
     except Exception:
         disegni = None
-    if disegni is not None and not any(m for _w, _h, m in disegni):
+    if disegni is not None and not any(i for _w, _h, i in disegni):
         disegni = None
     if chiave is not None:
         while len(_SOVRASTAMPE) >= 8:
@@ -681,8 +719,8 @@ def _nome(b):
 
 
 def _in_linea(testo, spazi):
-    """`(larghezza, altezza, tinta piatta)` di un'immagine in linea, dal suo
-    dizionario."""
+    """`(larghezza, altezza, inchiostri)` di un'immagine in linea, dal suo
+    dizionario: vedi `_inchiostri`."""
     def valore(*chiavi):
         for k in chiavi:
             m = re.search(re.escape(b"/" + k) + _DELIMITA + _VALORE_IN_LINEA,
@@ -698,22 +736,25 @@ def _in_linea(testo, spazi):
             return 0
 
     cs = valore(b"CS", b"ColorSpace") or b""
-    if cs.startswith(b"["):
+    if valore(b"IM", b"ImageMask") == b"true" or not cs:
+        inchiostri = None
+    elif cs.startswith(b"["):
         parti = re.findall(rb"/[^\s()<>\[\]{}/%]*", cs)
         # un Indexed in linea: la base e' il secondo nome
-        tinta = (len(parti) > 1 and _nome(parti[0]) in ("/I", "/Indexed")
-                 and _tinta_piatta(_nome(parti[1]), spazi))
+        indicizzato = len(parti) > 1 and _nome(parti[0]) in ("/I", "/Indexed")
+        inchiostri = (_inchiostri(_nome(parti[1]), spazi) if indicizzato
+                      else None)
     else:
-        tinta = bool(cs) and _tinta_piatta(_nome(cs), spazi)
+        inchiostri = _inchiostri(_nome(cs), spazi)
     return (intero(valore(b"W", b"Width")), intero(valore(b"H", b"Height")),
-            bool(tinta))
+            inchiostri)
 
 
 def _disegni(pdf, page_no):
     import pypdf
     r = pypdf.PdfReader(pdf)
     pagina = r.pages[page_no]
-    if not _con_tinte_piatte(_oggetto(pagina.get("/Resources")), set()):
+    if not _con_sovrastampa(_oggetto(pagina.get("/Resources")), set()):
         return None
     fuori = []
 
@@ -755,18 +796,20 @@ def _disegni(pdf, page_no):
                 tipo = o.get("/Subtype")
                 if tipo == "/Image":
                     # una maschera prende il colore corrente: non si segue
-                    tinta = (not _vero(o.get("/ImageMask"))
-                             and _tinta_piatta(o.get("/ColorSpace"), spazi))
+                    inchiostri = (None if _vero(o.get("/ImageMask"))
+                                  else _inchiostri(o.get("/ColorSpace"), spazi))
                     fuori.append((int(_oggetto(o.get("/Width", 0))),
                                   int(_oggetto(o.get("/Height", 0))),
-                                  bool(tinta and st["op"] and st["normale"])))
+                                  inchiostri if st["op"] and st["normale"]
+                                  and inchiostri else None))
                 elif tipo == "/Form":
                     giro(o.get_data(), o.get("/Resources", risorse), st,
                          fondo + 1)
             elif m.group("bi") is not None:
-                larga, alta, tinta = _in_linea(m.group("bi"), spazi)
+                larga, alta, inchiostri = _in_linea(m.group("bi"), spazi)
                 fuori.append((larga, alta,
-                              bool(tinta and st["op"] and st["normale"])))
+                              inchiostri if st["op"] and st["normale"]
+                              and inchiostri else None))
 
     contenuto = pagina.get_contents()
     if contenuto is None:
@@ -776,36 +819,194 @@ def _disegni(pdf, page_no):
     return fuori
 
 
-def _moltiplica(page, disegni):
-    """Mette a Moltiplica le immagini che `disegni` segna. Torna quante, o
-    None se le immagini di pdfium non sono quelle del flusso."""
+def _immagini(page, telaio=False):
+    """Gli oggetti immagine di pdfium nell'ordine in cui si disegnano, anche
+    dentro i form.
+
+    Con `telaio`, coppie `(oggetto, matrice)`: la matrice porta i confini
+    dell'oggetto nel telaio di misura (vedi `_riquadro`). Dentro un form
+    pdfium i confini li da' nelle coordinate del form, non della pagina.
+    """
     import pypdfium2.raw as raw
+    from .tracciati import _componi, _matrice, _telaio
     immagini = []
 
-    def giro(cont, quanti, prendi):
+    def giro(cont, quanti, prendi, m):
         for i in range(quanti(cont)):
             o = prendi(cont, i)
             t = raw.FPDFPageObj_GetType(o)
             if t == raw.FPDF_PAGEOBJ_IMAGE:
-                immagini.append(o)
+                immagini.append((o, m) if telaio else o)
             elif t == raw.FPDF_PAGEOBJ_FORM:
-                giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject)
+                giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject,
+                     _componi(m, _matrice(o)))
 
-    giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject)
+    giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject,
+         _telaio(page))
+    return immagini
+
+
+def _accoppiate(immagini, disegni):
+    """Vero se le immagini di pdfium sono quelle del flusso: tante quante, e
+    una per una delle stesse misure in pixel."""
+    import pypdfium2.raw as raw
     if len(immagini) != len(disegni):
-        return None
+        return False
     w, h = ctypes.c_uint(), ctypes.c_uint()
-    for o, (larga, alta, _m) in zip(immagini, disegni):
+    for o, (larga, alta, _i) in zip(immagini, disegni):
         if (not raw.FPDFImageObj_GetImagePixelSize(o, ctypes.byref(w),
                                                    ctypes.byref(h))
                 or (w.value, h.value) != (larga, alta)):
-            return None
-    n = 0
-    for o, (_l, _a, moltiplica) in zip(immagini, disegni):
-        if moltiplica:
-            raw.FPDFPageObj_SetBlendMode(o, b"Multiply")
-            n += 1
-    return n
+            return False
+    return True
+
+
+def sovrastampa(pdf, page_no=0):
+    """Quali immagini rendere a Moltiplica. `(indici, conto)`.
+
+    `indici` e' l'insieme delle posizioni, nell'elenco di `sovrastampe`, delle
+    immagini in sovrastampa che sotto non hanno i loro inchiostri; `conto` ha
+    `tinta` e `processo` - quante ne vanno a moltiplica fra quelle in tinta
+    piatta e quelle che stampano anche un colore di processo -, `coperte` -
+    quante restano coprenti perche' sotto c'e' lo stesso inchiostro -,
+    `spaiate` e `senza_gs`, e `riquadri`: dove stanno, in punti con la y in
+    giu', quelle con colori di processo rese a moltiplica - la colata, che
+    `colata` allora non ripara piu'. Vedi *la sovrastampa delle immagini*.
+    """
+    k = _chiave(pdf)
+    chiave = k + (page_no,) if k else None
+    if chiave is not None and chiave in _SCELTE:
+        return _SCELTE[chiave]
+    conto = dict(tinta=0, processo=0, coperte=0, spaiate=False,
+                 senza_gs=False, riquadri=[])
+    indici = set()
+    disegni = sovrastampe(pdf, page_no)
+    if disegni:
+        try:
+            indici = _scegli(pdf, page_no, disegni, conto)
+        except Exception:
+            indici = set()
+    esito = (frozenset(indici), conto)
+    if chiave is not None:
+        while len(_SCELTE) >= 8:
+            _SCELTE.pop(next(iter(_SCELTE)))
+        _SCELTE[chiave] = esito
+    return esito
+
+
+def _scegli(pdf, page_no, disegni, conto):
+    import numpy as np
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+    from . import techink
+
+    candidate = [i for i, (_w, _h, ink) in enumerate(disegni) if ink]
+    # Ghostscript per primo, per l'abitudine di `nero.spia`: parte con un
+    # fork, e il momento in cui lo chiami conta
+    lastre = techink.mappe_lastre(pdf, page_no, DPI_SOTTO, processo=True,
+                                  senza_immagini=True)
+    scala = DPI_SOTTO / 72.0
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        page = doc[page_no]
+        page.set_cropbox(*page.get_mediabox())
+        mx0, my0, mx1, my1 = page.get_mediabox()
+        coppie = _immagini(page, telaio=True)
+        immagini = [o for o, _m in coppie]
+        if not _accoppiate(immagini, disegni):
+            conto["spaiate"] = True
+            return set()
+        # il riquadro di ciascuna sulla pagina; su una pagina girata il telaio
+        # non e' quello della resa, e si guarda tutta
+        tutta = (0.0, 0.0, mx1 - mx0, my1 - my0)
+        girata = page.get_rotation() % 360
+        riquadri = {i: tutta if girata else (_riquadro(*coppie[i]) or tutta)
+                    for i in candidate}
+        if not lastre:
+            # senza lastre non si sa cosa c'e' sotto: solo chi in
+            # sovrastampa ci va apposta, Separation e DeviceN
+            scelte = {i for i in candidate if disegni[i][2] != _QUADRICROMIA}
+            conto["senza_gs"] = len(scelte) < len(candidate)
+            for i in scelte:
+                processo = bool(disegni[i][2] & _QUADRICROMIA)
+                conto["processo" if processo else "tinta"] += 1
+                if processo:
+                    conto["riquadri"].append(riquadri[i])
+            return scelte
+
+        def resa():
+            return np.asarray(page.render(scale=scala).to_pil()
+                              .convert("RGB")).astype(np.int16)
+
+        def diversa(a, b):
+            return np.abs(a - b).max(2) > 8
+
+        # dove si vede ciascuna: la pagina con e senza le candidate
+        con = resa()
+        for i in candidate:
+            raw.FPDFPageObj_SetIsActive(immagini[i], False)
+        si_vede = diversa(con, resa())
+        # Le altre immagini SOTTO le candidate: quelle disegnate prima della
+        # prima candidata, contro la pagina senza nessuna immagine. Solo
+        # prima: sopra la colata c'e' spesso un'altra immagine - le sfumature
+        # del latte, disegnate dopo l'ombra - e contarla come fondo scarta la
+        # colata. Le lastre di Ghostscript le immagini non le vedono affatto.
+        for o in immagini:
+            raw.FPDFPageObj_SetIsActive(o, False)
+        nude = resa()
+        for o in immagini[:min(candidate)]:
+            raw.FPDFPageObj_SetIsActive(o, True)
+        altra = diversa(resa(), nude)
+    finally:
+        doc.close()
+
+    h = min([si_vede.shape[0]] + [m.shape[0] for m in lastre.values()])
+    w = min([si_vede.shape[1]] + [m.shape[1] for m in lastre.values()])
+    si_vede, altra = si_vede[:h, :w], altra[:h, :w]
+    # inchiostro di ogni lastra, 0..255 (nelle mappe 255 e' niente)
+    ink = {n: 255 - m[:h, :w].astype(np.int16) for n, m in lastre.items()}
+
+    scelte = set()
+    for i in candidate:
+        inchiostri = disegni[i][2]
+        x0, y0, x1, y1 = (int(round(v * scala)) for v in riquadri[i])
+        x0, y0 = max(x0, 0), max(y0, 0)
+        x1, y1 = min(x1 + 1, w), min(y1 + 1, h)
+        if x1 <= x0 or y1 <= y0:
+            continue
+        dove = si_vede[y0:y1, x0:x1]
+        if not dove.any():
+            continue
+        sotto = np.zeros(dove.shape, bool)
+        for n in inchiostri:
+            if n in ink:
+                sotto |= ink[n][y0:y1, x0:x1] > INCHIOSTRO
+        processo = bool(inchiostri & _QUADRICROMIA)
+        if processo:
+            sotto |= altra[y0:y1, x0:x1]
+        if sotto[dove].mean() > QUOTA_SOTTO:
+            conto["coperte"] += 1
+            continue
+        scelte.add(i)
+        conto["processo" if processo else "tinta"] += 1
+        if processo:
+            conto["riquadri"].append(riquadri[i])
+    return scelte
+
+
+def colata_simulata(pdf, page_no=0, riquadro=None):
+    """Vero se la resa della grafica mette a moltiplica un'immagine con
+    colori di processo in sovrastampa - la colata - dentro `riquadro` (`(x0, x1,
+    y0, y1)` in punti, y in giu'), o ovunque se non c'e'. Allora l'ombra la
+    fa gia' lei, e `colata` non deve ripararla: vedi la'."""
+    _indici, conto = sovrastampa(pdf, page_no)
+    for a0, b0, a1, b1 in conto["riquadri"]:
+        if riquadro is None:
+            return True
+        x0, x1, y0, y1 = riquadro
+        if a0 < x1 and x0 < a1 and b0 < y1 and y0 < b1:
+            return True
+    return False
 
 
 # L'ultimo conteggio fatto: lo legge chi scrive gli avvisi, senza una seconda
@@ -850,11 +1051,19 @@ def rendi(pdf, page_no=0, scala=1.0, livello=GRAFICA, riquadro=None,
                 raw.FPDFPageObj_SetIsActive(o, False)
             for o, pieno in contorni:
                 raw.FPDFPath_SetDrawMode(o, pieno, False)
-            # le tinte piatte in sovrastampa: vedi sopra
+            # le immagini in sovrastampa: vedi sopra
             disegni = sovrastampe(pdf, page_no)
             if disegni:
-                n = _moltiplica(page, disegni)
-                CONTI.update(moltiplica=n or 0, spaiate=n is None)
+                indici, conto = sovrastampa(pdf, page_no)
+                immagini = _immagini(page)
+                spaiate = conto["spaiate"] or not _accoppiate(immagini, disegni)
+                if not spaiate:
+                    for i in indici:
+                        raw.FPDFPageObj_SetBlendMode(immagini[i], b"Multiply")
+                CONTI.update(moltiplica=0 if spaiate else len(indici),
+                             tinta=conto["tinta"], processo=conto["processo"],
+                             coperte=conto["coperte"], spaiate=spaiate,
+                             senza_gs=conto["senza_gs"])
         elif livello == DT:
             for o in grafica:
                 raw.FPDFPageObj_SetIsActive(o, False)

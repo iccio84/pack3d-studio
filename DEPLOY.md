@@ -125,14 +125,15 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
 ## Dipendenze di sistema
 
 Oltre a quelle Python del `requirements.txt`, l'immagine installa
-**ghostscript**. Serve a una cosa sola e non c'e' altro modo di farla: simulare
-la sovrastampa, che pdfium non simula. Vedi in REGOLE.md *La colata si rimette
-con l'inchiostro del file*.
+**ghostscript**. Serve a leggere le **lastre**, che pdfium non separa: dove il
+file e' nero (`nero`), le aree riservate (`techink`) e cosa c'e' sotto
+un'immagine in sovrastampa (`strati.sovrastampa`, a 36 dpi, mezzo secondo).
+Vedi in REGOLE.md *Un'immagine in sovrastampa si somma a quello che trova*.
 
-Costa una quarantina di MB di immagine e non si vede mai al lavoro: gira solo
-sui file che hanno la colata su un livello suo, e solo sulla sua banda - misurato,
-un paio di secondi e una quarantina di MB di processo figlio. Se manca, il
-codice se ne accorge (`shutil.which`) e usa la risorsa: non si rompe niente.
+Costa una quarantina di MB di immagine e passate brevi a bassa risoluzione. Se
+manca, il codice se ne accorge (`shutil.which`) e fa meno: non si rompe niente,
+e la sovrastampa resta simulata per le Separation e i DeviceN, cioe' per la
+colata di quasi tutti i file.
 
 ## Quando una costruzione non arriva in fondo
 
