@@ -49,13 +49,20 @@ def build(args):
     dpi, tmax = artwork.risoluzione(args.quality)
     if args.dpi:
         dpi = args.dpi
+    esito = {}
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
-                                              dieline=d)
+                                              dieline=d, esito=esito)
     for m in avvisi_tex:
         print("  avviso   :", m)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso,
                                 fianchi_sul_fronte=d.fianchi_su == "front")
+    # il marchio orizzontale e dritto, come il server: vedi `folding.gira_facce`
+    if esito.get("marchio"):
+        folding.gira_facce(faces, esito["marchio"])
+        print("  avviso   : modello girato di %d gradi attorno al fronte "
+              "perche' il marchio si legga orizzontale e dritto"
+              % esito["marchio"])
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
     riscontro = quote.riscontro_astuccio(pdf, d)
     verifiche = verifiche + ([riscontro] if riscontro else [])

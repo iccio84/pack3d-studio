@@ -373,6 +373,39 @@ Sul parco nel verso di sempre cambia un solo modello, il Nutella Donut, che
 adesso si legge nel verso della sua grafica: vedi *Se i fianchi li portano
 tutte e due, si vedono quelli stampati*.
 
+### Il modello finito si gira: il marchio orizzontale e dritto
+
+**Il marchio del fronte si legge sempre orizzontale e nel verso giusto.**
+Quando il modello e' finito e verificato, lo si gira tutto intero attorno alla
+normale del fronte - il fronte resta davanti, il centro al centro - finche'
+l'alto della grafica punta in alto.
+
+Il caso sono i flowpack. Il tubo si costruisce sempre **coricato**, l'asse
+lungo la x e le pinne a destra e a sinistra, ma il marchio sta come sta sullo
+steso: sul KP T1 Mandarino, sul Cheesecake, sui K Brioss, su Colazione, sul
+Kinder Cards, sul Kinder Country, sul Kinder Choco Fresh e sul Nutella B-ready
+il testo corre **attraverso** il passo, e sul pack coricato "Kinder Pingui" si
+leggeva dall'alto in basso. Girati di un quarto, stanno **in piedi** con le
+pinne in alto e in basso, come in mano. Milch-Schnitte, Paradiso, K Tronky e
+Bueno Dark, col testo lungo il passo, restano coricati. Gli astucci, il vassoio
+e i flowpack coricati escono identici al byte: il giro e' zero.
+
+Il giro non si ragiona sulle convenzioni, si **misura**
+(`verifica.giro_del_marchio`): al centro del fronte, dove guarda la verifica
+del fronte, l'alto della grafica sulla pagina si porta nella texture - lo
+steso ruotato ci entra girato di un quarto in senso orario - e con le derivate
+della griglia lungo u e v sul modello; il giro e' quello che lo rimette
+sull'asse y. L'alto della grafica e' quello del testo vivo del fronte; senza
+testo vivo e' l'alto del foglio, che dopo *Il foglio nel verso della grafica*
+e' la stessa cosa per tutti i file che si leggono. Si gira DOPO le verifiche,
+che il giro attorno al fronte non tocca.
+
+Sugli astucci il fronte si raddrizza gia' con la texture; resta da girare solo
+la scatola il cui fronte non si poteva girare senza stirarlo - un pannello non
+quadrato con la grafica a 90 gradi, vedi *Non distorcere mai la grafica* - e
+allora si gira la scatola intera, guscio, interno e coste
+(`folding.gira_facce`). Il vassoio ha il fronte dritto per costruzione.
+
 ## Domande all'utente
 
 | regola | dove |
@@ -2875,6 +2908,32 @@ invece di 7,55.
 
 Lezione generale: **una verifica che non si applica e una verifica che passa
 non sono la stessa cosa, e nel resoconto devono leggersi diverse.**
+
+#### A pari scarto il fronte lo dice la stampa
+
+`risolvi_pillow` cerca la fascia fra due pieghe che misura mezzo giro. Sul
+**Kinder Choco Fresh** - nastro 101, pieghe a 13, 26, 42 e 81, lembo di 20 in
+fondo - ne trova due, e a pari scarto, 1,48 mm dal mezzo giro:
+
+    fronte  0 - 42   retro 0 / 39    striscia tecnica e tratteggio
+    fronte 42 - 81   retro 42 / 0    "kinder CHOCO fresh"
+
+Vinceva la prima trovata, e "CHOCO fresh" finiva sul **retro** del modello - da
+sempre, e la verifica del fronte passava, perche' confronta la texture con la
+fascia che il solutore ha chiamato fronte. L'ordine in cui le pieghe si
+incontrano non e' un criterio: dipende dal verso del foglio, e girato di mezzo
+giro il solutore sceglieva l'altra. A pari scarto il DT non decide, e decide
+la **stampa**, come per il fronte di un astuccio a fasciatura orizzontale: il
+fronte e' la fascia con piu' grafica (`_risolvi_steso`).
+
+E il retro tutto da un lato ha fatto vedere l'ultimo appiglio del tubo piatto:
+la cucitura sta `back_a` prima della piega, e con 42 mm di retro su 40,5 di
+mezza ellisse cadeva oltre la piega opposta, sul fronte. Il retro e' mezzo
+giro, e la cucitura non va piu' in la' della piega (`superellipse_section`);
+e le due pieghe si prendono nell'ordine in cui le incontra il film, non per
+valore (`_panel_knots`), perche' con la cucitura sulla piega una delle due
+viene a zero. Sul K Tronky e sul Bueno Dark, col retro diviso in due, non cambia
+niente.
 
 ### Le guide ravvicinate: due letture, non una scelta
 

@@ -155,6 +155,63 @@ def _campiona(im, x, y, r):
     return a.reshape(-1, 3).mean(0)
 
 
+def giro_del_marchio(V, UV, nv, fp, verso=0):
+    """Di quanti gradi va girato il flowpack FINITO, in senso antiorario visto
+    dal davanti, perche' la grafica del fronte si legga orizzontale e dritta.
+
+    Il tubo si costruisce sempre coricato: l'asse lungo la x, il fronte verso
+    +z. Ma il marchio sta come sta sullo steso: sul KP T1 Mandarino, sul K
+    Brioss, su Colazione il testo corre ATTRAVERSO il passo, e sul pack
+    coricato si leggeva dall'alto in basso. Il pack in mano sta in piedi.
+
+    Qui non si ragiona sulle convenzioni, si misura: al centro del fronte,
+    dove lo guarda `fronte_flowpack`, si prende l'alto della grafica sulla
+    pagina - girato di `verso`, i gradi orari che il testo vivo del fronte
+    dice, zero se il testo non c'e' - lo si porta nella texture (lo steso
+    ruotato ci entra girato di un quarto in senso orario), e con le derivate
+    della griglia lungo u e v lo si porta sul modello. Il giro e' quello che
+    rimette quella direzione sull'asse y, il piu' vicino a un quarto intero.
+    """
+    import math
+    web = fp.web_mm
+    s_web = _centro_fronte(fp)
+    griglia = V.reshape(-1, nv + 1, 3)
+    uvg = UV.reshape(-1, nv + 1, 2)
+    iu = int(np.argmin(np.abs(uvg[:, 0, 0] - 0.5)))
+    iv = int(np.argmin(np.abs(uvg[iu, :, 1] - s_web / web)))
+    a, b = max(iu - 1, 0), min(iu + 1, griglia.shape[0] - 1)
+    c, d = max(iv - 1, 0), min(iv + 1, griglia.shape[1] - 1)
+    dpu = (griglia[b, iv] - griglia[a, iv]) / max(uvg[b, iv, 0] - uvg[a, iv, 0], 1e-9)
+    dpv = (griglia[iu, d] - griglia[iu, c]) / max(uvg[iu, d, 1] - uvg[iu, c, 1], 1e-9)
+    # l'alto della grafica sulla pagina, con la y in giu'
+    t = math.radians(verso)
+    gx, gy = math.sin(t), -math.cos(t)
+    # nella texture: ROTATE_270 porta il pixel (X, Y) in (h - 1 - Y, X)
+    if fp.ruotato:
+        gx, gy = -gy, gx
+    # u corre sulle colonne della texture, v sulle righe
+    su = dpu / (np.linalg.norm(dpu) or 1.0)
+    sv = dpv / (np.linalg.norm(dpv) or 1.0)
+    alto = su * gx + sv * gy
+    gradi = math.degrees(math.atan2(float(alto[0]), float(alto[1])))
+    return int(round(gradi / 90.0)) * 90 % 360
+
+
+def gira_attorno_al_fronte(V, gradi):
+    """I vertici girati di `gradi` (multiplo di 90) in senso antiorario
+    attorno all'asse z, cioe' attorno alla normale del fronte: il fronte
+    resta davanti e il centro resta al centro."""
+    gradi = int(gradi) % 360
+    if not gradi:
+        return V
+    c = {90: 0, 180: -1, 270: 0}[gradi]
+    s = {90: 1, 180: 0, 270: -1}[gradi]
+    W = np.array(V, float, copy=True)
+    W[:, 0] = c * V[:, 0] - s * V[:, 1]
+    W[:, 1] = s * V[:, 0] + c * V[:, 1]
+    return W
+
+
 def fronte_flowpack(V, UV, nv, fp, texture, foglio, scala):
     """Il pannello fronte dell'AW sulla faccia fronte del modello. `(ok, riga)`.
 

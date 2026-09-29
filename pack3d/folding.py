@@ -293,6 +293,22 @@ def guscio(faces, spessore=SPESSORE_CRT, interno=INTERNO, taglio=TAGLIO):
     return out
 
 
+def gira_facce(faces, gradi):
+    """Le facce del modello finito girate di `gradi` (multiplo di 90) in senso
+    antiorario attorno alla normale del fronte, perche' il marchio si legga
+    orizzontale e dritto: e' il fronte che la texture non ha potuto girare
+    senza stirarlo (`artwork.gira_sulla_grafica`), e allora si gira la
+    scatola. Il fronte resta davanti; guscio, interno e coste girano con lui.
+    """
+    from .verifica import gira_attorno_al_fronte
+    if not int(gradi) % 360:
+        return faces
+    for f in faces:
+        f["quad"] = [tuple(float(c) for c in p) for p in
+                     gira_attorno_al_fronte(np.array(f["quad"], float), gradi)]
+    return faces
+
+
 def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
                 panels: dict | None = None, chiuso: bool = True,
                 spessore: float = SPESSORE_CRT,
