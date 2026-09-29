@@ -203,7 +203,9 @@ _VERSO_FP = OrderedDict()
 
 
 def flowpack_sulla_grafica(pdf):
-    """`(pdf, giro, avviso)`: lo steso di un flowpack nel verso della grafica.
+    """`(pdf, giro, avviso, verso)`: lo steso di un flowpack nel verso della
+    grafica, e i gradi orari di cui sul foglio tornato e' girato il testo del
+    fronte - zero se si legge dritto o se il testo vivo non c'e'.
 
     E' `artwork.astuccio_sulla_grafica` per il flowpack, e per la stessa
     ragione: uno steso non deve dare un pack diverso secondo come sta sulla
@@ -229,7 +231,7 @@ def flowpack_sulla_grafica(pdf):
     with _ANALISI_CHIAVE:
         noto = _VERSO_FP.get(imp)
     if noto is None:
-        giro, avviso = 0, None
+        giro, avviso, resta = 0, None, 0
 
         def verso(p):
             _box, fp, ripiego = analisi_flowpack(p)
@@ -261,16 +263,18 @@ def flowpack_sulla_grafica(pdf):
                           "tavola la grafica del fronte era girata, e pinne, "
                           "retro e colata si leggono nel suo verso" % giro)
             else:
+                resta = g
                 avviso = ("la grafica del fronte e' girata di %d gradi sullo "
                           "steso, ma girato il foglio non si risolve col "
                           "fronte dritto: resta letto com'e' sulla tavola" % g)
-        noto = (giro, avviso)
+        noto = (giro, avviso, resta)
         with _ANALISI_CHIAVE:
             _VERSO_FP[imp] = noto
             while len(_VERSO_FP) > _ANALISI_MAX:
                 _VERSO_FP.popitem(last=False)
-    giro, avviso = noto
-    return (artwork.pagina_girata(pdf, giro) if giro else pdf), giro, avviso
+    giro, avviso, resta = noto
+    return ((artwork.pagina_girata(pdf, giro) if giro else pdf), giro, avviso,
+            resta)
 
 
 # --------------------------------------------------------------------------- #
@@ -362,9 +366,19 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # e le misure del disegno contro le quote che il file scrive, come per le
     # testate del flowpack: le quote non costruiscono, confermano
     riscontro = quotature.riscontro_astuccio(pdf, d)
+    # il marchio orizzontale e dritto: se il fronte e' rimasto girato - la
+    # texture non si poteva girare senza stirarla - si gira la scatola
+    marchio = esito.get("marchio", 0)
+    if marchio:
+        folding.gira_facce(faces, marchio)
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if marchio:
+        meta.append("modello girato di %d gradi attorno al fronte perche' il "
+                    "marchio si legga orizzontale e dritto: la sua grafica "
+                    "sul foglio e' girata e il pannello non e' quadrato"
+                    % marchio)
     rgb = avviso_quadricromia(esito.get("pdf", pdf), regione=d.bbox)
     if rgb:
         meta.insert(0, rgb)
@@ -687,6 +701,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     pdf, n_pagine = artwork.pagina_unica(pdf)
     conti = {}
     giro = None
+    verso_fronte = 0
     if case:
         # anche qui le lastre dell'agente: un caso calibrato elenca a mano
         # quello che sapeva allora, non quello che si vede oggi guardando. E
@@ -704,7 +719,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # che l'agente ha indicato guardando il foglio com'era. Vedi
         # `flowpack_sulla_grafica`.
         sorgente = pdf
-        pdf, gradi, giro = flowpack_sulla_grafica(pdf)
+        pdf, gradi, giro, verso_fronte = flowpack_sulla_grafica(pdf)
         colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro,
                                                   gradi)
         # Stessa analisi di /api/analyze, non una seconda uguale: il ripiego
@@ -1050,6 +1065,20 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     avvisi_sez.append(verifica.fronte_flowpack(
         V, UV, nv, analisi if analisi is not None else fp0,
         tex, foglio, dpi_tex / 72.0)[1])
+    # Il modello finito si gira attorno alla normale del fronte perche' il
+    # marchio si legga orizzontale e dritto: il tubo si costruisce coricato,
+    # e su uno steso col testo attraverso il passo il pack sta in piedi.
+    # Dopo le verifiche, che il giro attorno al fronte non tocca: il centro
+    # del fronte resta al centro e la sua normale davanti.
+    marchio = verifica.giro_del_marchio(
+        V, UV, nv, analisi if analisi is not None else fp0, verso_fronte)
+    if marchio:
+        Vm = verifica.gira_attorno_al_fronte(Vm, marchio)
+        avvisi_sez.append(
+            "modello girato di %d gradi attorno al fronte perche' il marchio "
+            "si legga orizzontale e dritto%s" % (
+                marchio, ": il pack sta in piedi, con le pinne in alto e in "
+                "basso" if marchio in (90, 270) else ""))
     exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
 
     base = fin_open / max(int(teeth), 1)
@@ -1095,10 +1124,19 @@ def _panel_knots(Ps, d, G, fp):
         # di un tubo piatto sono le due PIEGHE, cioe' gli estremi dell'asse
         # maggiore, e lo steso dice dove devono cadere: a back_a dalla
         # cucitura e a back_a + fronte.
+        #
+        # Nell'ordine in cui le incontra il film: prima la piega a +y, a
+        # back_a dalla cucitura, poi l'altra mezzo giro dopo. Ordinarle per
+        # valore sbagliava quando il retro sta tutto da un lato - Kinder Choco
+        # Fresh - e la cucitura cade sulla seconda piega: quella veniva a
+        # zero, prima dell'altra, e il fronte finiva sul retro.
         try:
             ia = int(np.argmax(Ps[:-1, 0]))
             ib = int(np.argmin(Ps[:-1, 0]))
-            ks = [0.0] + sorted([float(d[ia]), float(d[ib])]) + [G]
+            da, db = float(d[ia]), float(d[ib])
+            if db <= da:
+                db += G
+            ks = [0.0, da, min(db, G), G]
             kf = [0.0, fp.back_a, fp.back_a + fp.W, fp.back_a + fp.W + fp.back_b]
             if kf[-1] <= 0:
                 return None
@@ -1255,7 +1293,7 @@ def _analyze_pdf(pdf, kind=None):
                 raise
     # nel verso della grafica, come la costruzione; e se fallisce anche il
     # ripiego, l'errore va al client
-    pdf, _gradi, giro = flowpack_sulla_grafica(pdf)
+    pdf, _gradi, giro, _verso = flowpack_sulla_grafica(pdf)
     _box, fp, ripiego = analisi_flowpack(pdf)
     meta = ["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
             "corpo %.1f mm" % fp.L]

@@ -277,11 +277,18 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     # cioe' t = 0. Ancorare comunque ai 45 gradi ruota la grafica di tutto
     # l'arco fra i due punti - misurato sul K Tronky T1: 7,55 mm su un giro di
     # 71, il 10,6%, con il fronte che finiva mezzo sul fianco.
+    #
+    # E su un tubo piatto la cucitura non puo' stare piu' in la' della piega
+    # opposta: il retro e' mezzo giro. Quando il lembo si chiude proprio sulla
+    # piega - il Kinder Choco Fresh ha tutto il retro da un lato, 42 mm, e la
+    # meta' dell'ellisse e' 40,5 - la cucitura va sulla piega; lasciata a 42
+    # mm cadeva sul fronte, e il fronte finiva dietro.
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
     i_sp = 0 if fp.pillow else int(round(npts * 7.0 / 8.0)) % npts
-    s0 = (cum[i_sp] - fp.back_a) % per
+    retro = min(fp.back_a, per / 2.0) if fp.pillow else fp.back_a
+    s0 = (cum[i_sp] - retro) % per
     i0 = int(np.searchsorted(cum, s0)) % len(P)
     P = np.roll(P, -i0, axis=0)
     P = np.vstack([P, P[:1]])           # contorno chiuso
@@ -853,7 +860,7 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0, copertura=None):
     return best
 
 
-def risolvi_pillow(web_mm, folds_mm, tol=2.0):
+def risolvi_pillow(web_mm, folds_mm, tol=2.0, tutti=False):
     """Il tubo piatto chiuso a sovrapposizione: fronte, retro, lembo coperto.
 
     Non tutti i flowpack hanno la pinna longitudinale. Su un wrap di
@@ -872,10 +879,13 @@ def risolvi_pillow(web_mm, folds_mm, tol=2.0):
     ORIENTATION, come vuole la regola del pannello marcato.
 
     Il lembo sta a un capo del nastro o all'altro, e si provano tutti e due.
-    Vince la lettura in cui il fronte e' piu' vicino a mezzo giro.
+    Vince la lettura in cui il fronte e' piu' vicino a mezzo giro. Con
+    `tutti` tornano tutte le letture possibili, dalla migliore: a pari
+    scarto il DT non decide, e decide la stampa (vedi `_risolvi_steso`).
     """
     v = sorted(set([0.0] + [float(x) for x in folds_mm] + [float(web_mm)]))
     best = None
+    tutte = []
     for coda in (True, False):
         for s_ in v:
             lembo = (web_mm - s_) if coda else s_
@@ -902,8 +912,11 @@ def risolvi_pillow(web_mm, folds_mm, tol=2.0):
                                 back_a=round(ba, 2), back_b=round(bb, 2),
                                 giro=round(giro, 2), inizio=round(g0, 2),
                                 scarto=round(err, 2))
+                    tutte.append(cand)
                     if best is None or cand["scarto"] < best["scarto"]:
                         best = cand
+    if tutti:
+        return sorted(tutte, key=lambda q: q["scarto"])
     return best
 
 
@@ -1251,11 +1264,31 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
         giro = 2.0 * (b["front"] + b["thick"])
         spessore, falda = b["thick"], b["side_fin"]
     else:
-        sol = [q for q in (risolvi_pillow(web, f) for f in folds) if q]
+        sol = [q for f in folds for q in risolvi_pillow(web, f, tutti=True)]
         b = min(sol, key=lambda q: q["scarto"]) if sol else None
         if b is None:
             raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione: "
                                    "nastro %.1f mm" % web)
+        # A pari scarto il DT non dice quale fascia e' il fronte, e l'ordine
+        # in cui le pieghe si incontrano non e' un criterio: dipende dal
+        # verso del foglio. Sul Kinder Choco Fresh fronte da 42 a bordo
+        # nastro e fronte da 39 in mezzo tornano tutte e due a 1,48 mm dal
+        # mezzo giro, e vinceva la prima - la striscia tecnica e il
+        # tratteggio - con "CHOCO fresh" finito sul retro. Decide la stampa,
+        # come per il fronte di un astuccio a fasciatura orizzontale: il
+        # fronte e' la fascia con piu' grafica.
+        pari = {(q["back_a"], q["front"], q["sovrapposizione"]): q
+                for q in sol if q["scarto"] <= b["scarto"] + 0.05}
+        if len(pari) > 1:
+            def croma(q):
+                fy0 = y0 + (q["inizio"] + q["back_a"]) / PT2MM
+                fy1 = fy0 + q["front"] / PT2MM
+                banda = raster[int(fy0 * sc):int(fy1 * sc),
+                               int(x0 * sc):int(x1 * sc)]
+                if not banda.size:
+                    return 0.0
+                return float((banda.max(2) - banda.min(2)).mean())
+            b = max(pari.values(), key=croma)
         lembo, inizio, giro = b["sovrapposizione"], b["inizio"], b["giro"]
         spessore, falda = 0.0, 0.0
         avvisi.append("chiusura a sovrapposizione: lembo coperto %.1f mm, "
