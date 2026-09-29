@@ -182,14 +182,16 @@ pagina intera misurava anche quote, copie tecniche e cartiglio.
 L'ordine della costruzione, per tutte le famiglie:
 
 1. **una pagina sola** (vedi sopra);
-2. **le quote**, lette sul file intero: il DT con la grafica, le sue copie,
+2. **il foglio nel verso della grafica**, girato se sulla tavola stava girato
+   (vedi *Il foglio nel verso della grafica, prima di risolverlo*);
+3. **le quote**, lette sul file intero: il DT con la grafica, le sue copie,
    la miniatura, i numeri del cartiglio. E' li' che le note servono;
-3. **via tutto quello che sta TUTTO fuori dal DT**, nella stessa passata che
+4. **via tutto quello che sta TUTTO fuori dal DT**, nella stessa passata che
    toglie le coperture per nome (`artwork.strip_separations` con `regione`):
    quote, copie tecniche, legenda, cartiglio, miniature. Il DT e' lo steso del
    flowpack (`flowpack.foglio_in_pagina`), il riquadro della fustella per
    astucci e vassoi (`Dieline.bbox`), piu' 3 mm (`MARGINE_DT`);
-4. **la costruzione**, come prima, sul file cosi' pulito.
+5. **la costruzione**, come prima, sul file cosi' pulito.
 
 Le informazioni si leggono PRIMA della pulizia, sul file intero: le
 coperture per nome, le aree riservate - la cui didascalia puo' stare nella
@@ -261,6 +263,115 @@ E il caso per cui e' nata, provato: il Kinder Cards col cartiglio riempito di
 colore. Col codice di prima il blocco piu' colorato era il cartiglio, e ne
 usciva un pack di **28 x 34 mm** con la texture della legenda; adesso esce il
 Kinder Cards, **148 x 108**.
+
+### Il foglio nel verso della grafica, prima di risolverlo
+
+**Uno steso deve dare lo stesso pack comunque stia sulla tavola da disegno** -
+girato di 90, 180 o 270 gradi, spostato, con qualche aggiunta tecnica intorno.
+Come un DT sta sulla tavola lo decide chi impagina, e non e' il pack.
+
+Il caso che l'ha imposto: il **Kinder Pingui T6** arriva in due impaginati.
+Sul FERRERO_1742… il foglio e' dritto sulla grafica e le scritte tecniche -
+*OUTSIDE VIEW*, le quote - stanno capovolte; sul **KPI_T6_base** e' dritto il
+disegno tecnico, e la grafica e' capovolta. Stessa fustella, stesse misure, e
+il secondo usciva **rovesciato**: il solutore legge il cielo come la fascia
+SOPRA il fronte e le falde del retro nell'ordine in cui le incontra, cioe' nel
+verso del FOGLIO. Il fronte lo raddrizzava la texture, faccia per faccia, ma il
+cielo e il fondo erano scambiati, il retro aveva la fascia rossa in alto e la
+falda con "6 Pezzi - 180 g" capovolta, i fianchi a testa in giu'.
+
+La regola e' quella di sempre - **il modello segue la grafica** - applicata al
+FOGLIO invece che alla texture: prima si gira la pagina nel verso della
+grafica, poi si risolve. Il giro si **cuoce** nel contenuto
+(`artwork.pagina_girata`: il flusso avvolto fra `q cm` e `Q`, senza rileggerlo,
+e MediaBox e riquadri portati con la stessa matrice), perche' qui nessuno legge
+`/Rotate`: pdfplumber misura nello spazio del PDF, pdfium ci rende sopra, e un
+foglio girato solo a parole darebbe misure e raster in due telai diversi. Un
+`/Rotate` che il file ha gia' si somma al giro e sparisce, e anche senza giro
+si cuoce all'ingresso (`artwork.pagina_unica`): pdfplumber e la resa di pdfium
+lo applicano, il testo di pdfium e le passate di pypdf no, e lo stesso foglio
+si misurava in due telai diversi. Un KC T8 salvato con `/Rotate 90` da' lo
+stesso modello dell'originale, al pixel. Da li' in avanti
+tutto - quote, colata, nero, texture, testate - lavora sul foglio girato, e il
+riquadro della colata indicato dall'agente gira con lui
+(`artwork.riquadro_girato`).
+
+Il verso lo da' il **testo vivo** (`tracciati.verso_grafica`), e non il
+disegno tecnico, che sul KPI_T6_base e' dritto proprio mentre la grafica e'
+capovolta:
+
+- **astucci** (`artwork.astuccio_sulla_grafica`): ogni faccia che ha testo
+  vota contro il verso che DEVE avere sul foglio (`VERSO_ATTESO`): il fronte e
+  il cielo dritti; il retro e le falde del retro, su una fasciatura verticale,
+  **capovolti**, perche' la piega fa loro mezzo giro; su una orizzontale il
+  retro dritto come il fronte. Fondo e fianchi non votano. Se tutte le facce
+  che parlano si leggono come devono, il foglio resta com'e' e non costa
+  niente; altrimenti si prova a girarlo e a risolverlo di nuovo, prima nei
+  giri che i voti suggeriscono, e vince la lettura con piu' facce giuste - il
+  fronte conta doppio. **Il fronte da solo non basta**: su un astuccio chiuso
+  fronte e retro sono alti uguali, e girato il foglio di mezzo giro il
+  solutore puo' prendere l'altro, e il retro, stampato capovolto, si legge
+  dritto come un fronte. Lo smentisce il cielo, che fra i due deve leggersi
+  dritto col fronte: sul Nutella Donut girato di 90 gradi il fronte era la
+  faccia di PREPARAZIONE, e il cielo capovolto l'ha detto;
+- **flowpack** (`server.flowpack_sulla_grafica`): vota la fascia del fronte
+  (`flowpack.fronte_in_pagina`), e il giro vale se sullo steso girato
+  l'analisi si risolve senza ripiego e il fronte si legge dritto. Il solutore
+  i 90 gradi li reggeva gia' - traspone i suoi ingressi - ma la texture
+  seguiva il foglio: girato di mezzo giro, il Milch-Schnitte usciva a testa in
+  giu'; girato di un quarto il KP T1 Mandarino perdeva la fascia rossa,
+  perche' la colata si allinea su un'onda orizzontale e verticale si
+  incollava storta - con un errore sotto il mezzo millimetro, cioe' senza
+  nessun allarme. Un caso calibrato non passa di qui: le sue quote sono
+  scritte a mano sul foglio com'e'.
+
+Se sul foglio com'e' l'astuccio **non si risolve**, prima di arrendersi lo si
+prova girato: il solutore conosce meglio certi versi di altri. Il KC T8 girato
+di 90 gradi non si costruiva ("i fianchi non tornano con la profondita'"),
+girato si'. Lo stesso per il **vassoio** (`vassoio.riconosci_sulla_tavola`): la
+griglia si riconosce in un verso solo - cinque colonne e tre fasce - e il KMS
+Display girato di un quarto ne aveva tre e cinque; se non torna si prova il
+foglio girato di 90 e 270 gradi, ma solo quando il vassoio e' dichiarato,
+perche' la prova la pagherebbe ogni astuccio e ogni flowpack. Mezzo giro
+invece il vassoio lo regge da se': e' simmetrico, e quale testata va davanti
+lo dicono le altezze (`vassoio.testata_davanti`) - anche di un decimo di
+millimetro, 40,5 contro 40,6 sul KMS Display, perche' con la nord di serie
+davanti andava la testata che stava in alto sulla TAVOLA.
+
+**Il testo storto non vota.** Una scritta messa di sbieco e' un tratto della
+grafica: sul fronte del K Brioss "RICICLAMI nella CARTA" sta a 303 gradi e,
+col suo corpo grande, pesava piu' di tutto il testo dritto. Vota solo chi sta
+entro 10 gradi da un multiplo di 90.
+
+**Il limite: senza testo vivo il verso non si legge**, e il foglio resta com'e'
+sulla tavola - il modello segue il foglio, come prima - e **lo si dice**:
+"verso della grafica non letto ... il verso va controllato sul modello". E'
+l'unico caso in cui il pack puo' ancora dipendere da come lo steso sta sulla
+tavola. Sul parco il testo vivo sul fronte ce l'hanno tutti gli astucci e
+sette flowpack su dodici; Kinder Country, Kinder Cards, Kinder Choco Fresh,
+K Tronky e Kinder Bueno Dark hanno il marchio e le scritte vettorializzati.
+Leggere il verso dalle lettere disegnate - la linea di base allineata, le
+aste che sporgono - e' la strada per loro; con le poche lettere di un marchio
+non e' affidabile, e un verso sbagliato con sicurezza e' peggio di uno
+dichiarato non letto.
+
+Provato girando la pagina dei file del parco di 90, 180 e 270 gradi e
+costruendo ogni copia, cinque viste per modello contro quelle dell'originale:
+
+    identiche al pixel in tutti e quattro i versi
+      astucci   Pingui T6 (tutti e due gli impaginati), KC T8, Nutella Donut
+      flowpack  KP T1 Mandarino, KP T1 Cheesecake, Milch-Schnitte T1,
+                Colazione, Kinder Paradiso, K Brioss STD, K Brioss T10
+    lo stesso vassoio, a meno di un pixel di ricampionamento
+      vassoio   KMS Display (prima a 90 e 270 gradi non si costruiva)
+    capovolti in due versi su quattro: senza testo vivo sul fronte
+      flowpack  Kinder Country, Kinder Cards, Kinder Choco Fresh, K Tronky,
+                Kinder Bueno Dark
+
+E un file salvato con `/Rotate 90` - il KC T8 - da' il modello dell'originale.
+Sul parco nel verso di sempre cambia un solo modello, il Nutella Donut, che
+adesso si legge nel verso della sua grafica: vedi *Se i fianchi li portano
+tutte e due, si vedono quelli stampati*.
 
 ## Domande all'utente
 
@@ -421,7 +532,14 @@ della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
   stampati**, pesati sull'area: una riga di marchio a corpo 40 conta piu' di
   venti righe di legale a corpo 5, che e' come la legge un occhio
   (`tracciati.verso_grafica`). Un pannello senza testo abbastanza non dice
-  niente e si lascia com'e': indovinare sarebbe peggio.
+  niente e si lascia com'e': indovinare sarebbe peggio. E prima delle facce
+  il FOGLIO: se la grafica dice che sta girato sulla tavola, si gira lui e
+  poi si risolve - vedi *Il foglio nel verso della grafica, prima di
+  risolverlo*. Faccia per faccia resta da raddrizzare solo quello che scarta
+  dal verso che la faccia deve avere: il retro di una fasciatura verticale e
+  i fianchi agganciati a lui si stampano capovolti, e letti a 180 gradi sono
+  gia' giusti (`artwork.verso_atteso`). Prima si girava ogni verso diverso
+  da zero, e la falda del retro del Pingui T6 finiva a testa in giu'.
 - **Il marchio `kinder` e' `k` NERA + `inder` ARANCIO KINDER.** Due colori, e
   vanno tutti e due: la `k` in nero, le altre cinque lettere nell'arancio di
   marchio, che nei file e' una tinta piatta col suo nome — `Kinder ORANGE`,
@@ -451,8 +569,8 @@ della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
   foglio e' impaginato girato. Dove girare stirerebbe, non si gira e lo si
   **dichiara**: la regola dice di seguire la grafica, non di consegnare grafica
   deformata. Il caso generale — un pack non quadrato impaginato girato, dove
-  servirebbe trasporre anche le quote del solido — aspetta un pack che lo
-  mostri.
+  servirebbe trasporre anche le quote del solido — lo risolve il foglio
+  girato prima di risolvere: le quote escono gia' nel verso della grafica.
 - **Verificare il verso delle normali.** L'attributo NORMAL non basta: conta
   l'avvolgimento dei triangoli, ed e' quello che i viewer usano per il culling.
   Gli astucci sono stati consegnati due volte con le facce rivolte all'interno
@@ -658,7 +776,15 @@ quello che il file ci ha messo. Nel livello DT va:
   il pieno e' grafica;
 - i **testi fuori dall'artwork stampato** - quote delle miniature, legenda,
   cartiglio - ma solo nella vista del DT, e solo fuori: dentro l'artwork un
-  testo e' grafica anche quando ha il colore di una quota.
+  testo e' grafica anche quando ha il colore di una quota;
+- i **veli tecnici**: un rettangolo pieno, **semitrasparente**, con i quattro
+  lati sulle linee del DT - che ricalca una cella del disegno
+  (`strati._velo`, le linee da `strati.linee_dt`). Sul Kinder Pingui T1
+  Cheesecake le due gole da 10 mm e le fasce coperte sono velate cosi',
+  bianco al 50% dentro quattro form, senza nessun livello: sul modello pinne e
+  fianchi uscivano sbiaditi. Sul T1 Mandarino, stesso DT, i veli non ci sono.
+  Una grafica semitrasparente - il fondino del bollino "LIMITED EDITION" dello
+  stesso file - non ha i lati sulle linee del DT, e resta.
 
 Il colore non si guarda mai, come sempre.
 
@@ -854,13 +980,27 @@ riquadro `BEST BEFORE AREA` a destra: via quelle due, e restano interi il logo
 `100% LATTE ITALIANO`. Sei GLB su otto non cambiano di un byte, e i due che
 cambiano sono esattamente questi.
 
-**Il prefiltro.** Prima di estrarre il testo si guarda se nel flusso della
-pagina compare la parola `AREA`: costa da 0,00 a 0,05 secondi e divide netto -
-zero occorrenze sui sei file del parco senza etichette, 2, 6 e 11 sui tre che
-le hanno. Senza, l'estrazione del testo sarebbero 2,9 secondi buttati su ogni
-K Brioss STD. Se un file scrivesse `AREA` in una codifica che il prefiltro non
-vede si resterebbe alla pulizia di prima: puo' far perdere un'occasione, non
-puo' far strappare la lastra sbagliata.
+**Il prefiltro.** Prima di estrarre il testo con pypdf si guarda se nel testo
+della pagina compare la parola `area`. Il testo lo legge **pdfium**, che
+decodifica i font e scende nei form: costa da 0,01 a 0,15 secondi, contro i
+2,9 che l'estrazione di pypdf costa su ogni K Brioss STD. Prima si cercava
+`AREA` nei byte grezzi del flusso della pagina, e un font a glifi codificati
+la nascondeva: sul **Kinder Paradiso T1** la legenda dice "Covered Area",
+"Print Free Area", "Best Before Area", "Bar Code Area" e "Pin code area", il
+prefiltro diceva di no, e i cinque box - la fascia verde acqua, quella
+arancione, i due verdi e il quadratino rosa - restavano stampati sul pack.
+Stessa cosa sull'astuccio **Pingui T6**, che ha "Neutral Area" e "Best Before
+Area" in legenda. La parola si cerca anche dentro altre, perche' pdfium su una
+didascalia girata e spezzata restituisce "BESAREA": un falso si' costa una
+lettura, un falso no costa un box stampato.
+
+Adesso il Paradiso impara dalla legenda Covered = 1565 C, Print Free = 571 C,
+Best Before = 346 C, Bar Code = 3405 C, Pin code = 7436 C, e il Pingui T6
+Neutral = 571 C - la stessa lastra che l'agente toglieva a occhio, vedi
+sotto - e Best Before = 346 C. Sul Paradiso spariscono tutti i box, e logo,
+prodotto, "FATTA CON LATTE FRESCO" e l'icona del riciclo restano interi; sul
+Pingui T6 sparisce il box verde nella fascia rossa del retro, e il fronte -
+logo, bollino `x6`, QR code - non cambia di un pixel.
 
 **Su ogni file, anche con i livelli tecnici.** All'inizio la ricerca partiva
 solo sui file senza livelli tecnici, per risparmiare la lettura del testo. Sul
@@ -914,16 +1054,17 @@ Si guarda il campione solo se sotto la scritta non c'e' una lastra piena, e
 solo per le scritte che dicono un box area. Sul parco da' quello che l'occhio
 da': Country `COVERED Area` = 1565 C, `Best Before Area` = 346 C, `Bar Code
 Area` = 3405 C; Colazione e K Brioss `TEXT AREA` = 1595 C, `COVERED AREA` =
-1565 C. Le legende del B-ready e del Kinder Cards danno le lastre che gia' si
-chiamano area. Una legenda col campione dietro la scritta, o lontano, non da'
+1565 C; Paradiso e Pingui T6 come sopra, nel prefiltro. Le legende del
+B-ready e del Kinder Cards danno le lastre che gia' si chiamano area. Una legenda col campione dietro la scritta, o lontano, non da'
 niente: si perde un'occasione, non si strappa la lastra sbagliata.
 
 ##### Quando il file non le scrive nemmeno: allora si guarda
 
 Se il nome dell'area non si legge ne' sopra il riquadro ne' in un campione di
 legenda, non c'e' piu' niente da leggere. Era il caso del Kinder Bueno Dark T2
-e del cartotecnico Pingui T6 prima che si leggesse il campione; quei due file
-non sono nel parco di prova, e se ora il campione li prenda non e' verificato.
+e del cartotecnico Pingui T6 prima che si leggesse il campione: il Pingui T6
+adesso lo prende (vedi *Il prefiltro*), il Bueno Dark T2 non e' nel parco di
+prova e non e' verificato.
 A **occhio** pero' sono ovvie: un rettangolo pieno, verde o arancione,
 appoggiato sulle falde.
 
@@ -1867,7 +2008,9 @@ I controlli che decidono la famiglia:
   la stessa faccia vista da due parti. Il solutore prende come retro e fronte
   le due fasce piu' alte e ne fa la media: sul Pingui erano 40,5 e 125,0 e la
   media, 82,8, non e' l'altezza di niente. Quaranta contro centoventicinque
-  vuol dire che questa non e' la lettura giusta;
+  vuol dire che questa non e' la lettura giusta. Delle due, il **retro e'
+  quella che porta i fianchi**: vedi *Il retro e' la faccia che porta i
+  fianchi*;
 - **astuccio aperto**: cielo e fondo devono essere **uguali attorno a una
   faccia sola**, e i **fianchi devono tornare con la profondita'**;
 - in tutti i casi **cielo o fianco devono esistere**, altrimenti la profondita'
@@ -1885,6 +2028,8 @@ La firma in fustella di un astuccio aperto e' netta e non si confonde con
 quella di uno chiuso:
 
     chiuso   [aletta] RETRO | CIELO | FRONTE | FONDO     fianchi accanto al RETRO
+    chiuso   CIELO | FRONTE | FONDO | RETRO [colla]      fianchi accanto al RETRO
+    chiuso   FONDO | RETRO | CIELO | FRONTE [aletta]     fianchi stampati sul FRONTE
     aperto   [falda] CIELO | FRONTE | FONDO [falda]      fianchi accanto al FRONTE
 
 cioe' **una faccia grande sola**, con cielo e fondo **uguali** sopra e sotto, e
@@ -1898,6 +2043,68 @@ tiene fuori i flowpack: su Colazione la fascia grande e' il nastro, cielo e
 fondo sono due falde da 5 mm perfettamente uguali, e senza il controllo ne
 usciva un astuccio profondo cinque millimetri. I fianchi da 7 lo smentiscono, e
 il solutore si ferma.
+
+#### Il retro e' la faccia che porta i fianchi
+
+Un astuccio chiuso ha due facce alte uguali, e quale sia il retro non lo dice
+l'altezza. Il solutore prendeva sempre per retro **quella in alto** sul foglio,
+che e' lo schema `[aletta] RETRO | CIELO | FRONTE | FONDO`. Il **Kinder
+Cioccolato T8** (disegno 17435, KC_T8_GER) e' montato al contrario:
+
+    fasce (mm)   12 | 82 | 12,5 | 82 | 10
+                 cielo  fronte  fondo  retro  colla
+    fianchi      11,5 x 82 sulla faccia BASSA, con le alette colla da 10,5
+
+Letto alla solita maniera il modello usciva sbagliato senza nessun errore: sul
+fronte il pannello bianco, il bambino sul retro e capovolto, per fondo la
+linguetta della colla, i fianchi senza grafica, e la fascia del cielo con
+"kinder SCHOKOLADE" e il "100g" spariva.
+
+Quale e' il retro lo dice la fustella, senza guardare la grafica: **i fianchi
+stanno sul retro** - e' la stessa ipotesi su cui `FOLD_V` costruisce le pieghe.
+Se li porta solo la faccia bassa, il retro e' lei (`dieline._chiuso` con
+`_ha_fianchi`). Cielo e fondo restano quello che sono per il **fronte**: il
+cielo e' la fascia sopra il fronte, se e' profonda come il fondo, e il fondo
+quella fra fronte e retro. Le pieghe non cambiano: il cielo tocca il fronte col
+bordo basso, il fondo col bordo alto, e il retro ha comunque il bordo alto in
+fondo alla scatola - nello schema solito perche' scavalca il cielo, qui perche'
+risale dal fondo. La linguetta della colla non e' una faccia e resta fuori.
+
+Verificato guardando il modello: il cielo con "kinder SCHOKOLADE" si legge dal
+davanti, l'onda rossa del fronte gira sul fondo e si ricongiunge con quella in
+basso sul retro, e le verifiche - UV sul DT e fronte sul fronte - passano. Il
+cielo e' 12 mm e il fondo 12,5: la scatola esce profonda 12, e il fondo e i
+fianchi da 11,5 si stirano del 4-5%.
+
+#### Se i fianchi li portano tutte e due, si vedono quelli stampati
+
+Il retro che porta i fianchi e' la regola della fustella, e vale quando i
+fianchi li porta una faccia sola. Quando li portano **tutte e due** le facce
+alte, una coppia si vede e l'altra sono alette che finiscono dentro - bianche,
+o tratteggiate per la colla - e quale sia lo dice la **stampa**: il solutore
+prepara tutte e due le coppie (`Dieline.fianchi_alt`) e la texture sceglie
+quella con piu' croma, con lo stesso margine con cui si sceglie il fronte di
+una fasciatura orizzontale, un quarto in piu' e quattro punti
+(`artwork.scegli_fianchi`). E la quinta dei fianchi segue la faccia a cui sono
+agganciati (`Dieline.fianchi_su`, `folding.build_faces` con
+`fianchi_sul_fronte`): quelli del retro ne ereditano il mezzo giro, quelli del
+fronte no, come su un astuccio aperto.
+
+Il caso e' il **Nutella Donut**, letto nel verso della grafica - che sul
+foglio e' girato di 90 gradi rispetto al DT:
+
+    fasce (mm)   38,1 | 187,7 | 38,1 | 188,5 [aletta]
+                 fondo  retro   cielo  fronte
+    fianchi      36,9 sul retro, tratteggiati per la colla (croma 5)
+                 36,9 sul fronte, arancio con "nutella donut" (croma 154)
+
+Oltre il fronte c'e' solo l'aletta: **il fondo sta oltre il retro**, ed e' la
+fascia marrone che continua l'onda del retro (`dieline._chiuso`, se e'
+profonda come il cielo). Prima il Donut si leggeva come fasciatura
+orizzontale nel verso del DT, e il modello aveva il cielo capovolto, un
+fianco tutto marrone e per fondo un'aletta; adesso il cielo con "nutella
+donut" si legge dal davanti, i fianchi arancio continuano l'onda marrone del
+fronte e il fondo e' marrone.
 
 #### Le falde del retro sono fasce, non facce
 
@@ -2215,6 +2422,18 @@ piega `solve_bands` non chiude, la costruzione ripiega sul solutore vecchio e
 la grafica scivola. Le costanti restano la taratura buona sugli impaginati gia'
 coperti: si prende il **minimo** fra costante e frazione.
 
+**Una linea disegnata a pezzi e' una linea sola.** La soglia si applica ai
+tratti uno per uno, e un file puo' disegnare una linea in piu' pezzi di fila.
+Sul **Kinder Pingui T1 Cheesecake** il taglio in fondo allo steso e' nove
+segmenti consecutivi - il piu' lungo 96 punti contro una soglia di 135 - mentre
+sul T1 Mandarino, stesso identico disegno, e' uno solo da 340. Scartati i
+pezzi, lo steso si fermava sulla saldatura: passo **141 invece di 149**, corpo
+125 invece di 133, e la verifica delle UV che gridava "rientri diversi (8 e 10
+mm)". Prima della soglia, i tratti della stessa penna sullo stesso asse che si
+toccano si ricuciono (`flowpack._ricuci`): mezzo punto di vuoto al massimo,
+cosi' un tratteggio vero resta tratteggio. Col taglio ricucito il Cheesecake
+esce identico al Mandarino, 135,5 x 149, corpo 133, pinne 8 e gola 10.
+
 **Un ripiego non deve mai essere muto.** Se `analyze_auto` fallisce, la
 costruzione passa al solutore vecchio: il modello che ne esce non e' sbagliato
 in modo evidente, e' **plausibile**, che e' peggio. Su Milch-Schnitte T1 la
@@ -2295,6 +2514,20 @@ Dal PDF non si vede: e' il prodotto a dirlo. Va riportato in
   faccia: il pack resta squadrato fino in fondo e poi salda subito. Nel modello
   si sposta massa da `end_fin` a `L` tenendo ferma la somma `L/2 + end_fin`,
   cosi' le UV non cambiano e la grafica non si muove.
+- **Ma se la gola la disegna il DT, vale quella.** La stima dallo spessore
+  serve quando la saldatura non e' disegnata e la testata arriva alla piega
+  (Brioss). Quando il DT disegna la saldatura E dove finisce il prodotto, la
+  testata e' gia' divisa: pinna fino alla saldatura, gola fino al prodotto, e
+  il corpo la comprende. Su **K Colazione Piu' T10** le quote del file sono
+  `20 | 37,5 | 215 | 37,5 | 20`, e il ramo della scatola divideva lo stesso
+  la pinna da 20 mm: 18 di gola in piu' e **2 mm di pinna**. Il pack usciva
+  una scatola senza pinne, con la grafica delle testate stirata di 2,07 volte,
+  e nessun errore. Era cosi' dal 27 settembre, da quando le testate si
+  leggono dal DT (vedi *Prima le misure, poi il contenuto*), e nessun
+  controllo lo prendeva: la verifica delle UV con la scatola cercava la
+  piega, e sul Colazione la prima linea e' la saldatura. Adesso: gola dal DT,
+  pinna 20, verifica UV a 0,0 mm, film stirato 1,38 invece di 2,07. I due
+  Brioss restano identici al byte.
 
 Resta fuori dal modello il fatto che su questi pack la pinna, oltre a non
 allargarsi, viene **ripiegata sulla testata** invece di sporgere: nelle foto
@@ -2414,7 +2647,9 @@ verso l'interno, entro un terzo del passo:
   calo del tubo vuole piu' film (vedi *La grafica sulle pinne*);
 - se la prima struttura e' una **piega con le sue due guide**, la saldatura
   non e' disegnata: e' il film su scatola (Brioss), e la testata arriva alla
-  piega. Da li' in fuori la gola la decide lo spessore, come prima.
+  piega. Da li' in fuori la gola la decide lo spessore, come prima. Se invece
+  il DT disegna saldatura e gola e il film avvolge una scatola (K Colazione
+  Piu'), la gola resta quella del DT: vedi *Il film su scatola*.
 
 I due lati devono dire la stessa cosa. Se non la dicono, la pinna prende il
 rientro piu' stretto - la regola di sempre - la gola non si usa, e la

@@ -637,20 +637,28 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None):
 
 
 def _forse_etichette(pdf, page_no=0):
-    """Vero se nel flusso della pagina compare la parola `AREA`.
+    """Vero se nel testo della pagina compare la parola `area`.
 
-    Prefiltro, e costa quasi niente: da 0,00 a 0,05 secondi contro i 2,9 che
-    l'estrazione del testo costa sul K Brioss STD. Sul parco divide netto -
-    0 occorrenze sui sei file senza etichette, 2, 6 e 11 sui tre che le hanno.
+    Prefiltro, e costa quasi niente: da 0,01 a 0,15 secondi contro i 2,9 che
+    l'estrazione del testo di pypdf costa sul K Brioss STD.
 
-    Se un file scrivesse `AREA` in una codifica che qui non si vede, il
-    prefiltro direbbe di no e si resterebbe alla pulizia di prima: puo' far
-    perdere un'occasione, non puo' far strappare la lastra sbagliata.
+    Il testo lo legge pdfium, che decodifica i font e scende nei form. Prima
+    si cercava `AREA` nei byte del flusso della pagina, e bastava un font a
+    glifi codificati per non vederla: sul Kinder Paradiso T1 la legenda dice
+    "Covered Area", "Print Free Area", "Best Before Area", "Bar Code Area" e
+    "Pin code area", e i box restavano tutti stampati sul pack. Stesso difetto
+    sull'astuccio Pingui T6. Si cerca la parola anche dentro altre - pdfium
+    su una didascalia girata e spezzata restituisce "BESAREA": un falso si'
+    costa una lettura, un falso no costa un box stampato.
     """
     try:
-        import pypdf
-        dati = pypdf.PdfReader(pdf).pages[page_no].get_contents()
-        return b"AREA" in (dati.get_data() or b"").upper()
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf)
+        try:
+            testo = doc[page_no].get_textpage().get_text_range()
+        finally:
+            doc.close()
+        return "area" in (testo or "").lower()
     except Exception:
         return True   # nel dubbio si guarda davvero
 

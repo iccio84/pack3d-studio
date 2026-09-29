@@ -54,6 +54,10 @@ class Dieline:
     hsegs: list = field(default_factory=list)   # (y, xleft, xright) cordonature orizzontali
     chiuso: bool = True          # un astuccio puo' non avere retro: vedi _aperto
     finestra_mm: float = 0.0     # quanto del retro resta aperto, in altezza
+    fianchi_su: str = "back"     # la fascia a cui sono agganciati i fianchi
+    # I fianchi dell'altra fascia alta, quando le portano tutte e due: quali
+    # sono quelli che si vedono lo dice la stampa. Vedi `solve_carton`.
+    fianchi_alt: dict = field(default_factory=dict)
 
     def cols_in_row(self, y0, y1, cover=0.8):
         """Cordonature verticali che attraversano davvero la fascia [y0, y1]."""
@@ -483,26 +487,74 @@ def _fasce_del_corpo(d):
     return [(ys[i], ys[i + 1], ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
 
 
-def _chiuso(rows, tol=3.0):
+def _ha_fianchi(d, riga, minimo_mm=3.0):
+    """Se la fascia porta i fianchi: una colonna per parte accanto a quella
+    del corpo, attraversata da cordonature che tagliano davvero la fascia."""
+    xs = d.cols_in_row(riga[0], riga[1])
+    if len(xs) < 4:
+        return False
+    larghe = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    c = max(range(len(larghe)), key=lambda i: larghe[i])
+    return (c >= 1 and c + 1 < len(larghe)
+            and larghe[c - 1] * PT2MM >= minimo_mm
+            and larghe[c + 1] * PT2MM >= minimo_mm)
+
+
+def _chiuso(rows, tol=3.0, fianchi=None):
     """Ruoli di [aletta] RETRO - CIELO - FRONTE - FONDO, per indice di fascia.
 
     Retro e fronte sono la stessa faccia vista da due parti, e hanno la STESSA
     altezza: se le due fasce piu' alte non l'hanno, questa non e' la lettura
     giusta. Su un Kinder Pingui T6 il solutore prendeva 40,5 e 125 e ne faceva
     la media, 82,8, che non e' l'altezza di niente.
+
+    Quale delle due e' il retro lo dice la fustella: **i fianchi stanno sul
+    retro**. Di solito e' quella in alto, ma il Kinder Cioccolato T8 e'
+    montato al contrario - CIELO - FRONTE - FONDO - RETRO - colla - e le
+    chiusure di testa sono attaccate alla faccia bassa. Leggendolo alla solita
+    maniera il bambino finiva sul retro, il fronte era il pannello bianco, il
+    fondo la linguetta della colla e il cielo con "kinder SCHOKOLADE" spariva.
+    `fianchi(i)` dice se la fascia `i` porta i fianchi; se li porta solo la
+    faccia bassa, il retro e' lei. Cielo e fondo restano quello che sono per
+    il fronte, sopra e sotto di lui: sono loro, non il retro, a dire da che
+    parte sta la grafica.
     """
     if len(rows) < 3:
         return None
     order = sorted(range(len(rows)), key=lambda i: -rows[i][2])
-    back_i, front_i = sorted(order[:2])
-    hb, hf = rows[back_i][2] * PT2MM, rows[front_i][2] * PT2MM
-    if abs(hb - hf) > max(tol, 0.08 * max(hb, hf)):
+    alta, bassa = sorted(order[:2])
+    ha, hb = rows[alta][2] * PT2MM, rows[bassa][2] * PT2MM
+    if abs(ha - hb) > max(tol, 0.08 * max(ha, hb)):
         return None
+    if fianchi is not None and fianchi(bassa) and not fianchi(alta):
+        # CIELO - FRONTE - FONDO - RETRO [- colla]
+        r = {"back": bassa, "front": alta, "fianchi": bassa}
+        if bassa - alta > 1:
+            r["bottom"] = max(range(alta + 1, bassa), key=lambda i: rows[i][2])
+            fondo = rows[r["bottom"]][2] * PT2MM
+            cielo = rows[alta - 1][2] * PT2MM if alta >= 1 else 0.0
+            # il cielo e' la fascia sopra il fronte, se e' profonda come il
+            # fondo: sopra potrebbe esserci un'aletta, e un'aletta non e' una
+            # faccia della scatola
+            if cielo > 0 and abs(cielo - fondo) <= max(tol, 0.25 * fondo):
+                r["top"] = alta - 1
+        return r
+    back_i, front_i = alta, bassa
     r = {"back": back_i, "front": front_i, "fianchi": back_i}
     if front_i - back_i > 1:
         r["top"] = max(range(back_i + 1, front_i), key=lambda i: rows[i][2])
     if front_i + 1 < len(rows):
         r["bottom"] = front_i + 1
+    elif back_i >= 1 and "top" in r:
+        # FONDO - RETRO - CIELO - FRONTE: la fasciatura parte dal fondo, e
+        # oltre il fronte non c'e' niente. Il fondo e' la fascia prima del
+        # retro, se e' profonda come il cielo: sul Nutella Donut, letto nel
+        # verso della grafica, e' la fascia marrone che continua l'onda del
+        # retro, e senza questa lettura la faccia sotto restava bianca.
+        cielo = rows[r["top"]][2] * PT2MM
+        fondo = rows[back_i - 1][2] * PT2MM
+        if abs(cielo - fondo) <= max(tol, 0.25 * cielo):
+            r["bottom"] = back_i - 1
     return r
 
 
@@ -542,7 +594,8 @@ def solve_carton(d: Dieline) -> Dieline:
     `_aperto`.
     """
     rows = _fasce_del_corpo(d)
-    ruoli = _chiuso(rows) or _aperto(rows)
+    ruoli = (_chiuso(rows, fianchi=lambda i: _ha_fianchi(d, rows[i]))
+             or _aperto(rows))
 
     def fasce():
         """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""
@@ -571,6 +624,25 @@ def solve_carton(d: Dieline) -> Dieline:
         P["left"] = mk(cmain - 1, ruoli["fianchi"], "left")
     if cmain + 1 < len(cols):
         P["right"] = mk(cmain + 1, ruoli["fianchi"], "right")
+    d.fianchi_su = "front" if ruoli["fianchi"] == ruoli["front"] else "back"
+
+    # Se anche l'altra fascia alta porta i fianchi, quali si vedono non lo
+    # dice la fustella: una coppia e' stampata, l'altra sono alette di colla
+    # che finiscono dentro. Sul Nutella Donut i fianchi del retro sono
+    # tratteggiati e quelli del fronte portano "nutella donut": la scelta la
+    # fa la stampa, in `artwork.texture_astuccio`. Qui si preparano tutte e due.
+    altra = {"back": ruoli.get("front"), "front": ruoli.get("back")}[d.fianchi_su]
+    d.fianchi_alt = {}
+    if altra is not None and _ha_fianchi(d, rows[altra]):
+        riga2 = rows[altra]
+        xs2 = d.cols_in_row(riga2[0], riga2[1])
+        c2 = [(xs2[i], xs2[i + 1]) for i in range(len(xs2) - 1)]
+        m2 = max(range(len(c2)), key=lambda i: c2[i][1] - c2[i][0])
+        if m2 >= 1 and m2 + 1 < len(c2):
+            d.fianchi_alt = {
+                "left": Panel(c2[m2 - 1][0], riga2[0], c2[m2 - 1][1], riga2[1], "left"),
+                "right": Panel(c2[m2 + 1][0], riga2[0], c2[m2 + 1][1], riga2[1], "right"),
+            }
 
     # Prima di dare le quote, i controlli che il disegno stesso impone. Non
     # sono cinture di sicurezza: sono la differenza fra dire "non lo so

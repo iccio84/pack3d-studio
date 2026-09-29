@@ -407,8 +407,10 @@ def segmenti(pdf_path, page_no=0, tavolozza=None):
     return segs, larghezza, altezza
 
 
-def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6):
-    """Di quanto e' ruotata la grafica in ciascun riquadro, in gradi.
+def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6,
+                  storto=10.0):
+    """Di quanto e' ruotata la grafica in ciascun riquadro, in gradi, in senso
+    orario a vista.
 
     Il verso lo danno i CARATTERI STAMPATI, e non il disegno tecnico. Sono due
     cose diverse: il disegno tecnico dice come e' impaginato il foglio, la
@@ -423,6 +425,12 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6):
 
     Il peso e' l'AREA del carattere: una riga di marchio a corpo 40 conta piu'
     di venti righe di legale a corpo 5, che e' come la legge un occhio.
+
+    Il testo STORTO non vota: una scritta messa di sbieco e' un tratto della
+    grafica, non il verso del pannello. Sul fronte del K Brioss "RICICLAMI
+    nella CARTA" sta a 303 gradi, e col suo corpo grande pesava piu' di tutto
+    il testo dritto: arrotondata a 270, girava il fronte di un quarto. Vota
+    solo chi sta entro `storto` gradi da un multiplo di 90.
     """
     import math
     fuori = {}
@@ -448,7 +456,10 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6):
                 x = a * (sx + dx) / 2.0 + c * (giu + su) / 2.0 + e
                 y = b * (sx + dx) / 2.0 + d * (giu + su) / 2.0 + f
                 area = max(1e-9, abs(dx - sx) * abs(su - giu))
-                gradi = int(round(math.degrees(ang) / 90.0)) * 90 % 360
+                quarto = int(round(math.degrees(ang) / 90.0))
+                if abs(math.degrees(ang) - 90.0 * quarto) > storto:
+                    continue
+                gradi = quarto * 90 % 360
                 for nome, (x0, y0, x1, y1) in riquadri.items():
                     if x0 <= x <= x1 and y0 <= y <= y1:
                         peso[nome][gradi] = peso[nome].get(gradi, 0.0) + area

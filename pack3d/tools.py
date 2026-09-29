@@ -89,10 +89,15 @@ def fit_sector(pdf, path_index: int):
 
 
 def analyze_carton(pdf):
-    """Griglia della fustella, verso di fasciatura e quote di un astuccio."""
-    from . import quote
+    """Griglia della fustella, verso di fasciatura e quote di un astuccio.
+
+    Nel verso della grafica, come la costruzione (`artwork.
+    astuccio_sulla_grafica`): se il foglio sta girato sulla tavola, l'agente
+    deve vedere cielo, fondo e falde del retro dove li mettera' il modello.
+    """
+    from . import artwork, quote
     try:
-        d = dl.analyze(pdf)
+        pdf, d, _giro, verso = artwork.astuccio_sulla_grafica(pdf)
     except Exception as e:
         return {"errore": str(e)[:120]}
     if not d.panels:
@@ -100,7 +105,7 @@ def analyze_carton(pdf):
     return dict(layout=d.layout, dims_mm=list(d.dims_mm),
                 pannelli={k: [round(p.w_mm, 1), round(p.h_mm, 1)]
                           for k, p in sorted(d.panels.items())},
-                avvisi=dl.check(d),
+                avvisi=([verso] if verso else []) + dl.check(d),
                 quote_del_file=quote.riscontro_astuccio(pdf, d))
 
 
@@ -108,8 +113,7 @@ def analyze_vassoio(pdf):
     """Fondo e pareti di un vassoio espositore, dalla griglia della fustella."""
     from . import quote, vassoio
     try:
-        d = dl.extract(pdf)
-        v = vassoio.riconosci(d)
+        pdf, d, v, _giro, verso = vassoio.riconosci_sulla_tavola(pdf)
     except Exception as e:
         return {"errore": str(e)[:120]}
     finally:
@@ -119,7 +123,7 @@ def analyze_vassoio(pdf):
                           "e' un vassoio"}
     return dict(fondo_mm=[v.fondo_w, v.fondo_h], pareti_mm=dict(v.pareti),
                 testata_davanti=vassoio.testata_davanti(v),
-                avvisi=list(v.warnings),
+                avvisi=([verso] if verso else []) + list(v.warnings),
                 quote_del_file=quote.riscontro_vassoio(pdf, v, d))
 
 

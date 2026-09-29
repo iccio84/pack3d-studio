@@ -76,16 +76,27 @@ def pagina_unica(pdf):
     `clone_from` e non una pagina aggiunta a un file nuovo, per la stessa
     ragione di `strip_separations`: cosi' restano i livelli. Un file di una
     pagina sola torna com'e', senza copie.
+
+    E una pagina salvata con **/Rotate** torna col giro cotto nel contenuto
+    (`pagina_girata` di zero gradi): pdfplumber e la resa di pdfium /Rotate
+    lo applicano, il testo di pdfium e le passate di pypdf no, e lo stesso
+    foglio si misurava in due telai diversi. E' un altro modo di stare sulla
+    tavola, e da qui in avanti non lo vede piu' nessuno.
     """
-    import hashlib
-    import pypdf
+    p, n = _pagina_unica(pdf)
     try:
-        h = hashlib.sha256()
-        with open(pdf, "rb") as fh:
-            for blocco in iter(lambda: fh.read(1 << 20), b""):
-                h.update(blocco)
-        imp = h.hexdigest()
-    except OSError:
+        import pypdf
+        if int(pypdf.PdfReader(p).pages[0].rotation or 0) % 360:
+            p = pagina_girata(p, 0)
+    except Exception:
+        pass
+    return p, n
+
+
+def _pagina_unica(pdf):
+    import pypdf
+    imp = _impronta(pdf)
+    if imp is None:
         return pdf, 1
     fatta = _UNA_PAGINA.get(imp)
     if fatta is not None and os.path.exists(fatta[0]):
@@ -114,6 +125,126 @@ def pagina_unica(pdf):
             pass
     _UNA_PAGINA[imp] = (tmp.name, n)
     return tmp.name, n
+
+
+def _impronta(pdf):
+    """sha256 del file, o None se non si legge."""
+    import hashlib
+    try:
+        h = hashlib.sha256()
+        with open(pdf, "rb") as fh:
+            for blocco in iter(lambda: fh.read(1 << 20), b""):
+                h.update(blocco)
+        return h.hexdigest()
+    except OSError:
+        return None
+
+
+def riquadro_girato(pdf, riq, gradi):
+    """Il riquadro `(x_mm, y_mm, w_mm, h_mm)` - y dall'alto, come lo danno
+    l'agente e l'interfaccia - portato sulla pagina di `pdf` girata di
+    `gradi` in senso orario da `pagina_girata`. Chi ha guardato il foglio l'ha
+    guardato com'era: se la costruzione lo gira, gira anche il riquadro."""
+    gradi = int(gradi) % 360
+    if not riq or not gradi:
+        return riq
+    import pypdf
+    mb = pypdf.PdfReader(pdf).pages[0].mediabox
+    W, H = float(mb.width) * PT2MM, float(mb.height) * PT2MM
+    x, y, w, h = riq
+    if gradi == 90:
+        return (H - (y + h), x, h, w)
+    if gradi == 180:
+        return (W - (x + w), H - (y + h), w, h)
+    return (y, W - (x + w), h, w)
+
+
+# Le copie girate gia' fatte: (impronta del file, gradi) -> copia. Stessa
+# ragione di _UNA_PAGINA: /api/analyze e /api/build girano lo stesso file.
+_GIRATE = {}
+_GIRATE_MAX = 8
+
+
+def _matrice_giro(giro, x0, y0, x1, y1):
+    """La `cm` che gira di `giro` gradi in senso orario, a vista, il riquadro
+    (x0, y0, x1, y1) nello spazio del PDF (y in su) e lo riporta a partire da
+    (0, 0). Serve anche a portare i riquadri della pagina."""
+    if giro == 90:      # il lato alto diventa il lato destro
+        return (0.0, -1.0, 1.0, 0.0, -y0, x1)
+    if giro == 180:
+        return (-1.0, 0.0, 0.0, -1.0, x1, y1)
+    if giro == 270:     # il lato alto diventa il lato sinistro
+        return (0.0, 1.0, -1.0, 0.0, y1, -x0)
+    return (1.0, 0.0, 0.0, 1.0, -x0, -y0)
+
+
+def pagina_girata(pdf, gradi):
+    """Una copia di `pdf` con la prima pagina girata di `gradi` in senso
+    orario, a vista, e il giro COTTO nel contenuto.
+
+    Serve a mettere il foglio nel verso della grafica prima di risolverlo:
+    vedi `astuccio_sulla_grafica`. Cotto e non dichiarato con /Rotate,
+    perche' /Rotate qui non lo leggono tutti - pdfplumber e la resa di pdfium
+    si', il testo di pdfium e le passate di pypdf no - e un foglio girato solo
+    a parole darebbe misure, raster e testo in telai diversi. Per la stessa
+    ragione un /Rotate che il file ha gia' si somma al giro e sparisce: la
+    copia ha /Rotate 0 e si vede com'era, girata di `gradi`. Con zero gradi
+    cuoce soltanto il /Rotate, se c'e' (vedi `pagina_unica`).
+
+    Il contenuto si avvolge fra `q cm` e `Q` senza rileggerlo: su un foglio
+    come Colazione sono centinaia di migliaia di operazioni, e qui basta
+    spostarle tutte insieme. MediaBox e gli altri riquadri si portano con la
+    stessa matrice; livelli, separazioni e risorse restano quelli che erano.
+    Un giro nullo torna il file com'e'.
+    """
+    import pypdf
+    from pypdf.generic import NameObject, NumberObject, RectangleObject, StreamObject
+    impronta = _impronta(pdf)
+    if impronta is None:
+        return pdf
+    chiave = (impronta, int(gradi) % 360)
+    fatta = _GIRATE.get(chiave)
+    if fatta is not None and os.path.exists(fatta):
+        return fatta
+    w = pypdf.PdfWriter(clone_from=pdf)
+    page = w.pages[0]
+    giro = (chiave[1] + int(page.rotation or 0)) % 360
+    if giro == 0:
+        return pdf
+    mb = page.mediabox
+    m = _matrice_giro(giro, float(mb.left), float(mb.bottom),
+                      float(mb.right), float(mb.top))
+
+    def porta(r):
+        xs, ys = [], []
+        for x, y in ((float(r.left), float(r.bottom)), (float(r.right), float(r.top))):
+            xs.append(m[0] * x + m[2] * y + m[4])
+            ys.append(m[1] * x + m[3] * y + m[5])
+        return RectangleObject([min(xs), min(ys), max(xs), max(ys)])
+
+    for nome in ("/CropBox", "/BleedBox", "/TrimBox", "/ArtBox"):
+        if nome in page:
+            page[NameObject(nome)] = porta(RectangleObject(page[nome]))
+    page[NameObject("/MediaBox")] = porta(mb)
+    page[NameObject("/Rotate")] = NumberObject(0)
+    cs = page.get_contents()
+    dati = cs.get_data() if cs is not None else b""
+    nuovo = StreamObject()
+    nuovo.set_data(b"q " + " ".join("%.6f" % v for v in m).encode()
+                   + b" cm\n" + dati + b"\nQ\n")
+    page.replace_contents(nuovo.flate_encode())
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp.close()
+    with open(tmp.name, "wb") as fh:
+        w.write(fh)
+    while len(_GIRATE) >= _GIRATE_MAX:
+        vecchia = _GIRATE.pop(next(iter(_GIRATE)))
+        try:
+            os.unlink(vecchia)
+        except OSError:
+            pass
+    _GIRATE[chiave] = tmp.name
+    return tmp.name
 
 
 # Quanto oltre il DT puo' stare un oggetto e restare, in punti. La grafica
@@ -655,7 +786,7 @@ def verso_della_grafica(pdf, panels, page_no=0):
         return {}
 
 
-def gira_sulla_grafica(tex, panels, verso):
+def gira_sulla_grafica(tex, panels, verso, attesi=None):
     """Rimette dritte le texture seguendo la grafica. (fatte, non fatte).
 
     La regola e' che il modello segue la GRAFICA e non il disegno tecnico: il
@@ -674,9 +805,19 @@ def gira_sulla_grafica(tex, panels, verso):
 
     Dove non si puo' girare senza stirare, non si gira e lo si dichiara: la
     regola dice di seguire la grafica, non di consegnare grafica deformata.
+
+    "Dritta" vuol dire dritta SUL PACK, non sul foglio: il retro di una
+    fasciatura verticale si stampa capovolto, perche' la piega gli fa fare
+    mezzo giro, e letto a 180 gradi sul foglio e' gia' giusto. Si gira solo
+    lo scarto dal verso atteso per la faccia, `attesi` (vedi `verso_atteso`).
+    Prima si girava ogni verso diverso da zero, e sul Kinder Pingui T6 la
+    falda del retro con "6 Pezzi - 180 g", stampata giusta, finiva a testa
+    in giu'.
     """
+    attesi = attesi or {}
     fatte, no = [], []
-    for nome, gradi in sorted(verso.items()):
+    for nome, letto in sorted(verso.items()):
+        gradi = (letto - attesi.get(nome, 0)) % 360
         if not gradi or nome not in tex:
             continue
         p = panels[nome]
@@ -689,6 +830,222 @@ def gira_sulla_grafica(tex, panels, verso):
             no.append("%s (%d gradi, %.0f x %.0f)"
                       % (nome, gradi, lati[0] * PT2MM, lati[1] * PT2MM))
     return fatte, no
+
+
+# Come sta sul foglio, rispetto al fronte, la grafica delle facce che lo dicono
+# senza ambiguita'. Fasciatura verticale: il cielo si piega dal lato alto del
+# fronte e si legge col fronte davanti, quindi sul foglio sta dritto; il retro
+# e le falde del retro fanno mezzo giro attorno all'asse orizzontale, quindi
+# sul foglio stanno capovolti. Fasciatura orizzontale: retro e fianchi girano
+# attorno all'asse verticale, e il cielo si piega dal fronte come sopra: sul
+# foglio stanno dritti. Il fondo e i fianchi non votano: il fondo si stampa in
+# tutti e due i versi, e sui fianchi il testo verticale e' spesso il progetto.
+VERSO_ATTESO = {
+    "vwrap": {"front": 0, "top": 0, "back": 180, "back_top": 180,
+              "back_bottom": 180},
+    "hwrap": {"front": 0, "top": 0, "back": 0},
+}
+
+
+def voti_della_grafica(pdf, d, page_no=0):
+    """Faccia -> di quanto la sua grafica e' girata, in gradi orari, rispetto
+    a come deve stare sul foglio (`VERSO_ATTESO`) per l'astuccio risolto `d`.
+    0 vuol dire che si legge come deve; le facce senza testo vivo non
+    compaiono, perche' non dicono niente."""
+    attesi = VERSO_ATTESO.get(d.layout, {"front": 0})
+    verso = verso_della_grafica(
+        pdf, {n: p for n, p in d.panels.items() if n in attesi}, page_no)
+    return {n: (g - attesi[n]) % 360 for n, g in verso.items()}
+
+
+def _consenso(voti):
+    """Quanto una lettura dell'astuccio va d'accordo con la sua grafica: uno
+    per ogni faccia che si legge come deve, meno uno per ogni faccia che no.
+    Il fronte conta doppio: e' la faccia che si guarda."""
+    return sum((2 if n == "front" else 1) * (1 if g == 0 else -1)
+               for n, g in voti.items())
+
+
+def verso_atteso(layout, fianchi_su="back"):
+    """Come deve stare sul foglio la grafica di ogni faccia che lo dice, per
+    girare le texture (`gira_sulla_grafica`): `VERSO_ATTESO` piu' i fianchi,
+    che non votano il verso del foglio ma vanno girati giusti. Su una
+    fasciatura verticale quelli agganciati al retro ne ereditano il mezzo
+    giro, e sul foglio stanno capovolti come lui."""
+    attesi = dict(VERSO_ATTESO.get(layout, {}))
+    if layout == "vwrap" and fianchi_su == "back":
+        attesi.update(left=180, right=180)
+    return attesi
+
+
+def _croma(immagini):
+    """Quanta grafica c'e' in un gruppo di texture: la croma media, come
+    `dieline._ink`. Un'aletta di colla e' bianca o tratteggiata in nero, una
+    faccia stampata no."""
+    import numpy as np
+    somma = pixel = 0.0
+    for im in immagini:
+        im = im.convert("RGB")
+        im.thumbnail((256, 256))
+        a = np.asarray(im).astype(np.int16)
+        somma += float((a.max(2) - a.min(2)).sum())
+        pixel += a.shape[0] * a.shape[1]
+    return somma / pixel if pixel else 0.0
+
+
+def scegli_fianchi(tex, panels, d, altri):
+    """Fra le due coppie di fianchi di un astuccio chiuso, quella stampata.
+
+    Quando tutte e due le fasce alte portano i fianchi, una coppia si vede e
+    l'altra sono alette che finiscono dentro, di solito bianche o tratteggiate
+    per la colla. Il solutore prende quella del retro (`_chiuso`); qui la
+    stampa puo' smentirlo, con lo stesso margine con cui sceglie il fronte di
+    una fasciatura orizzontale: un quarto in piu' e quattro punti di croma.
+    `tex`, `panels` e `d.fianchi_su` si aggiornano sul posto; torna l'avviso,
+    o None se resta la coppia del solutore."""
+    nostri = [tex[k] for k in altri if k in tex]
+    a, b = _croma(nostri), _croma(altri.values())
+    if not (b > a * 1.25 and b > a + 4.0):
+        return None
+    prima = d.fianchi_su
+    tex.update(altri)
+    panels.update(d.fianchi_alt)
+    d.fianchi_alt = {}
+    d.fianchi_su = "front" if prima == "back" else "back"
+    return ("fianchi presi dalla fascia del %s: quelli del %s sono alette "
+            "che finiscono dentro, non stampate (croma %.0f contro %.0f)"
+            % ("fronte" if d.fianchi_su == "front" else "retro",
+               "retro" if prima == "back" else "fronte", b, a))
+
+
+# Le letture gia' decise: impronta del file -> (giro, avviso). L'analisi e la
+# costruzione dello stesso file la chiedono tutte e due, e le prove costano
+# un'analisi l'una.
+_SULLA_GRAFICA = {}
+_SULLA_GRAFICA_MAX = 16
+
+
+def astuccio_sulla_grafica(pdf, page_no=0):
+    """`(pdf, dieline, giro, avviso)`: l'astuccio risolto nel verso della
+    grafica, `giro` i gradi orari di cui si e' girato il foglio.
+
+    Il solutore legge il foglio come sta sulla tavola: il cielo e' la fascia
+    SOPRA il fronte, il fondo quella sotto, le falde del retro nell'ordine in
+    cui le incontra. Ma come un DT sta sulla tavola lo decide chi impagina: il
+    Kinder Pingui T6 arriva con il foglio dritto sulla grafica (FERRERO_1742…)
+    e con il DT dritto sul disegno tecnico e la grafica capovolta
+    (KPI_T6_base). Stesso astuccio, e il secondo usciva rovesciato: il fronte
+    lo raddrizzava la texture, ma cielo e fondo erano scambiati, il retro
+    aveva la fascia rossa in alto e i fianchi erano a testa in giu'.
+
+    La regola e' quella di sempre - il modello segue la grafica, non il
+    disegno tecnico - applicata al FOGLIO invece che alla texture: se la
+    grafica non si legge come deve, si prova a girare il foglio
+    (`pagina_girata`) e a risolverlo di nuovo, e vince la lettura in cui piu'
+    facce si leggono come devono (`voti_della_grafica`). Cosi' uno steso da'
+    lo stesso astuccio comunque sia messo sulla tavola.
+
+    Il fronte da solo non basta. Su un astuccio chiuso fronte e retro sono
+    alti uguali, e quale dei due e' il fronte il solutore lo decide dalla
+    fustella; girato il foglio di mezzo giro puo' scegliere l'altro, e il
+    retro - stampato capovolto - si legge dritto come un fronte. Lo smentisce
+    il cielo, che fra i due deve leggersi dritto col fronte: sul Nutella Donut
+    girato di 90 gradi il fronte era la faccia di PREPARAZIONE, e il cielo
+    capovolto l'ha detto.
+
+    Si prova solo quando serve: se ogni faccia che ha testo vivo si legge come
+    deve - o se nessuna ne ha - il foglio resta com'e' e non costa niente. E
+    se sul foglio com'e' l'astuccio non si risolve, si prova girato prima di
+    arrendersi: il solutore conosce meglio certi versi di altri.
+    """
+    from . import dieline as dl
+    from . import tracciati
+    chiave = _impronta(pdf)
+    noto = _SULLA_GRAFICA.get(chiave) if chiave else None
+    if noto is not None:
+        giro, avviso = noto
+        scelto = pagina_girata(pdf, giro) if giro else pdf
+        return scelto, dl.analyze(scelto), giro, avviso
+
+    def ricorda(giro, avviso):
+        if chiave:
+            while len(_SULLA_GRAFICA) >= _SULLA_GRAFICA_MAX:
+                _SULLA_GRAFICA.pop(next(iter(_SULLA_GRAFICA)))
+            _SULLA_GRAFICA[chiave] = (giro, avviso)
+
+    letture = []                     # (giro, pdf, dieline, voti)
+    ordine = []
+    try:
+        d0 = dl.analyze(pdf)
+        errore = None
+    except Exception as e:
+        d0, errore = None, e
+    if d0 is not None:
+        if not d0.panels:
+            return pdf, d0, 0, None
+        v0 = voti_della_grafica(pdf, d0, page_no)
+        if not v0:
+            # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
+            # dipendere da come il DT sta sulla tavola.
+            avviso = ("verso della grafica non letto: nessuna faccia ha testo "
+                      "vivo (scritte vettorializzate), e il foglio resta com'e' "
+                      "sulla tavola - il verso va controllato sul modello")
+            ricorda(0, avviso)
+            return pdf, d0, 0, avviso
+        if all(g == 0 for g in v0.values()):
+            ricorda(0, None)
+            return pdf, d0, 0, None  # ogni faccia che parla si legge come deve
+        letture.append((0, pdf, d0, v0))
+        # prima i giri che la grafica suggerisce, quello del fronte in testa
+        ordine = [(360 - g) % 360 for n, g in
+                  sorted(v0.items(), key=lambda kv: kv[0] != "front") if g]
+    else:
+        # nessuna lettura sul foglio com'e': prima il giro del testo del DT
+        try:
+            g = tracciati.verso_grafica(pdf, {"dt": dl.extract(pdf).bbox},
+                                        page_no).get("dt")
+        except Exception:
+            g = None
+        if g:
+            ordine = [(360 - g) % 360]
+    for giro in ordine + [90, 180, 270]:
+        if any(giro == l[0] for l in letture):
+            continue
+        girato = pagina_girata(pdf, giro)
+        try:
+            d = dl.analyze(girato)
+        except Exception:
+            d = None
+        if d is None or not d.panels:
+            letture.append((giro, girato, None, {}))
+            continue
+        v = voti_della_grafica(girato, d, page_no)
+        letture.append((giro, girato, d, v))
+        if v and all(g == 0 for g in v.values()):
+            break                    # ogni faccia che parla si legge come deve
+    risolte = [l for l in letture if l[2] is not None]
+    if not risolte:
+        raise errore
+    # a parita' vince il foglio com'e', poi il primo giro provato
+    giro, scelto, d, v = max(risolte,
+                             key=lambda l: (_consenso(l[3]), l[0] == 0))
+    if giro == 0:
+        avviso = ("la grafica non si legge come deve in nessun verso del "
+                  "foglio: l'astuccio resta letto com'e' sulla tavola, con "
+                  "le texture raddrizzate faccia per faccia")
+    elif d0 is None:
+        avviso = ("sul foglio com'e' l'astuccio non si risolveva (%s): "
+                  "girato di %d gradi si'%s"
+                  % (str(errore)[:60], giro,
+                     "" if _consenso(v) > 0 else
+                     ", ma senza testo vivo il verso non e' confermato dalla "
+                     "grafica"))
+    else:
+        avviso = ("foglio girato di %d gradi prima di risolvere: sulla tavola "
+                  "il DT stava girato rispetto alla grafica, e cielo, fondo, "
+                  "retro e fianchi si leggono nel suo verso" % giro)
+    ricorda(giro, avviso)
+    return scelto, d, giro, avviso
 
 
 def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
@@ -817,7 +1174,7 @@ def avviso_fuori_dt(conti):
 
 def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
                      nero_deciso=None, colata_riquadro=None, regione=None,
-                     esito=None):
+                     esito=None, dieline=None):
     """Le texture di un astuccio, pulite e girate sul verso della grafica.
 
     L'unico punto in cui i tre passaggi si applicano, cosi' non possono piu'
@@ -828,6 +1185,11 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     del cartiglio non sono grafica, e contate col resto abbassavano la quota
     della `k` tradita. In `esito`, se e' un dizionario, finiscono il file
     pulito (`pdf`) e quanti oggetti sono andati via (`conti`).
+
+    `dieline` e' l'astuccio risolto, se `panels` sono i suoi: dice il verso
+    atteso di ogni faccia (`verso_atteso`) e, se tutte e due le fasce alte
+    portano i fianchi, qui si sceglie la coppia STAMPATA (`scegli_fianchi`):
+    `panels` e `dieline.fianchi_su` si aggiornano sul posto.
 
     Restituisce `(texture, avvisi)`, con gli avvisi gia' scritti come vanno
     mostrati a chi guarda il modello.
@@ -844,12 +1206,22 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     fuori = avviso_fuori_dt(conti)
     if fuori:
         avvisi.append(fuori)
-    tex = folding.rasterize_panels(pulito, panels, dpi=dpi, page_no=page_no,
+    alt = dict(dieline.fianchi_alt) if dieline is not None else {}
+    da_rendere = dict(panels)
+    da_rendere.update({k + "~": p for k, p in alt.items()})
+    tex = folding.rasterize_panels(pulito, da_rendere, dpi=dpi, page_no=page_no,
                                    clean=clean, note=avvisi,
                                    nero_deciso=nero_deciso,
                                    colata_riquadro=colata_riquadro)
+    if alt:
+        scelta = scegli_fianchi(tex, panels, dieline,
+                                {k: tex.pop(k + "~") for k in alt})
+        if scelta:
+            avvisi.append(scelta)
+    attesi = (verso_atteso(dieline.layout, dieline.fianchi_su)
+              if dieline is not None else {})
     giri, storti = gira_sulla_grafica(
-        tex, panels, verso_della_grafica(pulito, panels, page_no))
+        tex, panels, verso_della_grafica(pulito, panels, page_no), attesi)
     if lastre:
         avvisi.append("lastre tecniche e coperture tolte per nome: %s"
                       % ", ".join(lastre))
