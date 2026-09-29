@@ -26,10 +26,20 @@ def build(args):
     os.makedirs(args.out, exist_ok=True)
     base = args.name or os.path.splitext(os.path.basename(args.pdf))[0]
 
-    d = dl.analyze(args.pdf, kind=args.kind)
+    giro = None
+    if args.kind in (None, "carton"):
+        # nel verso della grafica, come il server: vedi
+        # `artwork.astuccio_sulla_grafica`. Da qui in avanti `pdf` e' la
+        # copia girata, se il foglio andava girato.
+        pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(args.pdf)
+    else:
+        pdf = args.pdf
+        d = dl.analyze(pdf, kind=args.kind)
     if not d.panels:
         raise SystemExit(f"tipologia '{d.kind}' non ancora supportata dal solutore")
     print(f"tipologia   : {d.kind} ({d.layout})")
+    if giro:
+        print("  avviso   :", giro)
     print(f"quote L/H/P : {d.dims_mm[0]} x {d.dims_mm[1]} x {d.dims_mm[2]} mm")
     for k, p in sorted(d.panels.items()):
         print(f"  {k:7s} {p.w_mm:7.1f} x {p.h_mm:6.1f} mm")
@@ -39,13 +49,15 @@ def build(args):
     dpi, tmax = artwork.risoluzione(args.quality)
     if args.dpi:
         dpi = args.dpi
-    tex, avvisi_tex = artwork.texture_astuccio(args.pdf, d.panels, dpi)
+    tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
+                                              dieline=d)
     for m in avvisi_tex:
         print("  avviso   :", m)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
-                                panels=d.panels, chiuso=d.chiuso)
+                                panels=d.panels, chiuso=d.chiuso,
+                                fianchi_sul_fronte=d.fianchi_su == "front")
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
-    riscontro = quote.riscontro_astuccio(args.pdf, d)
+    riscontro = quote.riscontro_astuccio(pdf, d)
     verifiche = verifiche + ([riscontro] if riscontro else [])
     for m in verifiche:
         print("  verifica :", m)
@@ -87,7 +99,7 @@ def build(args):
                        "bbox_pt": [round(v, 2) for v in p.bbox()]}
                    for k, p in sorted(d.panels.items())},
         "layout": d.layout,
-        "warnings": dl.check(d) + avvisi_tex + verifiche,
+        "warnings": ([giro] if giro else []) + dl.check(d) + avvisi_tex + verifiche,
         "camera_fit_error_px": err,
     }
     with open(os.path.join(args.out, f"{base}_report.json"), "w") as fh:

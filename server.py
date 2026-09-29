@@ -196,6 +196,83 @@ def analisi_flowpack(pdf):
         return _ANALISI[imp]
 
 
+# I versi gia' decisi: impronta del file -> (giro, avviso). Come _ANALISI:
+# /api/analyze e /api/build chiedono lo stesso file, e la prova costa
+# un'analisi.
+_VERSO_FP = OrderedDict()
+
+
+def flowpack_sulla_grafica(pdf):
+    """`(pdf, giro, avviso)`: lo steso di un flowpack nel verso della grafica.
+
+    E' `artwork.astuccio_sulla_grafica` per il flowpack, e per la stessa
+    ragione: uno steso non deve dare un pack diverso secondo come sta sulla
+    tavola. Il solutore gli 90 gradi li regge gia' - traspone i suoi ingressi
+    e ritrova le pinne - ma la texture seguiva il FOGLIO: girato lo steso di
+    mezzo giro, il Milch-Schnitte usciva a testa in giu', e sul KP T1
+    Mandarino girato di un quarto la colata, che si allinea su un'onda
+    orizzontale, si incollava storta e la fascia rossa spariva.
+
+    Il verso lo da' il testo vivo del FRONTE (`fpk.fronte_in_pagina`): se e'
+    girato, si gira la pagina (`artwork.pagina_girata`) e si rifa' l'analisi,
+    e il giro vale solo se sul foglio girato lo steso si risolve senza ripiego
+    e il fronte si legge dritto. Da li' in avanti tutto - colata, nero,
+    testate, texture - lavora sullo steso com'e' negli originali del parco,
+    che si leggono tutti col fronte dritto. Senza testo vivo sul fronte il
+    verso non si conosce e il foglio resta com'e'.
+
+    Un caso calibrato non passa di qui: le sue quote sono scritte a mano sul
+    foglio com'e'.
+    """
+    from pack3d import tracciati
+    imp = _impronta(pdf)
+    with _ANALISI_CHIAVE:
+        noto = _VERSO_FP.get(imp)
+    if noto is None:
+        giro, avviso = 0, None
+
+        def verso(p):
+            _box, fp, ripiego = analisi_flowpack(p)
+            if ripiego is not None:
+                return None
+            return tracciati.verso_grafica(
+                p, {"front": fpk.fronte_in_pagina(fp)}).get("front", -1)
+
+        try:
+            g = verso(pdf)
+        except Exception:
+            g = None
+        if g == -1:
+            # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
+            # dipendere da come lo steso sta sulla tavola.
+            avviso = ("verso della grafica non letto: sul fronte non c'e' "
+                      "testo vivo (scritte vettorializzate), e lo steso resta "
+                      "com'e' sulla tavola - il verso va controllato sul "
+                      "modello")
+        elif g:
+            girato = artwork.pagina_girata(pdf, (360 - g) % 360)
+            try:
+                dritto = girato != pdf and verso(girato) == 0
+            except Exception:
+                dritto = False
+            if dritto:
+                giro = (360 - g) % 360
+                avviso = ("steso girato di %d gradi prima di risolvere: sulla "
+                          "tavola la grafica del fronte era girata, e pinne, "
+                          "retro e colata si leggono nel suo verso" % giro)
+            else:
+                avviso = ("la grafica del fronte e' girata di %d gradi sullo "
+                          "steso, ma girato il foglio non si risolve col "
+                          "fronte dritto: resta letto com'e' sulla tavola" % g)
+        noto = (giro, avviso)
+        with _ANALISI_CHIAVE:
+            _VERSO_FP[imp] = noto
+            while len(_VERSO_FP) > _ANALISI_MAX:
+                _VERSO_FP.popitem(last=False)
+    giro, avviso = noto
+    return (artwork.pagina_girata(pdf, giro) if giro else pdf), giro, avviso
+
+
 # --------------------------------------------------------------------------- #
 # costruzione
 # --------------------------------------------------------------------------- #
@@ -259,7 +336,12 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # fork di Ghostscript c'e' (16 GB), e le scritte nere della legenda non
     # devono pesare sulla quota della `k`.
     pdf, n_pagine = artwork.pagina_unica(pdf)
-    d = dl.analyze(pdf)          # sull'originale: il DT e' quello che misura
+    # sull'originale - il DT e' quello che misura - ma nel verso della
+    # grafica: se il foglio sta girato sulla tavola, da qui in avanti si
+    # lavora sulla copia girata. Vedi `artwork.astuccio_sulla_grafica`.
+    sorgente = pdf
+    pdf, d, gradi, giro = artwork.astuccio_sulla_grafica(pdf)
+    colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
     # Coperture via per nome e texture girate sul verso della grafica: sono
@@ -269,9 +351,11 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
                                               lastre_extra=lastre_extra,
                                               colata_riquadro=colata_riquadro,
-                                              regione=d.bbox, esito=esito)
+                                              regione=d.bbox, esito=esito,
+                                              dieline=d)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
-                                panels=d.panels, chiuso=d.chiuso)
+                                panels=d.panels, chiuso=d.chiuso,
+                                fianchi_sul_fronte=d.fianchi_su == "front")
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
@@ -280,7 +364,7 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     riscontro = quotature.riscontro_astuccio(pdf, d)
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
-            "%.1f x %.1f x %.1f mm" % d.dims_mm]
+            "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
     rgb = avviso_quadricromia(esito.get("pdf", pdf), regione=d.bbox)
     if rgb:
         meta.insert(0, rgb)
@@ -301,11 +385,12 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     dpi, tmax = risoluzione(quality)
     # una pagina sola, e il nero sul file pulito: vedi `build_carton`
     pdf, n_pagine = artwork.pagina_unica(pdf)
-    d = dl.extract(pdf)
-    v = vassoio.riconosci(d)
+    sorgente = pdf
+    pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(pdf)
     if v is None:
         raise ValueError("non e' un vassoio: la griglia della fustella non ha "
                          "cinque colonne e tre fasce")
+    colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
     # quindi non c'e' nessun ritaglio da ruotare. Il pannello unico serve
@@ -361,6 +446,8 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                " / ".join("%s %.1f" % (k, a) for k, a in v.pareti.items())),
             "%d vertici sul profilo della fustella, cartoncino %.1f mm"
             % (len(V), vassoio.SPESSORE)]
+    if giro:
+        meta.append(giro)
     pagine = avviso_pagine(n_pagine)
     if pagine:
         meta.insert(0, pagine)
@@ -599,6 +686,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # in avanti non le vede nessuno. Vedi `artwork.pagina_unica`.
     pdf, n_pagine = artwork.pagina_unica(pdf)
     conti = {}
+    giro = None
     if case:
         # anche qui le lastre dell'agente: un caso calibrato elenca a mano
         # quello che sapeva allora, non quello che si vede oggi guardando. E
@@ -611,6 +699,14 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         box = None
         ripiego = None
     else:
+        # Nel verso della grafica: da qui in avanti `pdf` e' lo steso girato,
+        # se sulla tavola stava girato, e con lui il riquadro della colata
+        # che l'agente ha indicato guardando il foglio com'era. Vedi
+        # `flowpack_sulla_grafica`.
+        sorgente = pdf
+        pdf, gradi, giro = flowpack_sulla_grafica(pdf)
+        colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro,
+                                                  gradi)
         # Stessa analisi di /api/analyze, non una seconda uguale: il ripiego
         # muto (che su Milch-Schnitte T1 dava corpo e pinne 136,5 e 8,0 invece
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
@@ -641,6 +737,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     pagine = avviso_pagine(n_pagine)
     if pagine:
         avvisi_sez.append(pagine)
+    if giro:
+        avvisi_sez.append(giro)
     fuori = artwork.avviso_fuori_dt(conti)
     if fuori:
         avvisi_sez.append(fuori)
@@ -1088,9 +1186,16 @@ def _analyze_pdf(pdf, kind=None):
                           "nastro %.0f x passo %.0f mm" % (case["web"], case["step"])])
     if kind in (None, "carton", "vassoio"):
         grezza = None
+        giro_v = None
         try:
-            grezza = dl.extract(pdf)
-            v = vassoio.riconosci(grezza)
+            if kind == "vassoio":
+                # dichiarato: vale la pena di provarlo anche di traverso,
+                # vedi `vassoio.riconosci_sulla_tavola`. Senza dichiarazione
+                # no: la prova la pagherebbe ogni astuccio e ogni flowpack.
+                _p, grezza, v, _g, giro_v = vassoio.riconosci_sulla_tavola(pdf)
+            else:
+                grezza = dl.extract(pdf)
+                v = vassoio.riconosci(grezza)
         except Exception:
             v = None
         finally:
@@ -1124,14 +1229,19 @@ def _analyze_pdf(pdf, kind=None):
                               % (v.fondo_w, v.fondo_h,
                                  " / ".join("%s %.1f" % (k, a)
                                             for k, a in v.pareti.items()))]
+                             + ([giro_v] if giro_v else [])
                              + list(v.warnings))
     if kind in (None, "carton"):
         try:
-            d = dl.analyze(pdf)
+            # nel verso della grafica, come la costruzione: i cartellini
+            # devono dire le falde nell'ordine in cui le vedra' il modello
+            pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(pdf)
             if d.panels:
                 meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso
                                            else " aperto"),
                         "%.1f x %.1f x %.1f mm" % d.dims_mm]
+                if giro:
+                    meta.append(giro)
                 apertura = dl.dichiara_apertura(d)
                 if apertura:
                     meta.append(apertura)
@@ -1143,10 +1253,14 @@ def _analyze_pdf(pdf, kind=None):
         except Exception:
             if kind == "carton":
                 raise
-    # se fallisce anche il ripiego, l'errore va al client
+    # nel verso della grafica, come la costruzione; e se fallisce anche il
+    # ripiego, l'errore va al client
+    pdf, _gradi, giro = flowpack_sulla_grafica(pdf)
     _box, fp, ripiego = analisi_flowpack(pdf)
     meta = ["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
             "corpo %.1f mm" % fp.L]
+    if giro:
+        meta.append(giro)
     if fp.pillow:
         # a sovrapposizione la sezione non c'e' nello steso: il tubo e' piatto
         # e la forma che prende gonfiandosi la decide il rigonfiamento. Quello

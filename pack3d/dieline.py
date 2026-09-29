@@ -54,6 +54,10 @@ class Dieline:
     hsegs: list = field(default_factory=list)   # (y, xleft, xright) cordonature orizzontali
     chiuso: bool = True          # un astuccio puo' non avere retro: vedi _aperto
     finestra_mm: float = 0.0     # quanto del retro resta aperto, in altezza
+    fianchi_su: str = "back"     # la fascia a cui sono agganciati i fianchi
+    # I fianchi dell'altra fascia alta, quando le portano tutte e due: quali
+    # sono quelli che si vedono lo dice la stampa. Vedi `solve_carton`.
+    fianchi_alt: dict = field(default_factory=dict)
 
     def cols_in_row(self, y0, y1, cover=0.8):
         """Cordonature verticali che attraversano davvero la fascia [y0, y1]."""
@@ -541,6 +545,16 @@ def _chiuso(rows, tol=3.0, fianchi=None):
         r["top"] = max(range(back_i + 1, front_i), key=lambda i: rows[i][2])
     if front_i + 1 < len(rows):
         r["bottom"] = front_i + 1
+    elif back_i >= 1 and "top" in r:
+        # FONDO - RETRO - CIELO - FRONTE: la fasciatura parte dal fondo, e
+        # oltre il fronte non c'e' niente. Il fondo e' la fascia prima del
+        # retro, se e' profonda come il cielo: sul Nutella Donut, letto nel
+        # verso della grafica, e' la fascia marrone che continua l'onda del
+        # retro, e senza questa lettura la faccia sotto restava bianca.
+        cielo = rows[r["top"]][2] * PT2MM
+        fondo = rows[back_i - 1][2] * PT2MM
+        if abs(cielo - fondo) <= max(tol, 0.25 * cielo):
+            r["bottom"] = back_i - 1
     return r
 
 
@@ -610,6 +624,25 @@ def solve_carton(d: Dieline) -> Dieline:
         P["left"] = mk(cmain - 1, ruoli["fianchi"], "left")
     if cmain + 1 < len(cols):
         P["right"] = mk(cmain + 1, ruoli["fianchi"], "right")
+    d.fianchi_su = "front" if ruoli["fianchi"] == ruoli["front"] else "back"
+
+    # Se anche l'altra fascia alta porta i fianchi, quali si vedono non lo
+    # dice la fustella: una coppia e' stampata, l'altra sono alette di colla
+    # che finiscono dentro. Sul Nutella Donut i fianchi del retro sono
+    # tratteggiati e quelli del fronte portano "nutella donut": la scelta la
+    # fa la stampa, in `artwork.texture_astuccio`. Qui si preparano tutte e due.
+    altra = {"back": ruoli.get("front"), "front": ruoli.get("back")}[d.fianchi_su]
+    d.fianchi_alt = {}
+    if altra is not None and _ha_fianchi(d, rows[altra]):
+        riga2 = rows[altra]
+        xs2 = d.cols_in_row(riga2[0], riga2[1])
+        c2 = [(xs2[i], xs2[i + 1]) for i in range(len(xs2) - 1)]
+        m2 = max(range(len(c2)), key=lambda i: c2[i][1] - c2[i][0])
+        if m2 >= 1 and m2 + 1 < len(c2):
+            d.fianchi_alt = {
+                "left": Panel(c2[m2 - 1][0], riga2[0], c2[m2 - 1][1], riga2[1], "left"),
+                "right": Panel(c2[m2 + 1][0], riga2[0], c2[m2 + 1][1], riga2[1], "right"),
+            }
 
     # Prima di dare le quote, i controlli che il disegno stesso impone. Non
     # sono cinture di sicurezza: sono la differenza fra dire "non lo so

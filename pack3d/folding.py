@@ -295,18 +295,23 @@ def guscio(faces, spessore=SPESSORE_CRT, interno=INTERNO, taglio=TAGLIO):
 
 def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
                 panels: dict | None = None, chiuso: bool = True,
-                spessore: float = SPESSORE_CRT) -> list:
+                spessore: float = SPESSORE_CRT,
+                fianchi_sul_fronte: bool | None = None) -> list:
     """Facce pronte per rasterizzatore ed export: quad 3D + texture + UV.
 
     Con `panels` si costruiscono anche le falde del retro, che sono fasce e
     non facce: la loro altezza la sa solo la fustella. Con `chiuso` falso i
-    fianchi si agganciano al fronte, vedi FIANCHI_SUL_FRONTE. Con `spessore`
-    il guscio prende lo spessore del cartoncino, vedi `guscio`.
+    fianchi si agganciano al fronte, vedi FIANCHI_SUL_FRONTE; lo stesso se
+    `fianchi_sul_fronte` lo dice di un astuccio chiuso, i cui fianchi stampati
+    stanno sulla fascia del fronte (`Dieline.fianchi_su`). Con `spessore` il
+    guscio prende lo spessore del cartoncino, vedi `guscio`.
     """
     W, H, D = dims_mm
     C = corners(W, H, D)
     pieghe = FOLDS[layout]
-    if layout == "vwrap" and not chiuso:
+    if fianchi_sul_fronte is None:
+        fianchi_sul_fronte = not chiuso
+    if layout == "vwrap" and fianchi_sul_fronte:
         pieghe = {**pieghe, **FIANCHI_SUL_FRONTE}
     faces = []
     for name, keys in pieghe.items():

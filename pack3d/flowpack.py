@@ -1358,6 +1358,17 @@ def foglio_in_pagina(fp):
     return (sh[1], sh[0], sh[3], sh[2]) if fp.ruotato else tuple(sh)
 
 
+def fronte_in_pagina(fp):
+    """Il riquadro della fascia del fronte nel telaio della pagina: tutto il
+    passo, e sul giro la faccia larga fra i due fianchi - o, a
+    sovrapposizione, dopo la prima meta' del retro. E' dove si legge il verso
+    della grafica: vedi `server.flowpack_sulla_grafica`."""
+    sh = fp.sheet
+    inizio = fp.girth_span[0] + (fp.back_a + (0.0 if fp.pillow else fp.T)) / PT2MM
+    r = (sh[0], inizio, sh[2], inizio + fp.W / PT2MM)
+    return (r[1], r[0], r[3], r[2]) if fp.ruotato else r
+
+
 def _testate_dallo_stampato(raster, sc, x0, x1, y0, inizio, b, spessore):
     """La pinna dal margine non stampato della fascia fronte: il ripiego.
 

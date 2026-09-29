@@ -107,6 +107,36 @@ def riconosci(d):
     return v
 
 
+def riconosci_sulla_tavola(pdf):
+    """`(pdf, dieline estratta, Vassoio o None, giro, avviso)`.
+
+    `riconosci` legge la griglia in un verso solo - cinque colonne e tre
+    fasce - e il KMS Display girato di 90 gradi sulla tavola ne ha tre e
+    cinque: non si costruiva. Se la griglia nel verso del foglio non torna si
+    prova il foglio girato di un quarto (`artwork.pagina_girata`), prima di
+    dire che non e' un vassoio. Mezzo giro non serve: il vassoio si legge
+    uguale, e quale testata va davanti lo decide `testata_davanti` dalle
+    altezze.
+    """
+    from . import artwork, dieline
+    d = dieline.extract(pdf)
+    v = riconosci(d)
+    if v is not None:
+        return pdf, d, v, 0, None
+    for giro in (90, 270):
+        girato = artwork.pagina_girata(pdf, giro)
+        if girato == pdf:
+            break
+        d2 = dieline.extract(girato)
+        v2 = riconosci(d2)
+        if v2 is not None:
+            return girato, d2, v2, giro, (
+                "foglio girato di %d gradi: sulla tavola la griglia del "
+                "vassoio - cinque colonne e tre fasce - stava di traverso"
+                % giro)
+    return pdf, d, None, 0, None
+
+
 def _fasce_comuni(m, i):
     """I tratti che le righe `i-1` e `i` hanno IN COMUNE, e i loro capi.
 
@@ -164,12 +194,18 @@ def testata_davanti(v: Vassoio):
 
     Su un espositore il davanti e' basso perche' il prodotto si deve vedere,
     e il dietro, se e' piu' alto, regge il cartello. E' una misura del DT,
-    non una scelta: quando le due testate sono alte uguali - entro due
-    millimetri, come sul Milch-Schnitte - resta la nord, che e' quella che la
-    maglia mette davanti.
+    non una scelta.
+
+    Anche quando le due testate sono alte quasi uguali - sul Milch-Schnitte
+    40,5 e 40,6 - decide la piu' bassa, e non la nord. Nord e sud sono il
+    sopra e il sotto del FOGLIO: con la nord di serie, lo stesso steso girato
+    di mezzo giro sulla tavola metteva davanti l'altra testata. Il decimo di
+    millimetro non dice niente del progetto, ma sta nel disegno e non nella
+    tavola, quindi da' lo stesso vassoio comunque sia messo il foglio. Solo a
+    pari altezza resta la nord.
     """
     n, s = v.pareti["nord"], v.pareti["sud"]
-    return "sud" if s < n - 2.0 else "nord"
+    return "sud" if s < n else "nord"
 
 
 def gira(V):
