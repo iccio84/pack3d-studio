@@ -277,6 +277,23 @@ def riscontro_vassoio(pdf, v, d, page_no=0):
     return _riscontro(pdf, "fondo e pareti", attese, v.dims_mm, page_no)
 
 
+def riscontro_plancia(pdf, p, d, page_no=0):
+    """Fondo, pareti e coperchio del display con plancia contro le quote scritte.
+
+    Le catene attese sono quelle della croce: in larghezza falda, fianco,
+    fondo, fianco e coperchio, in altezza falda, fronte, fondo, retro e falda
+    (vedi `pack3d.plancia`); la terna e' quella del display aperto.
+    """
+    bx0, by0, bx1, by1 = d.bbox
+    fx0, fy0, fx1, fy1 = p.fondo
+    b = p.bordi
+    xs = sorted({round(t, 2) for t in (bx0, b["ovest"], fx0, fx1, b["est"], bx1)})
+    ys = sorted({round(t, 2) for t in (by0, b["nord"], fy0, fy1, b["sud"], by1)})
+    attese = [("in larghezza", [round((q - a) * PT2MM, 1) for a, q in zip(xs, xs[1:])]),
+              ("in altezza", [round((q - a) * PT2MM, 1) for a, q in zip(ys, ys[1:])])]
+    return _riscontro(pdf, "fondo, pareti e coperchio", attese, p.dims_mm, page_no)
+
+
 # --------------------------------------------------------------------------- #
 # la miniatura vettoriale: quando le quote non sono testo
 # --------------------------------------------------------------------------- #

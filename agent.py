@@ -33,6 +33,14 @@ vengono prima di tutto il resto (le trovi in testa alle Regole del progetto):
   film, che non si allunga; lo fa la costruzione, e l'avviso "pinne e spalle"
   dice quanto si stira. Astucci e vassoi non hanno pinne.
 
+Il VASSOIO ha due forme, e si dichiarano tutte e due "vassoio". Quello aperto:
+fondo e quattro pareti. E il DISPLAY CON PLANCIA, che arriva come una scatola
+chiusa - fondo, pareti, un coperchio grande quanto il fondo attaccato al bordo
+di un fianco, una finestra a strappo sul fronte - e aperto diventa espositore,
+col coperchio che fa da plancia in piedi sul retro. analyze_vassoio li
+distingue da solo e la costruzione il display lo fa APERTO: non e' un astuccio
+e non e' un flowpack, anche se chiuso ne ha l'aria.
+
 Metodo:
 - Si lavora sulla PRIMA PAGINA sola. Un PDF su piu' pagine e' quasi sempre lo
   stesso pack ripetuto per lingua; gli strumenti guardano gia' solo la prima,

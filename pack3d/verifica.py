@@ -525,3 +525,83 @@ def vassoio(V, UV, T, parti, v, d, lato_tex, px_mm_tex, coda):
                         "sulle loro fasce entro %.1f mm, la testata %s guarda "
                         "davanti, nessuna parete specchiata" % (peggio, davanti))
     return ok, righe
+
+
+def plancia(V, UV, T, parti, p, pz, lato_tex, px_mm_tex, coda):
+    """Il display con plancia contro il DT, e la plancia al suo posto.
+
+    `(ok, righe)`. Le stesse due verifiche del vassoio - le pareti sulle loro
+    righe del DT, misurate sulle UV con la scala vera della texture, e nessuna
+    faccia specchiata - e in piu' quella che conta per questa famiglia: la
+    faccia davanti della plancia che guarda davanti, quella dietro che guarda
+    dietro, la parete con la finestra davanti, e la cima sopra il retro. Se la
+    piega del coperchio fosse quella sbagliata, e' qui che si vede.
+    """
+    W_t, H_t = lato_tex
+    alto = (H_t - coda) / float(H_t)
+    rx0, ry0, _rx1, _ry1 = pz.riquadro()
+    righe, ok, peggio = [], True, 0.0
+    # la riga esterna di ogni parete sul DT, e da che parte sta
+    esterni = {"ovest": (0, p.bordi["ovest"], -1), "est": (0, p.bordi["est"], +1),
+               "nord": (1, p.bordi["nord"], -1), "sud": (1, p.bordi["sud"], +1)}
+    for nome, (asse, linea, lato) in esterni.items():
+        if nome not in parti:
+            ok = False
+            righe.append("UVW NON CORRISPONDE AL DT - manca la parete %s" % nome)
+            continue
+        a, b = parti[nome]
+        uv = UV[np.unique(T[a:b].ravel())]
+        fuori = uv[uv[:, 1] < alto - 1e-6]
+        if not len(fuori):
+            continue
+        origine = (rx0 if asse == 0 else ry0) * PT2MM
+        mm = origine + fuori[:, asse] * (W_t if asse == 0 else H_t) / px_mm_tex
+        bordo = float(mm.min() if lato < 0 else mm.max())
+        scarto = abs(bordo - linea * PT2MM)
+        peggio = max(peggio, scarto)
+        if scarto > TOL_PARETE:
+            ok = False
+            righe.append("UVW NON CORRISPONDE AL DT - parete %s: il bordo cade "
+                         "%.1f mm %s la riga del disegno" % (
+                             nome, scarto,
+                             "oltre" if (bordo - linea * PT2MM) * lato > 0
+                             else "dentro"))
+    specchiate, versi = [], {}
+    for nome, (a, b) in parti.items():
+        t = T[a:b]
+        est = t[(UV[t][:, :, 1] < alto - 1e-6).all(1)]
+        if not len(est):
+            continue
+        n, rovesci, tot = _normale_e_verso(V, UV, est)
+        if tot and rovesci * 2 > tot:
+            specchiate.append(nome)
+        versi[nome] = n
+    if specchiate:
+        ok = False
+        righe.append("FACCIA SPECCHIATA: %s" % ", ".join(specchiate))
+    # davanti guarda davanti (+z), dietro guarda dietro, e la parete con la
+    # finestra e' quella davanti
+    attesi = {"plancia davanti": +1, "plancia dietro": -1, p.fronte: +1}
+    for nome, verso in attesi.items():
+        n = versi.get(nome)
+        if n is None or n[2] * verso < 0.97:
+            ok = False
+            righe.append("PLANCIA FUORI POSTO: %s non guarda %s" % (
+                nome, "davanti" if verso > 0 else "dietro"))
+    # e sta in piedi SOPRA il retro
+    sopra = None
+    if "plancia davanti" in parti and p.retro in parti:
+        a, b = parti["plancia davanti"]
+        cima = float(V[np.unique(T[a:b].ravel()), 1].max())
+        a, b = parti[p.retro]
+        retro = float(V[np.unique(T[a:b].ravel()), 1].max())
+        sopra = cima - retro
+        if sopra <= 0:
+            ok = False
+            righe.append("PLANCIA FUORI POSTO: non arriva sopra il retro")
+    if ok:
+        righe.insert(0, "UVW sul DT e plancia al suo posto: le pareti cadono "
+                        "sulle loro righe entro %.1f mm, la plancia guarda "
+                        "davanti e sale %.1f mm sopra il retro, nessuna faccia "
+                        "specchiata" % (peggio, sopra or 0.0))
+    return ok, righe

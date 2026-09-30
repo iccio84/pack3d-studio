@@ -230,87 +230,64 @@ def con_coda(steso):
     return Image.fromarray(np.concatenate([a, coda], 0))
 
 
-def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
-         alt_texture=None, parti=None):
-    """La maglia del vassoio piegato: vertici, UV sullo steso, triangoli.
+class Maglia:
+    """La maglia che si sta stendendo: vertici, UV sullo steso e triangoli.
 
-    I NOMI, come li chiama chi il display ce l'ha in mano: **base** al
-    centro, **fronte** e **retro** sulle due testate, **lato SX** e
-    **lato DX** sulle due colonne, e quattro **alette** agli angoli.
+    Si riempie un pezzo alla volta con `pezzo`, ognuno col suo spessore. Sta
+    fuori da `mesh` perche' la usa anche il display con plancia
+    (`plancia.mesh`): ha pezzi in piu', ma li stende allo stesso modo, e due
+    copie dello stesso codice prima o poi divergono.
 
-    LE ALETTE SONO DEI LATERALI, non delle testate. Piegano di 90 gradi
-    rispetto al laterale, e quando il laterale a sua volta piega di 90
-    rispetto alla base si ritrovano in posizione frontale e posteriore: sono
-    lo strato interno del fronte e del retro, che poi ci si chiudono sopra.
-    E' il modo in cui un vassoio sta in piedi, e sbagliarlo vuol dire
-    costruire quattro pareti che non si tengono.
-
-    Una texture sola - lo steso con in fondo due righe di colore piatto, vedi
-    `con_coda` - e le UV prese dalla posizione nel piano: la piega sposta i
-    vertici e la grafica se li porta dietro, quindi non c'e' nessun ritaglio
-    da ruotare. Le facce interne e le coste pescano dalle due righe in fondo.
-
-    Con `spessore` ogni pezzo diventa un guscio: faccia esterna, faccia
-    interna spostata lungo la normale entrante e avvolta al contrario, e la
-    costa sui bordi che confinano col taglio - non su quelli che confinano
-    con una cordonatura, dove il cartoncino continua.
-
-    `parti`, se c'e', si riempie con i triangoli di ogni pezzo - `{nome:
-    (primo, ultimo + 1)}` con i nomi della griglia, fondo, nord, est, sud,
-    ovest e le alette - perche' le verifiche li possano confrontare col DT.
+    `W` e `H` sono le misure della sagoma, cioe' della griglia su cui stanno
+    le maschere dei pezzi; `alt_texture` quella della texture con la coda.
     """
-    import numpy as np
 
-    H, W = sagoma.shape
-    cxL, cxR, cyT, cyB = creste
-    Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
-    # UNO specchio, e uno solo. Piegando lo steso cosi' com'e' la stampa
-    # finisce DENTRO - il marchio si legge mirror, cioe' attraverso il
-    # cartone - perche' la faccia stampata guardava in su e piegando in su
-    # va a guardare l'interno. Ci vuole uno specchio per rimetterla fuori, e
-    # uno solo: con due (x e z) e' una rotazione, e torna mirror.
-    #
-    # Si specchia la **z**, non la x. Le due scelte leggono uguale - il
-    # marchio sta dritto su tutte e quattro le pareti - e cambiano solo quale
-    # testata guarda la camera. Sul Milch-Schnitte le due testate portano la
-    # stessa grafica, quindi da qui non si decide: se arriva un display con
-    # fronte e retro diversi, quello e' il file su cui verificarlo.
-    mx = lambda X: (X - Xc) / px_mm
-    mz = lambda Y: (Yc - Y) / px_mm
-    xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
-    DENTRO = 0.5
+    def __init__(self, W, H, spessore=SPESSORE, alt_texture=None, parti=None):
+        self.W, self.H = W, H
+        self.spessore = spessore
+        self.parti = parti
+        # Le UV si misurano sulla TEXTURE, non sulla sagoma. La coda e' CODA
+        # righe in fondo alla texture (vedi `con_coda`), e la sagoma ha
+        # un'altezza tutta sua - 4 px/mm contro i 2,4 della texture sul
+        # Milch-Schnitte. Prendendo `H + CODA` come altezza totale la riga
+        # dell'interno cascava su quella del taglio, e tutto il dentro del
+        # vassoio usciva del colore del taglio.
+        ht = float(alt_texture) if alt_texture else float(H + CODA)
+        self.q = (ht - CODA) / ht                # la frazione con la grafica
+        self.vI = (ht - CODA * 0.75) / ht        # riga dell'interno
+        self.vT = (ht - CODA * 0.25) / ht        # riga del taglio
+        self.V, self.UV, self.T = [], [], []
 
-    # Le UV si misurano sulla TEXTURE, non sulla sagoma. La coda e' CODA righe
-    # in fondo alla texture (vedi `con_coda`), e la sagoma ha un'altezza tutta
-    # sua - 4 px/mm contro i 2,4 della texture sul Milch-Schnitte. Prendendo
-    # `H + CODA` come altezza totale la riga dell'interno cascava su quella del
-    # taglio, e tutto il dentro del vassoio usciva del colore del taglio.
-    ht = float(alt_texture) if alt_texture else float(H + CODA)
-    q = (ht - CODA) / ht                # la frazione che tiene la grafica
-    vI = (ht - CODA * 0.75) / ht        # riga dell'interno
-    vT = (ht - CODA * 0.25) / ht        # riga del taglio
-
-    V, UV, T = [], [], []
-
-    def quad(p0, p1, p2, p3, uv):
+    def quad(self, p0, p1, p2, p3, uv):
+        V, T = self.V, self.T
         k = len(V)
         V.extend([p0, p1, p2, p3])
-        UV.extend([uv] * 4)
+        self.UV.extend([uv] * 4)
         T.append((k, k + 2, k + 1))
         T.append((k, k + 3, k + 2))
 
-    def pezzo(masc, verso, punto, dentro, su_cordone, nome=None):
+    def pezzo(self, masc, verso, punto, dentro, su_cordone, nome=None):
         """Un pezzo col suo spessore: esterna, interna e coste.
+
+        `punto(X, Y)` porta un pixel della sagoma sulla faccia esterna, in mm;
+        `dentro` e' la direzione della faccia interna; `su_cordone(X, Y)` dice
+        dove il bordo e' cordonatura, cioe' cartoncino che continua nel pezzo
+        accanto, e la costa non ci va.
 
         Si procede a FASCE: due righe vicine e il cartoncino che hanno in
         comune, vedi `_fasce_comuni`. Cosi' il pezzo esce uno solo anche dove
         la sagoma si apre o si chiude, e le coste restano sui tagli veri.
         """
+        import numpy as np
+
+        V, UV, T = self.V, self.UV, self.T
+        W, H, q, vI, vT = self.W, self.H, self.q, self.vI, self.vT
+        quad = self.quad
         m = masc if verso == "righe" else masc.T
         if m.shape[0] < 2:
             return
         primo = len(T)
-        d = np.array(dentro, float) * spessore
+        d = np.array(dentro, float) * self.spessore
         # Il verso dell'avvolgimento non si indovina: si MISURA. La faccia
         # esterna deve guardare dalla parte opposta a `dentro`, e il piano lo
         # dice da solo - basta chiedere a `punto` dove vanno un passo in X e
@@ -375,8 +352,68 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
             aperta, inizio = sola, i - 1
         if aperta is not None:
             stendi(aperta, inizio, m.shape[0] - 1)
-        if parti is not None and nome:
-            parti[nome] = (primo, len(T))
+        if self.parti is not None and nome:
+            self.parti[nome] = (primo, len(T))
+
+    def array(self):
+        """`(V, UV, T)` come array, come li vuole l'esportatore."""
+        import numpy as np
+        return (np.array(self.V, float), np.array(self.UV, float),
+                np.array(self.T, np.uint32))
+
+
+def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
+         alt_texture=None, parti=None):
+    """La maglia del vassoio piegato: vertici, UV sullo steso, triangoli.
+
+    I NOMI, come li chiama chi il display ce l'ha in mano: **base** al
+    centro, **fronte** e **retro** sulle due testate, **lato SX** e
+    **lato DX** sulle due colonne, e quattro **alette** agli angoli.
+
+    LE ALETTE SONO DEI LATERALI, non delle testate. Piegano di 90 gradi
+    rispetto al laterale, e quando il laterale a sua volta piega di 90
+    rispetto alla base si ritrovano in posizione frontale e posteriore: sono
+    lo strato interno del fronte e del retro, che poi ci si chiudono sopra.
+    E' il modo in cui un vassoio sta in piedi, e sbagliarlo vuol dire
+    costruire quattro pareti che non si tengono.
+
+    Una texture sola - lo steso con in fondo due righe di colore piatto, vedi
+    `con_coda` - e le UV prese dalla posizione nel piano: la piega sposta i
+    vertici e la grafica se li porta dietro, quindi non c'e' nessun ritaglio
+    da ruotare. Le facce interne e le coste pescano dalle due righe in fondo.
+
+    Con `spessore` ogni pezzo diventa un guscio: faccia esterna, faccia
+    interna spostata lungo la normale entrante e avvolta al contrario, e la
+    costa sui bordi che confinano col taglio - non su quelli che confinano
+    con una cordonatura, dove il cartoncino continua.
+
+    `parti`, se c'e', si riempie con i triangoli di ogni pezzo - `{nome:
+    (primo, ultimo + 1)}` con i nomi della griglia, fondo, nord, est, sud,
+    ovest e le alette - perche' le verifiche li possano confrontare col DT.
+    """
+    import numpy as np
+
+    H, W = sagoma.shape
+    cxL, cxR, cyT, cyB = creste
+    Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
+    # UNO specchio, e uno solo. Piegando lo steso cosi' com'e' la stampa
+    # finisce DENTRO - il marchio si legge mirror, cioe' attraverso il
+    # cartone - perche' la faccia stampata guardava in su e piegando in su
+    # va a guardare l'interno. Ci vuole uno specchio per rimetterla fuori, e
+    # uno solo: con due (x e z) e' una rotazione, e torna mirror.
+    #
+    # Si specchia la **z**, non la x. Le due scelte leggono uguale - il
+    # marchio sta dritto su tutte e quattro le pareti - e cambiano solo quale
+    # testata guarda la camera. Sul Milch-Schnitte le due testate portano la
+    # stessa grafica, quindi da qui non si decide: se arriva un display con
+    # fronte e retro diversi, quello e' il file su cui verificarlo.
+    mx = lambda X: (X - Xc) / px_mm
+    mz = lambda Y: (Yc - Y) / px_mm
+    xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
+    DENTRO = 0.5
+
+    maglia = Maglia(W, H, spessore, alt_texture, parti)
+    pezzo = maglia.pezzo
 
     def cella(y0, y1, x0, x1):
         m = np.zeros((H, W), bool)
@@ -418,7 +455,7 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
           lambda X, Y: (xR - (Y - cyB) / px_mm, (X - cxR) / px_mm, zB + DENTRO),
           (0, 0, 1), lambda X, Y: vicino(Y, cyB), "aletta sud-est")
 
-    return (np.array(V, float), np.array(UV, float), np.array(T, np.uint32))
+    return maglia.array()
 
 
 # piu' chiaro di cosi', e attaccato al bordo del foglio, non e' cartoncino
