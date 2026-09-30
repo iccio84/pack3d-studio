@@ -35,7 +35,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, dieline as dl, folding, exporters, nero,
-                    vassoio, verifica)
+                    plancia, vassoio, verifica)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -393,8 +393,9 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                   colata_riquadro=None):
     """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
 
-    Le alette angolari non si costruiscono: da fuori le copre la parete che
-    tengono su, e un pannello che non si vede non vale la texture che costa.
+    Un blocco unico, senza feritoie: le alette angolari stanno dentro lo
+    spessore di fronte e retro, dove da fuori non si vedono, e le pareti
+    arrivano agli spigoli (`vassoio.corpo`, e `verifica.blocco` lo controlla).
     """
     dpi, tmax = risoluzione(quality)
     # una pagina sola, e il nero sul file pulito: vedi `build_carton`
@@ -402,8 +403,17 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     sorgente = pdf
     pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(pdf)
     if v is None:
+        # Non e' un vassoio aperto, ma puo' essere la scatola chiusa che si
+        # apre in espositore: stesso fondo, stesse pareti e un coperchio che
+        # diventa la plancia. Vedi `pack3d.plancia`.
+        pdf, d, p, gradi, giro = plancia.riconosci_sulla_tavola(sorgente)
+        if p is not None:
+            return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
+                                 quality, lastre_extra, colata_riquadro,
+                                 n_pagine)
         raise ValueError("non e' un vassoio: la griglia della fustella non ha "
-                         "cinque colonne e tre fasce")
+                         "cinque colonne e tre fasce, e non e' un display con "
+                         "plancia")
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
@@ -452,8 +462,12 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     # scala vera della texture, e il fronte sul fronte
     _ok, verifiche = verifica.vassoio(V, UV, T, parti, v, d, steso.size,
                                       dpi_tex / 25.4, vassoio.CODA)
+    # e un blocco unico, senza feritoie fra le pareti e sul fondo
+    verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
     riscontro = quotature.riscontro_vassoio(pdf, v, d)
-    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax)
+    # un blocco unico: un nodo solo, col suo nome
+    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax,
+                             parti=[("vassoio", 0, len(T))])
     meta = ["vassoio espositore",
             "base %.1f x %.1f mm, pareti %s mm"
             % (v.fondo_w, v.fondo_h,
@@ -467,6 +481,62 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
         meta.insert(0, pagine)
     return (meta + avvisi_sagoma + avvisi_tex + list(v.warnings) + avvisi_fronte
             + verifiche + ([riscontro] if riscontro else []))
+
+
+def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
+                  lastre_extra=(), colata_riquadro=None, n_pagine=1):
+    """Il display con plancia APERTO a espositore: vedi `pack3d.plancia`.
+
+    `pdf`, `d` e `p` sono gia' quelli di `plancia.riconosci_sulla_tavola`,
+    nel verso in cui la griglia si legge; `sorgente` il file a pagina unica,
+    per riportare la colata sul foglio girato.
+
+    Come il vassoio: una texture sola - lo steso - e le UV sono la posizione
+    sul foglio. Ma lo steso si rende sul solo riquadro della fustella, non
+    sulla pagina intera: sul Tronky la pagina e' 940 x 800 mm e la fustella
+    515 x 486, e con lo stesso lato massimo la texture tiene quasi il doppio
+    dei punti per millimetro.
+    """
+    dpi, tmax = risoluzione(quality)
+    colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
+    px_mm = 4.0
+    pz = plancia.pezzi(pdf, p, d, px_mm)
+    rx0, ry0, rx1, ry1 = pz.riquadro()
+    lato = max(rx1 - rx0, ry1 - ry0)
+    dpi_tex = min(dpi, tmax * 72.0 / lato) if lato > 0 else dpi
+    tex, avvisi_tex = artwork.texture_astuccio(
+        pdf, {"steso": Panel(rx0, ry0, rx1, ry1, "steso")}, dpi_tex,
+        lastre_extra=lastre_extra, colata_riquadro=colata_riquadro,
+        regione=d.bbox)
+    # la coda prima della maglia, come nel vassoio: le UV dell'interno e del
+    # taglio si misurano sull'altezza che la texture ha davvero
+    steso = vassoio.con_coda(tex["steso"])
+    parti = {}
+    V, UV, T = plancia.mesh(p, pz, px_mm, alt_texture=steso.height,
+                            parti=parti)
+    _ok, verifiche = verifica.plancia(V, UV, T, parti, p, pz, steso.size,
+                                      dpi_tex / 25.4, vassoio.CODA)
+    verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
+    # e le misure del disegno contro le quote scritte: confermano, non
+    # costruiscono
+    riscontro = quotature.riscontro_plancia(pdf, p, d)
+    # Il display e' un blocco unico e la plancia un elemento a se': due nodi
+    # nel GLB, sugli stessi vertici e la stessa texture. La plancia e' stesa
+    # per ultima, quindi i suoi triangoli stanno in fondo.
+    inizio = min(a for k, (a, _b) in parti.items() if k.startswith("plancia"))
+    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax,
+                             parti=[("display", 0, inizio),
+                                    ("plancia", inizio, len(T))])
+    meta = plancia.dichiara(p) + [
+        "%d vertici sui tratti della fustella, cartoncino %.1f mm"
+        % (len(V), vassoio.SPESSORE)]
+    if giro:
+        meta.append(giro)
+    pagine = avviso_pagine(n_pagine)
+    if pagine:
+        meta.insert(0, pagine)
+    return (meta + avvisi_tex + verifiche
+            + ([riscontro] if riscontro else []))
 
 
 def _flowpack_from_case(case):
@@ -1238,6 +1308,34 @@ def _analyze_pdf(pdf, kind=None):
             v = None
         finally:
             dl.scarta_resa()
+        if v is None and kind in (None, "vassoio"):
+            # Non e' un vassoio aperto: puo' essere il display con plancia, la
+            # scatola chiusa che si apre in espositore (`pack3d.plancia`).
+            # Dichiarato si prova anche di traverso, come il vassoio; senza
+            # dichiarazione si guarda la griglia gia' letta, e non costa
+            # niente. E' qui che il Tronky T48 smette di uscire flowpack.
+            pl, giro_p = None, None
+            try:
+                if kind == "vassoio":
+                    _p, _g, pl, _gr, giro_p = plancia.riconosci_sulla_tavola(pdf)
+                elif grezza is not None:
+                    pl = plancia.riconosci(grezza)
+                    if pl is None:
+                        # di traverso sulla tavola: la griglia trasposta lo
+                        # dice senza rileggere il file, e la costruzione poi
+                        # il foglio lo gira davvero
+                        pl = plancia.di_traverso(grezza)
+                        if pl is not None:
+                            giro_p = ("foglio di traverso sulla tavola: la "
+                                      "costruzione lo gira di un quarto")
+            except Exception:
+                pl = None
+            finally:
+                dl.scarta_resa()
+            if pl is not None:
+                return dict(kind="vassoio", title="Display con plancia",
+                            meta=plancia.dichiara(pl)
+                            + ([giro_p] if giro_p else []))
         if v is None and kind == "vassoio":
             # La dichiarazione deve valere anche quando dice di NO. Senza
             # questo ramo "vassoio" scivolava fino in fondo alla funzione e
@@ -1257,9 +1355,9 @@ def _analyze_pdf(pdf, kind=None):
                     max(0, len({round(t, 2) for t in grezza.xs}) - 1),
                     max(0, len({round(t, 2) for t in grezza.ys}) - 1))
             raise ValueError(
-                "vassoio: un espositore ha cinque colonne e tre fasce, questa "
-                "fustella %s. Se e' un astuccio dichiara 'cartotecnico'."
-                % letto)
+                "vassoio: un espositore ha cinque colonne e tre fasce, un "
+                "display con plancia un coperchio sul fianco; questa fustella "
+                "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
         if v is not None:
             return dict(kind="vassoio", title="Vassoio espositore",
                         meta=["vassoio espositore",

@@ -119,8 +119,31 @@ def analyze_vassoio(pdf):
     finally:
         dl.scarta_resa()
     if v is None:
-        return {"errore": "la griglia non ha cinque colonne e tre fasce: non "
-                          "e' un vassoio"}
+        # la scatola chiusa che si apre in espositore: vedi `pack3d.plancia`
+        from . import plancia
+        try:
+            _p, _d, pl, _giro, verso = plancia.riconosci_sulla_tavola(pdf)
+        except Exception:
+            pl = None
+        finally:
+            dl.scarta_resa()
+        if pl is not None:
+            davanti, dorso, dietro = pl.parti_coperchio
+            x0, y0, x1, y1 = pl.fondo
+            cx0, cy0, cx1, cy1 = pl.coperchio
+            return dict(tipo="display con plancia",
+                        fondo_mm=[round((x1 - x0) * dl.PT2MM, 1),
+                                  round((y1 - y0) * dl.PT2MM, 1)],
+                        pareti_mm={k: round(a, 1) for k, a in pl.pareti.items()},
+                        fronte=pl.fronte,
+                        coperchio_mm=[round((cx1 - cx0) * dl.PT2MM, 1),
+                                      round((cy1 - cy0) * dl.PT2MM, 1)],
+                        plancia_mm=dict(davanti=round(davanti, 1),
+                                        dorso=round(dorso, 1),
+                                        dietro=round(dietro, 1)),
+                        avvisi=([verso] if verso else []) + list(pl.warnings))
+        return {"errore": "la griglia non ha cinque colonne e tre fasce, e "
+                          "non e' un display con plancia: non e' un vassoio"}
     return dict(fondo_mm=[v.fondo_w, v.fondo_h], pareti_mm=dict(v.pareti),
                 testata_davanti=vassoio.testata_davanti(v),
                 avvisi=([verso] if verso else []) + list(v.warnings),
@@ -216,7 +239,11 @@ TOOLS = [
     dict(name="analyze_vassoio",
          description="Fondo e quattro pareti di un vassoio espositore dalla "
                      "griglia della fustella, quale testata va davanti e il "
-                     "riscontro con le quote scritte nel file.",
+                     "riscontro con le quote scritte nel file. Se non e' un "
+                     "vassoio aperto riconosce il display con plancia - la "
+                     "scatola chiusa col coperchio su un fianco che si apre "
+                     "in espositore - e ne da' fondo, pareti, coperchio e "
+                     "plancia.",
          input_schema={"type": "object", "properties": {}}),
     dict(name="analyze_flowpack",
          description="Fasce del nastro, sezione, corpo e saldature di un flowpack. "

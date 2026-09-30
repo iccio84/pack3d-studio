@@ -176,7 +176,16 @@ def write_obj_mesh(V, UV, tris, tex, outdir, basename="model", tex_quality=92):
 
 
 def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
-                   tex_quality=88, tex_max=2048):
+                   tex_quality=88, tex_max=2048, parti=None):
+    """Una maglia sola con la sua texture, in GLB.
+
+    `parti`, se c'e', e' `[(nome, primo, ultimo)]` sui triangoli: ognuna
+    diventa un NODO con la sua mesh, sugli stessi vertici e la stessa
+    texture. Serve dove il pack e' fatto di elementi separati - il display
+    con la plancia, che sta in piedi sul retro e non e' incollata al blocco -
+    e chi apre il modello li deve poter prendere uno per uno. Senza `parti` il
+    file e' quello di sempre: un nodo, una mesh.
+    """
     buf = bytearray()
     views, accessors = [], []
 
@@ -194,7 +203,6 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
     pos = (np.asarray(V, np.float32) * unit_scale)
     nrm = _normals(np.asarray(V, float), tris)
     uv = np.asarray(UV, np.float32)
-    idx = np.asarray(tris, np.uint32).ravel()
 
     a_pos = len(accessors)
     accessors.append({"bufferView": add_view(pos.tobytes(), 34962),
@@ -206,9 +214,15 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
     a_uv = len(accessors)
     accessors.append({"bufferView": add_view(uv.tobytes(), 34962),
                       "componentType": 5126, "count": len(uv), "type": "VEC2"})
-    a_idx = len(accessors)
-    accessors.append({"bufferView": add_view(idx.tobytes(), 34963),
-                      "componentType": 5125, "count": len(idx), "type": "SCALAR"})
+    tri = np.asarray(tris, np.uint32).reshape(-1, 3)
+    pezzi = parti or [("flowpack", 0, len(tri))]
+    a_idx = []
+    for _nome, t0, t1 in pezzi:
+        ix = tri[t0:t1].ravel()
+        a_idx.append(len(accessors))
+        accessors.append({"bufferView": add_view(ix.tobytes(), 34963),
+                          "componentType": 5125, "count": len(ix),
+                          "type": "SCALAR"})
 
     im = tex
     if max(im.size) > tex_max:
@@ -220,11 +234,13 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
 
     gltf = {
         "asset": {"version": "2.0", "generator": "pack3d"},
-        "scene": 0, "scenes": [{"nodes": [0]}],
-        "nodes": [{"mesh": 0, "name": "flowpack"}],
-        "meshes": [{"name": "flowpack", "primitives": [{
+        "scene": 0, "scenes": [{"nodes": list(range(len(pezzi)))}],
+        "nodes": [{"mesh": k, "name": nome}
+                  for k, (nome, _t0, _t1) in enumerate(pezzi)],
+        "meshes": [{"name": nome, "primitives": [{
             "attributes": {"POSITION": a_pos, "NORMAL": a_nrm, "TEXCOORD_0": a_uv},
-            "indices": a_idx, "material": 0}]}],
+            "indices": a_idx[k], "material": 0}]}
+            for k, (nome, _t0, _t1) in enumerate(pezzi)],
         "accessors": accessors, "bufferViews": views,
         "buffers": [{"byteLength": len(buf)}],
         "images": [{"bufferView": iv, "mimeType": "image/jpeg"}],

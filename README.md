@@ -43,5 +43,6 @@ tipologia di packaging, ricostruisce la geometria dalla fustella e restituisce
 un GLB scaricabile.
 
 Tipologie coperte: astuccio a fasciatura verticale, astuccio a fasciatura
-orizzontale, flowpack. Per i flowpack vengono chieste zigrinatura e tipo di
-gonfiore prima di costruire.
+orizzontale, flowpack, vassoio espositore e display con plancia - la scatola
+chiusa che si apre in espositore, costruita aperta. Per i flowpack vengono
+chieste zigrinatura e tipo di gonfiore prima di costruire.
