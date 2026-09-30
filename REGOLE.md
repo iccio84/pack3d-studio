@@ -2074,6 +2074,78 @@ quad per riga e' geometria pagata per niente: il Milch-Schnitte passa da
 e i capi coincidono, quindi la superficie e' la stessa — verificato al pixel,
 zero differenze su 5,8 milioni di pixel resi da sette angolazioni.
 
+### Un blocco unico, senza feritoie
+
+**Vassoi e display si costruiscono come UN BLOCCO solo: fondo, pareti e alette
+si toccano dappertutto, e fra una parte e l'altra non resta nessuno spazio
+vuoto. Le plance sono l'eccezione: sono elementi a se', e restano separate**
+(vedi *La plancia e' un elemento a se'*).
+
+Il cartoncino piegato non ha fessure: fra il fondo e una parete c'e' la
+cordonatura, e il cartone continua; agli spigoli le pareti si incontrano e si
+incollano. Nel modello, invece, anche un quarto di millimetro di vuoto da
+vicino si vede — una riga di luce lungo una piega, uno spigolo aperto, il vuoto
+fra la faccia stampata e quella interna — ed e' un difetto che il pack vero non
+ha. Da dove venivano:
+
+| la feritoia | dove | perche' |
+|---|---|---|
+| fra il fondo e le pareti, lungo tutta la piega, un quarto di millimetro | KMS, Tronky | ogni pezzo messo al suo posto sulla griglia di pixel, e non sulla sua piega |
+| su ogni spigolo, un millimetro e mezzo | Tronky | i fianchi sono 3 mm piu' corti del fondo — lo spessore, che il DT compensa — e finivano prima dello spigolo |
+| fra la faccia esterna e quella interna | tutti | la costa solo sui capi delle fasce: le teste dei fianchi e i lati del fronte restavano aperti |
+| due righe a trattini sul retro, dentro | Tronky | le alette mezzo millimetro fuori dalla parete, coi bordi a vista |
+
+Come si costruisce il blocco (`vassoio.corpo`, lo stesso per il vassoio e per
+il display):
+
+1. **ogni pezzo si ancora alla sua cordonatura**: il suo bordo sulla piega va
+   esattamente sulla piega. E il bordo e' fin dove arriva davvero la sua maglia
+   (`vassoio._ingombro`), non l'ingombro dei pixel: un pixel isolato sul
+   contorno — l'antialias di un angolo — allarga i pixel ma non la maglia.
+   Ancorato ai pixel, il fianco ovest del KMS usciva un quarto di millimetro
+   piu' basso del DT, e sul fondo lo stesso quarto e' una feritoia;
+2. **fianchi, fronte e retro si stirano fino agli spigoli**: la loro faccia
+   esterna arriva sulla faccia esterna della parete accanto, e la pelle del
+   blocco e' continua. Sul Tronky la grafica dei fianchi si allunga dell'1,5%,
+   che non si vede;
+3. **la faccia interna rientra di uno spessore** dove il pezzo incontra gli
+   altri: agli spigoli le coste si incontrano a 45 gradi e il bordo alto gira
+   l'angolo chiuso;
+4. **la costa va su ogni taglio** — anche sui lati che corrono nel verso delle
+   fasce — e **mai su una cordonatura**, dove il cartone continua nel pezzo
+   accanto (`Maglia.pezzo`);
+5. **le alette stanno dentro lo spessore** della parete a cui sono incollate:
+   la faccia esterna mezzo spessore dietro quella della parete, l'interna sul
+   suo piano interno, e dove c'e' la parete non si vedono. Dove la parete e'
+   piu' bassa — il fronte del KMS — l'aletta sporge sopra ed e' un pannello a
+   se', chiuso dalle sue coste: la riga chiara sopra il fronte basso del KMS e'
+   la costa del cartone, e c'e' anche sul pack vero;
+6. **le misure sono quelle del DT, non dei pixel**: il fondo e l'altezza di
+   ogni parete si stirano sulle quote del disegno, dalla piega al bordo. Sul
+   vassoio le pieghe delle colonne stanno a META' della cordonatura, come la
+   maglia (`vassoio.misure_blocco`): le fasce della griglia danno un fondo di
+   145,5 mm, e fra le due meta' ce ne sono 147,5. Cosi' il blocco esce uguale
+   comunque stia il foglio sulla tavola: sul Tronky, preso dai pixel, la cima
+   della plancia che sta sul retro ballava di mezzo millimetro fra un verso e
+   l'altro, 215,9 contro 216,5.
+
+**Di traverso alle fasce una riga di pixel si prende al suo centro**, lungo la
+fascia da bordo a bordo (`dove` in `Maglia.pezzo`). Presa sul bordo alto, di
+traverso l'ultima riga si perdeva, e sempre dalla stessa parte del foglio: con
+le misure del DT il pezzo arriva comunque dove deve, ma girato il foglio di
+mezzo giro la grafica ci scivolava sopra, fino a un pixel.
+
+Nel GLB il blocco e' **un nodo solo**, `vassoio` o `display`; la plancia e' un
+nodo a parte, `plancia`, sugli stessi vertici e sulla stessa texture
+(`exporters.write_glb_mesh` con `parti`).
+
+**La verifica che lo dice**, a ogni costruzione (`verifica.blocco`): sulla
+faccia stampata i fianchi coprono tutta la profondita' del fondo, fronte e
+retro tutta la larghezza, e ogni parete scende fino al piano del fondo, entro
+0,05 mm. Se no il build lo grida — "FERITOIA: la parete est non arriva allo
+spigolo, mancano 1.50 mm". Sul Milch-Schnitte e sul Tronky: 0,00 mm, e il
+blocco del Tronky e' lo stesso al centesimo nei quattro versi del foglio.
+
 ## Display con plancia
 
 La quarta famiglia, e sta accanto al vassoio: una scatola che arriva CHIUSA e
@@ -2179,14 +2251,23 @@ Quindi si disegnano i tratti della fustella - linee, rettangoli e CURVE
 spianate - e ogni zona chiusa fra un tratto e l'altro e' un pezzo di cartone;
 quella che tocca il bordo e' il foglio attorno. I pixel del tratto vanno al
 pezzo piu' vicino, cosi' due pezzi che si toccano non lasciano fessure
-(`plancia.pezzi`). Due cose da sapere:
+(`plancia.pezzi`). Tre cose da sapere:
 
 - ogni cella tiene solo le zone che stanno PER LO PIU' dentro di lei. Tagliata
   sul rettangolo, l'aletta nord-est si prendeva il bordo destro di tutto il
   fronte, un pixel per 116 mm;
 - della finestra si toglie la zona sotto il bordo alto, e con lei le zone che
   la toccano e ci stanno dentro: il mezzo tondo per il dito, che senza la
-  finestra resterebbe appeso.
+  finestra resterebbe appeso;
+- **a pari distanza il pixel va alla zona piu' grande** (`plancia._al_piu_vicino`).
+  La riga di mezzo di un tratto largo tre pixel e' a pari distanza dai due
+  pezzi che divide, e la trasformata di distanza, a pari merito, sceglie sempre
+  dalla stessa parte della griglia: col foglio capovolto quella riga passava al
+  pezzo di fronte, e sul Tronky la cresta della plancia saliva di 0,28 mm. Si
+  guarda anche la griglia capovolta, e dove le due scelte non coincidono vince
+  la zona piu' grande, che e' la stessa in tutti e due i versi. Non la piu'
+  piccola: provata, lasciava sul fianco della plancia i denti della
+  perforazione della cerniera.
 
 ### La texture, sul solo riquadro della fustella
 
@@ -2195,13 +2276,30 @@ non sulla pagina intera: la pagina del Tronky e' 940 x 800 mm e la fustella
 515 x 486, e con lo stesso lato massimo la texture tiene quasi il doppio dei
 punti per millimetro.
 
+### La plancia e' un elemento a se'
+
+Fondo, pareti e alette sono il blocco del vassoio (vedi *Un blocco unico,
+senza feritoie*), col fronte senza la finestra. La plancia no: sta in piedi
+sul retro ma non e' incollata al blocco, e nel GLB e' un nodo a parte,
+`plancia`, accanto al nodo `display`.
+
+Dentro, pero', e' un pezzo solo anche lei, senza feritoie: la parte dietro, il
+dorso e la parte davanti si ancorano l'una all'altra sulle loro pieghe, come i
+pezzi del blocco, e si stirano sulle loro lunghezze del DT
+(`Plancia.parti_coperchio`) e sulla larghezza del coperchio. La piega della
+parte davanti e' la riga dove lei e il dorso si toccano **piu' a lungo**: non
+la sua ultima riga sopra il dorso, perche' fra le due pieghe l'onda tocca il
+dorso anche lei, di sbieco. Ancorata li', la plancia scendeva di 8 mm, e la
+cresta con lei.
+
 ### Le verifiche
 
 `verifica.plancia`: le pareti sulle loro righe del DT, misurate sulle UV con la
 scala vera della texture, e nessuna faccia specchiata, come nel vassoio; e in
 piu' la plancia al suo posto - la faccia davanti che guarda davanti, quella
 dietro che guarda dietro, la parete con la finestra davanti, e la cima sopra il
-retro. Se la piega fosse quella sbagliata e' qui che si vedrebbe.
+retro. Se la piega fosse quella sbagliata e' qui che si vedrebbe. E
+`verifica.blocco`, come nel vassoio: nessuna feritoia fra fondo e pareti.
 
 Le quote del Tronky sono vettorializzate e non si leggono come testo, e il
 riscontro lo dice (`quote.riscontro_plancia`). Lette a occhio sulla miniatura,
@@ -2210,9 +2308,20 @@ per verificare e non per costruire, tornano tutte: 515 = 15 + 116 + 134 + 117 +
 fino alla riga dei fianchi e non a quella del fondo; finestra 89,5 x 75; onda
 larga 93; dal bordo del coperchio alla prima piega 94,5 = 86,4 + 8,1.
 
-E i quattro versi sulla tavola danno lo stesso modello: stesso ingombro al
-decimo, e la vista davanti uguale pixel per pixel a 270 gradi, al 99,6% a 90 e
-a 180, dove cambia solo come si stende la maglia.
+E i quattro versi sulla tavola danno lo stesso modello: il blocco uguale al
+centesimo, 134,0 x 204,0 x 117,0 mm, e la plancia pure, con la punta dell'onda
+entro 3 centesimi (216,16 contro 216,19). A 270 gradi la vista davanti e'
+uguale pixel per pixel; a 90 e a 180 cambiano solo i contorni della grafica,
+perche' la texture si rende dal foglio girato e i suoi pixel cadono altrove, di
+meno di un pixel della texture - come prima del blocco unico.
+
+Col foglio capovolto, fra la plancia e il retro si vede una riga chiara di un
+pixel della texture: il bordo di taglio della parte dietro campiona il pixel di
+confine fra la stampa e la carta. Non e' una feritoia - con i pezzi a colori
+piatti la giunta e' chiusa - e sta fra due elementi separati, dove sul display
+vero la giunta c'e'; c'era gia' prima. Se su un file si vedesse nel verso
+giusto, il rimedio e' allargare la stampa oltre il taglio nella texture, come
+si fa ai bordi delle isole UV.
 
 ## Astucci
 
@@ -3297,7 +3406,7 @@ Display con plancia, con la miniatura che conferma le catene:
 
 | | fondo | pareti | coperchio | plancia sopra il retro | piede |
 |---|---|---|---|---|---|
-| K Tronky Display T1x48 | 134,0 x 204,0 | 116 / 117 / 116 / 116 | 133,0 x 201,0 | 86,4 + cresta 14,0 | 20,1 |
+| K Tronky Display T1x48 | 134,0 x 204,0 | 116 / 117 / 116 / 116 | 133,0 x 201,0 | 86,4 + cresta 13,8 | 20,1 |
 
 Astucci, con la quota letta due volte che chiude il conto:
 

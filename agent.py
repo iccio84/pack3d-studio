@@ -39,7 +39,10 @@ chiusa - fondo, pareti, un coperchio grande quanto il fondo attaccato al bordo
 di un fianco, una finestra a strappo sul fronte - e aperto diventa espositore,
 col coperchio che fa da plancia in piedi sul retro. analyze_vassoio li
 distingue da solo e la costruzione il display lo fa APERTO: non e' un astuccio
-e non e' un flowpack, anche se chiuso ne ha l'aria.
+e non e' un flowpack, anche se chiuso ne ha l'aria. Tutti e due si costruiscono
+come UN BLOCCO solo, senza feritoie fra fondo, pareti e alette - lo dice la
+verifica "blocco unico", e un avviso FERITOIA e' un difetto da riportare - e la
+plancia e' un elemento a se', un nodo separato nel GLB.
 
 Metodo:
 - Si lavora sulla PRIMA PAGINA sola. Un PDF su piu' pagine e' quasi sempre lo

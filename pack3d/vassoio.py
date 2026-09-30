@@ -230,6 +230,35 @@ def con_coda(steso):
     return Image.fromarray(np.concatenate([a, coda], 0))
 
 
+# quanto un lato puo' stare lontano da una cordonatura ed esserci sopra, in
+# pixel della sagoma
+PIEGA_TOL = 3
+
+
+def _meno(A, B):
+    """Gli intervalli di A che B non copre, `[(a, b)]`, su una riga di pixel."""
+    def unione(I):
+        out = []
+        for a, b in sorted(I):
+            if out and a <= out[-1][1]:
+                out[-1][1] = max(out[-1][1], b)
+            else:
+                out.append([a, b])
+        return out
+    resta = []
+    for a, b in unione(A):
+        cur = a
+        for c, e in unione(B):
+            if e <= cur or c >= b:
+                continue
+            if c > cur:
+                resta.append((cur, c))
+            cur = max(cur, e)
+        if cur < b:
+            resta.append((cur, b))
+    return resta
+
+
 class Maglia:
     """La maglia che si sta stendendo: vertici, UV sullo steso e triangoli.
 
@@ -266,28 +295,52 @@ class Maglia:
         T.append((k, k + 2, k + 1))
         T.append((k, k + 3, k + 2))
 
-    def pezzo(self, masc, verso, punto, dentro, su_cordone, nome=None):
+    def faccia(self, A, B, C, D, uv, fuori):
+        """Il quad A-B-C-D in giro, avvolto perche' guardi verso `fuori`.
+
+        Il verso lo decide la geometria e non l'ordine dei vertici: glTF scarta
+        le facce voltate, e una costa girata al contrario e' un buco.
+        """
+        import numpy as np
+        n = np.cross(np.subtract(C, A), np.subtract(B, A))
+        if float(np.dot(n, fuori)) < 0:
+            B, D = D, B
+        self.quad(tuple(A), tuple(B), tuple(C), tuple(D), uv)
+
+    def pezzo(self, masc, verso, punto, dentro, pieghe=(), nome=None,
+              punto_dentro=None):
         """Un pezzo col suo spessore: esterna, interna e coste.
 
         `punto(X, Y)` porta un pixel della sagoma sulla faccia esterna, in mm;
-        `dentro` e' la direzione della faccia interna; `su_cordone(X, Y)` dice
-        dove il bordo e' cordonatura, cioe' cartoncino che continua nel pezzo
-        accanto, e la costa non ci va.
+        `dentro` e' la direzione della faccia interna, e `punto_dentro`, se
+        c'e', la faccia interna stessa - il blocco la fa rientrare di uno
+        spessore dove il pezzo incontra gli altri, vedi *Un blocco unico,
+        senza feritoie* nelle regole. `pieghe` sono le cordonature del pezzo,
+        `("X", x)` o `("Y", y)` in pixel del foglio: un lato che ci sta sopra
+        e' cartoncino che continua nel pezzo accanto, e la costa non ci va.
 
         Si procede a FASCE: due righe vicine e il cartoncino che hanno in
         comune, vedi `_fasce_comuni`. Cosi' il pezzo esce uno solo anche dove
         la sagoma si apre o si chiude, e le coste restano sui tagli veri.
+
+        La COSTA va su OGNI taglio. Prima andava solo sui capi delle fasce, e
+        i lati che corrono nel verso delle fasce - le teste dei fianchi, i
+        lati del fronte, i gradini di un contorno curvo - restavano aperti: da
+        vicino, fra la faccia esterna e quella interna si vedeva il vuoto. Sono
+        le feritoie che si vedevano sugli spigoli dei vassoi.
         """
         import numpy as np
+        from collections import defaultdict
 
         V, UV, T = self.V, self.UV, self.T
         W, H, q, vI, vT = self.W, self.H, self.q, self.vI, self.vT
-        quad = self.quad
         m = masc if verso == "righe" else masc.T
         if m.shape[0] < 2:
             return
         primo = len(T)
         d = np.array(dentro, float) * self.spessore
+        if punto_dentro is None:
+            punto_dentro = lambda X, Y: tuple(np.array(punto(X, Y), float) + d)
         # Il verso dell'avvolgimento non si indovina: si MISURA. La faccia
         # esterna deve guardare dalla parte opposta a `dentro`, e il piano lo
         # dice da solo - basta chiedere a `punto` dove vanno un passo in X e
@@ -303,17 +356,54 @@ class Maglia:
         n = np.cross(ey, ex) if verso == "righe" else np.cross(ex, ey)
         rovescio = float(np.dot(n, np.array(dentro, float))) > 0
 
+        # Lungo la fascia un pixel va da bordo a bordo, di traverso una riga
+        # e' il suo CENTRO. Presa sul suo bordo alto, di traverso l'ultima riga
+        # si perdeva, e sempre dalla stessa parte del foglio: girato il foglio
+        # di mezzo giro la grafica scivolava di un pixel sul cartone.
         def dove(t, riga):
-            return (t, riga) if verso == "righe" else (riga, t)
+            return (t, riga + 0.5) if verso == "righe" else (riga + 0.5, t)
+
+        def in_piega(P0, P1):
+            for asse, val in pieghe:
+                i = 0 if asse == "X" else 1
+                if abs(P0[i] - val) <= PIEGA_TOL and abs(P1[i] - val) <= PIEGA_TOL:
+                    return True
+            return False
+
+        def costa(P0, P1, verso_fuori):
+            """La costa sul lato P0-P1 del foglio, che guarda `verso_fuori`.
+
+            `verso_fuori` e' un passo sul foglio, (dt, driga), da dentro il
+            pezzo verso fuori: portato in 3D dice dove deve guardare la costa.
+            """
+            if P0 == P1 or in_piega(P0, P1):
+                return
+            M = ((P0[0] + P1[0]) / 2.0, (P0[1] + P1[1]) / 2.0)
+            # un passo, non un punto: senza il mezzo pixel di `dove`
+            dt, driga = verso_fuori
+            passo = (dt, driga) if verso == "righe" else (driga, dt)
+            fuori = (np.array(punto(M[0] + passo[0], M[1] + passo[1]), float)
+                     - np.array(punto(*M), float))
+            self.faccia(punto(*P0), punto(*P1), punto_dentro(*P1),
+                        punto_dentro(*P0), (0.5, vT), fuori)
+
+        fasce = []
 
         def stendi(fascia, r0, r1):
             """Una fascia dalla riga `r0` alla `r1`, col suo spessore."""
             a, b, capo_a, capo_b = fascia
+            fasce.append((a, b, r0, r1))
+            # coste sui capi: solo sui tagli veri, non dove la fascia finisce
+            # perche' l'altra riga e' piu' corta
+            if capo_a:
+                costa(dove(a, r0), dove(a, r1), (-1, 0))
+            if capo_b:
+                costa(dove(b, r0), dove(b, r1), (+1, 0))
             if rovescio:
-                a, b, capo_a, capo_b = b, a, capo_b, capo_a
+                a, b = b, a
             XY = [dove(a, r0), dove(b, r0), dove(a, r1), dove(b, r1)]
             fuori = [np.array(punto(X, Y), float) for X, Y in XY]
-            dentro_p = [f + d for f in fuori]
+            dentro_p = [np.array(punto_dentro(X, Y), float) for X, Y in XY]
             k = len(V)
             for (X, Y), f in zip(XY, fuori):
                 V.append(tuple(f))
@@ -324,14 +414,6 @@ class Maglia:
             T.append((k, k + 2, k + 1)); T.append((k + 2, k + 3, k + 1))
             # faccia interna, avvolta al contrario
             T.append((k + 4, k + 5, k + 6)); T.append((k + 6, k + 5, k + 7))
-            # coste: solo sui tagli veri, e non dove il bordo e' cordonatura,
-            # che e' cartoncino che continua nel pezzo accanto
-            if capo_a and not (su_cordone(*XY[0]) and su_cordone(*XY[2])):
-                quad(tuple(fuori[0]), tuple(fuori[2]),
-                     tuple(dentro_p[2]), tuple(dentro_p[0]), (0.5, vT))
-            if capo_b and not (su_cordone(*XY[1]) and su_cordone(*XY[3])):
-                quad(tuple(fuori[3]), tuple(fuori[1]),
-                     tuple(dentro_p[1]), tuple(dentro_p[3]), (0.5, vT))
 
         # Le fasce che non cambiano si stendono in UNA sola: su un display la
         # base e buona parte delle pareti hanno lo stesso tratto per centinaia
@@ -340,18 +422,31 @@ class Maglia:
         # superficie che esce e' la stessa - verificato al pixel sul render.
         aperta, inizio = None, 0
         for i in range(1, m.shape[0]):
-            fasce = _fasce_comuni(m, i)
-            sola = fasce[0] if len(fasce) == 1 else None
+            fasce_i = _fasce_comuni(m, i)
+            sola = fasce_i[0] if len(fasce_i) == 1 else None
             if aperta is not None and sola == aperta:
                 continue
             if aperta is not None:
                 stendi(aperta, inizio, i - 1)
-            for f in fasce:
+            for f in fasce_i:
                 if f is not sola:
                     stendi(f, i - 1, i)
             aperta, inizio = sola, i - 1
         if aperta is not None:
             stendi(aperta, inizio, m.shape[0] - 1)
+
+        # Le coste lungo le righe: dove da una parte della riga c'e' una fascia
+        # e dall'altra no, il lato e' un taglio - la testa di un fianco, il
+        # lato di un fronte, il gradino di un contorno curvo.
+        dopo, prima = defaultdict(list), defaultdict(list)
+        for a, b, r0, r1 in fasce:
+            dopo[r0].append((a, b))
+            prima[r1].append((a, b))
+        for r in sorted(set(dopo) | set(prima)):
+            for s0, s1 in _meno(dopo[r], prima[r]):
+                costa(dove(s0, r), dove(s1, r), (0, -1))
+            for s0, s1 in _meno(prima[r], dopo[r]):
+                costa(dove(s0, r), dove(s1, r), (0, +1))
         if self.parti is not None and nome:
             self.parti[nome] = (primo, len(T))
 
@@ -360,6 +455,201 @@ class Maglia:
         import numpy as np
         return (np.array(self.V, float), np.array(self.UV, float),
                 np.array(self.T, np.uint32))
+
+
+def _ingombro(masc, verso):
+    """`(r0, r1, c0, c1)`: fin dove arriva DAVVERO il pezzo che `Maglia.pezzo`
+    stende da `masc` in quel `verso`, sulla griglia del foglio. None se non ha
+    fasce.
+
+    Non e' l'ingombro dei pixel. Una fascia c'e' dove due righe vicine hanno il
+    cartoncino in comune, vedi `_fasce_comuni`, e lungo la riga arriva al bordo
+    del suo ultimo pixel: un pixel da solo sul contorno - l'antialias di un
+    angolo - allarga i pixel ma non la maglia. Ancorato ai pixel, il fianco
+    ovest del KMS usciva un quarto di millimetro piu' basso del DT; e sul
+    fondo, o sulla testa di un fianco, lo stesso quarto e' una feritoia.
+    """
+    import numpy as np
+    m = masc if verso == "righe" else masc.T
+    comune = m[:-1] & m[1:]
+    fra = np.flatnonzero(comune.any(1))          # da una riga all'altra
+    lungo = np.flatnonzero(comune.any(0))        # lungo la fascia
+    if not len(fra):
+        return None
+    # di traverso dal centro della prima riga a quello dell'ultima, lungo la
+    # fascia da bordo a bordo: vedi `dove` in `Maglia.pezzo`
+    fra = (int(fra[0]) + 0.5, int(fra[-1]) + 1.5)
+    lungo = (int(lungo[0]), int(lungo[-1]) + 1)
+    return fra + lungo if verso == "righe" else lungo + fra
+
+
+def _stira(a0, a1, b0, b1):
+    """La mappa lineare che porta [a0, a1] su [b0, b1]."""
+    if a1 == a0:
+        return lambda v: b0
+    k = (b1 - b0) / float(a1 - a0)
+    return lambda v: b0 + (v - a0) * k
+
+
+def corpo(maglia, mk, creste, px_mm, spessore=SPESSORE, dentro_alette=0.5,
+          alte=None, fondo_mm=None):
+    """Il BLOCCO del vassoio: fondo, quattro pareti e alette, senza feritoie.
+
+    `mk` sono le maschere dei pezzi - fondo, ovest, est, nord, sud e le
+    quattro alette - e `creste` le cordonature del fondo sulla sagoma,
+    `(cxL, cxR, cyT, cyB)`. Riempie `maglia` e restituisce il telaio: dove
+    stanno le quattro pareti e quanto sono alte, in mm.
+
+    Le pareti si piegano come prima - lo specchio sulla z, uno solo, vedi
+    `mesh` - ma si incontrano senza lasciare fessure, per tre regole:
+
+      - ogni pezzo si ANCORA alla sua cordonatura: la riga di pixel del pezzo
+        che sta sulla piega va esattamente sulla piega. Prese dalla griglia di
+        pixel, le celle lasciavano un quarto di millimetro fra il fondo e
+        alcune pareti, lungo tutta la piega;
+      - fianchi, fronte e retro si STIRANO fino agli spigoli: la loro faccia
+        esterna arriva sulla faccia esterna della parete accanto, e la pelle
+        del blocco e' continua. Sul Tronky i fianchi sono 3 mm piu' corti del
+        fondo - lo spessore, compensato dal DT - e lasciavano una feritoia
+        di un millimetro e mezzo su ogni spigolo; stirati, la grafica si
+        allunga dell'1,5%, che non si vede;
+      - la faccia interna RIENTRA di uno spessore dove il pezzo incontra gli
+        altri: cosi' agli spigoli le coste si incontrano a 45 gradi e il
+        bordo alto gira l'angolo chiuso, come un blocco solo.
+
+    Le alette restano dentro, incollate a fronte e retro: `dentro_alette` e'
+    quanto stanno dietro la faccia esterna.
+
+    `alte` (le altezze delle pareti, in mm) e `fondo_mm` (larghezza e
+    profondita') sono le misure del DT: se ci sono, ogni pezzo si stira dalla
+    sua piega al suo bordo su quelle, e non sui pixel. Il blocco esce allora
+    uguale comunque stia il foglio sulla tavola - girando il foglio i pixel di
+    un bordo cambiano, e sul Tronky la cima della plancia, che sta sul retro,
+    ballava di mezzo millimetro fra un verso e l'altro.
+    """
+    t = spessore
+    cxL, cxR, cyT, cyB = creste
+    if fondo_mm is not None:
+        xR, zT = fondo_mm[0] / 2.0, fondo_mm[1] / 2.0
+    else:
+        xR = (cxR - cxL) / 2.0 / px_mm
+        zT = (cyB - cyT) / 2.0 / px_mm
+    xL, zB = -xR, -zT
+
+    def altezza(nome, piega, bordo):
+        """Dalla piega (altezza 0) al bordo: sull'altezza del DT, se c'e'."""
+        if alte and alte.get(nome):
+            return _stira(piega, bordo, 0.0, float(alte[nome]))
+        return _stira(piega, bordo, 0.0, abs(bordo - piega) / px_mm)
+    pezzo = maglia.pezzo
+    fra = lambda v, a, b: min(max(v, a), b)
+    xin = lambda x: fra(x, xL + t, xR - t)
+    zin = lambda z: fra(z, zB + t, zT - t)
+    hin = lambda h: max(h, t)
+    alt = {}
+
+    # Ogni pezzo si ancora a fin dove arriva la sua maglia, vedi `_ingombro`:
+    # lungo la fascia al BORDO dell'ultimo pixel, di traverso dal centro della
+    # prima riga a quello dell'ultima. Ancorato ai pixel e non alla maglia
+    # restava fuori un quarto di millimetro, ed e' stata la verifica del blocco
+    # a dirlo.
+    e = _ingombro(mk["fondo"], "righe")
+    if e is not None:
+        r0, r1, c0, c1 = e
+        fx, fz = _stira(c0, c1, xL, xR), _stira(r0, r1, zT, zB)
+        pezzo(mk["fondo"], "righe", lambda X, Y: (fx(X), 0.0, fz(Y)), (0, 1, 0),
+              [("X", c0), ("X", c1), ("Y", r0), ("Y", r1)], "fondo",
+              lambda X, Y: (xin(fx(X)), t, zin(fz(Y))))
+    # i fianchi: la cordonatura e' la colonna verso il fondo, e si stirano
+    # sulla lunghezza del fondo
+    ancora = {}
+    for nome, x_p, lato in (("ovest", xL, -1), ("est", xR, +1)):
+        e = _ingombro(mk[nome], "righe")
+        if e is None:
+            continue
+        r0, r1, c0, c1 = e
+        piega, bordo = (c1, c0) if lato < 0 else (c0, c1)
+        h = altezza(nome, piega, bordo)
+        ancora[nome] = h
+        fz = _stira(r0, r1, zT, zB)
+        xi = x_p - lato * t
+        alt[nome] = h(bordo)
+        pezzo(mk[nome], "righe",
+              lambda X, Y, h=h, fz=fz, x_p=x_p: (x_p, h(X), fz(Y)),
+              (-lato, 0, 0), [("X", piega)], nome,
+              lambda X, Y, h=h, fz=fz, xi=xi: (xi, hin(h(X)), zin(fz(Y))))
+    # fronte e retro: la cordonatura e' la riga verso il fondo, e si stirano
+    # sulla larghezza del fondo
+    for nome, z_p, lato in (("nord", zT, +1), ("sud", zB, -1)):
+        e = _ingombro(mk[nome], "colonne")
+        if e is None:
+            continue
+        r0, r1, c0, c1 = e
+        piega, bordo = (r1, r0) if lato > 0 else (r0, r1)
+        h = altezza(nome, piega, bordo)
+        fx = _stira(c0, c1, xL, xR)
+        zi = z_p - lato * t
+        alt[nome] = h(bordo)
+        pezzo(mk[nome], "colonne",
+              lambda X, Y, h=h, fx=fx, z_p=z_p: (fx(X), h(Y), z_p),
+              (0, 0, -lato), [("Y", piega)], nome,
+              lambda X, Y, h=h, fx=fx, zi=zi: (xin(fx(X)), hin(h(Y)), zi))
+    # Le alette: piegate sul fianco, finiscono dentro fronte e retro. La loro
+    # piega e' la riga verso il fianco, e l'altezza e' quella del fianco.
+    for nome, fianco, x_p, z_p, dz in (
+            ("aletta nord-ovest", "ovest", xL, zT, -1),
+            ("aletta nord-est", "est", xR, zT, -1),
+            ("aletta sud-ovest", "ovest", xL, zB, +1),
+            ("aletta sud-est", "est", xR, zB, +1)):
+        e = _ingombro(mk[nome], "righe")
+        if e is None or fianco not in ancora:
+            continue
+        r0, r1, c0, c1 = e
+        piega = r1 if dz < 0 else r0
+        # lineare, e col segno giusto: il verso dell'avvolgimento `pezzo` lo
+        # misura in (0, 0), lontano dall'aletta, e con un valore assoluto
+        # le alette di sud uscivano specchiate
+        verso_x = 1.0 if fianco == "ovest" else -1.0
+        passo = -dz * verso_x
+        h = ancora[fianco]              # l'altezza e' quella del suo fianco
+        # L'aletta sta DENTRO lo spessore della parete a cui e' incollata: la
+        # faccia esterna mezzo spessore dietro quella della parete, e quella
+        # interna sulla faccia interna della parete, stesso colore. Cosi' dove
+        # c'e' la parete l'aletta non si vede, e i suoi bordi stanno chiusi
+        # nello spessore: con l'aletta mezzo millimetro in fuori, all'interno
+        # del Tronky i suoi bordi disegnavano due righe a trattini sul retro.
+        # Dove la parete e' piu' bassa - il fronte del KMS - l'aletta sporge
+        # sopra ed e' un pannello a se', chiuso dalle sue coste.
+        pezzo(mk[nome], "righe",
+              lambda X, Y, h=h, piega=piega, x_p=x_p, passo=passo, z_p=z_p, dz=dz:
+              (x_p + passo * (piega - Y) / px_mm, h(X),
+               z_p + dz * dentro_alette),
+              (0, 0, dz), [("Y", piega)], nome,
+              lambda X, Y, h=h, piega=piega, x_p=x_p, passo=passo, z_p=z_p, dz=dz:
+              (x_p + passo * (piega - Y) / px_mm, h(X), z_p + dz * t))
+    return {"xL": xL, "xR": xR, "zT": zT, "zB": zB, "alt": alt}
+
+
+def misure_blocco(v: Vassoio):
+    """`(fondo_mm, alte)` del blocco dal DT, prese sulle stesse pieghe della
+    maglia.
+
+    Non sono `fondo_w` e `pareti`: quelle sono le fasce della griglia, e sulle
+    colonne la piega sta a META' della cordonatura, come in `sagoma_e_creste`.
+    Sul KMS le fasce danno un fondo di 145,5 mm, e fra le due meta' di
+    cordonatura ci sono 147,5 mm: stirato sulle fasce il blocco usciva stretto
+    di due millimetri e i fianchi bassi di uno.
+    """
+    r = v.riquadri
+    cL = (r["ovest"][2] + r["fondo"][0]) / 2.0
+    cR = (r["fondo"][2] + r["est"][0]) / 2.0
+    cT, cB = r["fondo"][1], r["fondo"][3]
+    fondo_mm = ((cR - cL) * PT2MM, (cB - cT) * PT2MM)
+    alte = {"ovest": (cL - r["ovest"][0]) * PT2MM,
+            "est": (r["est"][2] - cR) * PT2MM,
+            "nord": (cT - r["nord"][1]) * PT2MM,
+            "sud": (r["sud"][3] - cB) * PT2MM}
+    return fondo_mm, alte
 
 
 def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
@@ -395,7 +685,6 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
 
     H, W = sagoma.shape
     cxL, cxR, cyT, cyB = creste
-    Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
     # UNO specchio, e uno solo. Piegando lo steso cosi' com'e' la stampa
     # finisce DENTRO - il marchio si legge mirror, cioe' attraverso il
     # cartone - perche' la faccia stampata guardava in su e piegando in su
@@ -406,55 +695,24 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
     # marchio sta dritto su tutte e quattro le pareti - e cambiano solo quale
     # testata guarda la camera. Sul Milch-Schnitte le due testate portano la
     # stessa grafica, quindi da qui non si decide: se arriva un display con
-    # fronte e retro diversi, quello e' il file su cui verificarlo.
-    mx = lambda X: (X - Xc) / px_mm
-    mz = lambda Y: (Yc - Y) / px_mm
-    xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
-    DENTRO = 0.5
-
+    # fronte e retro diversi, quello e' il file su cui verificarlo. Lo
+    # specchio sta in `corpo`: la riga di sopra del foglio va verso +z.
     maglia = Maglia(W, H, spessore, alt_texture, parti)
-    pezzo = maglia.pezzo
 
     def cella(y0, y1, x0, x1):
         m = np.zeros((H, W), bool)
         m[y0:y1, x0:x1] = True
         return m & sagoma
 
-    TOL = 3
-    vicino = lambda a, b: abs(a - b) <= TOL
-
-    # base: il bordo e' tutto cordonatura, niente coste
-    pezzo(cella(cyT, cyB, cxL, cxR), "righe",
-          lambda X, Y: (mx(X), 0.0, mz(Y)), (0, 1, 0),
-          lambda X, Y: True, "fondo")
-    # laterali: la cordonatura e' quella verticale
-    pezzo(cella(cyT, cyB, 0, cxL), "righe",
-          lambda X, Y: (xL, (cxL - X) / px_mm, mz(Y)), (1, 0, 0),
-          lambda X, Y: vicino(X, cxL), "ovest")
-    pezzo(cella(cyT, cyB, cxR, W), "righe",
-          lambda X, Y: (xR, (X - cxR) / px_mm, mz(Y)), (-1, 0, 0),
-          lambda X, Y: vicino(X, cxR), "est")
-    # retro e fronte: la cordonatura e' quella orizzontale
-    pezzo(cella(0, cyT, cxL, cxR), "colonne",
-          lambda X, Y: (mx(X), (cyT - Y) / px_mm, zT), (0, 0, -1),
-          lambda X, Y: vicino(Y, cyT), "nord")
-    pezzo(cella(cyB, H, cxL, cxR), "colonne",
-          lambda X, Y: (mx(X), (Y - cyB) / px_mm, zB), (0, 0, 1),
-          lambda X, Y: vicino(Y, cyB), "sud")
-    # le alette: piegate sul laterale, finiscono nel piano di retro e fronte
-    pezzo(cella(0, cyT, 0, cxL), "righe",
-          lambda X, Y: (xL + (cyT - Y) / px_mm, (cxL - X) / px_mm, zT - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, cyT), "aletta nord-ovest")
-    pezzo(cella(0, cyT, cxR, W), "righe",
-          lambda X, Y: (xR - (cyT - Y) / px_mm, (X - cxR) / px_mm, zT - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, cyT), "aletta nord-est")
-    pezzo(cella(cyB, H, 0, cxL), "righe",
-          lambda X, Y: (xL + (Y - cyB) / px_mm, (cxL - X) / px_mm, zB + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, cyB), "aletta sud-ovest")
-    pezzo(cella(cyB, H, cxR, W), "righe",
-          lambda X, Y: (xR - (Y - cyB) / px_mm, (X - cxR) / px_mm, zB + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, cyB), "aletta sud-est")
-
+    mk = {"fondo": cella(cyT, cyB, cxL, cxR),
+          "ovest": cella(cyT, cyB, 0, cxL), "est": cella(cyT, cyB, cxR, W),
+          "nord": cella(0, cyT, cxL, cxR), "sud": cella(cyB, H, cxL, cxR),
+          "aletta nord-ovest": cella(0, cyT, 0, cxL),
+          "aletta nord-est": cella(0, cyT, cxR, W),
+          "aletta sud-ovest": cella(cyB, H, 0, cxL),
+          "aletta sud-est": cella(cyB, H, cxR, W)}
+    fondo_mm, alte = misure_blocco(v)
+    corpo(maglia, mk, creste, px_mm, spessore, alte=alte, fondo_mm=fondo_mm)
     return maglia.array()
 
 

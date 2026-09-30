@@ -393,8 +393,9 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                   colata_riquadro=None):
     """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
 
-    Le alette angolari non si costruiscono: da fuori le copre la parete che
-    tengono su, e un pannello che non si vede non vale la texture che costa.
+    Un blocco unico, senza feritoie: le alette angolari stanno dentro lo
+    spessore di fronte e retro, dove da fuori non si vedono, e le pareti
+    arrivano agli spigoli (`vassoio.corpo`, e `verifica.blocco` lo controlla).
     """
     dpi, tmax = risoluzione(quality)
     # una pagina sola, e il nero sul file pulito: vedi `build_carton`
@@ -461,8 +462,12 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     # scala vera della texture, e il fronte sul fronte
     _ok, verifiche = verifica.vassoio(V, UV, T, parti, v, d, steso.size,
                                       dpi_tex / 25.4, vassoio.CODA)
+    # e un blocco unico, senza feritoie fra le pareti e sul fondo
+    verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
     riscontro = quotature.riscontro_vassoio(pdf, v, d)
-    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax)
+    # un blocco unico: un nodo solo, col suo nome
+    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax,
+                             parti=[("vassoio", 0, len(T))])
     meta = ["vassoio espositore",
             "base %.1f x %.1f mm, pareti %s mm"
             % (v.fondo_w, v.fondo_h,
@@ -511,10 +516,17 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
                             parti=parti)
     _ok, verifiche = verifica.plancia(V, UV, T, parti, p, pz, steso.size,
                                       dpi_tex / 25.4, vassoio.CODA)
+    verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
     # e le misure del disegno contro le quote scritte: confermano, non
     # costruiscono
     riscontro = quotature.riscontro_plancia(pdf, p, d)
-    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax)
+    # Il display e' un blocco unico e la plancia un elemento a se': due nodi
+    # nel GLB, sugli stessi vertici e la stessa texture. La plancia e' stesa
+    # per ultima, quindi i suoi triangoli stanno in fondo.
+    inizio = min(a for k, (a, _b) in parti.items() if k.startswith("plancia"))
+    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax,
+                             parti=[("display", 0, inizio),
+                                    ("plancia", inizio, len(T))])
     meta = plancia.dichiara(p) + [
         "%d vertici sui tratti della fustella, cartoncino %.1f mm"
         % (len(V), vassoio.SPESSORE)]

@@ -605,3 +605,54 @@ def plancia(V, UV, T, parti, p, pz, lato_tex, px_mm_tex, coda):
                         "davanti e sale %.1f mm sopra il retro, nessuna faccia "
                         "specchiata" % (peggio, sopra or 0.0))
     return ok, righe
+
+
+# quanto possono mancare due pezzi del blocco per dirsi attaccati, in mm
+TOL_BLOCCO = 0.05
+
+
+def blocco(V, UV, T, parti, lato_tex, coda):
+    """Il vassoio e' un blocco unico, senza feritoie? `(ok, righe)`.
+
+    Le pareti devono arrivare agli spigoli e toccare il fondo: i fianchi
+    lunghi quanto il fondo, fronte e retro larghi quanto lui, e tutte e
+    quattro giu' fino al piano del fondo. E' la regola *Un blocco unico,
+    senza feritoie*: sul Tronky i fianchi finivano un millimetro e mezzo
+    prima dello spigolo, e sul KMS fra fondo e pareti restava un quarto di
+    millimetro. Si misura sulla faccia esterna, quella con la grafica.
+    """
+    _W_t, H_t = lato_tex
+    alto = (H_t - coda) / float(H_t)
+
+    def esterni(nome):
+        if nome not in parti:
+            return None
+        a, b = parti[nome]
+        idx = np.unique(T[a:b].ravel())
+        idx = idx[UV[idx, 1] < alto - 1e-6]
+        return V[idx] if len(idx) else None
+
+    fondo = esterni("fondo")
+    if fondo is None:
+        return False, ["FERITOIA: manca il fondo"]
+    x0, x1 = fondo[:, 0].min(), fondo[:, 0].max()
+    z0, z1 = fondo[:, 2].min(), fondo[:, 2].max()
+    y0 = fondo[:, 1].min()
+    righe, peggio = [], 0.0
+    for nome, asse, (a, b) in (("ovest", 2, (z0, z1)), ("est", 2, (z0, z1)),
+                                ("nord", 0, (x0, x1)), ("sud", 0, (x0, x1))):
+        P = esterni(nome)
+        if P is None:
+            continue
+        scarti = {"allo spigolo": max(abs(P[:, asse].min() - a),
+                                      abs(P[:, asse].max() - b)),
+                  "al fondo": abs(P[:, 1].min() - y0)}
+        for dove, s in scarti.items():
+            peggio = max(peggio, s)
+            if s > TOL_BLOCCO:
+                righe.append("FERITOIA: la parete %s non arriva %s, mancano "
+                             "%.2f mm" % (nome, dove, s))
+    if righe:
+        return False, righe
+    return True, ["blocco unico: le quattro pareti arrivano agli spigoli e "
+                  "toccano il fondo entro %.2f mm, nessuna feritoia" % peggio]

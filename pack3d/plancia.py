@@ -59,7 +59,7 @@ import math
 from dataclasses import dataclass, field
 
 from .dieline import PT2MM
-from .vassoio import CODA, SPESSORE, Maglia, gira
+from .vassoio import SPESSORE, Maglia, gira
 
 MM = 1.0 / PT2MM          # punti in un millimetro
 
@@ -507,6 +507,30 @@ class Pezzi:
         return (ox, oy, ox + W / self.scala, oy + H / self.scala)
 
 
+def _al_piu_vicino(tratto, lab):
+    """Ogni pixel del tratto alla zona piu' vicina; a pari distanza, alla piu'
+    grande.
+
+    `distance_transform_edt`, a pari distanza, sceglie sempre dalla stessa
+    parte della griglia. E la riga di mezzo di un tratto largo tre pixel e' a
+    pari distanza dai due pezzi che divide: col foglio capovolto passava al
+    pezzo di fronte, e sul Tronky la cresta della plancia saliva di un pixel.
+    Si guarda anche la griglia capovolta: dove le due scelte non coincidono e'
+    un pari merito, e vince la zona piu' grande, che e' la stessa comunque stia
+    il foglio.
+    """
+    import numpy as np
+    from scipy.ndimage import distance_transform_edt
+
+    _d, (iy, ix) = distance_transform_edt(tratto, return_indices=True)
+    a = lab[iy, ix]
+    _d, (iy, ix) = distance_transform_edt(tratto[::-1, ::-1],
+                                          return_indices=True)
+    b = lab[::-1, ::-1][iy, ix][::-1, ::-1]
+    quante = np.bincount(lab.ravel())
+    return np.where(quante[a] >= quante[b], a, b)
+
+
 def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
     """Le maschere dei pezzi del display, da ritagliare e piegare.
 
@@ -520,7 +544,7 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
     """
     import numpy as np
     from PIL import Image, ImageDraw
-    from scipy.ndimage import binary_dilation, distance_transform_edt, label
+    from scipy.ndimage import binary_dilation, label
 
     scala = px_mm * 25.4 / 72.0
     bx0, by0, bx1, by1 = d.bbox
@@ -534,8 +558,7 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
                 fill=255, width=TRATTO_PX)
     tratto = np.asarray(img) > 0
     lab, _n = label(~tratto)
-    _dist, (iy, ix) = distance_transform_edt(tratto, return_indices=True)
-    zone = lab[iy, ix]
+    zone = _al_piu_vicino(tratto, lab)
     bordo = np.unique(np.concatenate([zone[0], zone[-1], zone[:, 0], zone[:, -1]]))
     sagoma = ~np.isin(zone, bordo)
 
@@ -636,21 +659,26 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
 def mesh(p, pz, px_mm, spessore=SPESSORE, alt_texture=None, parti=None):
     """La maglia del display APERTO: vertici, UV sullo steso, triangoli.
 
-    Il vassoio - fondo, pareti, alette - si piega come in `vassoio.mesh`, con
-    lo stesso specchio sulla z e le alette dei fianchi nel piano di fronte e
-    retro; il fronte e' senza la finestra, che e' stata strappata via.
+    Il vassoio - fondo, pareti, alette - e' il BLOCCO di `vassoio.corpo`,
+    senza feritoie, col fronte senza la finestra che e' stata strappata via.
 
-    La plancia e' il coperchio, alzato sul retro e ripiegato. Detto `t` quanto
-    un punto del coperchio dista dal bordo che sta sulla cerniera del retro:
+    La plancia e' il coperchio, alzato sul retro e ripiegato, ed e' un
+    elemento a se': sta in piedi sul retro, non e' incollata al blocco. Detto
+    `t` quanto un punto del coperchio dista dal bordo che sta sulla cerniera
+    del retro:
 
       - la parte DIETRO sta in piedi sul retro, nel suo piano, con la stampa
         verso fuori: altezza = retro + t;
       - il DORSO e' orizzontale in cima: la stessa altezza, e avanza verso il
         fronte di quanto e' largo, 8,1 mm sul Tronky;
-      - la parte DAVANTI scende dal dorso con la stampa verso chi guarda:
-        altezza = cima - (t - t della sua riga). La cresta - l'onda, che sta
-        oltre la riga - viene fuori sopra la cima, e il piede, piu' lungo
-        della parte dietro, finisce dentro la scatola.
+      - la parte DAVANTI scende dal dorso con la stampa verso chi guarda. La
+        cresta - l'onda, che sta oltre la piega - viene fuori sopra la cima,
+        e il piede, piu' lungo della parte dietro, finisce dentro la scatola.
+
+    Anche qui ogni pezzo si ancora alla sua piega, come nel blocco: la cima
+    e' dove finisce la parte dietro, il dorso parte dal suo piano, e la parte
+    davanti dal bordo del dorso. Presi dalla griglia di pixel, fra una parte
+    e l'altra restava un quarto di millimetro.
 
     Il coperchio attraversa la scatola come quando era chiuso: il suo lato
     sulla cerniera del fianco va sopra quel fianco, e l'altro sopra l'altro.
@@ -659,88 +687,86 @@ def mesh(p, pz, px_mm, spessore=SPESSORE, alt_texture=None, parti=None):
     """
     import numpy as np
 
+    from .vassoio import _ingombro, _stira, corpo
+
     H, W = pz.maschere["fondo"].shape
     r = pz.righe
-    cxL, cxR, cyT, cyB = r["fondo"]
-    oW, oE, oN, oS = (r["bordi"][k] for k in ("ovest", "est", "nord", "sud"))
-    ya, yb = r["fianchi"]
-    lx0, ly0, lx1, ly1 = r["coperchio"]
-    pa, pb = r["pieghe"]
-    Xc, Yc = (cxL + cxR) / 2.0, (cyT + cyB) / 2.0
-    # lo specchio sulla z, uno solo: vedi `vassoio.mesh`
-    mx = lambda X: (X - Xc) / px_mm
-    mz = lambda Y: (Yc - Y) / px_mm
-    xL, xR, zT, zB = mx(cxL), mx(cxR), mz(cyT), mz(cyB)
-    alt = {"ovest": (cxL - oW) / px_mm, "est": (oE - cxR) / px_mm,
-           "nord": (cyT - oN) / px_mm, "sud": (oS - cyB) / px_mm}
-    DENTRO = 0.5
-
     maglia = Maglia(W, H, spessore, alt_texture, parti)
-    pezzo = maglia.pezzo
     mk = pz.maschere
-    TOL = 3
-    vicino = lambda a, b: abs(a - b) <= TOL
+    # il blocco sulle misure del DT, non sui pixel: vedi `corpo`
+    fx0, fy0, fx1, fy1 = p.fondo
+    telaio = corpo(maglia, mk, r["fondo"], px_mm, spessore, alte=p.pareti,
+                   fondo_mm=((fx1 - fx0) * PT2MM, (fy1 - fy0) * PT2MM))
+    xL, xR = telaio["xL"], telaio["xR"]
 
-    pezzo(mk["fondo"], "righe", lambda X, Y: (mx(X), 0.0, mz(Y)), (0, 1, 0),
-          lambda X, Y: True, "fondo")
-    pezzo(mk["ovest"], "righe",
-          lambda X, Y: (xL, (cxL - X) / px_mm, mz(Y)), (1, 0, 0),
-          lambda X, Y: vicino(X, cxL), "ovest")
-    pezzo(mk["est"], "righe",
-          lambda X, Y: (xR, (X - cxR) / px_mm, mz(Y)), (-1, 0, 0),
-          lambda X, Y: vicino(X, cxR), "est")
-    pezzo(mk["nord"], "colonne",
-          lambda X, Y: (mx(X), (cyT - Y) / px_mm, zT), (0, 0, -1),
-          lambda X, Y: vicino(Y, cyT), "nord")
-    pezzo(mk["sud"], "colonne",
-          lambda X, Y: (mx(X), (Y - cyB) / px_mm, zB), (0, 0, 1),
-          lambda X, Y: vicino(Y, cyB), "sud")
-    # le alette si piegano sulla riga dove finisce il fianco, che non e'
-    # quella del fondo: sul Tronky sta 1,5 mm piu' dentro
-    pezzo(mk["aletta nord-ovest"], "righe",
-          lambda X, Y: (xL + (ya - Y) / px_mm, (cxL - X) / px_mm, zT - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, ya), "aletta nord-ovest")
-    pezzo(mk["aletta nord-est"], "righe",
-          lambda X, Y: (xR - (ya - Y) / px_mm, (X - cxR) / px_mm, zT - DENTRO),
-          (0, 0, -1), lambda X, Y: vicino(Y, ya), "aletta nord-est")
-    pezzo(mk["aletta sud-ovest"], "righe",
-          lambda X, Y: (xL + (Y - yb) / px_mm, (cxL - X) / px_mm, zB + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, yb), "aletta sud-ovest")
-    pezzo(mk["aletta sud-est"], "righe",
-          lambda X, Y: (xR - (Y - yb) / px_mm, (X - cxR) / px_mm, zB + DENTRO),
-          (0, 0, 1), lambda X, Y: vicino(Y, yb), "aletta sud-est")
+    # La plancia. `sgn` dice da che parte del foglio sta il retro: +1 se e' la
+    # parete sud, e allora la cerniera e' l'ultima riga della parte dietro.
+    davanti, dorso, dietro = (mk["plancia davanti"], mk["plancia dorso"],
+                              mk["plancia dietro"])
+    e_b, e_s = _ingombro(dietro, "colonne"), _ingombro(dorso, "righe")
+    if e_b is None or e_s is None:
+        raise ValueError("display con plancia: il coperchio non si divide in "
+                         "parte davanti, dorso e parte dietro")
+    sgn = 1 if p.retro == "sud" else -1
+    z_r = telaio["zB"] if sgn > 0 else telaio["zT"]
+    o = -1.0 if sgn > 0 else 1.0          # il verso di fuori del retro, in z
+    base = telaio["alt"][p.retro]
+    # fin dove arrivano le loro maglie, vedi `vassoio._ingombro`: la parte
+    # dietro e' stesa per colonne, il dorso per righe
+    rb0, rb1 = e_b[0], e_b[1]
+    rs0, rs1 = e_s[0], e_s[1]
+    cerniera, piega_b = (rb1, rb0) if sgn > 0 else (rb0, rb1)
+    dietro_s, davanti_s = (rs1, rs0) if sgn > 0 else (rs0, rs1)
+    # Le lunghezze vere, dal DT e non dai pixel: la parte dietro dalla
+    # cerniera alla piega, il dorso fra le due righe, la parte davanti dalla
+    # piega al bordo. Ogni pezzo si stira fra le sue due righe su quella
+    # lunghezza, cosi' si attacca al vicino e la plancia esce uguale comunque
+    # stia il foglio sulla tavola: prese dai pixel, la cima ballava di mezzo
+    # millimetro fra un verso e l'altro.
+    davanti_mm, dorso_mm, dietro_mm = p.parti_coperchio
+    avanti = -o                              # verso il fronte, in z
+    cima = base + dietro_mm
+    z_a = z_r + avanti * dorso_mm
+    h_b = _stira(cerniera, piega_b, base, cima)
+    z_s = _stira(dietro_s, davanti_s, z_r, z_a)
+    # La piega della parte davanti e' la riga dove lei e il dorso si toccano
+    # PIU' A LUNGO. Non la sua ultima riga sopra il dorso: fra le due pieghe
+    # l'onda tocca il dorso anche lei, di sbieco, e arriva fino all'altra
+    # piega - ancorata li' la plancia scendeva di 8 mm, e la cresta con lei.
+    sotto = np.zeros_like(davanti)
+    if sgn > 0:
+        sotto[:-1] = davanti[:-1] & dorso[1:]
+    else:
+        sotto[1:] = davanti[1:] & dorso[:-1]
+    contatti = sotto.sum(1)
+    if not contatti.any():
+        raise ValueError("display con plancia: la parte davanti non tocca il "
+                         "dorso")
+    piega_a = int(np.argmax(contatti)) + (1 if sgn > 0 else 0)
+    e_a = _ingombro(davanti, "colonne")
+    piede = e_a[0] if sgn > 0 else e_a[1]
+    h_a = _stira(piega_a, piede, cima, cima - davanti_mm)
+    # In larghezza i tre pezzi si stirano sulla larghezza del coperchio, dal
+    # fianco della cerniera all'altro: cosi' i lati della plancia combaciano,
+    # anche se uno e' steso per righe e gli altri per colonne.
+    largo = (p.coperchio[2] - p.coperchio[0]) * PT2MM
+    x_h, x_f = (xR, xR - largo) if p.lato_coperchio == "est" else (xL, xL + largo)
 
-    # La plancia. `o` e' il verso di fuori del retro lungo la z, `t` quanto un
-    # punto del coperchio dista dal bordo che sta sulla cerniera del retro.
-    if p.retro == "sud":
-        z_r, o, bordo_r = zB, -1.0, ly1
-        t = lambda Y: (bordo_r - Y) / px_mm
-        riga_dietro, riga_davanti = pb, pa
-    else:
-        z_r, o, bordo_r = zT, +1.0, ly0
-        t = lambda Y: (Y - bordo_r) / px_mm
-        riga_dietro, riga_davanti = pa, pb
-    base = alt[p.retro]
-    t_dietro, t_davanti = t(riga_dietro), t(riga_davanti)
-    cima = base + t_dietro
-    dorso = t_davanti - t_dietro
-    if p.lato_coperchio == "est":
-        xc = lambda X: xR - (X - lx0) / px_mm
-    else:
-        xc = lambda X: xL + (lx1 - X) / px_mm
-    pezzo(mk["plancia dietro"], "colonne",
-          lambda X, Y: (xc(X), base + t(Y), z_r), (0, 0, -o),
-          lambda X, Y: vicino(Y, riga_dietro) or vicino(Y, bordo_r),
-          "plancia dietro")
-    # il dorso si stende per righe, e i capi delle sue fasce sono i fianchi
-    # del coperchio e l'onda: tagli tutti, le due pieghe sono la prima e
-    # l'ultima riga
-    pezzo(mk["plancia dorso"], "righe",
-          lambda X, Y: (xc(X), cima, z_r - o * (t(Y) - t_dietro)), (0, -1, 0),
-          lambda X, Y: False, "plancia dorso")
-    pezzo(mk["plancia davanti"], "colonne",
-          lambda X, Y: (xc(X), cima - (t(Y) - t_davanti), z_r - o * dorso),
-          (0, 0, o), lambda X, Y: vicino(Y, riga_davanti), "plancia davanti")
+    def xc(masc, verso):
+        c0, c1 = _ingombro(masc, verso)[2:]
+        if p.lato_coperchio == "est":
+            return _stira(c0, c1, x_h, x_f)
+        return _stira(c0, c1, x_f, x_h)
+
+    xb, xs = xc(dietro, "colonne"), xc(dorso, "righe")
+    xa = xc(davanti, "colonne")
+    pezzo = maglia.pezzo
+    pezzo(dietro, "colonne", lambda X, Y: (xb(X), h_b(Y), z_r),
+          (0, 0, -o), [("Y", piega_b)], "plancia dietro")
+    pezzo(dorso, "righe", lambda X, Y: (xs(X), cima, z_s(Y)), (0, -1, 0),
+          [("Y", dietro_s), ("Y", davanti_s)], "plancia dorso")
+    pezzo(davanti, "colonne", lambda X, Y: (xa(X), h_a(Y), z_a),
+          (0, 0, o), [("Y", piega_a)], "plancia davanti")
 
     V, UV, T = maglia.array()
     if p.fronte == "sud":
