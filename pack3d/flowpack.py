@@ -34,6 +34,10 @@ class Flowpack:
     # invece di girare intorno al prodotto. Se e' > 0 il pack e' un tubo
     # piatto - fronte e retro, nessun fianco e nessuna falda che sporge.
     sovrapposizione: float = 0.0
+    # tubo piatto chiuso a PINNA: lo steso non ha fianchi - il DT segna solo le
+    # due fasce della pinna ai bordi del nastro - e la sezione la da' il
+    # rigonfiamento, come a sovrapposizione. La pinna c'e' e si modella.
+    piatto: bool = False
     # tratto fra la saldatura di testa e la fine del prodotto, dove il tubo si
     # schiaccia verso la pinna: la zona "grinze" del DT, o la gola. Zero se il
     # disegno non la segna uguale dai due lati.
@@ -57,15 +61,26 @@ class Flowpack:
         return self.sovrapposizione > 0.0
 
     @property
+    def tubo_piatto(self):
+        """Vero se lo steso non ha fianchi: a sovrapposizione, o a pinna senza
+        pieghe. La sezione allora non sta nel disegno, la da' il rigonfiamento,
+        e i nodi della grafica sono le due pieghe del tubo appiattito."""
+        return self.piatto or self.sovrapposizione > 0.0
+
+    @property
     def girth(self):
         """Il film che gira davvero intorno al prodotto.
 
         A pinna i due lembi escono fuori e il giro e' il perimetro della
         sezione, 2(W+T). A sovrapposizione non esce niente: il lembo passa
-        sotto, quindi il giro e' tutto il nastro meno quel lembo.
+        sotto, quindi il giro e' tutto il nastro meno quel lembo. Sul tubo
+        piatto a pinna e' il nastro meno le due fasce della pinna: lo spessore
+        glielo da' il rigonfiamento, e non deve allungare il film.
         """
         if self.sovrapposizione > 0.0:
             return self.web_mm - self.sovrapposizione
+        if self.piatto:
+            return self.web_mm - 2.0 * self.side_fin
         return 2.0 * (self.W + self.T)
 
 
@@ -286,8 +301,8 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
-    i_sp = 0 if fp.pillow else int(round(npts * 7.0 / 8.0)) % npts
-    retro = min(fp.back_a, per / 2.0) if fp.pillow else fp.back_a
+    i_sp = 0 if fp.tubo_piatto else int(round(npts * 7.0 / 8.0)) % npts
+    retro = min(fp.back_a, per / 2.0) if fp.tubo_piatto else fp.back_a
     s0 = (cum[i_sp] - retro) % per
     i0 = int(np.searchsorted(cum, s0)) % len(P)
     P = np.roll(P, -i0, axis=0)
@@ -681,6 +696,11 @@ def soft_section_fit(fp: Flowpack, r: float, n_corner: float = 3.0):
     return P, d, w
 
 
+# quanto la falda sta sopra il retro anche dove e' schiacciata, in mm: vedi
+# `fin_on_surface`
+FALDA_SOPRA = 0.05
+
+
 def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
                    fade: float = 10.0, u_tubo=None):
     """Pinna longitudinale appoggiata sul retro, che ne segue la forma.
@@ -701,7 +721,12 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
     for i in range(nu):
         x = grid[i, 0, 0]
         t = min(1.0, max(0.0, (half - abs(x)) / fade))
-        lift = gap * (t * t * (3 - 2 * t))
+        # Mai a zero: nelle testate la falda sta SOPRA il retro, schiacciata
+        # con lui nella saldatura, e a distanza zero le due superfici si
+        # contendono i pixel - sul Happy Hippo la falda bianca e la testata
+        # marrone uscivano a puntini. Un ventesimo di millimetro non si vede
+        # e decide chi sta sopra.
+        lift = max(gap * (t * t * (3 - 2 * t)), FALDA_SOPRA)
         for j in range(jmax + 1):
             p = grid[i, j]
             n = np.array([0.0, p[1], p[2]])
@@ -920,6 +945,43 @@ def risolvi_pillow(web_mm, folds_mm, tol=2.0, tutti=False):
     return best
 
 
+def risolvi_pinna_piatta(web_mm, folds_mm, tol=1.5):
+    """Il tubo piatto chiuso a PINNA: le due fasce della pinna e basta.
+
+    Un film che avvolge un prodotto morbido non ha pieghe fra fronte e
+    fianchi, e il DT non ne disegna: segna le due fasce ai bordi del nastro
+    che si saldano a pinna, e in mezzo il giro. E' il Kinder Happy Hippo T1
+    (Ferrero 12402, cold seal), nastro 115 = 1 | 15 | 83 | 15 | 1: pinna 16,
+    giro 83, che e' proprio l'area di stampa del DT. Ne' `solve_bands_any` -
+    non ci sono le quattro pieghe - ne' `risolvi_pillow` - non c'e' un lembo
+    da una parte sola - lo risolvono.
+
+    L'invariante e' `giro + 2 falde = nastro`, con le due linee della pinna
+    speculari. In mezzo non ci deve essere nessuna linea: se ci fosse, sarebbe
+    una piega, e il pack avrebbe dei fianchi. Il fronte e' mezzo giro,
+    centrato, e la pinna sta a meta' del retro.
+    """
+    v = sorted(set(float(x) for x in folds_mm))
+    best = None
+    for a in v:
+        if not (2.0 < a < min(FALDA_LIMITE, web_mm * 0.25)):
+            continue
+        b = min(v, key=lambda x: abs(x - (web_mm - a)))
+        if b <= a or abs(b - (web_mm - a)) > tol:
+            continue
+        if any(a + 2.0 < x < b - 2.0 for x in v):
+            continue
+        falda = (a + web_mm - b) / 2.0
+        giro = b - a
+        cand = dict(front=round(giro / 2.0, 2), side_fin=round(falda, 2),
+                    back_a=round(giro / 4.0, 2), back_b=round(giro / 4.0, 2),
+                    giro=round(giro, 2), folds=(a, b),
+                    simmetria=round(abs(a - (web_mm - b)), 2))
+        if best is None or cand["simmetria"] < best["simmetria"]:
+            best = cand
+    return best
+
+
 def _solve_bands_symmetric(web_mm, folds_mm, tol=1.5):
     """Ricava fronte, fianco e falda longitudinale dalle pieghe.
 
@@ -1063,8 +1125,10 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # scambiando H con V, la rasterizzazione scambiando righe e colonne. Cosi'
     # il solutore resta uno solo e lavora sempre nel verso che conosce. Si
     # parte dall'orizzontale, che e' il piu' comune.
-    # Quattro tentativi: due chiusure per due versi. Prima la pinna in tutti e
-    # due i versi, poi la sovrapposizione.
+    # Sei tentativi: tre chiusure per due versi. Prima la pinna in tutti e due
+    # i versi, poi la sovrapposizione, e per ultimo il tubo piatto a pinna, che
+    # chiede meno al disegno - due linee speculari - e quindi viene dopo chi ne
+    # chiede di piu'.
     #
     # L'ordine conta, e l'ho imparato rompendolo: "le fasce non chiudono" e'
     # anche il segnale che lo steso e' girato di 90 gradi. Provando l'altra
@@ -1072,7 +1136,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # trovava una lettura plausibile nel verso sbagliato, e il verso giusto
     # non veniva mai provato.
     primo = None
-    for modo in ("pinna", "pillow"):
+    for modo in ("pinna", "pillow", "piatta"):
         for ruotato in (False, True):
             try:
                 return _risolvi_steso(S, raster, sc, ruotato, modo)
@@ -1196,6 +1260,27 @@ def testate_dal_dt(vs, x0, x1):
     return pinna, gola, righe
 
 
+def _testate_speculari(vs, x0, x1, tol=0.5):
+    """Il DT segna la testata alla stessa distanza dai due tagli?
+
+    E' quello che distingue il verso giusto di un tubo piatto a pinna. Sul
+    Happy Hippo tutte e due le letture trovano due linee speculari - le fasce
+    della pinna in un verso, le saldature di testa nell'altro - ma solo nel
+    verso giusto le testate tornano: 15 e 15 mm. Nell'altro verso le
+    "testate" sono le fasce della pinna viste di traverso, e i margini dei
+    bordi le sbilanciano, 12,9 contro 15,5.
+    """
+    lim = TESTATA_MAX * (x1 - x0) * PT2MM
+
+    def primo(dist):
+        dist = [d for d in dist if 0.3 < d <= lim]
+        return _strutture(dist)[0][0] if dist else None
+
+    a = primo([(c - x0) * PT2MM for c in vs])
+    b = primo([(x1 - c) * PT2MM for c in vs])
+    return a is not None and b is not None and abs(a - b) <= tol
+
+
 def _copre(linee, c, a0, a1, tol=3.0):
     """Frazione di `[a0, a1]` coperta dalle `linee` `(c, a, b)` vicine a `c`.
 
@@ -1247,8 +1332,21 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     if len(hs) < 4 or len(vs) < 2:
         raise _StesoNonRisolto("cordonature non riconosciute: impaginato non coperto")
 
-    y0, y1 = min(hs), max(hs)
-    x0, x1 = min(vs), max(vs)
+    # I due capi dello steso sono la linea PIU' ESTERNA del loro gruppo, non il
+    # centro del gruppo: sul Happy Hippo il taglio e la riga del margine, a un
+    # millimetro, finiscono nello stesso gruppo, e il centro metteva il capo a
+    # mezzo millimetro dal taglio - nastro 114 invece dei 115 del DT.
+    def capi(linee, centri):
+        centri = sorted(centri)
+        lo = min((c for c, _w in linee if abs(c - centri[0]) <= 3.0),
+                 default=centri[0])
+        hi = max((c for c, _w in linee if abs(c - centri[-1]) <= 3.0),
+                 default=centri[-1])
+        return [lo] + centri[1:-1] + [hi]
+
+    hs, vs = capi(H, hs), capi(V, vs)
+    y0, y1 = hs[0], hs[-1]
+    x0, x1 = vs[0], vs[-1]
     web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM
     folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
     # quanto passo attraversa ogni piega: separa le pieghe dalle guide
@@ -1263,6 +1361,22 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
         lembo, inizio = 0.0, b["side_fin"]
         giro = 2.0 * (b["front"] + b["thick"])
         spessore, falda = b["thick"], b["side_fin"]
+    elif modo == "piatta":
+        sol = [q for q in (risolvi_pinna_piatta(web, f) for f in folds) if q]
+        b = min(sol, key=lambda q: q["simmetria"]) if sol else None
+        if b is None:
+            raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione ne' a "
+                                   "tubo piatto: nastro %.1f mm" % web)
+        # due linee speculari le trovano tutti e due i versi: e' la testata
+        # che dice quale e' quello giusto, vedi `_testate_speculari`
+        if not _testate_speculari(vs, x0, x1):
+            raise _StesoNonRisolto("tubo piatto a pinna: le testate del DT "
+                                   "non tornano ai due capi")
+        lembo, inizio, giro = 0.0, b["side_fin"], b["giro"]
+        spessore, falda = 0.0, b["side_fin"]
+        avvisi.append("tubo piatto a pinna: il DT non segna fianchi, solo le "
+                      "due fasce della pinna - pinna %.1f mm, giro %.1f, "
+                      "fronte mezzo giro %.1f" % (falda, giro, b["front"]))
     else:
         sol = [q for f in folds for q in risolvi_pillow(web, f, tutti=True)]
         b = min(sol, key=lambda q: q["scarto"]) if sol else None
@@ -1319,7 +1433,7 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
                     linee_passo=tuple(round((c - x0) * PT2MM, 2)
                                       for c in sorted(vs) if x0 < c < x1),
                     back_a=b["back_a"], back_b=b["back_b"],
-                    sovrapposizione=lembo,
+                    sovrapposizione=lembo, piatto=(modo == "piatta"),
                     web_mm=round(web, 1), step_mm=round(step, 1),
                     sheet=(x0, y0, x1, y1), ruotato=ruotato,
                     # a pinna il giro si ancora ai due bordi misurati del
@@ -1397,7 +1511,7 @@ def fronte_in_pagina(fp):
     sovrapposizione, dopo la prima meta' del retro. E' dove si legge il verso
     della grafica: vedi `server.flowpack_sulla_grafica`."""
     sh = fp.sheet
-    inizio = fp.girth_span[0] + (fp.back_a + (0.0 if fp.pillow else fp.T)) / PT2MM
+    inizio = fp.girth_span[0] + (fp.back_a + (0.0 if fp.tubo_piatto else fp.T)) / PT2MM
     r = (sh[0], inizio, sh[2], inizio + fp.W / PT2MM)
     return (r[1], r[0], r[3], r[2]) if fp.ruotato else r
 

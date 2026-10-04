@@ -358,6 +358,9 @@ def _riscontro_miniature(pdf, fp, page_no):
     bordi = [0.0, float(fp.web_mm)]
     if fp.pillow:
         pieghe = bordi
+    elif fp.piatto:
+        # il tubo piatto a pinna: i bordi e le due fasce della pinna
+        pieghe = bordi + [float(fp.side_fin), float(fp.web_mm - fp.side_fin)]
     else:
         a = float(fp.side_fin) + float(fp.back_a)
         pieghe = bordi + [a, a + fp.T, a + fp.T + fp.W, a + 2 * fp.T + fp.W]
@@ -412,6 +415,8 @@ def _riscontro_miniature(pdf, fp, page_no):
         return None
     if fp.pillow:
         nastro = "nastro %s" % _catena([fp.web_mm])
+    elif fp.piatto:
+        nastro = "nastro %s" % _catena([fp.side_fin, fp.girth, fp.side_fin])
     else:
         nastro = "nastro %s" % _catena([fp.side_fin, fp.back_a, fp.T, fp.W,
                                         fp.T, fp.back_b, fp.side_fin])

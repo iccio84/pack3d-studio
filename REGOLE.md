@@ -13,7 +13,7 @@ versione ridotta.
 | regola | flowpack | astuccio | vassoio |
 |---|---|---|---|
 | **Grafica** | si' | si' | si' |
-| ↳ **box area via, come la GDA** | si' | si' | si' |
+| ↳ **box colorati via (i bianchi restano), e la GDA** | si' | si' | si' |
 | **Testate dal DT** | pinna e gola | pannelli e alette | fondo, testate e laterali |
 | **Pinne** | si' | - | - |
 
@@ -1190,6 +1190,37 @@ della legenda - e infatti sul parco nessuna texture cambia; ma su un file con
 la grafica dopo l'area riservata sarebbe sparita la grafica. Adesso lo stato
 si segue come lo segue il PDF.
 
+##### I box colorati via, i bianchi restano
+
+"Vanno eliminati dalle grafiche tutti i box colorati - verde, arancio - e
+lasciati quelli bianchi": e' la regola come l'ha detta l'utente col Kinder
+Happy Hippo T1 (FERRERO_1579...), che ha il box verde `Best Before Area` in
+mezzo al fronte.
+
+I segnaposto hanno colori vivi apposta, per farsi vedere: sul Nutella B-ready
+`Best Before Area` e `Bar Code Area` sono verdi, `TEXT Area` e `COVERED Area`
+arancio, `PIN CODE Area` rosa; sul Happy Hippo il Best Before e' PANTONE 346 C,
+verde, e la legenda lo dice. Tutti questi si tolgono, per le strade di sopra.
+
+Un box **bianco** invece non e' un segnaposto: e' il posto stampato in bianco
+dove la macchina scrivera' data e lotto - il Best Before del Milch-Schnitte T1,
+46 x 17 col data matrix, o i riquadri del Kinder Bueno Dark - e si stampa.
+Resta anche quando la sua lastra si chiama area: prima di strapparla si guarda
+di che colore la dipinge il file, cioe' il colore a tinta piena dello spazio
+alternativo della Separation (`techink.lastre_bianche`: Lab con L* da 94 in su
+e a*, b* entro 6, o inchiostro al 4% al piu'). Se e' bianca resta, e il build
+lo dice: "box bianchi lasciati". Provato su un PDF fatto apposta, un box verde
+e uno bianco sullo stesso fondo rosso: il verde sparisce e sotto torna il
+rosso, il bianco resta. Sul parco nessuna area riservata e' bianca, e nessun
+modello cambia.
+
+Non sono box i pannelli colorati della grafica: il riquadro giallo con le
+frecce del B-ready e' l'istruzione di apertura, il blocco giallo sul retro del
+Milch-Schnitte T1 e' la PANTONE 108 su cui va il testo legale. Si stampano e
+restano. Un box si toglie perche' il file dice che e' un'area riservata - per
+nome, per didascalia, per legenda, per livello - o perche' l'agente l'ha
+visto: mai per il colore.
+
 #### La GDA sta nel disegno tecnico, e si scarta
 
 La **GDA** — il riquadro che tiene il posto alla dichiarazione nutrizionale
@@ -1211,6 +1242,41 @@ passata lo paga solo il file che la GDA ce l'ha davvero. Come `white`, `gda` si
 confronta per **nome intero**: intero non e' il nome di nessun inchiostro,
 mentre come sottostringa prenderebbe parole qualunque.
 
+#### La GDA si toglie da tutte le grafiche, anche stampata
+
+"Togliere anche la GDA da tutte le grafiche": non solo il posto tenuto, ma
+anche le **icone stampate** delle Assunzioni di Riferimento - "Energia 476 kJ
+114 kcal 6%" - che cambiano da un paese all'altro e sul modello non vanno. Sul
+Nutella Donut e' l'icona dell'energia sul fianco, sul K Brioss il pannello
+bianco con le cinque icone sul retro, sul Nutella B-ready l'icona dentro una
+nota del grafico, fuori dal DT.
+
+Non ha una lastra ne' un livello: sono tracciati e scritte sciolti nella
+grafica, in quadricromia. Si riconosce dal **testo** (`techink.zone_gda`): da
+ogni `kcal` si cresce sulle scritte vicine, meno di 7 mm fra l'una e l'altra,
+ed e' GDA il gruppo che ha anche kJ e una percentuale e sta in 90 mm. Sul
+Brioss le etichette delle icone - ENERGIA, GRASSI - sono vettorializzate, e fra
+il titolo "Ciascuna porzione (27g) contiene:" e i valori restano 6 mm senza
+testo: a 5 il titolo restava fuori.
+
+**La tabella nutrizionale resta**: e' grafica e si stampa. Si riconosce da
+quello che le icone non hanno mai - le colonne in grammi, `(g)`, e le righe di
+proteine e carboidrati. Sul Nutella Donut il gruppo del retro, "(kJ / kcal)
+(g) (g) (g)", resta intero.
+
+Si toglie quello che sta nella zona - il gruppo allargato di 4 mm, il bordo
+dell'icona - e il pannello su cui le scritte stanno, anche se sborda dal
+margine, purche' non sia piu' grande di due volte la zona: il fondo bianco
+arrotondato del Brioss si', il fondo rosso del retro no (`techink.dentro_gda`).
+Per le scritte conta dove comincia la riga, non il riquadro che serve al DT,
+che a ogni carattere da' la larghezza del glifo piu' largo: con quello le
+scritte uscivano dalla zona e restavano stampate senza piu' il pannello sotto.
+Sul Brioss vanno via 101 oggetti, sul Nutella Donut 14, e sotto torna il fondo,
+rosso e marrone.
+
+Una GDA vettorializzata, senza testo vivo, non si legge e non si tocca: li' la
+puo' vedere solo l'agente, e lo dice.
+
 ### La tipologia non riconosciuta e' un errore, non un ripiego
 
 `kind` si dichiara e non si indovina, e c'era gia' la nota sul sinonimo
@@ -1219,6 +1285,20 @@ finiva dal solutore flowpack. Lo stesso difetto sta all'altro capo: un valore
 qualsiasi non riconosciuto - `auto`, per esempio - non entrava in nessun ramo e
 cadeva **in silenzio** su quello flowpack. Oggi risponde 400 e dice cosa
 dichiarare.
+
+### Un file che si dichiara film prova prima il flowpack
+
+Senza dichiarazione l'analisi prova il vassoio, poi l'astuccio, poi il
+flowpack. Ma il solutore astuccio risolve anche certi film: sul Kinder Happy
+Hippo T1 la griglia 1 | 15 | 83 | 15 | 1 per 15 | 85 | 15 gli dava un astuccio
+vwrap 52,5 x 51,2 x 9,7, e il flowpack non veniva mai provato. Il file pero' lo
+dice da se': il cartiglio Artworkr dei Ferrero scrive "WRAPPING/FILM" nella
+descrizione, e il disegno di un film ha FASCIA e PASSO. Su tutti i file che
+abbiamo, WRAPPING lo porta ogni flowpack e nessun astuccio.
+
+Allora, se il testo lo dice, il flowpack si prova per primo, e vince solo se
+l'analisi automatica si risolve davvero, senza ripiegare sul solutore vecchio
+(`server._dice_film`). Se non si risolve, si va avanti come sempre.
 
 ### Regole sempre valide
 
@@ -2834,7 +2914,9 @@ pezzi, lo steso si fermava sulla saldatura: passo **141 invece di 149**, corpo
 mm)". Prima della soglia, i tratti della stessa penna sullo stesso asse che si
 toccano si ricuciono (`flowpack._ricuci`): mezzo punto di vuoto al massimo,
 cosi' un tratteggio vero resta tratteggio. Col taglio ricucito il Cheesecake
-esce identico al Mandarino, 135,5 x 149, corpo 133, pinne 8 e gola 10.
+esce identico al Mandarino, 136 x 149, corpo 133, pinne 8 e gola 10 (135,5
+prima che i capi dello steso si prendessero sul taglio: vedi *I capi dello
+steso sono il taglio, non il centro del gruppo*).
 
 **Un ripiego non deve mai essere muto.** Se `analyze_auto` fallisce, la
 costruzione passa al solutore vecchio: il modello che ne esce non e' sbagliato
@@ -3237,10 +3319,42 @@ sbagliata. E' stata rimossa: era nata per il Tronky, il Tronky non ne ha
 bisogno, e restava una strada capace di produrre in silenzio una sezione
 sbagliata su qualche pack futuro.
 
+#### La terza chiusura: il tubo piatto a pinna
+
+Il **Kinder Happy Hippo T1** (Ferrero 12402, "KHH Film T1", cold seal) non e'
+ne' l'una ne' l'altra. Il DT, di traverso al nastro, segna 1 | 15 | 83 | 15 |
+1: il margine, le due fasce di cold seal che si saldano a pinna, e in mezzo il
+giro, che e' proprio l'area di stampa del cartiglio. Nessuna piega fra fronte e
+fianchi: il film avvolge un biscotto, e non ha spigoli. A pinna non chiude -
+mancano le quattro pieghe - e a sovrapposizione nemmeno, perche' il lembo non
+sta da una parte sola. Lo Space non lo costruiva.
+
+E' un **tubo piatto chiuso a pinna** (`risolvi_pinna_piatta`,
+`Flowpack.piatto`): `giro + 2 falde = nastro`, con le due linee della pinna
+speculari e nessuna linea fra loro, che sarebbe una piega. Il fronte e' mezzo
+giro, centrato, e la pinna sta a meta' del retro: 115 = 16 + 83 + 16, fronte
+41,5. La sezione la da' il rigonfiamento, come a sovrapposizione - dalla lente
+al cerchio - ma la pinna c'e', e si appoggia sul retro.
+
+Tutte e due le letture del foglio trovano due linee speculari: le fasce della
+pinna in un verso, le saldature di testa nell'altro (15 | 85 | 15). Il verso
+giusto lo dicono le **testate**: solo li' il DT le segna uguali ai due capi, 15
+e 15; nell'altro verso le "testate" sono le fasce della pinna viste di
+traverso, e i margini le sbilanciano, 12,9 contro 15,5 (`_testate_speculari`).
+
+Sul modello: nastro 115 x passo 115, giro 83, fronte 41,5, pinna 16, testate
+15, corpo 85, e la miniatura del cartiglio lo conferma su due copie (16 | 83 |
+16 e 15 | 85 | 15). Senza il box verde Best Before e senza il tratteggio del
+cold seal. Un biscotto piatto sta meglio a rigonfiamento basso: al 5 la
+sezione e' 31 x 21 e il marchio, largo 39 mm su un fronte di 41,5, gira un po'
+sul fianco.
+
 #### Come si sceglie la chiusura
 
-Quattro tentativi in ordine: pinna nei due versi dello steso, poi
-sovrapposizione nei due versi. L'ordine conta. "Le fasce non chiudono" non
+Sei tentativi in ordine: pinna nei due versi dello steso, poi sovrapposizione
+nei due versi, e per ultimo il tubo piatto a pinna, che chiede meno al disegno
+- due linee speculari - e quindi viene dopo chi ne chiede di piu'. L'ordine
+conta. "Le fasce non chiudono" non
 segnala solo la chiusura sbagliata: segnala **anche** che lo steso va letto
 ruotato di 90 gradi. Provando l'altra chiusura prima dell'altro verso, il K
 Brioss — che va letto ruotato — trovava una lettura plausibile nel verso
@@ -3343,6 +3457,30 @@ altro file cambia. Non vale come regola assoluta, e per questo viene dopo la
 simmetria: sul Milch-Schnitte e sul Kinder Bueno Dark una piega vera e' piu'
 corta delle altre (0,59 e 0,38 del passo).
 
+### I capi dello steso sono il taglio, non il centro del gruppo
+
+Le linee a meno di 3 punti fanno gruppo, e il gruppo vale il suo centro: per
+una piega disegnata due volte va bene. Per i due capi dello steso no. Sul Happy
+Hippo il taglio e la riga del margine, a un millimetro, finivano nello stesso
+gruppo, e il capo cadeva a mezzo millimetro dal taglio: nastro 114 invece di
+115. Il capo e' la linea **piu' esterna** del suo gruppo.
+
+Sul parco cambia il **KP T1 Mandarino**, da 135,5 a **136,0**: ed e' la sua
+catena di quote a dirlo, 1 | 15 | 14 | 20 | 2 | 32 | 2 | 19 | 16 | 13 | 2 =
+136. Il taglio a sinistra copre il passo come quello a destra e come le
+pieghe, 149 mm; la linea a un millimetro e' lunga 152 e sporge oltre il passo,
+quindi e' un'altra cosa. Il Brioss promo si sposta di un decimo di punto, e
+tutti gli altri restano al byte.
+
+### La falda sta sopra il retro anche nelle testate
+
+Oltre il corpo la falda si posava a distanza zero sul retro schiacciato nella
+saldatura, e due superfici alla stessa distanza si contendono i pixel: sul
+Happy Hippo la falda bianca e la testata marrone uscivano a puntini. Adesso
+resta sempre un ventesimo di millimetro sopra (`FALDA_SOPRA`): non si vede, e
+decide chi sta sopra - la falda, come nel pack vero. Sui flowpack a pinna del
+parco si spostano solo quei vertici, di 0,05 mm, e texture e UV non cambiano.
+
 ## Coppe e contenitori conici
 
 Lo steso e' un **settore anulare**. Il contorno va letto appiattendo le bezier
@@ -3396,6 +3534,12 @@ decide il rigonfiamento:
 | | nastro | passo | giro | fronte | lembo coperto |
 |---|---|---|---|---|---|
 | K Tronky T1 | 83,0 | 144,0 | 71,0 | 36,0 | 12,0 |
+
+Tubo piatto a pinna, con la miniatura che conferma le catene:
+
+| | nastro | passo | giro | fronte | pinna | testate |
+|---|---|---|---|---|---|---|
+| K Happy Hippo T1 | 115,0 | 115,0 | 83,0 | 41,5 | 16,0 | 15,0 |
 
 Nota sul Tronky: le quote del cartiglio sono testo vettorializzato, non
 estraibile — sulla pagina intera pdfplumber trova 20 parole. Sono state lette a

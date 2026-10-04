@@ -134,7 +134,7 @@ def _centro_fronte(fp):
     nastro (il bordo dello steso da cui partono le v)."""
     y0 = fp.sheet[1]
     inizio = (fp.girth_span[0] - y0) * PT2MM
-    if fp.pillow:
+    if fp.tubo_piatto:
         return inizio + fp.back_a + fp.W / 2.0
     return inizio + fp.back_a + fp.T + fp.W / 2.0
 

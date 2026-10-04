@@ -265,7 +265,7 @@ GLIFO_MAX = 1.5
 
 
 def strip_separations(src, dst, drop, riquadri=None, aree=None,
-                      regione=None, conti=None, coperte=None):
+                      regione=None, conti=None, coperte=None, zone=None):
     """Toglie le lastre tecniche eliminando le operazioni di disegno.
 
     Colorarle di bianco non basta: un tratto tecnico sopra la grafica
@@ -286,10 +286,15 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
     servono a leggere le quote, e le quote a quel punto sono gia' lette. Un
     oggetto che tocca il DT resta intero. `conti`, se e' un dizionario, dice
     quanti oggetti sono andati via per tipo.
+
+    `zone` sono le GDA del foglio, `[(nucleo, zona)]` nello stesso telaio -
+    vedi `techink.zone_gda`: nella stessa passata va via quello che e' della
+    GDA, scritte, icone e il pannello su cui stanno (`techink.dentro_gda`),
+    e `conti["gda"]` dice quanti oggetti.
     """
     import pypdf
     from pypdf.generic import ContentStream, NumberObject
-    from .techink import area
+    from .techink import area, dentro_gda
 
     # `clone_from` e non `append`: append PERDE /OCProperties, e con quello
     # perde i livelli. Un astuccio che ha insieme una vernice e la colata su un
@@ -307,6 +312,14 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
     coperte = {v.lower() for v in (coperte or ())} & aree
     if conti is None:
         conti = {}
+    zone = list(zone or ())
+    if zone and regione is None:
+        # la GDA si cerca con lo stesso filtro del DT: un DT grande quanto
+        # tutto, da cui non esce niente
+        regione = (-1e12, -1e12, 1e12, 1e12)
+
+    def gda(r):
+        return bool(zone) and dentro_gda(r, zone)
 
     def names(res, quali=drop):
         out = set()
@@ -383,6 +396,13 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
 
     def conta(chi, n=1):
         conti[chi] = conti.get(chi, 0) + n
+
+    def conta_scritte(via):
+        n = sum(1 for x in via if fuori(x[4]))
+        if n:
+            conta("scritte", n)
+        if len(via) > n:
+            conta("gda", len(via) - n)
 
     def lunghezza(s):
         """Quanti byte ha una stringa di testo: al piu' tanti glifi."""
@@ -482,13 +502,14 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                             r, chi = xobject(o, ctm)
                         except Exception:
                             r = None
-                        if r is not None and fuori(r):
+                        if r is not None and (fuori(r) or gda(r)):
                             tolti.add(str(ops[0]))
-                            conta(chi)
+                            conta(chi if fuori(r) else "gda")
                             continue
                 elif op == b"INLINE IMAGE" and regione is not None:
-                    if fuori(riquadro(angoli(0.0, 0.0, 1.0, 1.0, ctm))):
-                        conta("immagini")
+                    r = riquadro(angoli(0.0, 0.0, 1.0, 1.0, ctm))
+                    if fuori(r) or gda(r):
+                        conta("immagini" if fuori(r) else "gda")
                         continue
                 elif regione is not None:
                     # Il testo. Si decide alla fine del BT, perche' una
@@ -501,18 +522,19 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                             avanti = indietro = 0.0
                             scritte, ritaglio = [], False
                         elif op == b"ET":
-                            via = [x for x in scritte if fuori(x[4])]
+                            via = [x for x in scritte
+                                   if fuori(x[4]) or gda(x[5])]
                             if ritaglio or not via:
                                 pass
                             elif len(via) == len(scritte):
-                                for i, o, p, _m, _r in reversed(scritte):
+                                for i, o, p, _m, _r, _o in reversed(scritte):
                                     if o == b'"':
                                         # Tw e Tc restano: valgono anche dopo
                                         out[i:i + 1] = [([p[0]], b"Tw"),
                                                         ([p[1]], b"Tc")]
                                     else:
                                         del out[i]
-                                conta("scritte", len(via))
+                                conta_scritte(via)
                             else:
                                 # Un BT con scritte dentro e fuori - sul
                                 # Kinder Country "Bar Code Area" sul DT e le
@@ -520,12 +542,12 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                                 # scritte fuori non si tolgono, si rendono
                                 # invisibili (modo 3), cosi' quelle dopo non
                                 # si spostano.
-                                for i, _o, _p, modo, _r in reversed(via):
+                                for i, _o, _p, modo, _r, _q in reversed(via):
                                     out[i:i + 1] = [([NumberObject(3)], b"Tr"),
                                                     out[i],
                                                     ([NumberObject(modo)],
                                                      b"Tr")]
-                                conta("scritte", len(via))
+                                conta_scritte(via)
                             tm = tlm = None
                             scritte = []
                         elif op == b"Tf":
@@ -591,8 +613,16 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                                                 avanti,
                                                 ts["rise"] + 1.5 * corpo,
                                                 per(tm, ctm)))
+                            # Per la GDA si guarda dove comincia la riga,
+                            # dalla linea di base a un corpo sopra: il
+                            # riquadro qui sopra e' largo quanto il glifo piu'
+                            # largo per ogni carattere, giusto per non toccare
+                            # il DT, e le scritte della GDA ne uscivano.
+                            o = riquadro(angoli(0.0, ts["rise"], 0.0,
+                                                ts["rise"] + corpo,
+                                                per(tm, ctm)))
                             scritte.append((len(out), op, list(ops),
-                                            ts["modo"], r))
+                                            ts["modo"], r, o))
                     except (TypeError, ValueError, IndexError):
                         # un testo che non si capisce resta com'e'
                         ritaglio = True
@@ -607,10 +637,13 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                 coda = out[inizio:] if inizio is not None else []
                 solo_percorso = bool(coda) and all(o in PERCORSO or o == b"h"
                                                    for _p, o in coda)
+                della_gda = False
                 if regione is not None and op != b"n" and tracciato:
                     grosso = (lw * max(abs(v) for v in ctm[:4]) / 2.0
                               if op not in FILL else 0.0)
                     via = fuori(riquadro(tracciato, grosso))
+                    if not via and gda(riquadro(tracciato, grosso)):
+                        via = della_gda = True
                     if not via and op in STROKE:
                         # Un tratto che esce dal DT e ci entra e' il richiamo
                         # di una nota: la penna lo spegne come DT, ma il
@@ -650,11 +683,15 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                             if pt and fuori(riquadro(pt, grosso)):
                                 del out[da:fine]
                                 conta("sottotracciati")
+                            elif pt and gda(riquadro(pt, grosso)):
+                                del out[da:fine]
+                                conta("gda")
                             fine = da
                 tracciato = []
                 pezzi = []
                 if via:
-                    conta("richiami" if richiamo else "tracciati")
+                    conta("gda" if della_gda else
+                          "richiami" if richiamo else "tracciati")
                     inizio = None
                     if solo_percorso:
                         # via anche il tracciato, non solo il colore: meno
@@ -1135,8 +1172,30 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
     lastre |= set(etichettate)
     confermate = {techink._norm(n) for n in (extra or ()) if str(n).strip()}
     lastre |= confermate
+    # I box colorati si tolgono, quelli BIANCHI restano: un'area riservata
+    # dipinta in bianco non e' un segnaposto, e' il posto stampato in bianco
+    # dove andranno la data o il lotto. Vedi `techink.lastre_bianche`.
+    try:
+        bianche = techink.lastre_bianche(pagina)
+    except Exception:
+        bianche = set()
+    lasciate = sorted(n for n in lastre if n in bianche and (
+        techink.area(n) or n in etichettate or n in confermate))
+    if lasciate:
+        lastre -= set(lasciate)
+        for n in lasciate:
+            etichettate.pop(n, None)
+            confermate.discard(n)
+        if conti is not None:
+            conti["bianchi"] = lasciate
+    # La GDA va via da tutte le grafiche, dovunque stia: vedi
+    # `techink.zone_gda`.
+    try:
+        zone = techink.zone_gda(pdf, page_no)
+    except Exception:
+        zone = []
     lastre = sorted(lastre)
-    if not lastre and regione is None:
+    if not lastre and regione is None and not zone:
         return pdf, []
     try:
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
@@ -1156,13 +1215,28 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
             techink.vuota(n) or techink.vuota(etichettate.get(n, "")))}
         pulito = strip_separations(pdf, tmp.name, lastre, riquadri=riquadri,
                                    aree=aree, regione=regione, conti=conti,
-                                   coperte=coperte)
+                                   coperte=coperte, zone=zone)
         if riquadri:
             strati.segna_riservate(pulito, riquadri)
         return pulito, lastre
     except Exception:
         # meglio una texture con un residuo tecnico che nessun modello
         return pdf, []
+
+
+def avvisi_gda(conti):
+    """Le righe sulla GDA tolta e sui box bianchi lasciati, per chi guarda
+    il modello."""
+    fuori = []
+    if conti.get("gda"):
+        fuori.append("GDA tolta dalla grafica: %d oggetti - le icone delle "
+                     "Assunzioni di Riferimento (kJ, kcal, %%) col loro "
+                     "pannello, che sul modello non vanno" % conti["gda"])
+    if conti.get("bianchi"):
+        fuori.append("box bianchi lasciati: %s - un'area riservata bianca e' "
+                     "il posto stampato in bianco per data e lotto, e resta"
+                     % ", ".join(conti["bianchi"]))
+    return fuori
 
 
 def avviso_fuori_dt(conti):
@@ -1212,6 +1286,7 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     fuori = avviso_fuori_dt(conti)
     if fuori:
         avvisi.append(fuori)
+    avvisi.extend(avvisi_gda(conti))
     alt = dict(dieline.fianchi_alt) if dieline is not None else {}
     da_rendere = dict(panels)
     da_rendere.update({k + "~": p for k, p in alt.items()})

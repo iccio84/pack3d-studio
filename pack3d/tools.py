@@ -175,6 +175,7 @@ def analyze_flowpack(pdf):
                 return {"errore": str(e)[:160]}
     return dict(nastro_mm=fp.web_mm, passo_mm=fp.step_mm,
                 fronte=fp.W, spessore=fp.T, corpo=fp.L,
+                tubo_piatto=fp.tubo_piatto,
                 pinna_testa=fp.end_fin, gola=fp.gola,
                 falda_longitudinale=fp.side_fin,
                 perimetro=round(fp.girth, 1),
