@@ -227,7 +227,9 @@
       <button data-k="carton">Cartotecnico</button>
       <button data-k="flowpack">Flowpack</button>
       <button data-k="vassoio">Vassoio espositore</button>
+      <button data-k="coppa">Coppa con tappo</button>
     </div>
+    <p class="note">La coppa arriva in due PDF, lo sleeve e il tappo: caricali insieme. Con uno solo esce la coppa aperta, o il tappo da solo.</p>
   </div>
 
   <div id="params" class="pannello">
@@ -259,7 +261,7 @@
 
   <div class="row">
     <span class="tit">Strumenti</span>
-    <input id="file" type="file" accept="application/pdf,.pdf" hidden>
+    <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
     <button id="upload" class="primary">Carica PDF</button>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="annulla" style="display:none">Annulla</button>
@@ -312,35 +314,46 @@ function readAccessor(g, i){
 
 function buildScene(g){
   const group = new THREE.Group();
-  const mesh = g.json.meshes[0];
-  for (const prim of mesh.primitives){
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(readAccessor(g, prim.attributes.POSITION),3));
-    if (prim.attributes.NORMAL !== undefined)
-      geo.setAttribute('normal', new THREE.BufferAttribute(readAccessor(g, prim.attributes.NORMAL),3));
-    if (prim.attributes.TEXCOORD_0 !== undefined)
-      geo.setAttribute('uv', new THREE.BufferAttribute(readAccessor(g, prim.attributes.TEXCOORD_0),2));
-    if (prim.indices !== undefined)
-      geo.setIndex(new THREE.BufferAttribute(readAccessor(g, prim.indices),1));
-    if (prim.attributes.NORMAL === undefined) geo.computeVertexNormals();
+  // Ogni mesh del GLB e' un pezzo - la coppa e il tappo, il display e la
+  // plancia - e vanno lette TUTTE: si leggeva solo la prima, e il secondo
+  // pezzo nel viewer non c'era. I pezzi condividono vertici e texture: gli
+  // attributi e la texture si fanno una volta sola.
+  const attributi = {}, texture = {};
+  const attributo = (i, n) => attributi[i] ||
+    (attributi[i] = new THREE.BufferAttribute(readAccessor(g, i), n));
+  const immagine = src => {
+    if (texture[src]) return texture[src];
+    const img = g.json.images[src];
+    const bv = g.json.bufferViews[img.bufferView];
+    const blob = new Blob([new Uint8Array(g.bin, bv.byteOffset||0, bv.byteLength)],
+                          {type: img.mimeType || 'image/jpeg'});
+    const url = URL.createObjectURL(blob);
+    const t = new THREE.TextureLoader().load(url, () => { render(); URL.revokeObjectURL(url); });
+    t.flipY = false;                    // glTF ha l'origine UV in alto a sinistra
+    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    return (texture[src] = t);
+  };
+  for (const mesh of g.json.meshes){
+    for (const prim of mesh.primitives){
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', attributo(prim.attributes.POSITION, 3));
+      if (prim.attributes.NORMAL !== undefined)
+        geo.setAttribute('normal', attributo(prim.attributes.NORMAL, 3));
+      if (prim.attributes.TEXCOORD_0 !== undefined)
+        geo.setAttribute('uv', attributo(prim.attributes.TEXCOORD_0, 2));
+      if (prim.indices !== undefined)
+        geo.setIndex(new THREE.BufferAttribute(readAccessor(g, prim.indices),1));
+      if (prim.attributes.NORMAL === undefined) geo.computeVertexNormals();
 
-    const mat = new THREE.MeshPhongMaterial({color:0xffffff, shininess:38,
-                                             specular:0x4a4a4a, side:THREE.FrontSide});
-    const m = g.json.materials && g.json.materials[prim.material];
-    const texIdx = m && m.pbrMetallicRoughness && m.pbrMetallicRoughness.baseColorTexture;
-    if (texIdx){
-      const src = g.json.textures[texIdx.index].source;
-      const img = g.json.images[src];
-      const bv = g.json.bufferViews[img.bufferView];
-      const blob = new Blob([new Uint8Array(g.bin, bv.byteOffset||0, bv.byteLength)],
-                            {type: img.mimeType || 'image/jpeg'});
-      const url = URL.createObjectURL(blob);
-      const t = new THREE.TextureLoader().load(url, () => { render(); URL.revokeObjectURL(url); });
-      t.flipY = false;                    // glTF ha l'origine UV in alto a sinistra
-      t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
-      mat.map = t;
+      const mat = new THREE.MeshPhongMaterial({color:0xffffff, shininess:38,
+                                               specular:0x4a4a4a, side:THREE.FrontSide});
+      const m = g.json.materials && g.json.materials[prim.material];
+      const texIdx = m && m.pbrMetallicRoughness && m.pbrMetallicRoughness.baseColorTexture;
+      if (texIdx) mat.map = immagine(g.json.textures[texIdx.index].source);
+      const pezzo = new THREE.Mesh(geo, mat);
+      pezzo.name = mesh.name || '';
+      group.add(pezzo);
     }
-    group.add(new THREE.Mesh(geo, mat));
   }
   return group;
 }
@@ -674,30 +687,49 @@ async function build(buf, name, opts){
   setFase('pronto');
 }
 
-async function handle(file){
-  if (!file) return;
-  if (/\.glb$/i.test(file.name)){          // comodo per guardare un GLB gia' pronto
+async function handle(lista){
+  // la lista si copia SUBITO: chi chiama azzera il campo file appena torna
+  const files = Array.from(lista || []).filter(Boolean);
+  if (!files.length) return;
+  const file = files[0];
+  if (files.length === 1 && /\.glb$/i.test(file.name)){   // comodo per guardare un GLB gia' pronto
     glbBlob = file; glbName = file.name;
     show(await file.arrayBuffer()); setFase('pronto'); setTitolo(file.name);
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
-  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
-  if (!isPdf){ setStatus('Solo file PDF','err'); return; }
+  const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+  if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
+  // due PDF insieme servono solo alla coppa: lo sleeve e il tappo
+  if (files.length > 2){ setStatus('Al massimo due PDF insieme: lo sleeve e il tappo della coppa','err'); return; }
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
   // prima domanda obbligatoria su ogni PDF: la tipologia la dichiara l'utente
-  pending = {buf: await file.arrayBuffer(), name: file.name};
-  setTitolo(file.name);
+  const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
+  pending = {buf: bufs[0], bufs, name: file.name};
+  setTitolo(files.map(f => f.name).join(' + '));
   params.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
   setFase('lavoro');
-  setStatus('Indica il tipo di pack','');
+  setStatus(files.length > 1 ? 'Due PDF: insieme vanno solo per la coppa con tappo'
+                             : 'Indica il tipo di pack','');
+}
+
+/** Il corpo della richiesta: un PDF, o piu' PDF di fila con le lunghezze. */
+function corpo(p){
+  if (p.bufs.length < 2) return {buf: p.buf};
+  return {buf: new Blob(p.bufs, {type:'application/pdf'}),
+          parti: p.bufs.map(b => b.byteLength)};
 }
 
 async function withKind(kind){
+  if (pending.bufs.length > 1 && kind !== 'coppa'){
+    setStatus('Due PDF insieme solo per la coppa (sleeve e tappo): per questa tipologia caricane uno','err');
+    return;
+  }
   packtype.classList.remove('on');
+  const c = corpo(pending);
   try{
-    const info = await analyze(pending.buf, {kind});
+    const info = await analyze(c.buf, {kind, parti: c.parti});
     setMeta(info.meta || []);
     if (kind === 'flowpack'){
       document.getElementById('teeth').value = '';
@@ -705,7 +737,7 @@ async function withKind(kind){
       setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
     }
-    await build(pending.buf, pending.name, {kind});
+    await build(c.buf, pending.name, {kind, parti: c.parti});
     setStatus(info.title || 'Modello pronto','');
   }catch(err){
     const m = testoErrore(err);
@@ -757,7 +789,7 @@ setFase('vuoto');
 document.getElementById('riprova').onclick = cercaBackend;
 cercaBackend();
 document.getElementById('upload').onclick = () => document.getElementById('file').click();
-document.getElementById('file').onchange = e => { handle(e.target.files[0]); e.target.value=''; };
+document.getElementById('file').onchange = e => { handle(e.target.files); e.target.value=''; };
 document.querySelectorAll('#packtype button').forEach(b => {
   b.onclick = () => withKind(b.dataset.k);
 });
@@ -794,7 +826,7 @@ dlBtn.onclick = () => {
 ['dragleave','drop'].forEach(ev => addEventListener(ev, e => {
   e.preventDefault(); if (ev==='drop' || e.target===document.documentElement)
     document.body.classList.remove('dragging'); }));
-addEventListener('drop', e => { handle(e.dataTransfer.files[0]); });
+addEventListener('drop', e => { handle(e.dataTransfer.files); });
 
 resize();
 </script>

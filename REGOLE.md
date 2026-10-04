@@ -410,7 +410,8 @@ allora si gira la scatola intera, guscio, interno e coste
 
 | regola | dove |
 |---|---|
-| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Coppa conica, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
+| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Coppa con tappo, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
+| Solo coppa: i due PDF - sleeve e tappo - si caricano **insieme**; l'ordine non conta. | campo file multiplo, `parti` nell'intestazione |
 | Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
 | Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". | `gonfiore()` in `server.py` |
 | Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
@@ -2219,6 +2220,11 @@ Nel GLB il blocco e' **un nodo solo**, `vassoio` o `display`; la plancia e' un
 nodo a parte, `plancia`, sugli stessi vertici e sulla stessa texture
 (`exporters.write_glb_mesh` con `parti`).
 
+**Il visore della pagina legge TUTTE le mesh del GLB.** Leggeva solo la
+prima: il display nello Space usciva senza la plancia, e la coppa senza il
+tappo, mentre il file scaricato li aveva tutti e due. Un pezzo a parte si
+controlla nel visore, non solo nel file.
+
 **La verifica che lo dice**, a ogni costruzione (`verifica.blocco`): sulla
 faccia stampata i fianchi coprono tutta la profondita' del fondo, fronte e
 retro tutta la larghezza, e ogni parete scende fino al piano del fondo, entro
@@ -3483,6 +3489,23 @@ parco si spostano solo quei vertici, di 0,05 mm, e texture e UV non cambiano.
 
 ## Coppe e contenitori conici
 
+La coppa da gelato - il Nutella POT 500 - arriva in **due PDF**: il
+contenitore (sleeve e fondo) e il tappo (corpo e anello). Si dichiara
+**Coppa con tappo** e i due file si caricano INSIEME: l'ordine non conta,
+quale e' quale lo dice la pagina (`server._coppa_e_tappo`). Con lo sleeve solo
+esce la coppa aperta, col tappo solo il tappo, e il primo cartellino lo dice.
+La costruzione e' `pack3d/coppa.py`; nel GLB la coppa e il tappo sono **due
+nodi**, e il tappo si toglie.
+
+Ogni PDF ha due disegni che dicono due cose diverse, e servono tutti e due:
+
+| | dice | si legge da |
+|---|---|---|
+| lo **steso** in grande | dove sta la grafica | il settore anulare dello sleeve, il cerchio del corpo, il rettangolo dell'anello |
+| la **vista montata** in miniatura | la forma | i tratti neri: altezza, bocca, fondo, ricciolo, rientro; la sezione del tappo |
+
+### Lo steso
+
 Lo steso e' un **settore anulare**. Il contorno va letto appiattendo le bezier
 dal content stream (`cup.py`): ne' la silhouette rasterizzata ne' i punti che
 pdfplumber espone per le curve vanno bene, i secondi includono i punti di
@@ -3493,17 +3516,113 @@ r_bocca = R2 * alpha / 2pi     r_fondo = R1 * alpha / 2pi
 apotema = R2 - R1              altezza = radice(apotema^2 - (r_bocca - r_fondo)^2)
 ```
 
-- **Il fronte si ancora al baricentro angolare della grafica**, non alla
-  mezzeria geometrica del settore. Sulla coppa Nutella il baricentro dei pixel
-  rossi cade a +8,86 gradi.
-- **Con un render disponibile il fondo si allinea alla silhouette**: l'arco
-  interno puo' non essere concentrico con l'esterno. Nutella POT: 72,0 mm da
-  silhouette, poi confermati dal DT a 72,32, contro i 69,3 dell'artwork.
+Queste formule valgono per un cono che si chiude senza sormonto e con la
+carta tutta sulla parete. Lo sleeve vero ha il bordo arrotolato in cima, il
+risvolto sotto il fondo e il lembo incollato sul lato: sul Nutella POT danno
+un'altezza di 122,9 mm contro i 106 della coppa montata. **Lo steso non dice
+la forma: la dice la vista montata.**
+
 - Su `fit_sector` guardare **due numeri**, non uno. Residuo basso non basta se
   lo scarto fra gli angoli dei due archi e' alto: 0,001 mm con 14,5 gradi di
-  scarto significa cerchio adattato al pezzo sbagliato di contorno.
-- Il **fondo ha una cordonatura con rientranza**, leggibile dai cerchi
-  concentrici del DT.
+  scarto significa cerchio adattato al pezzo sbagliato di contorno. Sul
+  Nutella POT i tratteggi del DT passano con 0,020 mm e 9,5 gradi; il taglio
+  vero con 0,564 mm e 0,8 gradi, perche' ha gli spigoli arrotondati. Si guarda
+  prima lo scarto (`coppa.leggi_steso`).
+- I **lati di taglio** sono due rette, misurate lontano dagli spigoli; non
+  passano esattamente per il centro, e la carta fra i due si misura arco per
+  arco (`Steso.arco`).
+- La **piega del fondo** e' l'arco concentrico del DT piu' vicino al taglio di
+  sotto: 424,15 mm sul Nutella POT, sopra la fascia neutra del risvolto. Senza
+  quell'arco la parete parte dal taglio e il cartellino lo dice.
+
+### La vista montata: la scala dai cerchi gemelli
+
+Le quote della vista montata sono vettorializzate - le legge solo un occhio -
+ma i tratti no. Manca solo la scala, e la danno **i cerchi del fondo**, che il
+foglio disegna in grande e in miniatura: il rapporto fra i due e' la scala, e
+deve tornare su OGNI anello entro lo 0,4% (`coppa.gemello`). Sul Nutella POT
+87,5 / 72,5 / 67,2 mm tornano a 1:8,169; sul tappo il corpo da 104,14 a
+1:4,26. Misurata cosi', la miniatura rende le quote scritte:
+
+| | quota scritta | misurata sui tratti |
+|---|---|---|
+| altezza | 106 ± 0,38 | 105,96 |
+| bocca | 96,2 ± 0,25 | 96,17 |
+| fondo | 73,3 | 73,29 |
+| ricciolo | 3,81 ± 0,25 | 3,81 |
+| rientro del fondo | 8,29 ± 0,2 | 8,30 |
+| gonna del tappo, dentro | 96,1 ± 0,6 | 96,13 |
+| altezza del tappo | 15,71 ± 0,5 | 15,71 |
+
+Le pareti si riconoscono perche' pendono come il cono che lo steso impone e
+sono simmetriche; il resto della miniatura - cartiglio, legenda, quote - non
+ha due rette cosi'.
+
+Le viste montate si leggono DRITTE, quindi un foglio girato sulla tavola si
+gira prima di leggerlo (`coppa.orienta`), come gli astucci. Lo sleeve il verso
+lo dice da se': la bocca sta sopra, dalla parte opposta al centro degli
+archi. Il tappo si prova girato finche' la sezione si trova col piano nella
+meta' alta. Coi due fogli girati di 90, 180 e 270 gradi il modello esce
+identico: vertici a 0,0 mm, colori sui vertici identici.
+
+### La grafica sulla coppa senza stirarla
+
+La coppa e' il solido di rivoluzione del profilo misurato. Ogni altezza della
+parete prende l'arco dello steso che sta alla **stessa distanza dalla piega**,
+e lungo quell'arco **tanta carta quanta e' la circonferenza** della coppa li'
+(a mezzo spessore), a partire dal taglio sinistro. Quello che avanza e' il
+sormonto incollato sotto il lembo: **non si impone, si misura**, e deve
+tornare con la riga che il DT disegna lungo il taglio destro. Sul Nutella POT
+avanzano 8,6 mm al fondo e 7,7 alla bocca, e il DT ha la riga del lembo a
+8,05: torna. Torna anche il cono: la parete della miniatura pende 4,98 gradi,
+lo steso ne svolge 4,90.
+
+### Il bordo arrotolato e' bianco fuori
+
+In cima allo steso il DT ha 8,5 mm di **fascia neutra**: niente inchiostro,
+perche' la carta li' si arrotola. Si arrotola verso fuori partendo dal lembo,
+quindi la fascia neutra finisce al CENTRO del rotolo, e il giro che si vede e'
+l'ultimo, quello attaccato alla parete. Lungo quel giro la carta sale dal lato
+interno, passa sopra e scende fuori: il marrone della fascia alta copre il
+lato interno e la cima, e **il fuori del bordo resta bianco**. Mappato nel
+verso sbagliato - dalla parete verso fuori - il bordo usciva marrone fuori e
+bianco dentro. Col tappo chiuso il bordo non si vede: conta a coppa aperta.
+
+### Il fronte e' il marchio, non la mezzeria
+
+Il fronte si ancora alla grafica, non alla mezzeria geometrica del settore:
+**il gruppo piu' grande di colori vivi**, con i buchi fra lettere vicine
+chiusi entro 4 mm (`coppa.fronte`). E' il marchio - NEW e nutella - a +6,8
+gradi dalla mezzeria dello steso. Il baricentro di TUTTI i colori vivi lo
+tirava verso il box "nutella 60", 20 mm a sinistra, e il marchio usciva
+spostato a destra. Il marrone delle fasce gira tutto attorno e non conta: i
+colori vivi sono quelli che hanno almeno 115 livelli fra il canale piu' alto
+e il piu' basso.
+
+### Il tappo
+
+- **La sezione e' l'unico posto che dice com'e' fatto il tappo montato**: la
+  gonna, la nervatura che si aggancia sotto il bordo della coppa, il gradino,
+  il ricciolo che stringe il corpo, il piano incassato. Le orizzontali nere
+  della sezione sono gli spigoli del giro visti di fronte, e **la piu' lunga
+  e' l'interno della gonna**: e' su quella che il DT scrive Ø96,1. Il profilo
+  esterno e' il nero piu' a sinistra a ogni altezza; il piano e' la riga
+  rossa del corpo.
+- Il **piano** si apre sulla cordonatura del corpo appena dentro la gonna:
+  Ø88,5 sul Nutella POT.
+- Il tappo **poggia col piano sul sommo del bordo**: e' cosi' che la
+  nervatura cade subito sotto il ricciolo. Il pack chiuso e' alto 112,2 mm.
+  La verifica dice se la gonna calza sulla bocca: 96,13 dentro contro 96,17.
+- L'**anello** e' il rettangolo del DT alto quanto la gonna: 97,4 x 15,7.
+  La sua stampa e' casuale - il DT lo scrive - e sul modello il motivo si
+  ripete attorno, quattro volte, e sul retro si interrompe.
+
+### Senza dichiarazione la coppa si prova per ultima
+
+Dichiarata, la coppa non passa da nessun altro solutore. Senza dichiarazione
+si prova solo quando tutto il resto ha fallito, cosi' gli altri pack non ne
+pagano la lettura e non possono esserne scambiati: prima il ripiego flowpack
+la rifiutava dopo 170 secondi con "saldature di testa non riconosciute".
 
 ## Casi calibrati
 
@@ -3637,10 +3756,17 @@ Astucci, con la quota letta due volte che chiude il conto:
 - Il canale `quote.larghezza` / `quote.spessore` dall'analisi AI alla
   costruzione **non e' mai stato percorso con una chiave API vera**: e'
   verificato end-to-end con l'agente simulato, non con l'agente.
-- Il **profilo del tappo** della coppa (cordonatura, arrotolatura, rientranza)
-  e' stimato dal render: nessun documento lo riporta.
-- Un'eventuale **sovrapposizione incollata** dello sleeve non e' misurabile dal
-  PDF: se c'e', tutti i diametri calano.
+- La **coppa** ha un caso solo dietro, il Nutella POT 500: lo steso a
+  settore, la vista montata accanto ai cerchi del fondo, la sezione del tappo
+  accanto al corpo. Un disegno con la vista montata altrove, o senza cerchi
+  gemelli, oggi non si costruisce e lo dice.
+- Lo **spessore della carta della coppa** e' 0,35 mm: 260 g/m2 piu' il PE,
+  dal cartiglio, ma lo spessore il DT non lo scrive. Sposta i diametri di
+  mezzo spessore, e il sormonto misurato di un millimetro scarso.
+- Il **ricciolo** e' un cerchio alto quanto la quota, come nella miniatura;
+  quello vero e' arrotolato e un po' schiacciato. Il lato interno del
+  ricciolo del tappo, troppo piccolo nella sezione per leggerlo tratto per
+  tratto, e' una discesa dritta dal sommo al piano.
 - L'**astuccio aperto** ha un caso solo dietro, il Kinder Pingui T6 BOX, e ha
   due falde di retro. Il vassoio vero — nessuna falda, retro del tutto assente
   — il codice lo prevede ma **non l'ha mai visto**: la faccia del retro

@@ -539,6 +539,81 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
             + ([riscontro] if riscontro else []))
 
 
+def _coppa_e_tappo(pdfs):
+    """`(sleeve, tappo)`: quale dei PDF e' quale, ognuno a pagina unica.
+
+    La coppa arriva in due file, e l'ordine in cui l'utente li carica non
+    dice niente: lo dice la pagina. Lo sleeve ha lo steso a settore anulare,
+    il tappo il corpo tondo disegnato in grande e in miniatura. Uno dei due
+    puo' mancare; uno che non e' ne' l'uno ne' l'altro e' un errore.
+    """
+    from pack3d import coppa as cp
+    trovati = {}
+    for pdf in pdfs:
+        pdf, _n = artwork.pagina_unica(pdf)
+        # girato sulla tavola si legge girato: vedi `coppa.orienta`
+        pdf, cosa, _gradi = cp.orienta(pdf)
+        if cosa is None:
+            raise ValueError("coppa: un PDF non e' ne' lo sleeve (lo steso a "
+                             "settore anulare) ne' il tappo (corpo tondo e "
+                             "anello) di una coppa")
+        if cosa in trovati:
+            raise ValueError("coppa: due PDF dello stesso pezzo (%s) - servono "
+                             "lo sleeve e il tappo" % cosa)
+        trovati[cosa] = pdf
+    return trovati.get("coppa"), trovati.get("tappo")
+
+
+def analisi_coppa(pdfs):
+    """L'analisi della coppa: le misure, senza texture. Vedi `pack3d.coppa`."""
+    from pack3d import coppa as cp
+    sleeve, tappo = _coppa_e_tappo(pdfs)
+    meta = []
+    if sleeve:
+        c = cp.leggi_coppa(sleeve)
+        m = c.montata
+        meta.append("coppa: alta %.1f mm, bocca %.1f, fondo %.1f, bordo "
+                    "arrotolato %.1f, fondo rientrato %.1f"
+                    % (m.altezza, 2 * m.r_bordo, 2 * m.r_fondo, m.ricciolo,
+                       m.rientro))
+        meta += cp.riscontri(c, cp.tracce(sleeve))
+    if tappo:
+        p = cp.leggi_tappo(tappo)
+        meta.append("tappo: gonna di %.1f mm dentro, alta %.1f, piano "
+                    "incassato di %.1f" % (2 * p.r_interno, p.altezza,
+                                           p.z_piano))
+    if sleeve and not tappo:
+        meta.append("SENZA TAPPO: la coppa esce aperta - per chiuderla carica "
+                    "insieme il PDF dello sleeve e quello del tappo")
+    if tappo and not sleeve:
+        meta.append("SOLO IL TAPPO: per la coppa intera carica insieme il PDF "
+                    "dello sleeve e quello del tappo")
+    titolo = ("Coppa col tappo" if sleeve and tappo
+              else "Coppa senza tappo" if sleeve else "Tappo della coppa")
+    return dict(kind="coppa", title=titolo, meta=meta)
+
+
+def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=()):
+    """La coppa di carta col tappo, da uno o due PDF: vedi `pack3d.coppa`.
+
+    Una texture sola, un atlante con lo sleeve, il corpo e l'anello del
+    tappo; due nodi nel GLB, la coppa e il tappo, perche' il tappo si toglie.
+    """
+    from pack3d import coppa as cp
+    dpi, tmax = risoluzione(quality)
+    sleeve, tappo = _coppa_e_tappo(pdfs)
+    V, UV, T, A, parti, meta = cp.costruisci(sleeve, tappo, dpi=dpi,
+                                             lastre_extra=lastre_extra,
+                                             tex_max=tmax)
+    exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti)
+    titolo = ("coppa col tappo" if sleeve and tappo
+              else "coppa senza tappo: carica anche il PDF del tappo per "
+                   "chiuderla" if sleeve
+              else "solo il tappo: carica anche il PDF dello sleeve")
+    return [titolo] + meta + ["%d vertici, %d triangoli; la coppa e il tappo "
+                              "sono due nodi del GLB" % (len(V), len(T))]
+
+
 def _flowpack_from_case(case):
     return Flowpack(W=case["W"], T=case["T"], L=case["L"], end_fin=case["end_fin"],
                     side_fin=case["side_fin"], back_a=case["back_a"],
@@ -1260,7 +1335,9 @@ def _panel_knots(Ps, d, G, fp):
 SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  "carton": "carton", "flowpack": "flowpack",
                  "vassoio": "vassoio", "espositore": "vassoio",
-                 "display": "vassoio", "tray": "vassoio"}
+                 "display": "vassoio", "tray": "vassoio",
+                 "coppa": "coppa", "coppa conica": "coppa", "cup": "coppa",
+                 "bicchiere": "coppa", "sleeve": "coppa", "tappo": "coppa"}
 
 
 def normalizza_kind(kind):
@@ -1269,7 +1346,7 @@ def normalizza_kind(kind):
     return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
 
 
-KIND_NOTI = ("carton", "flowpack", "vassoio")
+KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa")
 
 
 def analyze_pdf(pdf, kind=None):
@@ -1296,6 +1373,8 @@ def _analyze_pdf(pdf, kind=None):
         # astuccio veniva saltato e usciva un flowpack.
         raise ValueError("tipologia '%s' non riconosciuta: dichiara %s"
                          % (kind, " o ".join("'%s'" % k for k in KIND_NOTI)))
+    if kind == "coppa":
+        return analisi_coppa([pdf])
     case = CASI.get(_sig(pdf))
     if case and kind in (None, "flowpack"):
         return dict(kind="flowpack", title=case["name"],
@@ -1411,7 +1490,19 @@ def _analyze_pdf(pdf, kind=None):
                 raise
     # nel verso della grafica, come la costruzione; e se fallisce anche il
     # ripiego, l'errore va al client
-    return _analisi_flowpack_dichiarata(pdf)
+    try:
+        return _analisi_flowpack_dichiarata(pdf)
+    except Exception:
+        if kind is None:
+            # Senza dichiarazione, l'ultima possibilita' e' una coppa: lo
+            # sleeve o il tappo. Si prova per ULTIMA, quando tutto il resto ha
+            # fallito, cosi' gli altri pack non la pagano e non ne possono
+            # essere scambiati; sul Nutella POT il ripiego flowpack falliva
+            # con "saldature di testa non riconosciute".
+            from pack3d import coppa as cp
+            if cp.riconosci(pdf) is not None:
+                return analisi_coppa([pdf])
+        raise
 
 
 def _dice_film(pdf):
@@ -1477,6 +1568,28 @@ def _analisi_flowpack_dichiarata(pdf, esigente=False):
 # --------------------------------------------------------------------------- #
 # http
 # --------------------------------------------------------------------------- #
+def _dividi(data, parti):
+    """I PDF di un corpo solo: `[bytes]`, o None se `parti` non torna.
+
+    Senza `parti` il corpo e' un PDF solo, com'e' sempre stato.
+    """
+    if not parti:
+        return [data]
+    try:
+        lunghe = [int(k) for k in parti]
+    except (TypeError, ValueError):
+        return None
+    if any(k <= 0 for k in lunghe) or sum(lunghe) != len(data):
+        return None
+    blocchi, o = [], 0
+    for k in lunghe:
+        blocchi.append(data[o:o + k])
+        o += k
+    if not all(b.startswith(b"%PDF") for b in blocchi):
+        return None
+    return blocchi
+
+
 class Handler(BaseHTTPRequestHandler):
     # HEAD risponde con le stesse intestazioni di GET e senza corpo. Il flag
     # lo dice a _send, cosi' le due risposte non possono divergere.
@@ -1550,10 +1663,21 @@ class Handler(BaseHTTPRequestHandler):
             if not data.startswith(b"%PDF"):
                 return self._send(400, "Il file caricato non e' un PDF")
             opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            # Piu' PDF in un corpo solo, uno dopo l'altro: `parti` ne dice le
+            # lunghezze. Serve alla coppa, che arriva in due file - lo sleeve
+            # e il tappo - e si costruisce intera solo con tutti e due.
+            blocchi = _dividi(data, opts.get("parti"))
+            if blocchi is None:
+                return self._send(400, "Le parti dichiarate non tornano col "
+                                       "corpo, o una non e' un PDF")
             with tempfile.TemporaryDirectory() as td:
-                pdf = os.path.join(td, "in.pdf")
-                with open(pdf, "wb") as fh:
-                    fh.write(data)
+                pdfs = []
+                for k, blocco in enumerate(blocchi):
+                    pdfs.append(os.path.join(td, "in.pdf" if k == 0
+                                             else "in%d.pdf" % k))
+                    with open(pdfs[-1], "wb") as fh:
+                        fh.write(blocco)
+                pdf = pdfs[0]
                 kind = normalizza_kind(opts.get("kind") or None)
                 if kind == "altro":
                     return self._send(400, "Tipologia non ancora supportata")
@@ -1562,6 +1686,14 @@ class Handler(BaseHTTPRequestHandler):
                                            "dichiara %s"
                                            % (kind, " o ".join("'%s'" % k
                                                                for k in KIND_NOTI)))
+                if len(pdfs) > 1 and kind != "coppa":
+                    return self._send(400, "Piu' PDF insieme solo per la coppa "
+                                           "(sleeve e tappo): per questa "
+                                           "tipologia caricane uno")
+                if kind == "coppa" and self.path.startswith("/api/analyze"):
+                    # anche da /api/analyze-ai: la coppa la misura il codice,
+                    # l'agente non ha niente da aggiungere
+                    return self._send(200, json.dumps(analisi_coppa(pdfs)))
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
                     par, tr = agent.analyse(pdf, kind, opts)
@@ -1583,7 +1715,8 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = analyze_pdf(pdf, kind)
+                        info = (analisi_coppa(pdfs) if kind == "coppa"
+                                else analyze_pdf(pdf, kind))
                         t1 = traccia("analisi", t0,
                                      "%s, %d kB" % (info["kind"], len(data) // 1024))
                         q = qualita(opts.get("quality"))
@@ -1598,7 +1731,9 @@ class Handler(BaseHTTPRequestHandler):
                         # dichiara la colata, e l'unica cosa che resta e'
                         # quello che l'agente ha guardato
                         col_riq = colata_da_agente(opts.get("params"))
-                        if info["kind"] == "vassoio":
+                        if info["kind"] == "coppa":
+                            avvisi = build_coppa(pdfs, out, q, aree)
+                        elif info["kind"] == "vassoio":
                             avvisi = build_vassoio(pdf, out, q, aree, col_riq)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
