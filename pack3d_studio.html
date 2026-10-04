@@ -159,7 +159,7 @@
   .pannello > .tit{display:block;margin-bottom:12px}
   #packtype .scelte{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 
-  #params .griglia{display:grid;gap:14px;border:1px solid var(--border);
+  #params .griglia, #pezzi .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   .fld{display:flex;flex-direction:column;gap:7px}
@@ -174,7 +174,7 @@
              cursor:pointer}
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
-  #go{width:100%;max-width:300px;margin:6px auto 0;display:block}
+  #go, #avanti{width:100%;max-width:300px;margin:6px auto 0;display:block}
   .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:10px;
         color:var(--muted-foreground)}
 
@@ -230,6 +230,18 @@
       <button data-k="coppa">Coppa con tappo</button>
     </div>
     <p class="note">La coppa arriva in due PDF, lo sleeve e il tappo: caricali insieme. Con uno solo esce la coppa aperta, o il tappo da solo.</p>
+  </div>
+
+  <div id="pezzi" class="pannello">
+    <span class="tit">Di quanti pezzi &egrave; fatto il pack</span>
+    <div class="griglia">
+    <div class="fld">
+      <label for="npezzi">Pezzi del pack cartotecnico &mdash; un PDF per pezzo</label>
+      <input id="npezzi" type="number" min="1" max="8" step="1" placeholder="digita il numero">
+      <p class="note">Un astuccio &egrave; un pezzo solo. La coppa col tappo ne ha due, lo sleeve e il tappo, ognuno nel suo PDF. Se hai caricato meno PDF dei pezzi, qui carichi gli altri.</p>
+    </div>
+    </div>
+    <button id="avanti" class="primary">Continua</button>
   </div>
 
   <div id="params" class="pannello">
@@ -470,6 +482,9 @@ function show(buf){
 const statusEl = document.getElementById('status');
 const params = document.getElementById('params');
 const packtype = document.getElementById('packtype');
+const pezziEl = document.getElementById('pezzi');
+const npezzi = document.getElementById('npezzi');
+const avanti = document.getElementById('avanti');
 const dlBtn = document.getElementById('download');
 const upBtn = document.getElementById('upload');
 const annBtn = document.getElementById('annulla');
@@ -486,6 +501,10 @@ function setFase(f){
   annBtn.style.display = f === 'vuoto'  ? 'none' : '';
 }
 let glbBlob = null, glbName = 'modello.glb', pending = null;
+// >0 mentre il cartotecnico aspetta i PDF dei pezzi che mancano: quello che
+// si carica allora si aggiunge ai PDF che ci sono, non li sostituisce
+let attesiPezzi = 0;
+const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
 // il sottotitolo del riquadro vuoto cambia quando il backend manca: si tiene
@@ -698,14 +717,14 @@ async function handle(lista){
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
-  const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
   if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
   // due PDF insieme servono solo alla coppa: lo sleeve e il tappo
   if (files.length > 2){ setStatus('Al massimo due PDF insieme: lo sleeve e il tappo della coppa','err'); return; }
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
   // prima domanda obbligatoria su ogni PDF: la tipologia la dichiara l'utente
   const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
-  pending = {buf: bufs[0], bufs, name: file.name};
+  pending = {buf: bufs[0], bufs, name: file.name, nomi: files.map(f => f.name)};
+  attesiPezzi = 0; pezziEl.classList.remove('on');
   setTitolo(files.map(f => f.name).join(' + '));
   params.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
@@ -722,14 +741,87 @@ function corpo(p){
 }
 
 async function withKind(kind){
+  if (kind === 'carton'){
+    // Il cartotecnico dice di quanti pezzi e' fatto, e ogni pezzo e' un PDF:
+    // il risolutore deve sapere se il pack ne ha uno o piu' d'uno.
+    packtype.classList.remove('on');
+    npezzi.value = '';
+    pezziEl.classList.add('on');
+    tastoAvanti();
+    setStatus('Cartotecnico: digita di quanti pezzi e\' fatto il pack','');
+    return;
+  }
   if (pending.bufs.length > 1 && kind !== 'coppa'){
-    setStatus('Due PDF insieme solo per la coppa (sleeve e tappo): per questa tipologia caricane uno','err');
+    setStatus('Piu\' PDF insieme solo per un cartotecnico in piu\' pezzi o per la coppa: per questa tipologia caricane uno','err');
     return;
   }
   packtype.classList.remove('on');
+  await procedi(kind, {});
+}
+
+/** Il numero di pezzi digitato, o 0 se non e' un numero da 1 in su. */
+function pezziDigitati(){
+  const n = parseInt(npezzi.value, 10);
+  return n >= 1 ? n : 0;
+}
+
+/** Il tasto del pannello dice cosa fa: continuare, o caricare i PDF mancanti. */
+function tastoAvanti(){
+  const n = pezziDigitati(), k = pending ? pending.bufs.length : 0;
+  const m = n - k;
+  avanti.textContent = m > 0 ? (m === 1 ? 'Carica l\'altro PDF' : 'Carica gli altri ' + m + ' PDF')
+                             : 'Continua';
+}
+
+/** Dal pannello dei pezzi: si costruisce quando i PDF sono tanti quanti i pezzi. */
+async function pezziAvanti(apri){
+  if (!pending) return;
+  const n = pezziDigitati();
+  tastoAvanti();
+  if (!n){ setStatus('Digita di quanti pezzi e\' fatto il pack','err'); return; }
+  const k = pending.bufs.length;
+  if (k > n){
+    setStatus('Hai caricato ' + k + ' PDF per un pack di ' + n + (n === 1 ? ' pezzo' : ' pezzi')
+              + ': annulla e ricarica', 'err');
+    return;
+  }
+  if (k < n){
+    attesiPezzi = n;
+    const m = n - k;
+    setStatus('Il pack ha ' + n + ' pezzi e i PDF sono ' + k + ': carica '
+              + (m === 1 ? 'quello che manca' : 'gli altri ' + m), '');
+    // la finestra dei file si apre solo da un clic: dopo un caricamento il
+    // tasto resta li', con scritto quanti ne mancano
+    if (apri) document.getElementById('file').click();
+    return;
+  }
+  attesiPezzi = 0;
+  pezziEl.classList.remove('on');
+  await procedi('carton', {pezzi: n});
+}
+
+/** I PDF che mancavano ai pezzi del cartotecnico: si aggiungono a quelli che ci sono. */
+async function aggiungi(lista){
+  const files = Array.from(lista || []).filter(Boolean);
+  if (!files.length) return;
+  if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
+  const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
+  pending.bufs.push(...bufs);
+  pending.nomi.push(...files.map(f => f.name));
+  setTitolo(pending.nomi.join(' + '));
+  await pezziAvanti(false);
+}
+
+/** Un file arrivato dal campo o trascinato: nuovo pack, o pezzo che mancava. */
+function ricevi(lista){
+  return (attesiPezzi && pending) ? aggiungi(lista) : handle(lista);
+}
+
+async function procedi(kind, extra){
   const c = corpo(pending);
+  const opts = Object.assign({kind, parti: c.parti}, extra);
   try{
-    const info = await analyze(c.buf, {kind, parti: c.parti});
+    const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
     if (kind === 'flowpack'){
       document.getElementById('teeth').value = '';
@@ -737,7 +829,7 @@ async function withKind(kind){
       setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
     }
-    await build(c.buf, pending.name, {kind, parti: c.parti});
+    await build(c.buf, pending.name, opts);
     setStatus(info.title || 'Modello pronto','');
   }catch(err){
     const m = testoErrore(err);
@@ -747,9 +839,10 @@ async function withKind(kind){
 }
 
 function annulla(){
-  pending = null; glbBlob = null;
+  pending = null; glbBlob = null; attesiPezzi = 0;
   params.classList.remove('on');
   packtype.classList.remove('on');
+  pezziEl.classList.remove('on');
   setMeta([]); setTitolo('');
   // il viewer sta dietro a three.js: se non si e' caricato i tasti devono
   // tornare a posto lo stesso, quindi la parte 3D va protetta
@@ -789,7 +882,10 @@ setFase('vuoto');
 document.getElementById('riprova').onclick = cercaBackend;
 cercaBackend();
 document.getElementById('upload').onclick = () => document.getElementById('file').click();
-document.getElementById('file').onchange = e => { handle(e.target.files); e.target.value=''; };
+document.getElementById('file').onchange = e => { ricevi(e.target.files); e.target.value=''; };
+avanti.onclick = () => pezziAvanti(true);
+npezzi.oninput = tastoAvanti;
+npezzi.onkeydown = e => { if (e.key === 'Enter') pezziAvanti(true); };
 document.querySelectorAll('#packtype button').forEach(b => {
   b.onclick = () => withKind(b.dataset.k);
 });
@@ -826,7 +922,7 @@ dlBtn.onclick = () => {
 ['dragleave','drop'].forEach(ev => addEventListener(ev, e => {
   e.preventDefault(); if (ev==='drop' || e.target===document.documentElement)
     document.body.classList.remove('dragging'); }));
-addEventListener('drop', e => { handle(e.dataTransfer.files); });
+addEventListener('drop', e => { ricevi(e.dataTransfer.files); });
 
 resize();
 </script>

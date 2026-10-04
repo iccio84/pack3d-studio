@@ -411,11 +411,32 @@ allora si gira la scatola intera, guscio, interno e coste
 | regola | dove |
 |---|---|
 | Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Coppa con tappo, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
-| Solo coppa: i due PDF - sleeve e tappo - si caricano **insieme**; l'ordine non conta. | campo file multiplo, `parti` nell'intestazione |
+| Solo cartotecnico: chiedere **di quanti pezzi** e' fatto il pack, digitato e senza valore proposto. **Ogni pezzo e' un PDF**: se ne sono arrivati meno si chiedono gli altri, se di piu' ci si ferma. Vedi *Il cartotecnico dice di quanti pezzi e' fatto*. | pannello `pezzi`, `pezzi` nell'intestazione; `server.in_piu_pezzi` |
+| Solo coppa: i due PDF - sleeve e tappo - si caricano **insieme**; l'ordine non conta. E' lo stesso pack di un cartotecnico in due pezzi. | campo file multiplo, `parti` nell'intestazione |
 | Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
 | Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". | `gonfiore()` in `server.py` |
 | Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
 | Solo flowpack: chiedere se il **film avvolge una scatola**. | casella `scatola`, `parametri_costruzione.avvolge_scatola` |
+
+### Il cartotecnico dice di quanti pezzi e' fatto
+
+Scelto **Cartotecnico**, la pagina chiede di quanti pezzi e' fatto il pack, e
+il numero va digitato: come i dentini, non si deduce. Ogni pezzo e' un PDF,
+e il risolutore lo deve sapere prima di cominciare - un astuccio e' un file
+solo, la coppa col tappo sono due, lo sleeve e il tappo, e da un file solo
+non c'e' modo di sapere che l'altro esiste. Se i PDF caricati sono meno dei
+pezzi la pagina chiede gli altri, e li aggiunge a quelli che ci sono; se
+sono di piu' si ferma. Il server ricontrolla: `pezzi` nell'intestazione deve
+essere il numero dei PDF arrivati, o la richiesta torna indietro.
+
+- **Un pezzo**: l'astuccio, come sempre. Se l'astuccio non si risolve e il
+  PDF e' un pezzo di una coppa - che e' cartotecnica anche lei - esce la
+  coppa, e il primo cartellino lo dice; se no resta l'errore dell'astuccio.
+- **Piu' pezzi**: va al risolutore dei pack in piu' PDF (`in_piu_pezzi`).
+  Oggi sa montare la coppa col tappo, e quale PDF e' lo sleeve e quale il
+  tappo lo dice la pagina, non l'ordine. Un PDF che non e' un pezzo che
+  sappia montare ferma la costruzione e il messaggio dice quale: un pack
+  plausibile coi pezzi sbagliati e' il difetto peggiore, vedi sotto.
 
 ### La dichiarazione vale anche quando dice di no
 

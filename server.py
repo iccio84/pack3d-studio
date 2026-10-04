@@ -539,35 +539,44 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
             + ([riscontro] if riscontro else []))
 
 
-def _coppa_e_tappo(pdfs):
+def _coppa_e_tappo(pdfs, dichiarato="coppa"):
     """`(sleeve, tappo)`: quale dei PDF e' quale, ognuno a pagina unica.
 
     La coppa arriva in due file, e l'ordine in cui l'utente li carica non
     dice niente: lo dice la pagina. Lo sleeve ha lo steso a settore anulare,
     il tappo il corpo tondo disegnato in grande e in miniatura. Uno dei due
-    puo' mancare; uno che non e' ne' l'uno ne' l'altro e' un errore.
+    puo' mancare; uno che non e' ne' l'uno ne' l'altro e' un errore, e
+    l'errore dice a chi ha dichiarato un cartotecnico in piu' pezzi che cosa
+    il risolutore sa montare.
     """
     from pack3d import coppa as cp
     trovati = {}
-    for pdf in pdfs:
+    for k, pdf in enumerate(pdfs):
         pdf, _n = artwork.pagina_unica(pdf)
         # girato sulla tavola si legge girato: vedi `coppa.orienta`
         pdf, cosa, _gradi = cp.orienta(pdf)
         if cosa is None:
+            if dichiarato == "carton":
+                raise ValueError(
+                    "cartotecnico in %d pezzi: per ora so montare insieme lo "
+                    "sleeve e il tappo di una coppa, e il PDF %d non e' ne' "
+                    "l'uno ne' l'altro" % (len(pdfs), k + 1))
             raise ValueError("coppa: un PDF non e' ne' lo sleeve (lo steso a "
                              "settore anulare) ne' il tappo (corpo tondo e "
                              "anello) di una coppa")
         if cosa in trovati:
-            raise ValueError("coppa: due PDF dello stesso pezzo (%s) - servono "
-                             "lo sleeve e il tappo" % cosa)
+            raise ValueError("%s: due PDF dello stesso pezzo (%s) - servono "
+                             "lo sleeve e il tappo"
+                             % ("cartotecnico" if dichiarato == "carton"
+                                else "coppa", cosa))
         trovati[cosa] = pdf
     return trovati.get("coppa"), trovati.get("tappo")
 
 
-def analisi_coppa(pdfs):
+def analisi_coppa(pdfs, dichiarato="coppa"):
     """L'analisi della coppa: le misure, senza texture. Vedi `pack3d.coppa`."""
     from pack3d import coppa as cp
-    sleeve, tappo = _coppa_e_tappo(pdfs)
+    sleeve, tappo = _coppa_e_tappo(pdfs, dichiarato)
     meta = []
     if sleeve:
         c = cp.leggi_coppa(sleeve)
@@ -590,10 +599,27 @@ def analisi_coppa(pdfs):
                     "dello sleeve e quello del tappo")
     titolo = ("Coppa col tappo" if sleeve and tappo
               else "Coppa senza tappo" if sleeve else "Tappo della coppa")
+    if dichiarato == "carton":
+        meta.insert(0, "cartotecnico in %d %s: %s"
+                    % (len(pdfs), "pezzo" if len(pdfs) == 1 else "pezzi",
+                       "lo sleeve e il tappo di una coppa" if sleeve and tappo
+                       else "lo sleeve di una coppa" if sleeve
+                       else "il tappo di una coppa"))
     return dict(kind="coppa", title=titolo, meta=meta)
 
 
-def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=()):
+def in_piu_pezzi(kind, pdfs):
+    """Vero se la richiesta va al risolutore dei pack in piu' PDF.
+
+    La coppa lo e' sempre - lo sleeve e il tappo - e il cartotecnico quando
+    l'utente ha dichiarato piu' di un pezzo: un PDF per pezzo. Oggi l'unico
+    pack in piu' pezzi che il risolutore sa montare e' la coppa col tappo.
+    """
+    return kind == "coppa" or (kind == "carton" and len(pdfs) > 1)
+
+
+def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
+                dichiarato="coppa"):
     """La coppa di carta col tappo, da uno o due PDF: vedi `pack3d.coppa`.
 
     Una texture sola, un atlante con lo sleeve, il corpo e l'anello del
@@ -601,7 +627,7 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=()):
     """
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
-    sleeve, tappo = _coppa_e_tappo(pdfs)
+    sleeve, tappo = _coppa_e_tappo(pdfs, dichiarato)
     V, UV, T, A, parti, meta = cp.costruisci(sleeve, tappo, dpi=dpi,
                                              lastre_extra=lastre_extra,
                                              tex_max=tmax)
@@ -610,6 +636,9 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=()):
               else "coppa senza tappo: carica anche il PDF del tappo per "
                    "chiuderla" if sleeve
               else "solo il tappo: carica anche il PDF dello sleeve")
+    if dichiarato == "carton":
+        titolo = "cartotecnico in %d %s: %s" % (
+            len(pdfs), "pezzo" if len(pdfs) == 1 else "pezzi", titolo)
     return [titolo] + meta + ["%d vertici, %d triangoli; la coppa e il tappo "
                               "sono due nodi del GLB" % (len(V), len(T))]
 
@@ -1487,6 +1516,12 @@ def _analyze_pdf(pdf, kind=None):
                             meta=meta)
         except Exception:
             if kind == "carton":
+                # Dichiarato cartotecnico e non e' un astuccio: puo' essere
+                # un pezzo di una coppa, che e' cartotecnica anche lei. Se
+                # non e' nemmeno quello, l'errore resta quello dell'astuccio.
+                from pack3d import coppa as cp
+                if cp.riconosci(pdf) is not None:
+                    return analisi_coppa([pdf], "carton")
                 raise
     # nel verso della grafica, come la costruzione; e se fallisce anche il
     # ripiego, l'errore va al client
@@ -1686,14 +1721,35 @@ class Handler(BaseHTTPRequestHandler):
                                            "dichiara %s"
                                            % (kind, " o ".join("'%s'" % k
                                                                for k in KIND_NOTI)))
-                if len(pdfs) > 1 and kind != "coppa":
-                    return self._send(400, "Piu' PDF insieme solo per la coppa "
-                                           "(sleeve e tappo): per questa "
-                                           "tipologia caricane uno")
-                if kind == "coppa" and self.path.startswith("/api/analyze"):
-                    # anche da /api/analyze-ai: la coppa la misura il codice,
+                # Il cartotecnico dice di quanti pezzi e' fatto, e ogni pezzo
+                # e' un PDF: se i conti non tornano non si indovina quale
+                # manca, si dice.
+                pezzi = opts.get("pezzi")
+                if pezzi not in (None, ""):
+                    try:
+                        pezzi = int(pezzi)
+                    except (TypeError, ValueError):
+                        return self._send(400, "Il numero di pezzi va digitato "
+                                               "come numero intero")
+                    if pezzi < 1:
+                        return self._send(400, "Un pack ha almeno un pezzo")
+                    if pezzi != len(pdfs):
+                        return self._send(400, "Il pack e' di %d %s ma sono "
+                                               "arrivati %d PDF: ne serve uno "
+                                               "per pezzo"
+                                          % (pezzi, "pezzo" if pezzi == 1
+                                             else "pezzi", len(pdfs)))
+                if len(pdfs) > 1 and kind not in ("coppa", "carton"):
+                    return self._send(400, "Piu' PDF insieme solo per un "
+                                           "cartotecnico in piu' pezzi o per "
+                                           "la coppa: per questa tipologia "
+                                           "caricane uno")
+                if (in_piu_pezzi(kind, pdfs)
+                        and self.path.startswith("/api/analyze")):
+                    # anche da /api/analyze-ai: i pezzi li misura il codice,
                     # l'agente non ha niente da aggiungere
-                    return self._send(200, json.dumps(analisi_coppa(pdfs)))
+                    return self._send(200, json.dumps(analisi_coppa(pdfs,
+                                                                    kind)))
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
                     par, tr = agent.analyse(pdf, kind, opts)
@@ -1715,7 +1771,8 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_coppa(pdfs) if kind == "coppa"
+                        info = (analisi_coppa(pdfs, kind)
+                                if in_piu_pezzi(kind, pdfs)
                                 else analyze_pdf(pdf, kind))
                         t1 = traccia("analisi", t0,
                                      "%s, %d kB" % (info["kind"], len(data) // 1024))
@@ -1732,7 +1789,8 @@ class Handler(BaseHTTPRequestHandler):
                         # quello che l'agente ha guardato
                         col_riq = colata_da_agente(opts.get("params"))
                         if info["kind"] == "coppa":
-                            avvisi = build_coppa(pdfs, out, q, aree)
+                            avvisi = build_coppa(pdfs, out, q, aree,
+                                                 dichiarato=kind or "coppa")
                         elif info["kind"] == "vassoio":
                             avvisi = build_vassoio(pdf, out, q, aree, col_riq)
                         elif info["kind"] == "carton":
