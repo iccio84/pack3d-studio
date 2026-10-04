@@ -410,9 +410,8 @@ allora si gira la scatola intera, guscio, interno e coste
 
 | regola | dove |
 |---|---|
-| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Coppa con tappo, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
+| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
 | Solo cartotecnico: chiedere **di quanti pezzi** e' fatto il pack, digitato e senza valore proposto. **Ogni pezzo e' un PDF**: se ne sono arrivati meno si chiedono gli altri, se di piu' ci si ferma. Vedi *Il cartotecnico dice di quanti pezzi e' fatto*. | pannello `pezzi`, `pezzi` nell'intestazione; `server.in_piu_pezzi` |
-| Solo coppa: i due PDF - sleeve e tappo - si caricano **insieme**; l'ordine non conta. E' lo stesso pack di un cartotecnico in due pezzi. | campo file multiplo, `parti` nell'intestazione |
 | Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
 | Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". | `gonfiore()` in `server.py` |
 | Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
@@ -3512,9 +3511,12 @@ parco si spostano solo quei vertici, di 0,05 mm, e texture e UV non cambiano.
 
 La coppa da gelato - il Nutella POT 500 - arriva in **due PDF**: il
 contenitore (sleeve e fondo) e il tappo (corpo e anello). Si dichiara
-**Coppa con tappo** e i due file si caricano INSIEME: l'ordine non conta,
-quale e' quale lo dice la pagina (`server._coppa_e_tappo`). Con lo sleeve solo
+**Cartotecnico in due pezzi**, un PDF ciascuno (vedi *Il cartotecnico dice di
+quanti pezzi e' fatto*): l'ordine non conta, quale e' quale lo dice la pagina
+(`server._coppa_e_tappo`). Con lo sleeve solo - cartotecnico in un pezzo -
 esce la coppa aperta, col tappo solo il tappo, e il primo cartellino lo dice.
+Nella home non c'e' un pulsante della coppa: era un secondo modo di dire la
+stessa cosa. L'API accetta ancora `coppa` come tipologia.
 La costruzione e' `pack3d/coppa.py`; nel GLB la coppa e il tappo sono **due
 nodi**, e il tappo si toglie.
 

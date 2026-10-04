@@ -227,9 +227,7 @@
       <button data-k="carton">Cartotecnico</button>
       <button data-k="flowpack">Flowpack</button>
       <button data-k="vassoio">Vassoio espositore</button>
-      <button data-k="coppa">Coppa con tappo</button>
     </div>
-    <p class="note">La coppa arriva in due PDF, lo sleeve e il tappo: caricali insieme. Con uno solo esce la coppa aperta, o il tappo da solo.</p>
   </div>
 
   <div id="pezzi" class="pannello">
@@ -505,6 +503,8 @@ let glbBlob = null, glbName = 'modello.glb', pending = null;
 // si carica allora si aggiunge ai PDF che ci sono, non li sostituisce
 let attesiPezzi = 0;
 const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+// quanti pezzi puo' avere un cartotecnico: lo stesso tetto del campo `npezzi`
+const MAX_PEZZI = 8;
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
 // il sottotitolo del riquadro vuoto cambia quando il backend manca: si tiene
@@ -718,8 +718,8 @@ async function handle(lista){
     return;
   }
   if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
-  // due PDF insieme servono solo alla coppa: lo sleeve e il tappo
-  if (files.length > 2){ setStatus('Al massimo due PDF insieme: lo sleeve e il tappo della coppa','err'); return; }
+  // piu' PDF insieme servono solo a un cartotecnico in piu' pezzi, uno per pezzo
+  if (files.length > MAX_PEZZI){ setStatus('Al massimo ' + MAX_PEZZI + ' PDF insieme, uno per pezzo del pack','err'); return; }
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
   // prima domanda obbligatoria su ogni PDF: la tipologia la dichiara l'utente
   const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
@@ -729,7 +729,7 @@ async function handle(lista){
   params.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
   setFase('lavoro');
-  setStatus(files.length > 1 ? 'Due PDF: insieme vanno solo per la coppa con tappo'
+  setStatus(files.length > 1 ? files.length + ' PDF: insieme vanno solo per un cartotecnico in piu\' pezzi'
                              : 'Indica il tipo di pack','');
 }
 
@@ -751,18 +751,18 @@ async function withKind(kind){
     setStatus('Cartotecnico: digita di quanti pezzi e\' fatto il pack','');
     return;
   }
-  if (pending.bufs.length > 1 && kind !== 'coppa'){
-    setStatus('Piu\' PDF insieme solo per un cartotecnico in piu\' pezzi o per la coppa: per questa tipologia caricane uno','err');
+  if (pending.bufs.length > 1){
+    setStatus('Piu\' PDF insieme solo per un cartotecnico in piu\' pezzi: per questa tipologia caricane uno','err');
     return;
   }
   packtype.classList.remove('on');
   await procedi(kind, {});
 }
 
-/** Il numero di pezzi digitato, o 0 se non e' un numero da 1 in su. */
+/** Il numero di pezzi digitato, o 0 se non e' un numero da 1 a MAX_PEZZI. */
 function pezziDigitati(){
   const n = parseInt(npezzi.value, 10);
-  return n >= 1 ? n : 0;
+  return n >= 1 && n <= MAX_PEZZI ? n : 0;
 }
 
 /** Il tasto del pannello dice cosa fa: continuare, o caricare i PDF mancanti. */
@@ -778,7 +778,7 @@ async function pezziAvanti(apri){
   if (!pending) return;
   const n = pezziDigitati();
   tastoAvanti();
-  if (!n){ setStatus('Digita di quanti pezzi e\' fatto il pack','err'); return; }
+  if (!n){ setStatus('Digita di quanti pezzi e\' fatto il pack, da 1 a ' + MAX_PEZZI,'err'); return; }
   const k = pending.bufs.length;
   if (k > n){
     setStatus('Hai caricato ' + k + ' PDF per un pack di ' + n + (n === 1 ? ' pezzo' : ' pezzi')

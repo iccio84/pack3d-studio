@@ -45,7 +45,8 @@ verifica "blocco unico", e un avviso FERITOIA e' un difetto da riportare - e la
 plancia e' un elemento a se', un nodo separato nel GLB.
 
 La COPPA CON TAPPO (la coppa da gelato di carta, come il Nutella POT) arriva in
-due PDF, lo sleeve col fondo e il tappo, che l'utente carica insieme. La
+due PDF, lo sleeve col fondo e il tappo: l'utente la dichiara Cartotecnico in
+due pezzi, un PDF ciascuno. La
 misura il codice e non l'agente: la forma dalla vista montata in miniatura,
 scalata sui cerchi del fondo e del corpo che il foglio disegna in grande e in
 piccolo, la grafica dallo steso. Le verifiche "sormonto", "cono" e "tappo"

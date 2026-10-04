@@ -1739,11 +1739,12 @@ class Handler(BaseHTTPRequestHandler):
                                                "per pezzo"
                                           % (pezzi, "pezzo" if pezzi == 1
                                              else "pezzi", len(pdfs)))
+                # (`coppa` resta per chi chiama l'API: dalla pagina la coppa
+                # e' un cartotecnico in due pezzi)
                 if len(pdfs) > 1 and kind not in ("coppa", "carton"):
                     return self._send(400, "Piu' PDF insieme solo per un "
-                                           "cartotecnico in piu' pezzi o per "
-                                           "la coppa: per questa tipologia "
-                                           "caricane uno")
+                                           "cartotecnico in piu' pezzi: per "
+                                           "questa tipologia caricane uno")
                 if (in_piu_pezzi(kind, pdfs)
                         and self.path.startswith("/api/analyze")):
                     # anche da /api/analyze-ai: i pezzi li misura il codice,
