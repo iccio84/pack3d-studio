@@ -827,6 +827,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     fuori = artwork.avviso_fuori_dt(conti)
     if fuori:
         avvisi_sez.append(fuori)
+    avvisi_sez.extend(artwork.avvisi_gda(conti))
     rgb = avviso_quadricromia(clean, regione=fpk.foglio_in_pagina(fp0))
     if rgb:
         avvisi_sez.append(rgb)
@@ -864,10 +865,14 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # che li riporta sul giro stirava la grafica fra un nodo e l'altro. Il
         # centro del fronte no: li' il riscalo compensa, e la verifica del
         # fronte lo dava gia' a posto anche prima.
+        #
+        # Su un tubo piatto a pinna la sezione il DT non la dice proprio: se
+        # l'agente la da', il pack ha i suoi fianchi, e non e' piu' piatto.
         sposta = (fp0.W - w_n) / 2.0
         fp0 = replace(fp0, W=round(w_n, 2), T=round(t_n, 2),
                       back_a=round(max(fp0.back_a - sposta, 0.5), 2),
-                      back_b=round(max(fp0.back_b - sposta, 0.5), 2))
+                      back_b=round(max(fp0.back_b - sposta, 0.5), 2),
+                      piatto=False)
 
     # (1) la sezione si arrotonda a perimetro costante
     liv = FASCE.get(str(soft).strip().lower(), None)
@@ -884,7 +889,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # la pinna, in fondo la sovrapposizione.
     liv = max(1.0, min(10.0, liv))
     fp = fp0
-    if fp0.pillow:
+    if fp0.tubo_piatto:
         # Un tubo piatto non ha un rapporto larghezza/spessore da tenere fermo:
         # gonfiandosi passa dalla lente al cerchio, e il cerchio e' il massimo
         # fisico - con quel film non si puo' essere piu' tondi. Il livello dice
@@ -908,7 +913,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # pinne e i cartellini. Con T a zero la nervatura divide per la
         # protezione da zero e la mesh esplode - misurato: vertici a
         # cinque milioni di millimetri. La proprieta' `girth` non ne soffre,
-        # perche' a sovrapposizione il giro lo da' il nastro meno il lembo.
+        # perche' su un tubo piatto il giro lo da' il nastro, meno il lembo a
+        # sovrapposizione o le due fasce della pinna.
         fp = replace(fp, T=round(pienezza * fp0.girth / math.pi, 2))
         avvisi_sez.append("tubo piatto gonfiato al %.0f%% del cerchio "
                           "(livello %g)" % (100.0 * pienezza, liv))
@@ -1156,11 +1162,15 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         sez = ("sezione a ellisse %.1f x %.1f (giro %.1f invariato, lembo "
                "coperto %.1f)" % (2.0 * semiasse, fp.T, G,
                                   fp.sovrapposizione))
+    elif fp.piatto:
+        sez = ("sezione a ellisse %.1f x %.1f (giro %.1f invariato, pinna "
+               "%.1f sul retro)" % (2.0 * semiasse, fp.T, G, fp.side_fin))
     else:
         sez = ("sezione %.1f x %.1f (perimetro %.1f invariato)"
                % (scala * fp.W, scala * fp.T, G))
     return ["flowpack%s, rigonfiamento %s"
-            % (" a sovrapposizione" if fp.pillow else "", soft), sez,
+            % (" a sovrapposizione" if fp.pillow else
+               " a tubo piatto" if fp.piatto else "", soft), sez,
             "corpo %.1f mm, pinne %.1f" % (fp0.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
              "%d denti equilateri, base %.2f altezza %.2f mm"
@@ -1187,7 +1197,7 @@ def _giro_film(knots, G, fp):
 
 def _panel_knots(Ps, d, G, fp):
     """Spigoli della sezione, per far cadere ogni fascia sul suo pannello."""
-    if fp.pillow:
+    if fp.tubo_piatto:
         # Un'ellisse non ha spigoli, quindi la ricerca per curvatura qui sotto
         # non trova niente e la verifica non scattava: la grafica poteva
         # ruotare attorno al tubo senza che nessuno se ne accorgesse. I nodi
@@ -1367,6 +1377,16 @@ def _analyze_pdf(pdf, kind=None):
                                             for k, a in v.pareti.items()))]
                              + ([giro_v] if giro_v else [])
                              + list(v.warnings))
+    if kind is None and _dice_film(pdf):
+        # Il file dice di essere un film: il flowpack si prova PRIMA
+        # dell'astuccio. Il solutore astuccio risolve anche certi film - sul
+        # Kinder Happy Hippo T1, 1 | 15 | 83 | 15 | 1 per 15 | 85 | 15, trovava
+        # un astuccio vwrap 52,5 x 51,2 x 9,7 - e il flowpack non veniva mai
+        # provato. Se il flowpack non si risolve si va avanti come sempre.
+        try:
+            return _analisi_flowpack_dichiarata(pdf, esigente=True)
+        except Exception:
+            pass
     if kind in (None, "carton"):
         try:
             # nel verso della grafica, come la costruzione: i cartellini
@@ -1391,8 +1411,37 @@ def _analyze_pdf(pdf, kind=None):
                 raise
     # nel verso della grafica, come la costruzione; e se fallisce anche il
     # ripiego, l'errore va al client
+    return _analisi_flowpack_dichiarata(pdf)
+
+
+def _dice_film(pdf):
+    """Il file dice da se' di essere un film da flowpack?
+
+    Il cartiglio Artworkr dei Ferrero lo scrive nella descrizione - "T1 0018 |
+    WRAPPING/FILM" - e il disegno tecnico di un film ha FASCIA e PASSO, cioe'
+    nastro e passo. Su tutti i file che abbiamo, WRAPPING lo porta ogni
+    flowpack e nessun astuccio.
+    """
+    try:
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf)
+        try:
+            testo = doc[0].get_textpage().get_text_range().upper()
+        finally:
+            doc.close()
+    except Exception:
+        return False
+    return "WRAPPING" in testo or ("FASCIA" in testo and "PASSO" in testo)
+
+
+def _analisi_flowpack_dichiarata(pdf, esigente=False):
+    """I cartellini del flowpack. Con `esigente` fallisce invece di ripiegare
+    sul solutore vecchio: e' la prova che si fa prima dell'astuccio, e un
+    ripiego li' vorrebbe dire scegliere la famiglia su una lettura muta."""
     pdf, _gradi, giro, _verso = flowpack_sulla_grafica(pdf)
     _box, fp, ripiego = analisi_flowpack(pdf)
+    if esigente and ripiego is not None:
+        raise ValueError("flowpack non risolto: %s" % ripiego)
     meta = ["flowpack", "nastro %.0f x passo %.0f mm" % (fp.web_mm, fp.step_mm),
             "corpo %.1f mm" % fp.L]
     if giro:
@@ -1403,6 +1452,10 @@ def _analyze_pdf(pdf, kind=None):
         # che lo steso dice davvero e' giro, fronte e lembo coperto.
         meta.append("tubo piatto: giro %.1f, fronte %.1f, lembo coperto %.1f mm"
                     % (fp.girth, fp.W, fp.sovrapposizione))
+    elif fp.piatto:
+        # lo stesso, chiuso a pinna: giro, fronte e le due fasce della pinna
+        meta.append("tubo piatto a pinna: giro %.1f, fronte %.1f, pinna %.1f mm"
+                    % (fp.girth, fp.W, fp.side_fin))
     else:
         meta.append("sezione %.1f x %.1f mm" % (fp.W, fp.T))
     sospetto = falda_sospetta(fp)

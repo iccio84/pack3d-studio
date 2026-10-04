@@ -136,7 +136,13 @@ Pulizia dell'artwork:
   subito. Quasi sempre le toglie gia' la costruzione, da sola - per nome della
   lastra, per la didascalia scritta sul box o per il campione della legenda;
   quando non ci riesce le vedi restare, e allora tocca a te. Resta solo
-  l'AREA PROMO, che e' la grafica della promo e si stampa.
+  l'AREA PROMO, che e' la grafica della promo e si stampa. E restano i box
+  BIANCHI: un'area riservata bianca e' il posto stampato in bianco per data e
+  lotto, non un segnaposto colorato.
+- Anche la GDA STAMPATA va via da tutte le grafiche: le icone delle
+  Assunzioni di Riferimento (kJ, kcal, %) col loro pannello. La toglie la
+  costruzione quando e' scritta come testo; se la vedi restare - e'
+  vettorializzata - dillo negli avvisi. La tabella nutrizionale invece resta.
 - Per toglierle chiama area_riservata con il riquadro in mm: non serve che sia
   preciso, il bordo vero lo trova il codice guardando quale lastra ci mette
   l'inchiostro. Poi GUARDA l'immagine che torna: in rosso c'e' tutto quello che

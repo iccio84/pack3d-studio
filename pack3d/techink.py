@@ -944,3 +944,216 @@ def lastra_nel_riquadro(pdf, x_mm, y_mm, w_mm, h_mm, page_no=0, dpi=36):
         return {}
     return dict(lastra=migliore, pieno_pct=round(100 * quota, 1),
                 copertura_foglio_pct=round(100 * copertura, 2))
+
+
+# --------------------------------------------------------------------------- #
+# i box bianchi restano
+# --------------------------------------------------------------------------- #
+# Chiaro abbastanza per essere il bianco della carta o l'inchiostro bianco: un
+# box area cosi' non e' un segnaposto colorato, e' il posto stampato in bianco
+# dove andranno la data o il lotto. I segnaposto veri sono vivi - verde Best
+# Before, arancio TEXT Area, rosa PIN CODE - e nessuno sta sopra questa luce.
+BIANCO_L = 94.0          # L* minima, su 100
+BIANCO_CROMA = 6.0       # quanto a* e b* possono scostarsi da zero
+BIANCO_INCHIOSTRO = 0.04  # quanto inchiostro CMYK, per canale, al massimo
+
+
+def _bianco(alternativo, colore):
+    """Il colore a tinta piena, nello spazio alternativo, e' bianco?"""
+    try:
+        spazio = alternativo
+        if isinstance(spazio, list):
+            spazio = spazio[0]
+        spazio = str(spazio)
+        v = [float(x) for x in colore]
+    except Exception:
+        return False
+    if spazio == "/Lab" and len(v) == 3:
+        return v[0] >= BIANCO_L and abs(v[1]) <= BIANCO_CROMA and abs(v[2]) <= BIANCO_CROMA
+    if spazio == "/DeviceCMYK" and len(v) == 4:
+        return max(v) <= BIANCO_INCHIOSTRO
+    if spazio == "/DeviceRGB" and len(v) == 3:
+        return min(v) >= 1.0 - BIANCO_INCHIOSTRO
+    if spazio == "/DeviceGray" and len(v) == 1:
+        return v[0] >= 1.0 - BIANCO_INCHIOSTRO
+    return False
+
+
+def lastre_bianche(page, dentro_i_form=True):
+    """I nomi (normalizzati) delle tinte piatte che a tinta piena sono
+    BIANCHE: vedi `_bianco`.
+
+    Si guarda solo la funzione di tipo 2, quella che i file che abbiamo usano
+    per tutte le tinte: a tinta piena vale `C1`. Una funzione che non si sa
+    leggere non fa bianca la lastra, e la lastra si tratta come sempre.
+    """
+    fuori, visti = set(), set()
+
+    def giro(res):
+        if res is None:
+            return
+        res = res.get_object()
+        for _k, v in (res.get("/ColorSpace") or {}).items():
+            try:
+                cs = v.get_object()
+                if not (isinstance(cs, list) and cs and cs[0] == "/Separation"):
+                    continue
+                f = cs[3].get_object()
+                if f.get("/FunctionType") != 2:
+                    continue
+                alt = cs[2].get_object() if hasattr(cs[2], "get_object") else cs[2]
+                if _bianco(alt, f.get("/C1", [])):
+                    fuori.add(_norm(str(cs[1]).lstrip("/").replace("#20", " ")))
+            except Exception:
+                continue
+        if not dentro_i_form:
+            return
+        for _k, x in (res.get("/XObject") or {}).items():
+            try:
+                x = x.get_object()
+            except Exception:
+                continue
+            if id(x) in visti or x.get("/Subtype") != "/Form":
+                continue
+            visti.add(id(x))
+            giro(x.get("/Resources"))
+
+    try:
+        giro(page.get("/Resources"))
+    except Exception:
+        return set()
+    return fuori
+
+
+# --------------------------------------------------------------------------- #
+# la GDA si toglie da tutte le grafiche
+# --------------------------------------------------------------------------- #
+# La GDA - le icone delle Assunzioni di Riferimento, "Energia 476 kJ 114 kcal
+# 6%" - non si stampa uguale in tutti i paesi, e sul modello non ci va, dovunque
+# stia: sul fronte della Nutella Donut, sul retro del K Brioss, sul fianco del
+# Nutella B-ready. Si riconosce dal testo: kcal, kJ e la percentuale vicini. La
+# tabella nutrizionale NO: ha le colonne in grammi e le righe di proteine e
+# carboidrati, che le icone non hanno mai.
+# Sul K Brioss le etichette delle icone - ENERGIA, GRASSI - sono
+# vettorializzate, e fra il titolo "Ciascuna porzione (27g) contiene:" e i
+# valori restano sei millimetri senza testo: a cinque il titolo restava fuori.
+GDA_STACCO = 7.0 / PT2MM          # due scritte della stessa icona, al piu'
+GDA_MAX = 90.0 / PT2MM            # nessun pannello GDA e' piu' grande
+GDA_MARGINE = 4.0 / PT2MM         # il bordo dell'icona oltre le sue scritte
+# Il pannello che contiene tutte le scritte e' della GDA anche se sborda dal
+# margine - sul Brioss il fondo bianco arrotondato - purche' non sia piu' di
+# tanto grande: il fondo della grafica, che la contiene pure lui, e' molto
+# piu' grande.
+GDA_CONTENITORE = 2.0
+TABELLA = _re.compile(
+    r"(?i)\(g\)|prote|carbo|glucid|kohlenhydr|eiwei|koolhydr|hidratos|"
+    r"ballaststoff|fibr|valori nutrizionali|nutrition|n.hrwert|voedingswaarde")
+
+
+def zone_gda(pdf, page_no=0):
+    """I riquadri della GDA sul foglio, `[(nucleo, zona)]` nel telaio di
+    misura (punti, MediaBox, y in giu'): il nucleo e' il riquadro delle sue
+    scritte, la zona lo stesso allargato del bordo dell'icona. Vuota se il
+    file non la scrive come testo: una GDA vettorializzata non si legge, e non
+    si tocca. Vedi `dentro_gda` per che cosa si toglie.
+
+    Da ogni `kcal` si cresce sulle scritte vicine - meno di `GDA_STACCO` fra
+    l'una e l'altra - finche' il gruppo e' chiuso: e' il pannello, con le sue
+    icone e la riga delle Assunzioni di Riferimento. Un gruppo che supera
+    `GDA_MAX` non e' un pannello GDA, e' testo di corsa, e si lascia stare.
+    """
+    try:
+        import pypdfium2 as pdfium
+    except Exception:
+        return []
+    doc = None
+    try:
+        doc = pdfium.PdfDocument(pdf)
+        pg = doc[page_no]
+        ml, _mb, _mr, mt = pg.get_mediabox()
+        tp = pg.get_textpage()
+        n = tp.count_chars()
+        if n <= 0:
+            return []
+        testo = tp.get_text_range()
+        if "kcal" not in testo.lower():
+            return []
+        car = []
+        for i in range(min(n, len(testo))):
+            if testo[i].isspace():
+                continue
+            l, b, r, t = tp.get_charbox(i)
+            if r <= l and t <= b:
+                continue
+            car.append((i, l - ml, mt - t, r - ml, mt - b))
+    except Exception:
+        return []
+    finally:
+        if doc is not None:
+            doc.close()
+    minuscolo = testo.lower()
+    semi = [k for k, c in enumerate(car) if minuscolo.startswith("kcal", c[0])]
+    zone, fatti = [], set()
+    for s in semi:
+        if s in fatti:
+            continue
+        gruppo, coda = {s}, [s]
+        x0, y0, x1, y1 = car[s][1:]
+        grande = False
+        while coda and not grande:
+            a = car[coda.pop()]
+            for k, c in enumerate(car):
+                if k in gruppo:
+                    continue
+                if (c[1] - GDA_STACCO <= a[3] and a[1] <= c[3] + GDA_STACCO
+                        and c[2] - GDA_STACCO <= a[4] and a[2] <= c[4] + GDA_STACCO):
+                    gruppo.add(k)
+                    coda.append(k)
+                    x0, y0 = min(x0, c[1]), min(y0, c[2])
+                    x1, y1 = max(x1, c[3]), max(y1, c[4])
+                    if x1 - x0 > GDA_MAX or y1 - y0 > GDA_MAX:
+                        grande = True
+                        break
+        fatti |= gruppo
+        if grande:
+            continue
+        scritta = "".join(testo[car[k][0]] for k in sorted(gruppo, key=lambda k: car[k][0]))
+        if not (_re.search(r"(?i)k\s*j", scritta) and "%" in scritta):
+            continue
+        if TABELLA.search(scritta):
+            continue
+        zone.append([x0, y0, x1, y1])
+    # due icone vicine fanno un pannello solo
+    fuse = True
+    while fuse:
+        fuse = False
+        for i in range(len(zone)):
+            for j in range(i + 1, len(zone)):
+                a, b = zone[i], zone[j]
+                m = 2 * GDA_MARGINE
+                if (a[0] - m <= b[2] and b[0] - m <= a[2]
+                        and a[1] - m <= b[3] and b[1] - m <= a[3]):
+                    zone[i] = [min(a[0], b[0]), min(a[1], b[1]),
+                               max(a[2], b[2]), max(a[3], b[3])]
+                    del zone[j]
+                    fuse = True
+                    break
+            if fuse:
+                break
+    return [(tuple(z), (z[0] - GDA_MARGINE, z[1] - GDA_MARGINE,
+                        z[2] + GDA_MARGINE, z[3] + GDA_MARGINE)) for z in zone]
+
+
+def dentro_gda(r, zone):
+    """Il riquadro `r` di un oggetto e' della GDA? Si', se sta tutto nella
+    zona di una GDA, o se ne contiene tutte le scritte e non e' piu' grande
+    di `GDA_CONTENITORE` volte la zona: e' il pannello, o la sagoma
+    dell'icona, su cui le scritte stanno."""
+    for n, z in zone:
+        if r[0] >= z[0] and r[1] >= z[1] and r[2] <= z[2] and r[3] <= z[3]:
+            return True
+        if (r[0] <= n[0] and r[1] <= n[1] and r[2] >= n[2] and r[3] >= n[3]
+                and (r[2] - r[0]) * (r[3] - r[1])
+                <= GDA_CONTENITORE * (z[2] - z[0]) * (z[3] - z[1])):
+            return True
+    return False
