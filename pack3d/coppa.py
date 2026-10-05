@@ -27,6 +27,13 @@ taglio sinistro. Quello che avanza e' il sormonto incollato sotto il lembo:
 non si impone, si misura - e deve tornare con la riga che il DT gli
 disegna. Sul Nutella POT avanzano 8,6 mm al fondo e 7,7 alla bocca, e il DT
 ha la riga a 8,05.
+
+Qui sta anche il CONO GELATO col suo lid (il Camy Apolo): lo steso e' un
+settore pieno con l'apice sul foglio, la forma la dice il disegno 1:1
+accanto, il lato che resta sopra lo dice la fascia senza inchiostro della
+colla, e la grafica va sulle generatrici con la cucitura che segue l'orlo
+della carta che si vede. Sopra l'ultimo taglio la carta e' il risvolto che
+piega sul lid e lo tiene chiuso. Vedi `leggi_cono` e `costruisci_cono`.
 """
 from __future__ import annotations
 
@@ -86,20 +93,20 @@ _LETTE_MAX = 2
 _LETTE_CHIAVE = threading.Lock()
 
 
-def tracce(pdf, page_no=0):
+def tracce(pdf, page_no=0, solo_tratti=False):
     """`_tracce` con memoria: la stessa pagina dello stesso file non si
     rilegge. La chiave porta dimensione e data del file, perche' un file
     temporaneo puo' riprendere il nome di uno cancellato."""
     import os
     try:
         st = os.stat(pdf)
-        chiave = (pdf, page_no, st.st_mtime_ns, st.st_size)
+        chiave = (pdf, page_no, st.st_mtime_ns, st.st_size, solo_tratti)
     except OSError:
-        return _tracce(pdf, page_no)
+        return _tracce(pdf, page_no, solo_tratti)
     with _LETTE_CHIAVE:
         T = _LETTE.get(chiave)
     if T is None:
-        T = _tracce(pdf, page_no)
+        T = _tracce(pdf, page_no, solo_tratti)
         with _LETTE_CHIAVE:
             while len(_LETTE) >= _LETTE_MAX:
                 _LETTE.pop(next(iter(_LETTE)))
@@ -107,14 +114,15 @@ def tracce(pdf, page_no=0):
     return T
 
 
-def _tracce(pdf, page_no=0):
+def _tracce(pdf, page_no=0, solo_tratti=False):
     """Ogni sottotracciato della pagina, appiattito, con tratto e pieno.
 
     Le miniature dei disegni Ferrero stanno spesso dentro un form, e
     `cup.flatten_paths` legge solo il flusso della pagina: qui si scende
     nei form componendo le matrici, come fa `tracciati`. Le bezier si
     appiattiscono in 12 tratti: sui cerchi della miniatura il raggio torna
-    al millesimo di punto.
+    al millesimo di punto. Con `solo_tratti` i pieni non si leggono: sono
+    quasi tutta la grafica, e per riconoscere un taglio bastano i tratti.
     """
     import pypdfium2 as pdfium
     import pypdfium2.raw as raw
@@ -134,6 +142,8 @@ def _tracce(pdf, page_no=0):
             fill, stroke = ctypes.c_int(), ctypes.c_int()
             raw.FPDFPath_GetDrawMode(o, ctypes.byref(fill), ctypes.byref(stroke))
             if not fill.value and not stroke.value:
+                return
+            if solo_tratti and not stroke.value:
                 return
             tratto = tr._stile(o) if stroke.value else None
             pieno = (tr._colore(o, raw.FPDFPageObj_GetFillColor)
@@ -274,6 +284,16 @@ class Steso:
     riquadro: tuple           # pt: il taglio
     resid: float              # mm: scarto del settore sul taglio
     note: list = field(default_factory=list)
+    # Il lato di taglio che resta SOPRA, da dove la carta parte, e il verso in
+    # cui gira (+1 verso gli angoli crescenti). Sulla coppa e' il sinistro e
+    # la carta va a destra; sul cono e' il lato radiale, e il lembo di colla
+    # sta dall'altra parte.
+    inizio: str = "sx"
+    verso: int = 1
+
+    def partenza(self, rho):
+        """L'angolo (rad) da cui la carta parte, sull'arco di raggio `rho`."""
+        return self.fi(rho, self.inizio)
 
     def fi(self, rho, lato):
         """L'angolo (rad) del lato di taglio sull'arco di raggio `rho` mm."""
@@ -686,6 +706,7 @@ class Coppa:
     montata: Montata
     fondo: tuple            # (cx, cy, raggi mm) del fondo in grande
     note: list = field(default_factory=list)
+    carta: float = CARTA    # lo spessore del cartoncino, mm
 
     @property
     def parete(self):
@@ -697,7 +718,7 @@ class Coppa:
         """La carta che avanza all'altezza `y`: va sotto il lembo, mm."""
         m = self.montata
         rho = self.steso.piega + self.parete * y / m.y_parete
-        return self.steso.arco(rho) - 2 * math.pi * (m.r(y) - CARTA / 2)
+        return self.steso.arco(rho) - 2 * math.pi * (m.r(y) - self.carta / 2)
 
 
 def leggi_coppa(pdf, T=None):
@@ -722,19 +743,594 @@ def leggi_coppa(pdf, T=None):
     return Coppa(s, m, (G[0], G[1], [r * PT2MM for r in G[2]]))
 
 
-def orienta(pdf):
+# --------------------------------------------------------------------------- #
+# il cono: lo steso a settore pieno col lembo di colla, e il disegno 1:1
+# --------------------------------------------------------------------------- #
+# La carta del cono: nel PDF non c'e' un cartiglio che la dica, e quella dei
+# coni gelato (carta e alluminio) sta sul decimo di millimetro.
+CARTA_CONO = 0.10
+
+
+def _arco_grande(Q, tol=0.6):
+    """`(cx, cy, R, dentro)`: il cerchio che passa per piu' punti del contorno
+    chiuso Q (pt, fitto), e quali punti ci stanno sopra entro `tol`. None se
+    non ce n'e' uno.
+
+    I cerchi di prova passano per tre punti del contorno presi a passi fissi:
+    nessun caso, la stessa pagina da' sempre lo stesso arco. Il migliore si
+    riadatta tre volte sui suoi punti.
+    """
+    n = len(Q)
+    meglio = None
+    for passo in (n // 12, n // 8, n // 5):
+        if passo < 3:
+            continue
+        for i in range(0, n, max(n // 150, 1)):
+            a, b, c = Q[i], Q[(i + passo) % n], Q[(i + 2 * passo) % n]
+            ax, ay = b - a
+            bx, by = c - b
+            D = 2 * (ax * by - ay * bx)
+            if abs(D) < 1e-6:
+                continue
+            ux = ((b @ b - a @ a) * by - (c @ c - b @ b) * ay) / D
+            uy = ((c @ c - b @ b) * ax - (b @ b - a @ a) * bx) / D
+            r = math.hypot(a[0] - ux, a[1] - uy)
+            if r > 5000:
+                continue
+            k = int((np.abs(np.hypot(Q[:, 0] - ux, Q[:, 1] - uy) - r) < tol).sum())
+            if meglio is None or k > meglio[0]:
+                meglio = (k, ux, uy, r)
+    if meglio is None:
+        return None
+    _k, ux, uy, r = meglio
+    for _ in range(3):
+        dentro = np.abs(np.hypot(Q[:, 0] - ux, Q[:, 1] - uy) - r) < tol
+        if dentro.sum() < 3:
+            return None
+        ux, uy, r, _s = _cerchio(Q[dentro])
+    dentro = np.abs(np.hypot(Q[:, 0] - ux, Q[:, 1] - uy) - r) < tol
+    return ux, uy, r, dentro
+
+
+def _rette(Q, liberi, tol=1.0, minimo=40.0):
+    """Le rette del contorno chiuso Q (pt, fitto): `[(a, b)]`, dalla piu'
+    lunga, fino a `minimo` pt.
+
+    Ognuna e' la corsa piu' lunga di punti CONSECUTIVI entro `tol` dalla retta
+    per due punti del contorno, fra i punti `liberi`; i punti presi non si
+    riprendono. Un lato disegnato come una bezier quasi dritta - il lato
+    radiale del cono Camy esce 0,6 pt dalla sua corda - e' una retta lo
+    stesso.
+    """
+    n = len(Q)
+    liberi = liberi.copy()
+    out = []
+    while True:
+        meglio = None
+        for m in (n // 40, n // 15, n // 6):
+            if m < 2:
+                continue
+            for i in range(0, n, max(n // 200, 1)):
+                j = (i + m) % n
+                if not (liberi[i] and liberi[j]):
+                    continue
+                a, b = Q[i], Q[j]
+                L = math.hypot(*(b - a))
+                if L < 1e-6:
+                    continue
+                nrm = np.array([a[1] - b[1], b[0] - a[0]]) / L
+                vicino = np.roll((np.abs((Q - a) @ nrm) < tol) & liberi, -i)
+                if vicino.all():
+                    continue
+                avanti = int(np.argmin(vicino))          # il primo fuori
+                if avanti <= m:
+                    continue
+                dietro = int(np.argmin(vicino[::-1]))   # quanti in coda
+                i0, i1 = (i - dietro) % n, (i + avanti - 1) % n
+                corda = math.hypot(*(Q[i1] - Q[i0]))
+                if meglio is None or corda > meglio[0]:
+                    meglio = (corda, i0, dietro + avanti)
+        if meglio is None or meglio[0] < minimo:
+            return out
+        _c, i0, quanti = meglio
+        idx = (i0 + np.arange(quanti)) % n
+        liberi[idx] = False
+        a, b, _scarto = _dritto(Q[idx])
+        # nel verso del contorno
+        if np.dot(b - a, Q[idx[-1]] - Q[idx[0]]) < 0:
+            a, b = b, a
+        out.append((a, b))
+
+
+def _archi_concentrici(T, cx, cy, colore, r0, r1, apertura):
+    """I raggi (mm) dei tratti sottili del colore `colore` concentrici a
+    (cx, cy) fra `r0` e `r1` mm, lunghi almeno meta' dell'`apertura`.
+
+    Sottili vuol dire 1,5 mm al piu' fra il punto piu' vicino al centro e il
+    piu' lontano: l'ultimo taglio del cono Camy e' un pieno sottile, non un
+    tratto, e non e' nemmeno concentrico al millimetro - sta a R 169,3 +- 0,4
+    dall'apice. Conta il raggio medio.
+    """
+    out = []
+    for t in T:
+        Q = t.P
+        if t.colore != colore or len(Q) < 3:
+            continue
+        d = np.hypot(Q[:, 0] - cx, Q[:, 1] - cy) * PT2MM
+        if np.ptp(d) > 1.5 or not r0 < d.mean() < r1:
+            continue
+        a = np.unwrap(np.arctan2(Q[:, 1] - cy, Q[:, 0] - cx))
+        if np.ptp(a) < 0.5 * apertura:
+            continue
+        F = _fitto(Q, 1.0)
+        r = float(np.hypot(F[:, 0] - cx, F[:, 1] - cy).mean() * PT2MM)
+        if all(abs(r - q) > 0.05 for q in out):
+            out.append(r)
+    return sorted(out)
+
+
+def _disegno_cono(T, beta, bocca):
+    """Il cono montato del disegno accanto allo steso: `(bocca, punta,
+    altezza, beta)` in mm e radianti, o None.
+
+    Il disegno e' in scala 1:1 e i suoi lati sono due rette lunghe uguali che
+    convergono con l'angolo del cono: ai capi larghi distano quanto la
+    bocca, a quelli stretti quanto la punta. L'angolo si cerca vicino a
+    quello che lo steso svolge (`beta`), la bocca vicino a quella che l'ultimo
+    taglio da' (`bocca`): la riga della quota dell'apotema, parallela a un
+    lato, con l'altro lato fa lo stesso angolo ma una "bocca" sbagliata.
+    """
+    rette = []
+    for t in T:
+        if t.tratto is None or len(t.P) < 2:
+            continue
+        a, b, scarto = _dritto(t.P)
+        L = float(np.hypot(*(b - a)))
+        if scarto > 0.05 or L * PT2MM < 20:
+            continue
+        rette.append((a, b, L))
+    meglio = None
+    for i, (a1, b1, L1) in enumerate(rette):
+        for a2, b2, L2 in rette[i + 1:]:
+            if abs(L1 - L2) > 0.02 * max(L1, L2):
+                continue
+            for p1, q1 in ((a1, b1), (b1, a1)):
+                for p2, q2 in ((a2, b2), (b2, a2)):
+                    # p: la punta, q: la bocca
+                    stretto = float(np.hypot(*(p1 - p2)))
+                    largo = float(np.hypot(*(q1 - q2)))
+                    if stretto >= 0.12 * largo:
+                        continue
+                    u1, u2 = (q1 - p1) / L1, (q2 - p2) / L2
+                    b_ = math.acos(float(np.clip(u1 @ u2, -1.0, 1.0))) / 2
+                    if abs(b_ - beta) > math.radians(1.5):
+                        continue
+                    D = largo * PT2MM
+                    if abs(D - bocca) > 0.15 * bocca:
+                        continue
+                    alto = float(np.hypot(*((q1 + q2) / 2 - (p1 + p2) / 2))) * PT2MM
+                    c = (abs(D - bocca), D, stretto * PT2MM, alto, b_)
+                    if meglio is None or c[0] < meglio[0]:
+                        meglio = c
+    return None if meglio is None else meglio[1:]
+
+
+@dataclass
+class Cono:
+    steso: Steso          # l'apice e' (cx, cy)
+    radiale: str          # 'sx' o 'dx': quale lato dello steso e' il radiale
+    R_bocca: float        # mm: l'ultimo taglio, dove il cono finisce in alto
+    lembo: float          # mm: la striscia oltre l'ultimo raggio, che sormonta
+    fine: float           # rad: la direzione dell'ultimo raggio, dall'apice
+    beta_steso: float     # rad: il mezzo angolo del cono che lo steso svolge
+    r_bocca: float        # mm, raggio esterno della bocca
+    r_punta: float        # mm, raggio della punta
+    altezza: float        # mm, dalla punta alla bocca
+    disegno: bool         # le misure vengono dal disegno 1:1 del cono
+    note: list = field(default_factory=list)
+    # la fascia senza inchiostro lungo il lato che va sotto, dove va la colla
+    colla: float | None = None
+    # il contorno del taglio, pt: dove finisce la carta
+    taglio: np.ndarray | None = None
+    # lo spessore della carta, mm
+    carta: float = CARTA_CONO
+
+    @property
+    def risvolto(self):
+        """La fascia fra l'ultimo taglio e il taglio, mm: il risvolto che
+        piega sul lid. Zero se il DT non disegna l'ultimo taglio."""
+        w = self.steso.R2 - self.R_bocca
+        return w if w > 0.3 else 0.0
+
+    def sopra(self, lato):
+        """Il lato di taglio `lato` resta sopra: la carta che si vede parte da
+        lui e gira verso l'altro."""
+        self.steso.inizio = lato
+        self.steso.verso = 1 if lato == "sx" else -1
+
+    @property
+    def lembo_sopra(self):
+        return self.steso.inizio != self.radiale
+
+    @property
+    def apotema(self):
+        return math.hypot(self.altezza, self.r_bocca - self.r_punta)
+
+    @property
+    def beta(self):
+        return math.atan2(self.r_bocca - self.r_punta, self.altezza)
+
+    @property
+    def R_punta(self):
+        """Il raggio dello steso che diventa la punta: l'apotema sotto la
+        bocca."""
+        return self.R_bocca - self.apotema
+
+    def r(self, y):
+        """Il raggio esterno all'altezza `y` dalla punta."""
+        return self.r_punta + (self.r_bocca - self.r_punta) * y / self.altezza
+
+    def rho(self, y):
+        """Il raggio dello steso che fa la parete all'altezza `y`."""
+        return self.R_punta + self.apotema * y / self.altezza
+
+    def sormonto(self, rho):
+        """La carta che avanza sull'arco di raggio `rho`: va sotto il lato
+        radiale, mm."""
+        y = (rho - self.R_punta) / self.apotema * self.altezza
+        return (self.steso.arco(rho)
+                - 2 * math.pi * (self.r(y) - self.carta / 2))
+
+
+def leggi_cono(T):
+    """Il cono, o None se sulla pagina non c'e' lo steso di un cono.
+
+    Lo steso del cono e' un settore PIENO: un arco solo, e l'apice sta sul
+    foglio. Il taglio e' il tracciato chiuso piu' grande che ha un arco col
+    centro a pochi millimetri dal contorno e, da quel centro, un lato dritto
+    che ci passa a 4 mm al piu': il lato radiale, da dove la carta parte e
+    che resta sopra. Il lembo di colla e' l'altro lato lungo, parallelo
+    all'ultimo raggio e scostato quanto il lembo e' largo. Se due contorni
+    hanno lo stesso apice - il taglio e la linea di abbondanza della grafica
+    - il taglio e' quello dentro.
+    """
+    candidati = []
+    for t in T:
+        P = t.P
+        if t.tratto is None or len(P) < 20:
+            continue
+        lato = max(np.ptp(P[:, 0]), np.ptp(P[:, 1]))
+        if lato < 100 or np.hypot(*(P[0] - P[-1])) > 0.01 * lato:
+            continue
+        candidati.append((np.ptp(P[:, 0]) * np.ptp(P[:, 1]), t))
+    letti = []
+    for _area, t in sorted(candidati, key=lambda c: -c[0])[:8]:
+        k = _cono_dal_taglio(T, t)
+        if k is not None:
+            letti.append(k)
+    if not letti:
+        return None
+    k = letti[0]
+    for altro in letti[1:]:
+        s, q = k.steso, altro.steso
+        if (math.hypot(s.cx - q.cx, s.cy - q.cy) * PT2MM < 0.02 * s.R2
+                and q.R2 < s.R2):
+            altro.note.append("taglio: dei due contorni attorno allo stesso "
+                              "apice quello dentro (R %.1f mm); quello fuori, a "
+                              "R %.1f, e' l'abbondanza della grafica"
+                              % (q.R2, s.R2))
+            k = altro
+    return k
+
+
+def _cono_dal_taglio(T, t):
+    P = t.P
+    Q = _fitto(P, 1.0)
+    if np.hypot(*(Q[0] - Q[-1])) < 1e-6:
+        Q = Q[:-1]
+    arco = _arco_grande(Q)
+    if arco is None:
+        return None
+    cx, cy, R, sull_arco = arco
+    C = np.array([cx, cy])
+    if R * PT2MM < 40 or sull_arco.sum() < 0.15 * len(Q):
+        return None
+    # l'apice sta sul foglio: il contorno ci passa vicino (sulla coppa il
+    # centro degli archi e' lontano, sotto lo steso)
+    vicinanza = float(np.hypot(*(Q - C).T).min())
+    if vicinanza > 0.06 * R:
+        return None
+    radiale = 4.0 / PT2MM
+    rette = []
+    for a, b in _rette(Q, ~sull_arco, minimo=0.15 * R):
+        L = math.hypot(*(b - a))
+        dl = abs((b - a)[0] * (C - a)[1] - (b - a)[1] * (C - a)[0]) / L
+        da, db = math.hypot(*(a - C)), math.hypot(*(b - C))
+        vicino, lontano = (a, b) if da < db else (b, a)
+        rette.append((L, dl, vicino, lontano))
+    partenze = [r for r in rette if r[1] <= radiale
+                and math.hypot(*(r[3] - C)) >= 0.8 * R
+                and math.hypot(*(r[2] - C)) <= 0.25 * R]
+    if not partenze:
+        return None
+    scelta = max(partenze, key=lambda r: r[0])
+    _Lp, _dl, vp, lp = scelta
+    altri = [r for r in rette if r is not scelta and r[0] >= 0.15 * R
+             and r[1] <= 0.4 * R]
+    lembi = [r for r in altri if r[1] > radiale]
+    note = []
+    if lembi:
+        Lf, dl, vf, lf = max(lembi, key=lambda r: r[0])
+        lembo = dl * PT2MM
+    else:
+        chiusure = [r for r in altri if r[1] <= radiale
+                    and math.hypot(*(r[3] - C)) >= 0.8 * R]
+        if not chiusure:
+            return None
+        Lf, dl, vf, lf = max(chiusure, key=lambda r: r[0])
+        lembo = 0.0
+        note.append("CONO SENZA LEMBO DI COLLA: lo steso chiude con un "
+                    "secondo lato radiale, il sormonto non si riscontra")
+    u_p = (lp - vp) / np.linalg.norm(lp - vp)
+    u_f = (lf - vf) / np.linalg.norm(lf - vf)
+    fi_p = math.atan2(u_p[1], u_p[0])
+    fi_f = math.atan2(u_f[1], u_f[0])
+    a = np.arctan2(Q[sull_arco, 1] - cy, Q[sull_arco, 0] - cx)
+    fi_m = math.atan2(np.sin(a).mean(), np.cos(a).mean())
+    giro = 2 * math.pi
+    verso = 1 if (fi_m - fi_p) % giro < (fi_f - fi_p) % giro else -1
+    partenza = (tuple(lp), tuple(u_p))
+    lembo_l = (tuple(lf), tuple(u_f))
+    sx, dx = (partenza, lembo_l) if verso > 0 else (lembo_l, partenza)
+    archi = _archi_concentrici(T, cx, cy, t.colore, 0.3 * R * PT2MM,
+                               R * PT2MM - 0.5, math.radians(30))
+    R_mm = R * PT2MM
+    bocche = [r for r in archi if R_mm - 15.0 < r < R_mm - 0.5]
+    if bocche:
+        R_bocca = bocche[-1]
+    else:
+        R_bocca = R_mm
+        note.append("CONO SENZA ULTIMO TAGLIO NEL DT: la bocca e' il taglio "
+                    "dello steso")
+    x0, y0 = P.min(0)
+    x1, y1 = P.max(0)
+    resid = float(np.abs(np.hypot(*(Q[sull_arco] - C).T) - R).max()) * PT2MM
+    s = Steso(cx, cy, 0.0, R_mm, sx, dx, 0.0, archi,
+              (float(x0), float(y0), float(x1), float(y1)), resid, note,
+              inizio="sx" if verso > 0 else "dx", verso=verso)
+    # l'angolo svolto, misurato alla bocca: dal lato radiale all'ultimo raggio
+    settore = ((fi_f - s.partenza(R_bocca)) * verso) % giro
+    beta_s = math.asin(min(settore / giro, 0.99))
+    d = _disegno_cono(T, beta_s, 2 * R_bocca * math.sin(beta_s))
+    if d is not None:
+        bocca, punta, alto, _b = d
+        r_b, r_p, H, dal_disegno = bocca / 2, punta / 2, alto, True
+    else:
+        # senza il disegno, la forma la da' lo steso: la bocca all'ultimo
+        # taglio, la punta dove la carta arriva piu' vicina all'apice
+        R_p = max(vicinanza * PT2MM, 2.0)
+        r_b = R_bocca * math.sin(beta_s) + CARTA_CONO / 2
+        r_p = R_p * math.sin(beta_s) + CARTA_CONO / 2
+        H = (R_bocca - R_p) * math.cos(beta_s)
+        dal_disegno = False
+        note.append("DISEGNO DEL CONO MONTATO NON TROVATO: la forma viene "
+                    "dallo steso, bocca all'ultimo taglio e punta dove la "
+                    "carta arriva all'apice")
+    k = Cono(s, "sx" if verso > 0 else "dx", R_bocca, lembo, fi_f, beta_s,
+             r_b, r_p, H, dal_disegno, note, taglio=P)
+    if not 0 < k.R_punta < R_bocca:
+        return None
+    s.R1 = s.piega = k.R_punta
+    return k
+
+
+# La fascia senza inchiostro per la colla: da quanti mm lungo un lato di
+# taglio la si riconosce.
+FASCIA_COLLA = 3.0
+
+
+def _fascia_bianca(s, lato, im, riq, rhos, passo=0.25, fino=30.0):
+    """La larghezza (mm) della carta NON stampata lungo il lato di taglio
+    `lato`, dal taglio verso la carta: la mediana sugli archi `rhos` (mm).
+
+    Si cammina sulla normale al lato dal punto in cui l'arco lo incontra,
+    finche' l'immagine pulita dello steso `im` (il riquadro `riq`, pt) smette
+    di essere bianca. La grafica che deborda dal taglio da' zero.
+    """
+    a = np.asarray(im.convert("RGB"), float)
+    h, w = a.shape[:2]
+    x0, y0, x1, y1 = riq
+    p, d = s.sx if lato == "sx" else s.dx
+    p, d = np.asarray(p, float), np.asarray(d, float)
+    nrm = np.array([-d[1], d[0]])
+    # verso la carta: dalla parte del mezzo dello steso
+    rho_m = 0.6 * s.R2
+    a_, b_ = s.fi(rho_m, "sx"), s.fi(rho_m, "dx")
+    m = b_ - 0.5 * ((b_ - a_) % (2 * math.pi))
+    q = np.array([s.cx, s.cy]) + rho_m / PT2MM * np.array([math.cos(m),
+                                                           math.sin(m)])
+    if np.dot(q - p, nrm) < 0:
+        nrm = -nrm
+    t = np.arange(0.5, fino, passo)
+    larghe = []
+    for rho in rhos:
+        f = s.fi(rho, lato)
+        e = np.array([s.cx, s.cy]) + rho / PT2MM * np.array([math.cos(f),
+                                                             math.sin(f)])
+        P = e + (t / PT2MM)[:, None] * nrm
+        X = ((P[:, 0] - x0) / (x1 - x0) * w).astype(int)
+        Y = ((P[:, 1] - y0) / (y1 - y0) * h).astype(int)
+        if X.min() < 0 or Y.min() < 0 or X.max() >= w or Y.max() >= h:
+            continue
+        c = a[Y, X]
+        bianco = (c.min(1) >= 245) & (np.ptp(c, 1) <= 10)
+        k = len(t) if bianco.all() else int(np.argmin(bianco))
+        larghe.append(float(t[k]) if k < len(t) else fino)
+    return float(np.median(larghe)) if larghe else 0.0
+
+
+def lato_sopra(k, im, riq):
+    """`(lato, nota)`: quale dei due lati di taglio resta sopra e si vede.
+
+    La colla non tiene sull'inchiostro: il lato che va SOTTO ha lungo il
+    taglio una fascia di carta non stampata, e il sormonto dell'altro la
+    copre. Sul cono Camy la fascia e' lungo il lato radiale (11,9 mm): va
+    sotto, e sopra resta il lembo - quello con la linguetta, che gira
+    attorno al cono verso la punta e da cui il cono si sbuccia. Senza una
+    fascia su un lato solo, sopra resta il lato radiale, e si dichiara.
+    """
+    s = k.steso
+    rhos = np.linspace(0.35, 0.9, 12) * k.R_bocca
+    rad = k.radiale
+    altro = "dx" if rad == "sx" else "sx"
+    w_rad = _fascia_bianca(s, rad, im, riq, rhos)
+    w_lem = _fascia_bianca(s, altro, im, riq, rhos) if k.lembo > 0 else 0.0
+    if w_rad >= FASCIA_COLLA and w_lem < FASCIA_COLLA:
+        k.colla = w_rad
+        return altro, ("lembo sopra: lungo il lato radiale la grafica si ferma "
+                       "%.1f mm prima del taglio - e' la fascia senza "
+                       "inchiostro della colla, e va sotto; sopra resta il "
+                       "lembo, e il suo bordo gira attorno al cono verso la "
+                       "punta" % w_rad)
+    if w_lem >= FASCIA_COLLA and w_rad < FASCIA_COLLA:
+        k.colla = w_lem
+        return rad, ("lato radiale sopra: la fascia senza inchiostro della "
+                     "colla (%.1f mm) sta lungo il lembo, che va sotto" % w_lem)
+    return rad, ("LATO DI SOPRA NON RICONOSCIUTO: nessuno dei due lati di "
+                 "taglio ha da solo la fascia senza inchiostro della colla "
+                 "(%.1f mm lungo il radiale, %.1f lungo il lembo); assumo sopra "
+                 "il lato radiale" % (w_rad, w_lem))
+
+
+def _incroci(P, C, R):
+    """Gli angoli (rad) dove il contorno chiuso P (pt) passa sul cerchio di
+    raggio R (pt) attorno a C."""
+    A = P[:-1] - C
+    D = P[1:] - P[:-1]
+    a = (D * D).sum(1)
+    b = 2 * (A * D).sum(1)
+    c = (A * A).sum(1) - R * R
+    disc = b * b - 4 * a * c
+    ok = (disc >= 0) & (a > 1e-12)
+    sq = np.sqrt(np.where(ok, disc, 0.0))
+    aa = np.where(ok, a, 1.0)
+    out = []
+    for sgn in (-1.0, 1.0):
+        t = (-b + sgn * sq) / (2 * aa)
+        sel = ok & (t >= 0) & (t < 1)
+        Q = A[sel] + t[sel, None] * D[sel]
+        out.append(np.arctan2(Q[:, 1], Q[:, 0]))
+    return np.concatenate(out)
+
+
+def orli(k, rhos):
+    """L'angolo dello steso (rad) dove comincia la carta che si vede, su
+    ognuno degli archi `rhos` (mm): srotolato lungo i raggi.
+
+    Se sopra resta il lato radiale l'orlo e' lui, e sta quasi fermo. Se
+    sopra resta il lembo, l'orlo e' dove la carta finisce partendo dal lato
+    radiale verso il lembo: il bordo del lembo, parallelo all'ultimo raggio,
+    poi la curva del taglio attorno all'apice - e la linguetta, dove c'e'.
+    Il bordo del lembo non e' un raggio: sul cono gira attorno, e piu' stretto
+    verso la punta.
+    """
+    s = k.steso
+    C = np.array([s.cx, s.cy])
+    P = np.asarray(k.taglio, float)
+    if np.hypot(*(P[0] - P[-1])) > 1e-6:
+        P = np.vstack([P, P[:1]])
+    dentro = -1.0 if k.radiale == "dx" else 1.0     # dal radiale verso la carta
+    out = []
+    for rho in rhos:
+        f_r = s.fi(float(rho), k.radiale)
+        if not k.lembo_sopra:
+            out.append(f_r)
+            continue
+        d = ((_incroci(P, C, rho / PT2MM) - f_r) * dentro + 0.5) % (2 * math.pi) - 0.5
+        if not len(d):
+            out.append(f_r)
+            continue
+        # il primo incrocio e' il lato radiale stesso; il seguente e' dove la
+        # carta finisce
+        d0 = d[np.argmin(np.abs(d))]
+        dopo = d[d > d0 + 1e-9]
+        out.append(f_r + dentro * (dopo.min() if len(dopo) else 2 * math.pi))
+    return np.unwrap(np.array(out))
+
+
+def fronte_cono(k, rf, ef, kk, sleeve, riquadro):
+    """`(angolo, gradi)`: l'angolo dello steso (rad) del baricentro del
+    marchio sulla carta che si vede, e lo stesso in gradi dalla mezzeria;
+    `(None, 0)` senza colori vivi. `ef` (rad) e' l'orlo della carta che si
+    vede sugli archi `rf` (mm), `kk` l'angolo dello steso per angolo del
+    cono: la carta che si vede e' un giro dall'orlo, `2 pi kk`."""
+    s = k.steso
+    m = _marchio(s, k.R_punta, k.R_bocca, sleeve, riquadro)
+    if m is None:
+        return None, 0.0
+    r, fi = m
+    u = ((fi - np.interp(r, rf, ef)) * s.verso) % (2 * math.pi)
+    vede = u < 2 * math.pi * kk
+    if vede.sum() < 20:
+        return None, 0.0
+    fb = math.atan2(np.sin(fi[vede]).mean(), np.cos(fi[vede]).mean())
+    return fb, _dalla_mezzeria(s, 0.5 * (k.R_punta + k.R_bocca), fb)
+
+
+# --------------------------------------------------------------------------- #
+# il lid: un disco piatto
+# --------------------------------------------------------------------------- #
+@dataclass
+class Disco:
+    centro: tuple                  # pt
+    r_taglio: float                # mm
+    raggi: list                    # mm: tutti i cerchi concentrici, decrescenti
+    abbondanza: float | None = None    # mm: il cerchio dell'abbondanza
+
+
+def leggi_disco(T):
+    """Il disco del lid: il gruppo di cerchi concentrici piu' grande della
+    pagina, o None.
+
+    Il lid Camy disegna tre cerchi: l'abbondanza, il taglio e l'area di
+    sicurezza (67, 61 e 51 mm). L'abbondanza e' il cerchio di fuori se il
+    secondo le sta da 1,5 a 3,2 mm dentro - di quanto la grafica deve
+    debordare - e allora il taglio e' il secondo; l'area di sicurezza sta
+    piu' dentro, di 5 mm sul Camy.
+    """
+    gruppi = anelli(cerchi(T))
+    if not gruppi:
+        return None
+    G = max(gruppi, key=lambda g: g[2][0])
+    raggi = [r * PT2MM for r in G[2]]
+    if raggi[0] < 10:
+        return None
+    if len(raggi) >= 2 and 1.5 <= raggi[0] - raggi[1] <= 3.2:
+        return Disco((G[0], G[1]), raggi[1], raggi, raggi[0])
+    return Disco((G[0], G[1]), raggi[0], raggi)
+
+
+def orienta(pdf, dischi=False):
     """`(pdf, cosa, gradi)`: il foglio nel verso in cui si legge, e che cos'e'.
 
-    `cosa` e' 'coppa', 'tappo' o None; `pdf` e' il foglio girato di `gradi`
-    in senso orario, se andava girato. Le viste montate si leggono DRITTE -
-    pareti verticali, sezione orizzontale - e un foglio girato sulla tavola
-    si gira prima di leggerlo, come gli astucci (`artwork.pagina_girata`).
-    Lo sleeve il suo verso lo dice da se': la bocca sta sopra, dalla parte
-    opposta al centro degli archi. Il tappo no: si prova girato finche' la
-    sezione si trova, col piano nella meta' alta.
+    `cosa` e' 'coppa', 'tappo', 'cono', 'lid' o None; `pdf` e' il foglio
+    girato di `gradi` in senso orario, se andava girato. Le viste montate si
+    leggono DRITTE - pareti verticali, sezione orizzontale - e un foglio
+    girato sulla tavola si gira prima di leggerlo, come gli astucci
+    (`artwork.pagina_girata`). Lo sleeve il suo verso lo dice da se': la
+    bocca sta sopra, dalla parte opposta al centro degli archi. Il tappo no:
+    si prova girato finche' la sezione si trova, col piano nella meta' alta.
+    Il cono si legge in qualsiasi verso, ma si raddrizza lo stesso, con la
+    mezzeria dello steso in su: la grafica si rasterizza su una griglia di
+    pixel, e girata il marchio cade su pixel diversi.
+
+    Il lid del cono e' un disco piatto, e un cerchio grande in un PDF
+    qualsiasi non e' un lid: si cerca solo se `dischi`, cioe' quando
+    l'utente ha dichiarato un pack in piu' pezzi.
     """
     from . import artwork
-    s = leggi_steso(tracce(pdf))
+    T = tracce(pdf)
+    s = leggi_steso(T)
     if s is not None:
         rho = 0.5 * (s.R1 + s.R2)
         a, b = s.fi(rho, "sx"), s.fi(rho, "dx")
@@ -745,19 +1341,46 @@ def orienta(pdf):
         gradi = int(round(-(mezzo + 90.0) / 90.0)) * 90 % 360
         return (artwork.pagina_girata(pdf, gradi) if gradi else pdf,
                 "coppa", gradi)
-    for gradi in (0, 180, 90, 270):
-        q = artwork.pagina_girata(pdf, gradi) if gradi else pdf
-        try:
-            p = leggi_tappo(q)
-        except ValueError:
-            continue
-        if p.z_piano < 0.5 * p.altezza:
-            return q, "tappo", gradi
+    k = leggi_cono(T)
+    if k is not None:
+        # il cono si legge in qualsiasi verso, ma la grafica si rasterizza
+        # su una griglia di pixel: dritto - la mezzeria dello steso in su,
+        # come la coppa - lo stesso foglio girato sulla tavola da' lo stesso
+        # modello
+        s = k.steso
+        rho = 0.5 * (k.R_punta + s.R2)
+        a, b = s.fi(rho, "sx"), s.fi(rho, "dx")
+        mezzo = math.degrees(b - 0.5 * ((b - a) % (2 * math.pi)))
+        gradi = int(round(-(mezzo + 90.0) / 90.0)) * 90 % 360
+        return (artwork.pagina_girata(pdf, gradi) if gradi else pdf,
+                "cono", gradi)
+    # il tappo si legge solo col corpo e la sua miniatura, e girare il foglio
+    # non li cambia: senza, i quattro giri sono tempo perso
+    if gemello(anelli(cerchi(T))) is not None:
+        for gradi in (0, 180, 90, 270):
+            q = artwork.pagina_girata(pdf, gradi) if gradi else pdf
+            try:
+                p = leggi_tappo(q)
+            except ValueError:
+                continue
+            if p.z_piano < 0.5 * p.altezza:
+                return q, "tappo", gradi
+    if dischi and leggi_disco(T) is not None:
+        return pdf, "lid", 0
     return pdf, None, 0
 
 
+def e_un_cono(pdf):
+    """Vero se la pagina e' lo steso di un cono: lo riconosce dai soli
+    tratti, che si leggono in una frazione del tempo di tutta la pagina.
+    Serve prima del solutore astuccio, che su uno steso di cono trova un
+    "astuccio" di due centimetri fra le icone."""
+    return leggi_cono(tracce(pdf, solo_tratti=True)) is not None
+
+
 def riconosci(pdf):
-    """'coppa', 'tappo' o None: che cosa disegna questa pagina."""
+    """'coppa', 'tappo', 'cono' o None: che cosa disegna questa pagina. Il
+    lid da solo no: vedi `orienta`."""
     return orienta(pdf)[1]
 
 
@@ -885,21 +1508,82 @@ MARCHIO_STACCO = 4.0
 
 
 def fronte(c, sleeve, riquadro):
-    """`(frazione, gradi)`: dove sta il marchio sullo sleeve.
+    """`(frazione, gradi)`: dove sta il marchio sullo sleeve della coppa.
 
-    `frazione` e' la frazione di giro (0..1 dal taglio sinistro) del
+    Vedi `fronte_steso`: qui la carta va dalla piega del fondo alla cima della
+    parete, e la circonferenza e' quella della coppa montata.
+    """
+    s, m = c.steso, c.montata
+
+    def raggio(r):
+        y = np.clip((r - s.piega) / c.parete, 0, 1) * m.y_parete
+        return m.r(y) - c.carta / 2
+
+    return fronte_steso(s, s.piega, s.piega + c.parete, raggio, sleeve,
+                        riquadro)
+
+
+# Un colore vivo che copre piu' di questa quota dello steso e' il FONDO, non
+# il marchio: il giallo del cono Camy Apolo ne copre i due terzi.
+FONDO_VIVO = 0.30
+FONDO_DISTANZA = 60.0     # livelli RGB: quanto un colore e' "quello del fondo"
+
+
+def fronte_steso(s, rho0, rho1, raggio, sleeve, riquadro):
+    """`(frazione, gradi)`: dove sta il marchio sullo steso `s`.
+
+    `frazione` e' la frazione di giro (0..1 dal lato che resta sopra) del
     baricentro del marchio, `gradi` lo stesso punto come angolo dello steso
-    dalla sua mezzeria. `(None, 0)` se la grafica non ha colori vivi.
+    dalla sua mezzeria. La carta si guarda fra i raggi `rho0` e `rho1` (mm),
+    e `raggio(rho)` da' il raggio del pezzo montato a quell'altezza.
+    `(None, 0)` se la grafica non ha colori vivi.
 
     Il fronte si ancora al baricentro angolare della grafica, non alla
     mezzeria del settore (REGOLE, *Coppe e contenitori conici*). Contano i
     colori VIVI - il marrone delle fasce gira tutto attorno e non dice
     niente - e di quelli il GRUPPO piu' grande, chiusi i buchi fra lettere
     vicine: e' il marchio. Il baricentro di tutti i colori vivi lo tirava
-    verso il box "nutella 60" e il marchio usciva spostato a destra.
+    verso il box "nutella 60" e il marchio usciva spostato a destra. Un
+    colore vivo che fa da fondo - il giallo del cono Camy - non e' marchio e
+    si toglie prima di contare.
     """
+    m = _marchio(s, rho0, rho1, sleeve, riquadro)
+    if m is None:
+        return None, 0.0
+    r, fi_sel = m
+    start = np.array([s.partenza(q) for q in r])
+    giro = 2 * math.pi * raggio(r)
+    if s.verso == 1:
+        f = ((fi_sel - start) % (2 * math.pi)) * r / giro
+    else:
+        f = ((start - fi_sel) % (2 * math.pi)) * r / giro
+    f = f[f < 1.0]
+    if len(f) < 20:
+        return None, 0.0
+    ang = 2 * math.pi * f
+    media = (math.atan2(np.sin(ang).mean(), np.cos(ang).mean())
+             / (2 * math.pi)) % 1.0
+    # lo stesso punto sullo steso, a meta' altezza, come angolo dalla mezzeria
+    rho_m = 0.5 * (rho0 + rho1)
+    fi_m = s.partenza(rho_m) + s.verso * media * 2 * math.pi * float(
+        raggio(np.array(rho_m))) / rho_m
+    return media, _dalla_mezzeria(s, rho_m, fi_m)
+
+
+def _dalla_mezzeria(s, rho, fi):
+    """L'angolo `fi` (rad) dello steso in gradi dalla mezzeria fra i due lati
+    sull'arco `rho`, anche quando lo steso scavalca i 180 gradi dell'atan2
+    (il cono Camy va da -112 a -187)."""
+    a, b = s.fi(rho, "sx"), s.fi(rho, "dx")
+    mezzo = b - 0.5 * ((b - a) % (2 * math.pi))
+    return math.degrees((fi - mezzo + math.pi) % (2 * math.pi) - math.pi)
+
+
+def _marchio(s, rho0, rho1, sleeve, riquadro):
+    """`(rho, fi)` dei punti del marchio sullo steso, in mm e radianti: il
+    gruppo piu' grande di colori vivi fra gli archi `rho0` e `rho1`, tolto il
+    colore del fondo. None se la grafica non ha colori vivi."""
     from scipy import ndimage
-    s, m = c.steso, c.montata
     a = np.asarray(sleeve.convert("RGB").resize(
         (max(sleeve.width // 4, 1), max(sleeve.height // 4, 1))), float)
     x0, y0, x1, y1 = riquadro
@@ -909,36 +1593,28 @@ def fronte(c, sleeve, riquadro):
     X, Y = np.meshgrid(X, Y)
     rho = np.hypot(X - s.cx, Y - s.cy) * PT2MM
     fi = np.arctan2(Y - s.cy, X - s.cx)
-    vivo = ((a.max(2) - a.min(2)) >= VIVO) & (rho >= s.piega) \
-        & (rho <= s.piega + c.parete)
+    dentro = (rho >= rho0) & (rho <= rho1)
+    vivo = ((a.max(2) - a.min(2)) >= VIVO) & dentro
+    if vivo.sum() >= 50:
+        q = (a[vivo] // 32).astype(int)
+        chiavi, quanti = np.unique(q[:, 0] * 64 + q[:, 1] * 8 + q[:, 2],
+                                   return_counts=True)
+        if quanti.max() > FONDO_VIVO * dentro.sum():
+            k = chiavi[int(np.argmax(quanti))]
+            tinta = a[vivo][(q[:, 0] * 64 + q[:, 1] * 8 + q[:, 2]) == k].mean(0)
+            vivo &= np.linalg.norm(a - tinta, axis=2) > FONDO_DISTANZA
     if vivo.sum() < 50:
-        return None, 0.0
+        return None
     px_mm = w / ((x1 - x0) * PT2MM)
     k = max(int(round(MARCHIO_STACCO * px_mm)), 1)
     yy, xx = np.mgrid[-k:k + 1, -k:k + 1]
     lab, n = ndimage.label(ndimage.binary_closing(vivo,
                                                   structure=xx ** 2 + yy ** 2 <= k * k))
     if n == 0:
-        return None, 0.0
+        return None
     quanti = ndimage.sum(vivo, lab, index=np.arange(1, n + 1))
     sel = vivo & (lab == int(np.argmax(quanti)) + 1)
-    r = rho[sel]
-    sx = np.array([s.fi(q, "sx") for q in r])
-    y = np.clip((r - s.piega) / c.parete, 0, 1) * m.y_parete
-    giro = 2 * math.pi * (m.r(y) - CARTA / 2)
-    f = ((fi[sel] - sx) % (2 * math.pi)) * r / giro
-    f = f[f < 1.0]
-    if len(f) < 20:
-        return None, 0.0
-    ang = 2 * math.pi * f
-    media = (math.atan2(np.sin(ang).mean(), np.cos(ang).mean())
-             / (2 * math.pi)) % 1.0
-    # lo stesso punto sullo steso, a meta' parete, come angolo dalla mezzeria
-    rho_m = s.piega + c.parete / 2
-    fi_m = s.fi(rho_m, "sx") + media * 2 * math.pi * (m.r(m.y_parete / 2)
-                                                       - CARTA / 2) / rho_m
-    mezzo = 0.5 * (s.fi(rho_m, "sx") + s.fi(rho_m, "dx"))
-    return media, math.degrees(fi_m - mezzo)
+    return rho[sel], fi[sel]
 
 
 # --------------------------------------------------------------------------- #
@@ -983,6 +1659,26 @@ class Maglia:
             tris.append(np.c_[a, d, c])
         self.T.extend(tris)
         return s[-1]
+
+    def falda(self, V, UV):
+        """Una superficie a righe: `V[i]` e `UV[i]` sono i vertici della riga
+        i, tanti quante le colonne. I triangoli uniscono la colonna j di una
+        riga alla colonna j della seguente, con le facce come in `giro`:
+        righe che salgono lungo la parete esterna e colonne che girano come
+        teta guardano fuori. Serve al cono, dove ogni riga comincia
+        all'orlo della carta e l'orlo gira attorno."""
+        righe, n1 = V.shape[:2]
+        base = self.n
+        self.V.append(V.reshape(-1, 3))
+        self.UV.append(UV.reshape(-1, 2))
+        self.n += righe * n1
+        i = np.arange(n1 - 1)
+        for j in range(righe - 1):
+            a = base + j * n1 + i
+            b, c = a + 1, a + n1
+            d = c + 1
+            self.T.append(np.c_[a, b, d])
+            self.T.append(np.c_[a, d, c])
 
     def segna(self, nome, primo):
         self.parti[nome] = (primo, self.triangoli())
@@ -1029,7 +1725,7 @@ def _semplifica(P, tol):
                            _semplifica(P[k:], tol)])
 
 
-def profilo_coppa(m):
+def profilo_coppa(m, spessore=CARTA):
     """I pezzi del profilo della coppa: `{nome: [(r, y)]}`.
 
     - `parete` sale dalla base alla cima della parete: e' la carta stampata,
@@ -1071,13 +1767,13 @@ def profilo_coppa(m):
         carta.append(((f0 - f) % (2 * math.pi)) * a)
     fine = bordo[-1]
     y_fondo = m.rientro
-    dentro = [fine] + [(m.r(y) - CARTA, y)
-                       for y in np.linspace(m.y_parete, y_fondo + CARTA, 13)]
-    r_piano = m.r(y_fondo + CARTA) - CARTA
-    piano = [(r_piano, y_fondo + CARTA), (r_piano * 0.5, y_fondo + CARTA),
-             (0.0, y_fondo + CARTA)]
+    dentro = [fine] + [(m.r(y) - spessore, y)
+                       for y in np.linspace(m.y_parete, y_fondo + spessore, 13)]
+    r_piano = m.r(y_fondo + spessore) - spessore
+    piano = [(r_piano, y_fondo + spessore), (r_piano * 0.5, y_fondo + spessore),
+             (0.0, y_fondo + spessore)]
     # il risvolto: tre strati di carta attorno alla gonna del fondo
-    orlo_r = 3 * CARTA
+    orlo_r = 3 * spessore
     sotto = [(0.0, y_fondo), (0.5 * (m.r(y_fondo) - orlo_r), y_fondo),
              (m.r(y_fondo) - orlo_r, y_fondo)]
     orlo = [(m.r(y) - orlo_r, y) for y in np.linspace(y_fondo, 0.0, 5)]
@@ -1087,7 +1783,7 @@ def profilo_coppa(m):
             "base": base}
 
 
-def profilo_tappo(p, y_sommo):
+def profilo_tappo(p, y_sommo, spessore=CARTA):
     """I pezzi del profilo del tappo, alla quota `y_sommo` del suo sommo.
 
     - `fuori`: la gonna dal fondo al sommo, com'e' nella sezione, poi il
@@ -1099,7 +1795,7 @@ def profilo_tappo(p, y_sommo):
     F = _semplifica(p.fuori[::-1], 0.01)          # dal fondo al sommo
     fuori = [(r, y_sommo - z) for z, r in F]
     r_su = fuori[-1][0]
-    z_p = p.z_piano - CARTA / 2                   # la faccia di sopra del piano
+    z_p = p.z_piano - spessore / 2                   # la faccia di sopra del piano
     r_p = p.r_piano
     # il ricciolo: dal sommo scende dentro, stretto, fino al bordo del piano
     giu = [(r_su - 0.9, 0.35), (r_su - 1.5, 1.0), (r_p + 0.35, z_p - 0.6),
@@ -1107,15 +1803,15 @@ def profilo_tappo(p, y_sommo):
     fuori += [(r, y_sommo - z) for r, z in giu]
     piano = [(r_p, y_sommo - z_p), (r_p * 0.5, y_sommo - z_p),
              (0.0, y_sommo - z_p)]
-    z_s = p.z_piano + CARTA / 2
-    r_dentro = lambda z: float(np.interp(z, p.fuori[:, 0], p.fuori[:, 1])) - CARTA
+    z_s = p.z_piano + spessore / 2
+    r_dentro = lambda z: float(np.interp(z, p.fuori[:, 0], p.fuori[:, 1])) - spessore
     sotto = [(0.0, y_sommo - z_s), (r_dentro(z_s) * 0.5, y_sommo - z_s),
              (r_dentro(z_s), y_sommo - z_s)]
     zz = [z for z, _r in F[::-1] if z > z_s] + [p.altezza]
     zz = sorted(set([z_s] + zz))
     dentro = [(r_dentro(z), y_sommo - z) for z in zz]
     orlo = [(r_dentro(p.altezza), y_sommo - p.altezza),
-            (r_dentro(p.altezza) + CARTA, y_sommo - p.altezza)]
+            (r_dentro(p.altezza) + spessore, y_sommo - p.altezza)]
     return {"fuori": fuori, "piano": piano, "sotto": sotto, "dentro": dentro,
             "orlo": orlo}
 
@@ -1189,7 +1885,7 @@ def riscontri(c, T):
 # la costruzione
 # --------------------------------------------------------------------------- #
 def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
-               tex_max=8192):
+               tex_max=8192, carta=None):
     """`(V, UV, T, atlante, parti, meta)` della coppa, del tappo, o dei due.
 
     V in mm, asse della coppa su y, base a y = 0, fronte verso +z. `parti`
@@ -1197,9 +1893,12 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
     nodi del GLB, e il tappo si toglie. Il dpi si abbassa fino a quello che
     l'atlante terra' davvero sotto `tex_max`, come per il vassoio: rendere
     lo sleeve a 300 dpi per poi ridurlo a 1700 punti e' memoria buttata.
+    `carta` e' lo spessore del cartoncino in mm, se l'utente l'ha
+    dichiarato; senza, quello del cartiglio del Nutella POT.
     """
     if not pdf_coppa and not pdf_tappo:
         raise ValueError("coppa: nessun PDF")
+    t_carta = CARTA if carta is None else float(carta)
     meta, avvisi = [], []
     immagini, giri = {}, {}
     c = p = None
@@ -1207,6 +1906,7 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
     if pdf_coppa:
         Tc = tracce(pdf_coppa)
         c = leggi_coppa(pdf_coppa, Tc)
+        c.carta = t_carta
         s, m = c.steso, c.montata
         x0, y0, x1, y1 = s.riquadro
         riq_s = (x0 - 3, y0 - 3, x1 + 3, y1 + 3)
@@ -1284,14 +1984,14 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
                         "dello steso (il gruppo piu' grande di colori vivi)"
                         % gradi)
         inizio = -2 * math.pi * f
-        P = profilo_coppa(m)
+        P = profilo_coppa(m, t_carta)
         zs = zone["sleeve"]
         rho_c = s.piega + c.parete
         w_c = c.sormonto(m.y_parete)
         parete, carta = P["parete"], P["carta"]
 
         def sullo_steso(rho, fr, giro):
-            fi = s.fi(rho, "sx") + fr * giro / rho
+            fi = s.partenza(rho) + fr * giro / rho
             Rp = rho / PT2MM
             return zs.uv(s.cx + Rp * np.cos(fi), s.cy + Rp * np.sin(fi))
 
@@ -1299,7 +1999,7 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
             # la parete: tanta carta quanta e' la circonferenza a quell'altezza
             fr = (teta - inizio) / (2 * math.pi)
             return sullo_steso(s.piega + sj, fr,
-                               2 * math.pi * (parete[j][0] - CARTA / 2))
+                               2 * math.pi * (parete[j][0] - t_carta / 2))
 
         def bordo(j, _sj, teta):
             # il bordo: la carta che segue la parete, nel verso in cui si
@@ -1329,10 +2029,10 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
     if p is not None:
         if c is not None:
             # il piano del corpo poggia sul sommo del bordo
-            y_sommo = c.montata.altezza + p.z_piano + CARTA / 2
+            y_sommo = c.montata.altezza + p.z_piano + t_carta / 2
         else:
             y_sommo = p.altezza
-        Q = profilo_tappo(p, y_sommo)
+        Q = profilo_tappo(p, y_sommo, t_carta)
         za, zc = zone["anello"], zone["corpo"]
         fuori = Q["fuori"]
         F = np.asarray(fuori)
@@ -1372,5 +2072,341 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
                         % (2 * p.r_interno, 2 * c.montata.r_bordo,
                            "calza" if -0.4 <= gioco <= 1.0
                            else "NON CALZA, gioco %.2f mm" % gioco))
+    if carta is not None:
+        meta.append("carta: %.2f mm - dichiarata" % t_carta)
+    V, UV, T, parti = M.arrays()
+    return V, UV, T, A, parti, meta + avvisi
+
+
+# --------------------------------------------------------------------------- #
+# il cono col lid
+# --------------------------------------------------------------------------- #
+# Il lid: lo spessore del disco, e quanto sta sotto il taglio della bocca
+# quando ci entra dentro.
+SPESSORE_LID = 0.2
+INCASSO_LID = 0.5
+
+
+def profilo_cono(k, r_cima, y_cima, chiuso):
+    """I pezzi del profilo del cono che non sono carta stampata: `{nome:
+    [(r, y)]}`, punta a y = 0. La parete e la fascia sopra la bocca le fa
+    `Maglia.falda`, riga per riga dall'orlo della carta; qui restano:
+
+    - `punta`: il dischetto della punta, che il disegno tronca (2 mm sul
+      Camy);
+    - `cima`: il taglio della carta dove la falda finisce, a raggio `r_cima`
+      e quota `y_cima`. Col risvolto piegato sul lid (`chiuso`) e' lo
+      spessore del suo orlo interno, e sotto il risvolto c'e' il suo
+      rovescio; senza, e' lo spessore del taglio in cima alla carta dritta;
+    - `dentro` e `fondo`: il rovescio, bianco, dalla bocca giu' alla punta.
+    """
+    H, t = k.altezza, k.carta
+    punta = [(0.0, 0.0), (0.5 * k.r_punta, 0.0), (k.r_punta, 0.0)]
+    if chiuso:
+        cima = [(r_cima, H), (r_cima, H - t), (k.r_bocca - t, H - t)]
+        y0 = H - t
+    else:
+        cima = [(r_cima, y_cima), (r_cima - t, y_cima)]
+        y0 = y_cima
+    dentro = [(k.r(y) - t, y) for y in np.linspace(y0, t, 33)]
+    fondo = [(k.r(t) - t, t), (0.0, t)]
+    return {"punta": punta, "cima": cima, "dentro": dentro, "fondo": fondo}
+
+
+def profilo_lid(d, y, r_anello=None):
+    """I pezzi del profilo del lid col sommo alla quota `y`: `piano` (la
+    grafica), `anello` (dal lid alla parete, se il lid e' piu' stretto della
+    bocca), `orlo` e `sotto`."""
+    r = d.r_taglio
+    giu = y - SPESSORE_LID
+    piano = [(r, y), (0.5 * r, y), (0.0, y)]
+    anello = ([(r_anello, y), (r, y)]
+              if r_anello is not None and r_anello > r + 0.05 else [])
+    orlo = [(r, giu), (r, y)]
+    sotto = [(0.0, giu), (0.5 * r, giu), (r, giu)]
+    return {"piano": piano, "anello": anello, "orlo": orlo, "sotto": sotto}
+
+
+def riscontri_cono(k):
+    """Le righe di verifica del cono: tornano, o dicono di quanto no."""
+    out = []
+    w_b = k.sormonto(k.R_bocca)
+    w_m = k.sormonto(k.rho(0.5 * k.altezza))
+    if k.lembo > 0:
+        esito = ("torna" if abs(0.5 * (w_b + w_m) - k.lembo) <= 1.5
+                 else "NON TORNA")
+        out.append("verifica sormonto: la carta che avanza al giro e' %.1f "
+                   "mm alla bocca e %.1f a meta' altezza, il lembo oltre "
+                   "l'ultimo raggio e' largo %.1f - %s"
+                   % (w_b, w_m, k.lembo, esito))
+    if k.colla is not None:
+        out.append("verifica colla: la fascia senza inchiostro e' larga %.1f "
+                   "mm e il sormonto la copre con %.1f - %s"
+                   % (k.colla, min(w_b, w_m),
+                      "torna" if min(w_b, w_m) >= k.colla
+                      else "NON TORNA, la fascia bianca si vede"))
+    if not (0.0 <= min(w_b, w_m) and max(w_b, w_m) <= 40.0):
+        out.append("SORMONTO FUORI MISURA: il cono montato e lo steso non "
+                   "parlano dello stesso pezzo")
+    if k.disegno:
+        scarto = math.degrees(abs(k.beta - k.beta_steso))
+        out.append("verifica cono: il disegno 1:1 apre %.1f gradi, lo steso "
+                   "ne svolge %.1f alla bocca - %s"
+                   % (2 * math.degrees(k.beta), 2 * math.degrees(k.beta_steso),
+                      "torna" if scarto <= 0.5
+                      else "NON TORNA, scarto %.2f" % scarto))
+        bocca = 2 * (k.R_bocca * math.sin(k.beta_steso) + k.carta / 2)
+        out.append("verifica bocca: l'ultimo taglio a R %.1f arrotolato fa "
+                   "una bocca di %.1f mm, il disegno %.1f - %s"
+                   % (k.R_bocca, bocca, 2 * k.r_bocca,
+                      "torna" if abs(bocca - 2 * k.r_bocca)
+                      <= 0.015 * 2 * k.r_bocca else "NON TORNA"))
+    return out
+
+
+def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
+                    tex_max=8192, carta=None):
+    """`(V, UV, T, atlante, parti, meta)` del cono, del lid, o dei due.
+
+    V in mm, asse su y, punta a y = 0, fronte verso +z. Il cono e il lid sono
+    due nodi del GLB, e il lid si toglie. Le generatrici dello steso vanno
+    sulle generatrici del cono, e la carta che si vede e' un giro che parte
+    dall'orlo di quella che sta sopra (`lato_sopra`, `orli`): la grafica
+    resta dritta e la cucitura segue l'orlo vero. Sopra la bocca - l'ultimo
+    taglio - la carta fino al taglio e' il RISVOLTO ACCOPPIATO: piega dentro
+    sul lid e lo tiene chiuso; senza il lid resta dritto, com'e' prima della
+    chiusura. `carta` e' lo spessore in mm, se l'utente l'ha dichiarato.
+    """
+    if not pdf_cono and not pdf_lid:
+        raise ValueError("cono: nessun PDF")
+    meta, avvisi = [], []
+    immagini = {}
+    k = d = None
+    riq_s = riq_c = None
+    if pdf_cono:
+        k = leggi_cono(tracce(pdf_cono))
+        if k is None:
+            raise ValueError("cono: sulla pagina non c'e' lo steso di un cono "
+                             "(un settore pieno con l'apice sul foglio e il "
+                             "lato radiale)")
+        if carta is not None:
+            k.carta = float(carta)
+        x0, y0, x1, y1 = k.steso.riquadro
+        riq_s = (x0 - 3, y0 - 3, x1 + 3, y1 + 3)
+    if pdf_lid:
+        d = leggi_disco(tracce(pdf_lid))
+        if d is None:
+            raise ValueError("lid: sulla pagina non c'e' il disco del lid (i "
+                             "cerchi concentrici del taglio)")
+        bx, by = d.centro
+        R = (d.abbondanza or d.r_taglio + 1.0) / PT2MM
+        riq_c = (bx - R, by - R, bx + R, by + R)
+    # il dpi che l'atlante terra' davvero sotto `tex_max`: lo steso sopra, il
+    # lid sotto
+    largo = max((r[2] - r[0]) for r in (riq_s, riq_c) if r is not None)
+    alto = sum((r[3] - r[1]) for r in (riq_s, riq_c) if r is not None)
+    dpi = min(dpi, tex_max * 72.0 / max(largo, alto))
+    if k is not None:
+        s = k.steso
+        tex, avv = ritagli(pdf_cono, {"sleeve": riq_s}, dpi, riq_s,
+                           lastre_extra)
+        avvisi += ["cono: " + a for a in avv]
+        immagini["sleeve"] = (tex["sleeve"], riq_s)
+        lato, nota_lato = lato_sopra(k, tex["sleeve"], riq_s)
+        k.sopra(lato)
+        meta.append("cono: alto %.1f mm, bocca %.1f, punta %.1f, apre %.1f "
+                    "gradi - %s"
+                    % (k.altezza, 2 * k.r_bocca, 2 * k.r_punta,
+                       2 * math.degrees(k.beta),
+                       "dal disegno 1:1 accanto allo steso" if k.disegno
+                       else "dallo steso"))
+        meta.append("steso: settore pieno con l'apice sul foglio, taglio a R "
+                    "%.1f mm, ultimo taglio (la bocca) a R %.1f, punta a R "
+                    "%.1f%s"
+                    % (s.R2, k.R_bocca, k.R_punta,
+                       "; oltre l'ultimo raggio un lembo largo %.1f mm"
+                       % k.lembo if k.lembo > 0 else ""))
+        meta.append(nota_lato)
+        meta.append("carta: %.2f mm%s" % (k.carta, " - dichiarata"
+                                          if carta is not None
+                                          else " - quella dei coni gelato, "
+                                               "carta e alluminio"))
+        meta += k.note
+    if d is not None:
+        tex, avv = ritagli(pdf_lid, {"corpo": riq_c}, dpi, riq_c,
+                           lastre_extra)
+        avvisi += ["lid: " + a for a in avv]
+        immagini["corpo"] = (tex["corpo"], riq_c)
+        altri = [r for r in d.raggi if r < d.r_taglio - 0.05]
+        meta.append("lid: disco di %.1f mm al taglio%s%s"
+                    % (2 * d.r_taglio,
+                       ", l'abbondanza a %.1f" % (2 * d.abbondanza)
+                       if d.abbondanza else "",
+                       ", l'area di sicurezza a %.1f" % (2 * altri[0])
+                       if altri else ""))
+    A, zone = atlante(immagini)
+    bianco = zone["bianco"]
+    ub, vb = bianco.uv(0.5, 0.5)
+
+    def tinta(_j, _s, teta):
+        return np.full(teta.shape, ub), np.full(teta.shape, vb)
+
+    M = Maglia()
+    chiuso = k is not None and d is not None and k.risvolto > 0
+    r_cima = None
+    if k is not None:
+        s = k.steso
+        zs = zone["sleeve"]
+        t = k.carta
+        # Le generatrici dello steso - i raggi dall'apice - vanno sulle
+        # generatrici del cono: l'angolo dello steso e quello del cono stanno
+        # in un rapporto fisso `kk`, e alla bocca un giro del cono e' tanta
+        # carta quanta la sua circonferenza. La carta che si vede e' un giro
+        # che comincia all'orlo, riga per riga: se l'orlo gira attorno al
+        # cono, la cucitura gira con lui e la grafica resta dritta.
+        kk = (k.r_bocca - t / 2) / k.R_bocca
+        yf = np.linspace(0.0, k.altezza, 1025)
+        rf = k.rho(yf)
+        # oltre la bocca, fino a un soffio dal taglio: il risvolto
+        rr = (np.linspace(k.R_bocca, k.R_bocca + k.risvolto - 0.2, 8)[1:]
+              if k.risvolto > 0 else np.zeros(0))
+        e_tutti = orli(k, np.r_[rf, rr])
+        ef, er = e_tutti[:len(rf)], e_tutti[len(rf):]
+        fb, gradi = fronte_cono(k, rf, ef, kk, immagini["sleeve"][0],
+                                immagini["sleeve"][1])
+        if fb is None:
+            fb = float(ef[-1]) + s.verso * math.pi * kk
+            meta.append("FRONTE NON TROVATO: lo steso non ha colori vivi, la "
+                        "meta' della carta che si vede guarda davanti")
+        else:
+            meta.append("fronte: il marchio, a %+.1f gradi dalla mezzeria "
+                        "dello steso (il gruppo piu' grande di colori vivi, "
+                        "tolto il colore del fondo)" % gradi)
+        # alla bocca l'orlo sta entro mezzo giro dal marchio; sotto e sopra,
+        # l'orlo srotolato lo segue
+        giri = 2 * math.pi * round((float(ef[-1]) - fb) / (2 * math.pi))
+
+        def inizio_riga(e):
+            te = (e - giri - fb) / kk
+            return te if s.verso > 0 else te - 2 * math.pi
+
+        ts, tr_ = inizio_riga(ef), inizio_riga(er)
+        # le righe della parete: ogni sessantaquattresimo d'altezza, e piu'
+        # fitte dove la cucitura gira in fretta
+        scelte = [0]
+        for i in range(1, len(yf)):
+            if (yf[i] - yf[scelte[-1]] >= k.altezza / 64 - 1e-9
+                    or abs(ts[i] - ts[scelte[-1]]) >= math.radians(6.0)):
+                scelte.append(i)
+        if scelte[-1] != len(yf) - 1:
+            scelte.append(len(yf) - 1)
+        scelte = np.array(scelte)
+        ys, rhos, t0 = yf[scelte], rf[scelte], ts[scelte]
+        giro_cucitura = math.degrees(abs(ts[-1] - ts[len(yf) // 2]))
+        # sopra la bocca: piegato dentro, in piano sul lid, o dritto
+        if chiuso:
+            r_su = k.r_bocca - (rr - k.R_bocca)
+            y_su = np.full(len(rr), k.altezza)
+        else:
+            y_su = (rr - k.R_punta) * k.altezza / k.apotema
+            r_su = k.r(y_su)
+        y_r = np.r_[ys, y_su]
+        r_r = np.r_[k.r(ys), r_su]
+        rho_r = np.r_[rhos, rr]
+        t_r = np.r_[t0, tr_]
+        teta = t_r[:, None] + 2 * math.pi * np.arange(LATI + 1)[None, :] / LATI
+        fi = fb + kk * teta
+        rr2 = r_r[:, None]
+        Vw = np.stack([rr2 * np.sin(teta),
+                       np.broadcast_to(y_r[:, None], teta.shape),
+                       rr2 * np.cos(teta)], axis=2)
+        Rp = (rho_r / PT2MM)[:, None]
+        U, Vv = zs.uv(s.cx + Rp * np.cos(fi), s.cy + Rp * np.sin(fi))
+        UVw = np.stack([U, Vv], axis=2)
+        r_cima, y_cima = float(r_r[-1]), float(y_r[-1])
+        P = profilo_cono(k, r_cima, y_cima, chiuso)
+
+        def riga(i):
+            """Le UV della riga `i` della falda, per i pezzi che la chiudono:
+            la punta sotto, il taglio della carta in cima."""
+            def uv(_j, _sj, _teta):
+                return UVw[i, :, 0], UVw[i, :, 1]
+            return uv
+
+        primo = M.triangoli()
+        M.giro(P["punta"], riga(0), float(t_r[0]))
+        M.falda(Vw, UVw)
+        M.giro(P["cima"], riga(-1), float(t_r[-1]))
+        for nome in ("dentro", "fondo"):
+            M.giro(P[nome], tinta, float(t_r[-1]))
+        if k.lembo_sopra:
+            meta.append("cucitura: l'orlo del lembo gira di %.0f gradi attorno "
+                        "al cono dalla bocca a meta' altezza, e piu' stretto "
+                        "verso la punta; la grafica resta sulle generatrici"
+                        % giro_cucitura)
+        if chiuso:
+            meta.append("risvolto accoppiato: la fascia di %.1f mm fra "
+                        "l'ultimo taglio e il taglio piega dentro sul lid e lo "
+                        "tiene chiuso" % k.risvolto)
+        elif k.risvolto > 0:
+            meta.append("SENZA LID: il risvolto di %.1f mm resta dritto sopra "
+                        "la bocca, com'e' prima della chiusura - per chiuderlo "
+                        "carica anche il PDF del lid" % k.risvolto)
+        M.segna("cono", primo)
+        meta += riscontri_cono(k)
+    if d is not None:
+        r_anello = None
+        if k is None:
+            y_lid = SPESSORE_LID
+        elif chiuso:
+            # sotto il risvolto, che lo tiene
+            y_lid = k.altezza - k.carta
+            copre = d.r_taglio - r_cima
+            if copre >= 0:
+                meta.append("verifica risvolto: piegato arriva a %.1f mm dal "
+                            "centro e il lid ne ha %.1f - lo tiene per %.1f mm, "
+                            "e del lid si vede un disco di %.1f mm - torna"
+                            % (r_cima, d.r_taglio, copre, 2 * r_cima))
+            else:
+                r_anello = r_cima
+                meta.append("verifica risvolto: NON TORNA - piegato arriva a "
+                            "%.1f mm dal centro e il lid ne ha solo %.1f: fra i "
+                            "due resta un anello bianco di %.1f mm"
+                            % (r_cima, d.r_taglio, -copre))
+        else:
+            y_lid = k.altezza - INCASSO_LID
+            r_dentro = k.r(y_lid) - k.carta
+            if d.r_taglio < r_dentro:
+                r_anello = r_dentro
+                meta.append("verifica lid: il lid e' largo %.1f mm e la bocca "
+                            "%.1f dentro - il lid entra nella bocca e sta %.1f "
+                            "mm sotto il taglio; l'anello di %.1f mm fra il lid "
+                            "e la carta non e' in nessuno dei due PDF e resta "
+                            "bianco"
+                            % (2 * d.r_taglio, 2 * (k.r_bocca - k.carta),
+                               INCASSO_LID, r_dentro - d.r_taglio))
+            else:
+                y_lid = k.altezza + SPESSORE_LID
+                meta.append("verifica lid: il lid e' largo %.1f mm e la bocca "
+                            "%.1f fuori - il lid poggia sul taglio della bocca"
+                            % (2 * d.r_taglio, 2 * k.r_bocca))
+        Q = profilo_lid(d, y_lid, r_anello)
+        zc = zone["corpo"]
+        bx, by = d.centro
+        piano = Q["piano"]
+
+        def corpo(j, _sj, teta):
+            # il sopra del foglio va dietro: guardando il cono dal davanti e
+            # dall'alto il lid si legge dritto
+            r = piano[j][0]
+            return zc.uv(bx + r * np.sin(teta) / PT2MM,
+                         by + r * np.cos(teta) / PT2MM)
+
+        primo = M.triangoli()
+        M.giro(piano, corpo, 0.0)
+        for nome in ("anello", "orlo", "sotto"):
+            if Q[nome]:
+                M.giro(Q[nome], tinta, 0.0)
+        M.segna("lid", primo)
     V, UV, T, parti = M.arrays()
     return V, UV, T, A, parti, meta + avvisi

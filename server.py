@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import sys
 from urllib.parse import quote
@@ -331,7 +332,9 @@ def avviso_pagine(pdf):
 
 
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
-                 colata_riquadro=None):
+                 colata_riquadro=None, carta=None):
+    """L'astuccio. `carta` e' lo spessore del cartoncino in mm se l'utente
+    l'ha dichiarato (`SPESSORI_CARTA`); senza, `folding.SPESSORE_CRT`."""
     dpi, tmax = risoluzione(quality)
     # L'ordine e' quello delle regole: una pagina sola, poi le quote lette
     # sul file intero - note e miniature comprese - poi via tutto quello che
@@ -359,6 +362,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                                               dieline=d)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso,
+                                spessore=(folding.SPESSORE_CRT if carta is None
+                                          else carta),
                                 fianchi_sul_fronte=d.fianchi_su == "front")
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
@@ -374,6 +379,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if carta is not None:
+        meta.append("cartoncino: %.2f mm - dichiarato" % carta)
     if marchio:
         meta.append("modello girato di %d gradi attorno al fronte perche' il "
                     "marchio si legga orizzontale e dritto: la sua grafica "
@@ -539,44 +546,68 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
             + ([riscontro] if riscontro else []))
 
 
-def _coppa_e_tappo(pdfs, dichiarato="coppa"):
-    """`(sleeve, tappo)`: quale dei PDF e' quale, ognuno a pagina unica.
+def _pezzi_tondi(pdfs, dichiarato="coppa"):
+    """`{cosa: pdf}`: quale dei PDF e' quale pezzo, ognuno a pagina unica.
 
-    La coppa arriva in due file, e l'ordine in cui l'utente li carica non
-    dice niente: lo dice la pagina. Lo sleeve ha lo steso a settore anulare,
-    il tappo il corpo tondo disegnato in grande e in miniatura. Uno dei due
-    puo' mancare; uno che non e' ne' l'uno ne' l'altro e' un errore, e
-    l'errore dice a chi ha dichiarato un cartotecnico in piu' pezzi che cosa
-    il risolutore sa montare.
+    I pack tondi arrivano in piu' file - la coppa con lo sleeve e il tappo, il
+    cono con lo steso e il lid - e l'ordine in cui l'utente li carica non
+    dice niente: lo dice la pagina. Lo sleeve della coppa ha lo steso a
+    settore anulare, il tappo il corpo tondo disegnato in grande e in
+    miniatura, il cono lo steso a settore pieno con l'apice sul foglio, il
+    lid un disco. Il lid si cerca solo fra piu' PDF: un disco da solo non
+    dice di essere un lid (`coppa.orienta`). Un pezzo puo' mancare; uno che
+    non e' nessuno di questi e' un errore, e l'errore dice a chi ha
+    dichiarato un cartotecnico in piu' pezzi che cosa il risolutore sa
+    montare.
     """
     from pack3d import coppa as cp
     trovati = {}
     for k, pdf in enumerate(pdfs):
         pdf, _n = artwork.pagina_unica(pdf)
         # girato sulla tavola si legge girato: vedi `coppa.orienta`
-        pdf, cosa, _gradi = cp.orienta(pdf)
+        pdf, cosa, _gradi = cp.orienta(pdf, dischi=len(pdfs) > 1)
         if cosa is None:
             if dichiarato == "carton":
                 raise ValueError(
                     "cartotecnico in %d pezzi: per ora so montare insieme lo "
-                    "sleeve e il tappo di una coppa, e il PDF %d non e' ne' "
-                    "l'uno ne' l'altro" % (len(pdfs), k + 1))
+                    "sleeve e il tappo di una coppa, o il cono col suo lid, e "
+                    "il PDF %d non e' nessuno di questi" % (len(pdfs), k + 1))
             raise ValueError("coppa: un PDF non e' ne' lo sleeve (lo steso a "
                              "settore anulare) ne' il tappo (corpo tondo e "
-                             "anello) di una coppa")
+                             "anello) di una coppa, ne' lo steso o il lid di "
+                             "un cono")
         if cosa in trovati:
-            raise ValueError("%s: due PDF dello stesso pezzo (%s) - servono "
-                             "lo sleeve e il tappo"
+            raise ValueError("%s: due PDF dello stesso pezzo (%s) - servono %s"
                              % ("cartotecnico" if dichiarato == "carton"
-                                else "coppa", cosa))
+                                else "coppa", cosa,
+                                "lo sleeve e il tappo"
+                                if cosa in ("coppa", "tappo")
+                                else "il cono e il lid"))
         trovati[cosa] = pdf
-    return trovati.get("coppa"), trovati.get("tappo")
+    if {"coppa", "tappo"} & set(trovati) and {"cono", "lid"} & set(trovati):
+        raise ValueError("i PDF sono pezzi di due pack diversi: %s"
+                         % ", ".join(sorted(trovati)))
+    return trovati
+
+
+def _cono(pezzi):
+    return "cono" in pezzi or "lid" in pezzi
+
+
+def _in_pezzi(dichiarato, pdfs, cosa):
+    """La riga d'apertura del cartotecnico dichiarato in pezzi."""
+    return ("cartotecnico in %d %s: %s"
+            % (len(pdfs), "pezzo" if len(pdfs) == 1 else "pezzi", cosa))
 
 
 def analisi_coppa(pdfs, dichiarato="coppa"):
-    """L'analisi della coppa: le misure, senza texture. Vedi `pack3d.coppa`."""
+    """L'analisi della coppa o del cono: le misure, senza texture. Vedi
+    `pack3d.coppa`."""
     from pack3d import coppa as cp
-    sleeve, tappo = _coppa_e_tappo(pdfs, dichiarato)
+    pezzi = _pezzi_tondi(pdfs, dichiarato)
+    if _cono(pezzi):
+        return _analisi_cono(pezzi, pdfs, dichiarato)
+    sleeve, tappo = pezzi.get("coppa"), pezzi.get("tappo")
     meta = []
     if sleeve:
         c = cp.leggi_coppa(sleeve)
@@ -600,11 +631,40 @@ def analisi_coppa(pdfs, dichiarato="coppa"):
     titolo = ("Coppa col tappo" if sleeve and tappo
               else "Coppa senza tappo" if sleeve else "Tappo della coppa")
     if dichiarato == "carton":
-        meta.insert(0, "cartotecnico in %d %s: %s"
-                    % (len(pdfs), "pezzo" if len(pdfs) == 1 else "pezzi",
-                       "lo sleeve e il tappo di una coppa" if sleeve and tappo
-                       else "lo sleeve di una coppa" if sleeve
-                       else "il tappo di una coppa"))
+        meta.insert(0, _in_pezzi(dichiarato, pdfs,
+                                 "lo sleeve e il tappo di una coppa"
+                                 if sleeve and tappo
+                                 else "lo sleeve di una coppa" if sleeve
+                                 else "il tappo di una coppa"))
+    return dict(kind="coppa", title=titolo, meta=meta)
+
+
+def _analisi_cono(pezzi, pdfs, dichiarato):
+    from pack3d import coppa as cp
+    cono, lid = pezzi.get("cono"), pezzi.get("lid")
+    meta = []
+    if cono:
+        k = cp.leggi_cono(cp.tracce(cono))
+        meta.append("cono: alto %.1f mm, bocca %.1f, punta %.1f, apre %.1f "
+                    "gradi" % (k.altezza, 2 * k.r_bocca, 2 * k.r_punta,
+                               2 * math.degrees(k.beta)))
+        meta += k.note + cp.riscontri_cono(k)
+    if lid:
+        d = cp.leggi_disco(cp.tracce(lid))
+        meta.append("lid: disco di %.1f mm al taglio" % (2 * d.r_taglio))
+    if cono and not lid:
+        meta.append("SENZA LID: il cono esce aperto - per chiuderlo carica "
+                    "insieme il PDF del cono e quello del lid")
+    if lid and not cono:
+        meta.append("SOLO IL LID: per il cono intero carica insieme il PDF "
+                    "del cono e quello del lid")
+    titolo = ("Cono col lid" if cono and lid
+              else "Cono senza lid" if cono else "Lid del cono")
+    if dichiarato == "carton":
+        meta.insert(0, _in_pezzi(dichiarato, pdfs,
+                                 "il cono e il suo lid" if cono and lid
+                                 else "il cono" if cono else "il lid di un "
+                                                             "cono"))
     return dict(kind="coppa", title=titolo, meta=meta)
 
 
@@ -612,35 +672,49 @@ def in_piu_pezzi(kind, pdfs):
     """Vero se la richiesta va al risolutore dei pack in piu' PDF.
 
     La coppa lo e' sempre - lo sleeve e il tappo - e il cartotecnico quando
-    l'utente ha dichiarato piu' di un pezzo: un PDF per pezzo. Oggi l'unico
-    pack in piu' pezzi che il risolutore sa montare e' la coppa col tappo.
+    l'utente ha dichiarato piu' di un pezzo: un PDF per pezzo. Oggi i pack
+    in piu' pezzi che il risolutore sa montare sono la coppa col tappo e il
+    cono col lid.
     """
     return kind == "coppa" or (kind == "carton" and len(pdfs) > 1)
 
 
 def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
-                dichiarato="coppa"):
-    """La coppa di carta col tappo, da uno o due PDF: vedi `pack3d.coppa`.
+                dichiarato="coppa", carta=None):
+    """La coppa di carta col tappo, o il cono col lid, da uno o due PDF: vedi
+    `pack3d.coppa`.
 
-    Una texture sola, un atlante con lo sleeve, il corpo e l'anello del
-    tappo; due nodi nel GLB, la coppa e il tappo, perche' il tappo si toglie.
+    Una texture sola, un atlante con i ritagli dei due fogli; due nodi nel
+    GLB, il contenitore e la chiusura, perche' la chiusura si toglie.
     """
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
-    sleeve, tappo = _coppa_e_tappo(pdfs, dichiarato)
-    V, UV, T, A, parti, meta = cp.costruisci(sleeve, tappo, dpi=dpi,
-                                             lastre_extra=lastre_extra,
-                                             tex_max=tmax)
+    pezzi = _pezzi_tondi(pdfs, dichiarato)
+    if _cono(pezzi):
+        cono, lid = pezzi.get("cono"), pezzi.get("lid")
+        V, UV, T, A, parti, meta = cp.costruisci_cono(
+            cono, lid, dpi=dpi, lastre_extra=lastre_extra, tex_max=tmax,
+            carta=carta)
+        titolo = ("cono col lid" if cono and lid
+                  else "cono senza lid: carica anche il PDF del lid per "
+                       "chiuderlo" if cono
+                  else "solo il lid: carica anche il PDF del cono")
+        nodi = "il cono e il lid sono due nodi del GLB"
+    else:
+        sleeve, tappo = pezzi.get("coppa"), pezzi.get("tappo")
+        V, UV, T, A, parti, meta = cp.costruisci(sleeve, tappo, dpi=dpi,
+                                                 lastre_extra=lastre_extra,
+                                                 tex_max=tmax, carta=carta)
+        titolo = ("coppa col tappo" if sleeve and tappo
+                  else "coppa senza tappo: carica anche il PDF del tappo per "
+                       "chiuderla" if sleeve
+                  else "solo il tappo: carica anche il PDF dello sleeve")
+        nodi = "la coppa e il tappo sono due nodi del GLB"
     exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti)
-    titolo = ("coppa col tappo" if sleeve and tappo
-              else "coppa senza tappo: carica anche il PDF del tappo per "
-                   "chiuderla" if sleeve
-              else "solo il tappo: carica anche il PDF dello sleeve")
     if dichiarato == "carton":
-        titolo = "cartotecnico in %d %s: %s" % (
-            len(pdfs), "pezzo" if len(pdfs) == 1 else "pezzi", titolo)
-    return [titolo] + meta + ["%d vertici, %d triangoli; la coppa e il tappo "
-                              "sono due nodi del GLB" % (len(V), len(T))]
+        titolo = _in_pezzi(dichiarato, pdfs, titolo)
+    return [titolo] + meta + ["%d vertici, %d triangoli; %s"
+                              % (len(V), len(T), nodi)]
 
 
 def _flowpack_from_case(case):
@@ -1366,7 +1440,11 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  "vassoio": "vassoio", "espositore": "vassoio",
                  "display": "vassoio", "tray": "vassoio",
                  "coppa": "coppa", "coppa conica": "coppa", "cup": "coppa",
-                 "bicchiere": "coppa", "sleeve": "coppa", "tappo": "coppa"}
+                 "bicchiere": "coppa", "sleeve": "coppa", "tappo": "coppa",
+                 # il cono gelato col lid e' della stessa famiglia: pezzi
+                 # tondi, uno steso a settore e una chiusura
+                 "cono": "coppa", "cono gelato": "coppa", "cone": "coppa",
+                 "lid": "coppa"}
 
 
 def normalizza_kind(kind):
@@ -1376,6 +1454,26 @@ def normalizza_kind(kind):
 
 
 KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa")
+
+# Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
+# 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
+# astucci e delle coppe; 3 un cartoncino spesso. Senza dichiarazione ogni
+# famiglia tiene il suo: 0,45 mm l'astuccio (`folding.SPESSORE_CRT`), 0,35 la
+# coppa (dal cartiglio del Nutella POT), 0,10 il cono.
+SPESSORI_CARTA = {1: 0.10, 2: 0.40, 3: 0.70}
+
+
+def spessore_carta(valore):
+    """Il livello dichiarato (1-3) in mm, None se non e' dichiarato.
+    ValueError se non e' un livello."""
+    if valore in (None, ""):
+        return None
+    try:
+        return SPESSORI_CARTA[int(valore)]
+    except (TypeError, ValueError, KeyError):
+        raise ValueError("Lo spessore della carta va da 1 a 3: 1 carta (coni "
+                         "gelato), 2 cartoncino (astucci e coppe), 3 "
+                         "cartoncino spesso")
 
 
 def analyze_pdf(pdf, kind=None):
@@ -1485,6 +1583,15 @@ def _analyze_pdf(pdf, kind=None):
                                             for k, a in v.pareti.items()))]
                              + ([giro_v] if giro_v else [])
                              + list(v.warnings))
+    if kind in (None, "carton"):
+        # Lo steso di un cono si riconosce dai soli tratti in due decimi di
+        # secondo, e va provato PRIMA dell'astuccio: sul cono Camy Apolo il
+        # solutore astuccio trovava fra le icone un "astuccio vwrap" di 18,7 x
+        # 5,9 x 2,5 mm, e il cono non veniva mai provato. La coppa invece
+        # l'astuccio la rifiuta da se', e resta in fondo.
+        from pack3d import coppa as cp
+        if cp.e_un_cono(pdf):
+            return analisi_coppa([pdf], kind or "coppa")
     if kind is None and _dice_film(pdf):
         # Il file dice di essere un film: il flowpack si prova PRIMA
         # dell'astuccio. Il solutore astuccio risolve anche certi film - sul
@@ -1514,7 +1621,7 @@ def _analyze_pdf(pdf, kind=None):
                     meta.insert(0, rgb)
                 return dict(kind="carton", title="Astuccio %s" % d.layout,
                             meta=meta)
-        except Exception:
+        except Exception as e:
             if kind == "carton":
                 # Dichiarato cartotecnico e non e' un astuccio: puo' essere
                 # un pezzo di una coppa, che e' cartotecnica anche lei. Se
@@ -1522,6 +1629,16 @@ def _analyze_pdf(pdf, kind=None):
                 from pack3d import coppa as cp
                 if cp.riconosci(pdf) is not None:
                     return analisi_coppa([pdf], "carton")
+                # Un disco da solo non dice di essere un lid (`coppa.orienta`):
+                # se c'e', l'errore dell'astuccio resta, ma prima viene il
+                # consiglio, che l'interfaccia mostra solo i primi 200 caratteri
+                disco = cp.leggi_disco(cp.tracce(pdf))
+                if disco is not None:
+                    raise ValueError("Non si risolve come astuccio, e ha un disco "
+                                     "di %.0f mm: se e' il lid di un cono, "
+                                     "dichiara 2 pezzi e carica anche il PDF del "
+                                     "cono. (astuccio: %s)"
+                                     % (2 * disco.r_taglio, e)) from e
                 raise
     # nel verso della grafica, come la costruzione; e se fallisce anche il
     # ripiego, l'errore va al client
@@ -1739,6 +1856,10 @@ class Handler(BaseHTTPRequestHandler):
                                                "per pezzo"
                                           % (pezzi, "pezzo" if pezzi == 1
                                              else "pezzi", len(pdfs)))
+                try:
+                    carta = spessore_carta(opts.get("spessore"))
+                except ValueError as e:
+                    return self._send(400, str(e))
                 # (`coppa` resta per chi chiama l'API: dalla pagina la coppa
                 # e' un cartotecnico in due pezzi)
                 if len(pdfs) > 1 and kind not in ("coppa", "carton"):
@@ -1791,14 +1912,16 @@ class Handler(BaseHTTPRequestHandler):
                         col_riq = colata_da_agente(opts.get("params"))
                         if info["kind"] == "coppa":
                             avvisi = build_coppa(pdfs, out, q, aree,
-                                                 dichiarato=kind or "coppa")
+                                                 dichiarato=kind or "coppa",
+                                                 carta=carta)
                         elif info["kind"] == "vassoio":
                             avvisi = build_vassoio(pdf, out, q, aree, col_riq)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
                             # variabile che su questo ramo non esisteva.
-                            avvisi = build_carton(pdf, out, q, aree, col_riq)
+                            avvisi = build_carton(pdf, out, q, aree, col_riq,
+                                                  carta=carta)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":

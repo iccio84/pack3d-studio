@@ -175,6 +175,9 @@
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
   #go, #avanti{width:100%;max-width:300px;margin:6px auto 0;display:block}
+  #spessore{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
+    background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
   .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:10px;
         color:var(--muted-foreground)}
 
@@ -231,12 +234,21 @@
   </div>
 
   <div id="pezzi" class="pannello">
-    <span class="tit">Di quanti pezzi &egrave; fatto il pack</span>
+    <span class="tit">Di quanti pezzi &egrave; fatto il pack, e di che carta</span>
     <div class="griglia">
     <div class="fld">
       <label for="npezzi">Pezzi del pack cartotecnico &mdash; un PDF per pezzo</label>
       <input id="npezzi" type="number" min="1" max="8" step="1" placeholder="digita il numero">
-      <p class="note">Un astuccio &egrave; un pezzo solo. La coppa col tappo ne ha due, lo sleeve e il tappo, ognuno nel suo PDF. Se hai caricato meno PDF dei pezzi, qui carichi gli altri.</p>
+      <p class="note">Un astuccio &egrave; un pezzo solo. La coppa col tappo ne ha due, lo sleeve e il tappo, e il cono gelato col lid anche: ognuno nel suo PDF. Se hai caricato meno PDF dei pezzi, qui carichi gli altri.</p>
+    </div>
+    <div class="fld">
+      <label>Spessore della carta <b id="spessoreval">scegli 1, 2 o 3</b></label>
+      <div id="spessore" role="group" aria-label="Spessore della carta">
+        <button type="button" data-s="1" aria-pressed="false">1 &middot; carta</button>
+        <button type="button" data-s="2" aria-pressed="false">2 &middot; cartoncino</button>
+        <button type="button" data-s="3" aria-pressed="false">3 &middot; cartoncino spesso</button>
+      </div>
+      <p class="note">1 = poco pi&ugrave; spesso di un foglio di carta, ~0,1 mm, come il cono gelato &middot; 2 = il cartoncino di astucci e coppe, ~0,4 mm &middot; 3 = cartoncino spesso, ~0,7 mm. Lo spessore fa le coste, il rovescio e il sormonto del modello.</p>
     </div>
     </div>
     <button id="avanti" class="primary">Continua</button>
@@ -483,6 +495,12 @@ const packtype = document.getElementById('packtype');
 const pezziEl = document.getElementById('pezzi');
 const npezzi = document.getElementById('npezzi');
 const avanti = document.getElementById('avanti');
+const spessoreEl = document.getElementById('spessore');
+const spessoreVal = document.getElementById('spessoreval');
+const NOMI_SPESSORE = {1: 'carta', 2: 'cartoncino', 3: 'cartoncino spesso'};
+// lo spessore della carta dichiarato nel pannello dei pezzi, 0 finche' non si
+// sceglie: come i pezzi si dichiara, non si indovina
+let spessoreScelto = 0;
 const dlBtn = document.getElementById('download');
 const upBtn = document.getElementById('upload');
 const annBtn = document.getElementById('annulla');
@@ -746,9 +764,10 @@ async function withKind(kind){
     // il risolutore deve sapere se il pack ne ha uno o piu' d'uno.
     packtype.classList.remove('on');
     npezzi.value = '';
+    scegliSpessore(0);
     pezziEl.classList.add('on');
     tastoAvanti();
-    setStatus('Cartotecnico: digita di quanti pezzi e\' fatto il pack','');
+    setStatus('Cartotecnico: digita di quanti pezzi e\' fatto il pack e scegli lo spessore della carta','');
     return;
   }
   if (pending.bufs.length > 1){
@@ -757,6 +776,14 @@ async function withKind(kind){
   }
   packtype.classList.remove('on');
   await procedi(kind, {});
+}
+
+/** Lo spessore della carta: 1, 2 o 3, o 0 per nessuno. */
+function scegliSpessore(n){
+  spessoreScelto = n;
+  spessoreEl.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(Number(b.dataset.s) === n)));
+  spessoreVal.textContent = n ? n + ' \u00b7 ' + NOMI_SPESSORE[n] : 'scegli 1, 2 o 3';
 }
 
 /** Il numero di pezzi digitato, o 0 se non e' un numero da 1 a MAX_PEZZI. */
@@ -795,9 +822,13 @@ async function pezziAvanti(apri){
     if (apri) document.getElementById('file').click();
     return;
   }
+  if (!spessoreScelto){
+    setStatus('Scegli lo spessore della carta: 1 carta, 2 cartoncino, 3 cartoncino spesso','err');
+    return;
+  }
   attesiPezzi = 0;
   pezziEl.classList.remove('on');
-  await procedi('carton', {pezzi: n});
+  await procedi('carton', {pezzi: n, spessore: spessoreScelto});
 }
 
 /** I PDF che mancavano ai pezzi del cartotecnico: si aggiungono a quelli che ci sono. */
@@ -884,6 +915,9 @@ cercaBackend();
 document.getElementById('upload').onclick = () => document.getElementById('file').click();
 document.getElementById('file').onchange = e => { ricevi(e.target.files); e.target.value=''; };
 avanti.onclick = () => pezziAvanti(true);
+spessoreEl.querySelectorAll('button').forEach(b => {
+  b.onclick = () => scegliSpessore(Number(b.dataset.s));
+});
 npezzi.oninput = tastoAvanti;
 npezzi.onkeydown = e => { if (e.key === 'Enter') pezziAvanti(true); };
 document.querySelectorAll('#packtype button').forEach(b => {

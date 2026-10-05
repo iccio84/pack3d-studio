@@ -52,6 +52,16 @@ scalata sui cerchi del fondo e del corpo che il foglio disegna in grande e in
 piccolo, la grafica dallo steso. Le verifiche "sormonto", "cono" e "tappo"
 devono dire "torna" e "calza"; un NON TORNA e' un difetto da riportare.
 
+Il CONO GELATO COL LID (come il Camy Apolo) e' anche lui un Cartotecnico in due
+pezzi: lo steso del cono - un settore pieno con l'apice sul foglio, il DT
+sulla lastra TROQUEL - e il lid, un disco. La forma viene dal disegno 1:1
+accanto allo steso, la grafica dallo steso; il lato che resta sopra lo dice la
+fascia senza inchiostro della colla, e la fascia sopra l'ultimo taglio e' il
+risvolto che piega sul lid e lo tiene chiuso. Anche qui lo misura il codice:
+le verifiche "sormonto", "colla", "cono", "bocca" e "risvolto" devono dire
+"torna". Lo spessore della carta lo dichiara l'utente, da 1 a 3: non si
+deduce.
+
 Metodo:
 - Si lavora sulla PRIMA PAGINA sola. Un PDF su piu' pagine e' quasi sempre lo
   stesso pack ripetuto per lingua; gli strumenti guardano gia' solo la prima,
