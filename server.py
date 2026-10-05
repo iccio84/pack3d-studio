@@ -1464,6 +1464,12 @@ def dichiarazione(kind, pezzi):
     nome = NOMI_KIND.get(kind, "non dichiarata")
     return nome + (" in %d pezzi" % pezzi if pezzi > 1 else "")
 
+
+# Le scelte dell'utente che cambiano il modello: vanno in coda col caso, e chi
+# lo riprende lo ricostruisce con le stesse (vedi prove/parco.py e CODA.md).
+OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
+                "spessore", "quality")
+
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
 # astucci e delle coppe; 3 un cartoncino spesso. Senza dichiarazione ogni
@@ -2027,7 +2033,11 @@ class Handler(BaseHTTPRequestHandler):
                         t2 = traccia("controllo")
                         ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
                                    riconosciuto=info.get("title") or info["kind"],
-                                   avvisi=list(meta), nomi=nomi)
+                                   avvisi=list(meta), nomi=nomi,
+                                   # col caso in coda, perche' chi lo
+                                   # riprende lo ricostruisca uguale
+                                   opzioni={k: opts[k] for k in OPZIONI_CASO
+                                            if k in opts})
                         verdetto = controllo.giudica(quadro, ctx)
                         traccia("controllo", t2, verdetto["esito"])
                         riga = None

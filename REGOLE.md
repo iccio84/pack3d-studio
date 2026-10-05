@@ -1997,6 +1997,26 @@ costruirlo.
   all'utente di mandare il PDF citando il codice.
 - Il caricamento gira in un thread a parte: la risposta all'utente non aspetta
   l'upload dei PDF.
+- Col caso vanno le **opzioni** che l'utente ha scelto (`OPZIONI_CASO`:
+  tipologia, dentini, rigonfiamento, pinne, scatola, pezzi, spessore), in
+  `contesto.opzioni` di `verdetto.json`: chi lo riprende lo ricostruisce
+  uguale. Il controllo dell'AI non le legge.
+
+### Chi lavora la coda, e il parco che la protegge
+
+Ogni mattina una sessione automatica di Claude Code prende i casi aperti e li
+lavora come e' stato lavorato il primo, il Yogurette: riproduce, trova la
+causa, scrive una regola generale, la prova su **tutto il parco** prima e dopo,
+e se tutto torna unisce da sola - quindi pubblica sullo Space. Il metodo, e le
+condizioni per unire senza chiedere, sono in CODA.md.
+
+Il **parco** sono i casi di prova: 26 PDF, 25 casi di tutte le famiglie,
+nella cartella `parco/` del repository privato dei casi - sono artwork dei
+clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li
+chiede la pagina, con un server del codice da provare, e confronta due
+costruzioni al byte, con le viste affiancate dei modelli che cambiano. Ogni
+caso risolto dalla coda entra nel parco: da quel momento nessuna modifica puo'
+romperlo senza che si veda.
 
 ## Quando la pulizia deterministica non basta
 
