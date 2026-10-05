@@ -185,6 +185,8 @@ def _affianca(a, b, nome, uscita):
     for cartella in (a, b):
         f = os.path.join(cartella, nome + "_viste.png")
         ims.append(Image.open(f).convert("RGB") if os.path.exists(f) else None)
+    if all(i is None for i in ims):
+        return                      # nessuna delle due si e' costruita
     w = max(i.width for i in ims if i is not None)
     h = sum((i.height if i is not None else 60) for i in ims) + 2 * 28
     out = Image.new("RGB", (w, h), "white")
@@ -207,12 +209,12 @@ def confronta(args):
     a, b = _esiti(args.prima), _esiti(args.dopo)
     uscita = args.immagini or os.path.join(args.dopo, "confronto")
     os.makedirs(uscita, exist_ok=True)
-    uguali, cambiati = [], []
+    uguali, cambiati, spaiati = [], [], []
     for nome in sorted(set(a) | set(b)):
         ea, eb = a.get(nome), b.get(nome)
         if ea is None or eb is None:
             print("SOLO IN %s  %s" % ("DOPO" if ea is None else "PRIMA", nome))
-            cambiati.append(nome)
+            spaiati.append(nome)
             continue
         if ea["stato"] == eb["stato"] and ea["md5"] == eb["md5"]:
             uguali.append(nome)
@@ -228,8 +230,9 @@ def confronta(args):
         if not tolti and not nuovi:
             print("    avvisi identici: cambia solo il modello (geometria o texture)")
         _affianca(args.prima, args.dopo, nome, uscita)
-    print("\n%d uguali al byte, %d cambiati%s" % (
+    print("\n%d uguali al byte, %d cambiati%s%s" % (
         len(uguali), len(cambiati),
+        (", %d costruiti da una parte sola" % len(spaiati)) if spaiati else "",
         (": le viste affiancate sono in %s" % uscita) if cambiati else ""))
 
 
