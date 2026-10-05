@@ -16,7 +16,7 @@ import json
 import math
 import os
 import sys
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 import tempfile
 import time
 import traceback
@@ -35,8 +35,8 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import (artwork, dieline as dl, folding, exporters, nero,
-                    plancia, vassoio, verifica)
+from pack3d import (artwork, coda, controllo, dieline as dl, folding,
+                    exporters, nero, plancia, vassoio, verifica)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -1454,6 +1454,15 @@ def normalizza_kind(kind):
 
 
 KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa")
+# come l'utente ha chiamato il pack, per il controllo dell'AI
+NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
+             "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato"}
+
+
+def dichiarazione(kind, pezzi):
+    """La tipologia dichiarata, a parole: "cartotecnico in 2 pezzi"."""
+    nome = NOMI_KIND.get(kind, "non dichiarata")
+    return nome + (" in %d pezzi" % pezzi if pezzi > 1 else "")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -1756,11 +1765,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
         # senza questo il browser nasconde l'header alla pagina, su altra origine
-        self.send_header("Access-Control-Expose-Headers", "X-Pack3d-Meta")
+        self.send_header("Access-Control-Expose-Headers",
+                         "X-Pack3d-Meta, X-Pack3d-Controllo")
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _send(self, code, body, ctype="application/json", filename=None,
-              meta=None):
+              meta=None, controllo=None):
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
@@ -1771,6 +1781,9 @@ class Handler(BaseHTTPRequestHandler):
             # percent-encoded: un header HTTP e' latin-1 e non tollera accenti
             self.send_header("X-Pack3d-Meta", quote(
                 json.dumps(meta, ensure_ascii=False)))
+        if controllo:
+            self.send_header("X-Pack3d-Controllo", quote(
+                json.dumps(controllo, ensure_ascii=False)))
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -1830,6 +1843,11 @@ class Handler(BaseHTTPRequestHandler):
                     with open(pdfs[-1], "wb") as fh:
                         fh.write(blocco)
                 pdf = pdfs[0]
+                # i nomi dei file servono al controllo e alla coda dei casi
+                # nuovi; arrivano percent-encoded, perche' un header HTTP e'
+                # latin-1 e un nome di file puo' essere qualsiasi cosa
+                nomi = [unquote(str(n))[:200] for n in (opts.get("nomi") or [])][:len(pdfs)]
+                nomi += ["artwork%d.pdf" % (k + 1) for k in range(len(nomi), len(pdfs))]
                 kind = normalizza_kind(opts.get("kind") or None)
                 if kind == "altro":
                     return self._send(400, "Tipologia non ancora supportata")
@@ -1928,6 +1946,27 @@ class Handler(BaseHTTPRequestHandler):
                                 # "Scegli tu": il livello lo decide l'agente in
                                 # /api/analyze-ai e torna qui dentro params
                                 scelto = livello_da_agente(opts.get("params"))
+                                perche = "nessuna analisi AI allegata alla richiesta"
+                                if scelto is None and controllo.attivo():
+                                    # La pagina non chiama /api/analyze-ai: la
+                                    # scelta la fa qui Claude guardando
+                                    # l'artwork, con le regole di REGOLE.md.
+                                    # Si e' dentro il posto di costruzione, e
+                                    # deve essere cosi': la pagina passa da
+                                    # pdfium.
+                                    sc = controllo.rigonfiamento(pdf, nomi[0])
+                                    if "errore" in sc:
+                                        perche = "l'AI non ha risposto (%s)" % sc["errore"]
+                                    else:
+                                        scelto = sc["livello"]
+                                        avvisi_ingresso.append(
+                                            controllo.dichiarazione(sc))
+                                        if sc["avvolge_scatola"] and not opts.get("scatola"):
+                                            opts["scatola"] = True
+                                            avvisi_ingresso.append(
+                                                "il film avvolge una scatola: "
+                                                "l'ha visto l'AI, la casella "
+                                                "non era spuntata")
                                 if scelto is None:
                                     # Nessuna analisi allegata: gonfiore() cade
                                     # su 5 in silenzio mentre l'interfaccia ha
@@ -1937,8 +1976,7 @@ class Handler(BaseHTTPRequestHandler):
                                     # questo progetto possa avere.
                                     avvisi_ingresso.append(
                                         "RIGONFIAMENTO NON SCELTO DA NESSUNO: "
-                                        "nessuna analisi AI allegata alla "
-                                        "richiesta, uso il livello medio 5")
+                                        "%s, uso il livello medio 5" % perche)
                                     soft = 5
                                 else:
                                     soft = scelto
@@ -1956,16 +1994,48 @@ class Handler(BaseHTTPRequestHandler):
                                 scatola, pinne, aree, col_riq)
                         traccia("costruzione", t1,
                                 "%d kB" % (os.path.getsize(out) // 1024))
-                        traccia("totale", t0)
                         with open(out, "rb") as fh:
-                            # gli avvisi della costruzione viaggiano in un
-                            # header: il corpo e' il GLB. Finivano nel nulla,
-                            # e con loro ogni diagnostica.
-                            return self._send(200, fh.read(), "model/gltf-binary",
-                                              filename="modello.glb",
-                                              meta=avvisi_ingresso + list(avvisi))
+                            glb = fh.read()
+                        meta = avvisi_ingresso + list(avvisi)
+                        # Le immagini del controllo si fanno qui dentro: le
+                        # pagine passano da pdfium, che non si chiama da due
+                        # thread. La risposta di Claude invece si aspetta
+                        # fuori, a posto restituito: e' solo attesa di rete, e
+                        # chi viene dopo intanto costruisce.
+                        quadro = None
+                        if controllo.attivo():
+                            try:
+                                quadro = controllo.prepara(pdfs, out)
+                            except Exception as e:
+                                traceback.print_exc()
+                                meta.append("controllo AI non fatto: le viste del "
+                                            "modello non sono riuscite (%s)" % e)
+                        traccia("totale", t0)
                     finally:
                         _slots.release()
+                    verdetto = None
+                    if quadro is not None:
+                        t2 = traccia("controllo")
+                        ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                                   riconosciuto=info.get("title") or info["kind"],
+                                   avvisi=list(meta), nomi=nomi)
+                        verdetto = controllo.giudica(quadro, ctx)
+                        if verdetto["esito"] == "sbagliato":
+                            verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                                blocchi, nomi, verdetto, quadro["viste"], ctx)
+                        traccia("controllo", t2, verdetto["esito"])
+                        meta.insert(0, controllo.avviso(verdetto))
+                    elif controllo.manca_la_chiave():
+                        # spento perche' manca la chiave, non perche' qualcuno
+                        # l'ha spento apposta: chi gestisce lo Space lo deve sapere
+                        meta.append("controllo AI spento: manca la chiave "
+                                    "ANTHROPIC_API_KEY fra i Secrets dello Space")
+                    # gli avvisi della costruzione viaggiano in un header: il
+                    # corpo e' il GLB. Finivano nel nulla, e con loro ogni
+                    # diagnostica. Il verdetto del controllo in un altro.
+                    return self._send(200, glb, "model/gltf-binary",
+                                      filename="modello.glb", meta=meta,
+                                      controllo=verdetto)
             return self._send(404, "endpoint sconosciuto")
         except Exception as e:
             traceback.print_exc()

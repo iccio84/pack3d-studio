@@ -15,8 +15,12 @@ pdfplumber==0.11.10
 pypdf==6.19.0
 pypdfium2==5.13.0
 
-# Questi due non toccano la geometria: servono solo all'agente di
-# /api/analyze-ai. Restano aperti perche' qui non sono installati e fissarli a
-# un numero che non ho provato sarebbe peggio che lasciarli liberi.
-anthropic>=0.40
+# Questi due non toccano la geometria. anthropic serve al controllo dell'AI
+# su ogni costruzione e all'agente di /api/analyze-ai: e' fissato alla
+# versione su cui il controllo e' stato provato, perche' usa la risposta in
+# JSON vincolato (output_config), che le versioni vecchie non conoscono.
+# openai serve solo al piano B dell'agente e resta aperto: qui non e'
+# installato, e fissarlo a un numero che non ho provato sarebbe peggio che
+# lasciarlo libero.
+anthropic==1.11.0
 openai>=1.60
