@@ -3,10 +3,15 @@ name: Sync to Hugging Face Spaces
 on:
   push:
     branches: [ main ]
+  # per rilanciarlo a mano, dal tasto "Run workflow" della pagina Actions
+  workflow_dispatch:
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    # un'immagine con nome e numero: il 5 ottobre 2026 le macchine di GitHub
+    # per ubuntu-latest non arrivavano ("not acquired by Runner of type
+    # hosted"), e tre pubblicazioni di fila sono state annullate
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
