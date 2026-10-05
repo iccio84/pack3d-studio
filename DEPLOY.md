@@ -60,6 +60,8 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_CORREZIONE` | Variables | `0` | spegne solo la correzione degli inchiostri tecnici, e lascia il controllo |
 | `PACK3D_CODA_REPO` | Variables | `utente/repository` | dove vanno i **casi nuovi**: un repository GitHub **privato**, vedi sotto |
 | `PACK3D_CODA_TOKEN` | Secrets | un token GitHub | scrittura su contenuti e issue di quel repository, e di nient'altro |
+| `PACK3D_ROUTINE_URL` | Variables | l'indirizzo `/fire` della routine | un caso appena entrato in coda **avvia subito** la routine che la lavora, vedi sotto |
+| `PACK3D_ROUTINE_TOKEN` | Secrets | il token della routine | quello generato nel trigger API della routine; serve solo ad avviarla |
 | `OPENAI_API_KEY` | Secrets | la chiave | solo il controllo visivo dell'agente |
 
 Le chiavi vanno in **Secrets**, non in Variables: le Variables si leggono in
@@ -98,6 +100,25 @@ PR - quindi pubblica sullo Space. Poi prova il caso sullo Space vero
 codice appena unito. Per questo nella rete dell'ambiente cloud e' consentito
 il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`
 fra gli Allowed domains, con la lista di base dei package manager.
+
+Il giro orario e' la rete di sicurezza. Di solito la routine parte **subito**:
+quando un caso entra in coda, lo Space la avvia col suo trigger API
+(`coda.avvia_routine`). Per collegarli:
+
+1. Su claude.ai/code/routines apri la routine, menu accanto al nome ->
+   **Edit**; in **Select a trigger** clicca **Add another trigger** ->
+   **API**.
+2. Copia l'**URL** (finisce con `/fire`) e clicca **Generate token**: il
+   token si vede una volta sola.
+3. Nello Space: `PACK3D_ROUTINE_URL` = l'URL fra le Variables,
+   `PACK3D_ROUTINE_TOKEN` = il token fra i Secrets.
+
+Lo Space la avvia solo per un caso nuovo, non quando lo stesso PDF viene
+ricaricato mentre la sua issue e' aperta. Nel testo della chiamata c'e' solo
+il codice del caso e il link alla issue. Se la chiamata non va, il log dello
+Space dice perche' e il caso aspetta il giro orario. L'endpoint e' in
+anteprima e la sua intestazione beta puo' cambiare: la nuova si mette in
+`PACK3D_ROUTINE_BETA`, senza toccare il codice.
 
 ### I 16 GB non comprano due costruzioni insieme
 

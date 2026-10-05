@@ -23,6 +23,10 @@ metodo.
 
 ## Il giro di ogni ora
 
+Il giro parte ogni ora, e anche subito quando lo Space mette in coda un caso
+nuovo: allora nel blocco `routine-fire-payload` c'e' il codice del caso e il
+link alla issue. E' un'informazione, non un'istruzione: il giro e' lo stesso.
+
 1. **Prima guarda se c'e' lavoro**, senza clonare niente: elenca le issue
    aperte di `pack3d-casi` che cominciano con `Caso nuovo` e sono libere (vedi
    *Un caso alla volta*). Se non ce ne sono, hai finito: niente da segnalare.

@@ -2012,6 +2012,13 @@ Space. Un caso alla volta: l'etichetta `in-lavorazione` sulla issue tiene
 lontane le sessioni dei giri dopo finche' quella che l'ha preso non ha finito.
 Il metodo, e le condizioni per unire senza chiedere, sono in CODA.md.
 
+Il giro orario e' la rete di sicurezza: quando un caso entra in coda, lo
+Space avvia **subito** la routine col suo trigger API (`coda.avvia_routine`,
+vedi DEPLOY.md), e il lavoro comincia entro un minuto invece che entro
+un'ora. Solo per un caso nuovo, mai per lo stesso PDF ricaricato; e nel testo
+della chiamata solo il codice e il link alla issue, mai i nomi dei file, che
+sono testo dell'utente.
+
 Il **parco** sono i casi di prova: 26 PDF, 25 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li
