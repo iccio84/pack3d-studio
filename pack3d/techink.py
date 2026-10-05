@@ -60,7 +60,7 @@ FRASI_TECNICHE = (
     "crease", "cordonatura", "creasing",
     "perf", "glue", "gluelap", "coldseal", "cold seal",
     "opaque white", "underprint",
-    "technical", "tecnico", "stanz", "fustella",
+    "technical", "tecnico", "stanz", "fustella", "troquel",
     "braille", "registration", "reg mark", "eyemark", "eye mark",
     "legend", "dimension", "infopanel", "info panel", "job ticket",
     "print free", "printfree", "ink free", "inkfree",
@@ -255,7 +255,9 @@ DISEGNO_FRASI = (
     "technical", "tecnico", "dieline", "die line", "die-line",
     "cutcontour", "cut contour", "thru-cut", "thrucut", "kiss cut", "kisscut",
     "cutter", "cutting", "crease", "creasing", "cordonatura", "stanz",
-    "fustella", "dimension", "legend",
+    # "troquel" e' la fustella in spagnolo: la lastra del DT del cono Camy
+    # Apolo, e anche del suo lid
+    "fustella", "troquel", "dimension", "legend",
 )
 
 
