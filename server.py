@@ -2056,7 +2056,10 @@ class Handler(BaseHTTPRequestHandler):
                                 glb, avvisi_corr, quadro, verdetto, ctx = nuovo
                                 meta = avvisi_ingresso + list(avvisi_corr)
                             ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
-                        if verdetto["esito"] == "sbagliato":
+                        # anche il dubbio: il modello all'utente arriva lo
+                        # stesso, ma qualcuno deve guardarlo, e se ha un
+                        # difetto vero correggerlo come un caso respinto
+                        if verdetto["esito"] in ("sbagliato", "dubbio"):
                             verdetto["codice"], verdetto["in_coda"] = coda.metti(
                                 blocchi, nomi, verdetto, quadro["viste"], ctx)
                         if riga:

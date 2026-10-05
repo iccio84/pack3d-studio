@@ -89,6 +89,16 @@
   #caso .riga{max-width:560px;color:var(--foreground)}
   #caso .riga:empty{display:none}
   #caso .dove{font-weight:600;margin-top:6px}
+  /* Il dubbio del controllo va in coda come un caso respinto, ma il modello
+     si vede: l'avviso sta in alto, sopra il modello, senza prendere il
+     puntatore, fino alla costruzione dopo. */
+  #verifica{position:absolute;top:44px;left:50%;transform:translateX(-50%);
+            width:min(640px,calc(100% - 36px));display:none;z-index:2;
+            pointer-events:none;text-align:center;font-size:12px;line-height:1.45;
+            color:var(--foreground);background:var(--surface);border-radius:12px;
+            border:1px solid color-mix(in oklab,var(--warning) 55%,transparent);
+            padding:8px 12px}
+  #verifica.on{display:block}
   #caso .codice{max-width:560px;font-size:11px}
   #caso button{pointer-events:auto;margin-top:10px}
   /* i cartellini della costruzione parlano di un modello che non si vede: con
@@ -248,6 +258,7 @@
     <div class="codice" id="caso-codice"></div>
     <button id="caso-mostra" type="button">Mostra comunque il modello</button>
   </div>
+  <div id="verifica" role="status"></div>
   <div id="meta"></div>
   <div id="status">Nessun modello caricato</div>
 </div>
@@ -767,6 +778,7 @@ async function build(buf, name, opts){
   glbBlob = blob;
   show(await glbBlob.arrayBuffer());
   setFase('pronto');
+  if (verdetto && verdetto.esito === 'dubbio' && verdetto.in_coda) mostraVerifica(verdetto);
   return verdetto;
 }
 
@@ -820,7 +832,20 @@ function mostraCaso(v, blob){
   casoEl.classList.add('on');
 }
 
+// Un dubbio in coda: il modello resta, e sopra c'e' scritto che qualcuno lo
+// riguarda e dove arriva se va corretto.
+const verificaEl = document.getElementById('verifica');
+
+function mostraVerifica(v){
+  verificaEl.textContent = 'Il controllo AI ha un dubbio, e il caso è andato in verifica (codice '
+    + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
+    + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
+    + '», col nome «' + nomeInGlam() + '».';
+  verificaEl.classList.add('on');
+}
+
 function nascondiCaso(){
+  verificaEl.classList.remove('on');
   if (!casoEl.classList.contains('on')) return;
   casoEl.classList.remove('on');
   respinto = null;

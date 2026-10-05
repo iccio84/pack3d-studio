@@ -12,7 +12,8 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
 - **I casi e il parco**: `iccio84/pack3d-casi`, **privato**.
   - `casi/<data>_<codice>/`: i PDF del caso, `verdetto.json` (il giudizio
     dell'AI, gli avvisi della costruzione e le opzioni scelte dall'utente in
-    `contesto.opzioni`) e `viste_modello.jpg` (il modello respinto).
+    `contesto.opzioni`) e `viste_modello.jpg` (il modello respinto, o
+    quello su cui il controllo ha avuto un dubbio).
   - Una **issue aperta per ogni caso**, titolo `Caso nuovo <codice>: <file>`.
   - `parco/`: i PDF di prova (`parco/pdf/`), il manifesto `parco/parco.json`
     con le opzioni e com'e' giusto ogni modello, e in `parco/riferimento/` le
@@ -45,7 +46,8 @@ dallo Space avesse perso.
 3. Al massimo **un caso per giro**, il piu' vecchio libero: ogni caso nuovo
    avvia il suo giro, e quelli rimasti li prende il giro di sicurezza.
 4. **Per il caso:**
-   1. **Leggi** `verdetto.json` - motivo, difetti, avvisi, opzioni - e guarda
+   1. **Leggi** `verdetto.json` - esito, motivo, difetti, avvisi, opzioni;
+      se l'esito e' `dubbio`, vedi *Un caso col dubbio* - e guarda
       `viste_modello.jpg` accanto al PDF (rendi la pagina: `pack3d.vista.pagina`).
    2. **Mettilo nel parco**: copia i PDF in `parco/pdf/`, aggiungi la voce a
       `parco/parco.json` con le opzioni del caso (`contesto.opzioni`; se
@@ -141,6 +143,30 @@ Se anche **una sola** cosa e' falsa o dubbia, **non si unisce**: la PR resta
 aperta come bozza, e sulla issue va un commento con la diagnosi, cosa e'
 cambiato sul parco e perche' non si e' unito. La issue resta aperta.
 
+## Un caso col dubbio
+
+In coda vanno anche i modelli su cui il controllo ha un **dubbio**
+(`esito: dubbio`): l'utente il modello l'ha avuto, con sopra l'avviso che il
+caso e' in verifica e che, se va corretto, quello giusto arrivera' in Glam.
+Prima di toccare il codice decidi se il dubbio e' fondato, guardando le viste
+accanto al PDF e rileggendo i difetti:
+
+- **Fondato** - il modello ha davvero il difetto: e' un caso come gli altri,
+  con la stessa strada e le stesse condizioni per unire. Sullo Space deve
+  tornare "ok": un altro "dubbio" non basta per chiudere. Il modello corretto
+  va in Glam.
+- **Infondato** - il modello e' giusto, e quello che il controllo ha visto
+  c'e' davvero nel PDF (un segno stampato, una fascia, un colore): il codice
+  che costruisce non si tocca, e in Glam non va niente, perche' l'utente ha
+  gia' il modello giusto. Scrivi sulla issue perche' il modello e' giusto,
+  con quello che hai visto nel PDF, e chiudila come «not planned». Se lo
+  stesso dubbio puo' tornare su altri pack, proponi la regola per il
+  controllo - la lista di quello che non e' un difetto, in
+  `pack3d/controllo.py` - in una PR **in bozza**, e scrivilo nel commento:
+  quello che il controllo considera un difetto non si cambia mai da soli,
+  perche' una regola sbagliata lo renderebbe cieco proprio sui difetti veri.
+- **Non sai dire**: come un caso che non si risolve, qui sotto.
+
 ## Un caso che non si risolve
 
 Succede: un artwork che il disegno non spiega, una tipologia che il codice non
@@ -160,4 +186,6 @@ togliere l'etichetta.
 - Mai togliere o indebolire una verifica, un avviso o un caso del parco per
   far passare una correzione.
 - Mai unire con il parco che peggiora.
+- Mai unire da soli una modifica a quello che il controllo dell'AI considera
+  un difetto: si propone in bozza.
 - Mai usare token dello Space: lo Space si aggiorna solo dal workflow.
