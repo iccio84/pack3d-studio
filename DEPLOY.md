@@ -52,11 +52,40 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | nome | dove | valore | a cosa serve |
 |---|---|---|---|
 | `PACK3D_MAX_JOBS` | Variables | `1` | e' gia' il default dell'immagine. **Non alzarlo**, vedi sotto |
-| `ANTHROPIC_API_KEY` | Secrets | la chiave | solo `/api/analyze-ai`, l'agente che legge la fustella |
+| `ANTHROPIC_API_KEY` | Secrets | la chiave | il **controllo dell'AI** su ogni costruzione, il rigonfiamento "Scegli tu", e `/api/analyze-ai`. Senza, si costruisce come prima e un cartellino dice che il controllo e' spento |
+| `PACK3D_MODEL` | Variables | il modello di Claude | quello dell'agente e del controllo; senza, quello scritto in `agent.py` |
+| `PACK3D_MODEL_CONTROLLO` | Variables | un modello di Claude | solo se il controllo deve usare un modello diverso dall'agente |
+| `PACK3D_EFFORT_CONTROLLO` | Variables | `low`, `medium`, `high` | quanto ragiona il controllo; `medium` se manca. Vuoto per non mandarlo, coi modelli che non lo accettano |
+| `PACK3D_CONTROLLO` | Variables | `0` | spegne il controllo apposta, senza togliere la chiave |
+| `PACK3D_CODA_REPO` | Variables | `utente/repository` | dove vanno i **casi nuovi**: un repository GitHub **privato**, vedi sotto |
+| `PACK3D_CODA_TOKEN` | Secrets | un token GitHub | scrittura su contenuti e issue di quel repository, e di nient'altro |
 | `OPENAI_API_KEY` | Secrets | la chiave | solo il controllo visivo dell'agente |
 
 Le chiavi vanno in **Secrets**, non in Variables: le Variables si leggono in
 chiaro dalla pagina dello Space.
+
+### Il controllo dell'AI e la coda dei casi nuovi
+
+Con `ANTHROPIC_API_KEY` ogni costruzione finisce con una chiamata a Claude:
+le prime pagine dei PDF e quattro viste del modello, e Claude dice se e' il
+pack giusto (vedi REGOLE.md, *Il controllo dell'AI prima della consegna*).
+Costa qualche centesimo di dollaro a costruzione, a seconda del modello; con
+"Scegli tu" sul flowpack le chiamate sono due. La costruzione si allunga dei
+secondi della risposta, ma il posto di costruzione si libera prima: il
+prossimo utente non aspetta Claude.
+
+I modelli respinti vanno in coda solo se c'e' un repository **privato**:
+
+1. Su GitHub crea un repository **privato**, per esempio `pack3d-casi`.
+2. Crea un token *fine-grained* (Settings -> Developer settings -> Personal
+   access tokens) con accesso **solo** a quel repository, e i permessi
+   *Contents: Read and write* e *Issues: Read and write*.
+3. Nello Space: `PACK3D_CODA_REPO` = `tuo-utente/pack3d-casi` fra le
+   Variables, `PACK3D_CODA_TOKEN` = il token fra i Secrets.
+
+Ogni caso respinto diventa una cartella `casi/<data>_<codice>/` coi PDF, le
+viste e la diagnosi, piu' una issue. Se il repository non e' privato non si
+carica niente, e il log lo dice.
 
 ### I 16 GB non comprano due costruzioni insieme
 

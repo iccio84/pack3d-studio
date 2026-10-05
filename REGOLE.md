@@ -413,7 +413,7 @@ allora si gira la scatola intera, guscio, interno e coste
 | Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
 | Solo cartotecnico: chiedere **di quanti pezzi** e' fatto il pack, digitato e senza valore proposto. **Ogni pezzo e' un PDF**: se ne sono arrivati meno si chiedono gli altri, se di piu' ci si ferma. Vedi *Il cartotecnico dice di quanti pezzi e' fatto*. | pannello `pezzi`, `pezzi` nell'intestazione; `server.in_piu_pezzi` |
 | Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
-| Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". | `gonfiore()` in `server.py` |
+| Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". Con "Scegli tu" il livello lo sceglie Claude guardando l'artwork, con le regole qui sotto; senza chiave API si ripiega sul 5 e lo si grida. | `gonfiore()` in `server.py`, `controllo.rigonfiamento` |
 | Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
 | Solo flowpack: chiedere se il **film avvolge una scatola**. | casella `scatola`, `parametri_costruzione.avvolge_scatola` |
 
@@ -1865,6 +1865,75 @@ questo progetto possa avere.
 Sul flowpack ce n'e' una terza, dopo: **il film sulle testate**, quanto la
 grafica si stira su pinne e spalle. Sta con la regola che la chiede, in *La
 grafica sulle pinne: il film non si allunga*.
+
+## Il controllo dell'AI prima della consegna
+
+Le verifiche qui sopra controllano un modello **dentro la sua famiglia**: le
+UV sul DT, il fronte sul fronte. Non possono accorgersi che la famiglia e'
+sbagliata, perche' i loro conti tornano anche sul pack sbagliato. Il cono Camy
+caricato in un pezzo usciva come un astuccio di 18,7 x 5,9 x 2,5 mm, con un
+pezzo del bollino Rainforest come grafica, e nessuna verifica gridava. Su un
+pack che il codice non conosce succede quasi sempre: il solutore costruisce la
+cosa piu' vicina che sa fare e la consegna come buona.
+
+Quindi, prima di consegnare, **Claude guarda il modello accanto all'artwork**,
+come lo guarderebbe una persona:
+
+- `vista.py` rende il GLB scritto su disco da quattro lati - fronte, tre
+  quarti, retro, dall'alto - senza GPU, scartando le facce posteriori come il
+  visore della pagina. Si guarda il file consegnato, non le strutture di chi
+  l'ha costruito: un difetto dell'export si deve vedere.
+- `controllo.giudica` manda in **una chiamata** le prime pagine dei PDF, le
+  quattro viste, le misure del foglio e del modello, la tipologia dichiarata e
+  riconosciuta e gli avvisi della costruzione. Torna **ok**, **dubbio** o
+  **sbagliato**, con cosa c'e' nel PDF, cosa mostra il modello e perche'.
+- Le immagini si fanno **dentro** il posto di costruzione, perche' le pagine
+  passano da pdfium (vedi *pdfium non si chiama da due thread*). La risposta di
+  Claude si aspetta **fuori**: e' solo attesa di rete, e chi viene dopo intanto
+  costruisce.
+
+Non sono difetti, e il controllo lo sa: il DT, le quote, le note e le barre
+colore che il servizio toglie; i box delle aree riservate e la tabella GDA
+lasciati vuoti; l'interno del cartone dove il pack e' aperto; le alette non
+stampate che nel pack montato stanno dentro.
+
+Cosa vede l'utente:
+
+| esito | la pagina |
+|---|---|
+| ok | il modello, e nello stato "controllato dall'AI" |
+| dubbio | il modello, e nello stato il dubbio in giallo |
+| sbagliato | **niente modello nel visore**: il riquadro "Caso nuovo" con cosa c'e' nel PDF, cosa e' uscito, perche', e il codice del caso. "Mostra comunque il modello" lo carica, con lo stato in rosso |
+| non controllato | il modello come prima, e un cartellino che dice perche' il controllo non c'e' stato |
+
+**Il controllo non rompe mai la costruzione per colpa sua.** Senza chiave, con
+la rete giu', con una risposta che non si capisce, il modello si consegna come
+prima. Senza `ANTHROPIC_API_KEY` un cartellino lo dice a ogni costruzione: chi
+gestisce lo Space lo deve sapere. Con `PACK3D_CONTROLLO=0` lo si spegne
+apposta, e allora tace.
+
+Un "sbagliato" puo' essere sbagliato lui: per questo il modello resta a un
+clic, e non si butta.
+
+### La coda dei casi nuovi
+
+Un modello respinto e' un pack che il codice non sa ancora costruire. Non
+deve sparire con la risposta: `coda.py` lo mette da parte, con i PDF, le viste
+del modello sbagliato e la diagnosi, per la sessione che insegnera' al codice a
+costruirlo.
+
+- Va **solo** in un repository GitHub **privato** (`PACK3D_CODA_REPO` e
+  `PACK3D_CODA_TOKEN`, vedi DEPLOY.md). Prima di caricare si chiede a GitHub se
+  il repository e' privato, e se non lo e' non parte niente: il repository del
+  codice e' pubblico, e un errore di configurazione non deve pubblicare un
+  artwork di un cliente.
+- Ogni caso: i file in `casi/<data>_<codice>/` e una issue col codice nel
+  titolo. Lo stesso PDF ricaricato non apre una seconda issue.
+- Il **codice** e' un'impronta dei PDF: lo stesso file da' lo stesso codice.
+  Senza coda configurata il caso resta nel log dello Space, e la pagina chiede
+  all'utente di mandare il PDF citando il codice.
+- Il caricamento gira in un thread a parte: la risposta all'utente non aspetta
+  l'upload dei PDF.
 
 ## Quando la pulizia deterministica non basta
 
@@ -3839,6 +3908,14 @@ Astucci, con la quota letta due volte che chiude il conto:
 
 ## Assunzioni non verificate
 
+- Il **controllo dell'AI** e la scelta del **rigonfiamento** sono stati
+  provati con un'API finta, che risponde come quella vera, e guardando a mano
+  le immagini che ricevono: il cono letto come astuccio, messo accanto al suo
+  artwork, si vede sbagliato a colpo d'occhio. Con una chiave vera non sono
+  ancora passati. Le prime costruzioni sullo Space vanno guardate insieme al
+  verdetto.
+- La **coda** e' stata provata con un GitHub finto: un repository privato vero
+  non l'ha ancora vista.
 - Il **cono** e' stato costruito su un file solo, il Camy Apolo. Da li'
   vengono la lettura dell'ultimo taglio come piega del **risvolto** (il DT
   lo chiama "last cutting of cone", e la fascia sopra e' larga 3,5 mm), il

@@ -26,6 +26,7 @@
     --muted:oklch(0.965 0.002 265);
     --muted-foreground:oklch(0.58 0.01 265);
     --destructive:oklch(0.577 0.245 27.325);
+    --warning:oklch(0.62 0.15 65);
     --border:oklch(0.36 0.012 265 / 12%);
     --glass-border:oklch(0.36 0.012 265 / 9%);
     --shadow-soft:0 18px 40px -28px oklch(0.36 0.012 265 / 45%);
@@ -76,6 +77,24 @@
   /* il bottone dentro #empty deve ricevere il puntatore: il riquadro non lo
      prende, se no si mangia trascinamento e rotella sul palco */
   #empty button{pointer-events:auto;margin-top:10px}
+
+  /* Il modello che il controllo dell'AI ha respinto non va nel viewer come
+     se fosse buono: al suo posto questo riquadro dice cosa c'e' nel PDF,
+     cosa e' uscito e perche', e lascia guardarlo lo stesso. */
+  #caso{position:absolute;inset:0;display:none;flex-direction:column;
+        align-items:center;justify-content:center;gap:8px;text-align:center;
+        padding:24px;color:var(--muted-foreground);pointer-events:none;z-index:2}
+  #caso.on{display:flex}
+  #caso strong{color:var(--destructive);font-weight:600;font-size:15px}
+  #caso .riga{max-width:560px;color:var(--foreground)}
+  #caso .riga:empty{display:none}
+  #caso .codice{max-width:560px;font-size:11px}
+  #caso button{pointer-events:auto;margin-top:10px}
+  /* i cartellini della costruzione parlano di un modello che non si vede: con
+     una ventina di righe coprivano il riquadro. Tornano con "Mostra comunque". */
+  #caso.on ~ #meta{display:none}
+  #status.dubbio{color:var(--warning);letter-spacing:.02em;text-transform:none;
+                 font-size:12px;font-weight:400}
 
   /* La rotella del risveglio. Il piano gratuito sospende il servizio dopo 15
      minuti, e la prima richiesta lo sveglia in decine di secondi: senza un
@@ -218,6 +237,14 @@
     <strong>Carica un artwork PDF</strong>
     <div>Il modello 3D comparirà qui. Puoi anche trascinare il file.</div>
     <button id="riprova" type="button" hidden>Riprova</button>
+  </div>
+  <div id="caso" role="alert">
+    <strong>Caso nuovo: il modello non &egrave; il tuo pack</strong>
+    <div class="riga" id="caso-pdf"></div>
+    <div class="riga" id="caso-mod"></div>
+    <div class="riga" id="caso-perche"></div>
+    <div class="codice" id="caso-codice"></div>
+    <button id="caso-mostra" type="button">Mostra comunque il modello</button>
   </div>
   <div id="meta"></div>
   <div id="status">Nessun modello caricato</div>
@@ -711,6 +738,7 @@ async function analyze(buf, opts){
 }
 
 async function build(buf, name, opts){
+  nascondiCaso();
   setStatus('Costruzione del modello…','busy');
   const r = await post('/api/build', buf, opts);
   // gli avvisi della costruzione arrivano in un header: il corpo e' il GLB
@@ -718,16 +746,86 @@ async function build(buf, name, opts){
     const m = r.headers.get('X-Pack3d-Meta');
     if (m) setMeta(JSON.parse(decodeURIComponent(m)));
   }catch(e){}
-  glbBlob = await r.blob();
+  // il verdetto del controllo dell'AI in un altro; manca se il controllo e'
+  // spento, e allora il modello si mostra come sempre
+  let verdetto = null;
+  try{
+    const c = r.headers.get('X-Pack3d-Controllo');
+    if (c) verdetto = JSON.parse(decodeURIComponent(c));
+  }catch(e){}
+  const blob = await r.blob();
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
+  if (verdetto && verdetto.esito === 'sbagliato'){
+    // respinto: non va nel viewer come se fosse buono
+    glbBlob = null;
+    mostraCaso(verdetto, blob);
+    setFase('lavoro');
+    return verdetto;
+  }
+  glbBlob = blob;
   show(await glbBlob.arrayBuffer());
   setFase('pronto');
+  return verdetto;
+}
+
+/** La riga di stato a costruzione finita, secondo il controllo dell'AI. */
+function esitoFinale(v, titolo){
+  if (!v || v.esito === 'non controllato'){ setStatus(titolo, ''); return; }
+  if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 controllato dall\u2019AI', ''); return; }
+  if (v.esito === 'dubbio'){
+    // una riga sola in fondo al visore: il motivo intero e' nei cartellini
+    setStatus('Il controllo AI ha un dubbio: ' + (v.motivo || 'guarda bene il modello').slice(0, 160), 'dubbio');
+    return;
+  }
+  setStatus('Caso nuovo: modello respinto dal controllo AI', 'err');
+}
+
+/* ---------------------------- caso nuovo ------------------------------ */
+const casoEl = document.getElementById('caso');
+// il GLB respinto, tenuto da parte per chi lo vuole guardare lo stesso
+let respinto = null;
+
+function mostraCaso(v, blob){
+  respinto = blob;
+  togliModello();
+  document.getElementById('empty').style.display = 'none';
+  document.getElementById('caso-pdf').textContent = v.pack_nel_pdf ? 'Nel PDF: ' + v.pack_nel_pdf : '';
+  document.getElementById('caso-mod').textContent = v.modello ? 'Il modello: ' + v.modello : '';
+  document.getElementById('caso-perche').textContent = v.motivo || '';
+  document.getElementById('caso-codice').textContent = 'Codice del caso: ' + (v.codice || '-')
+    + (v.in_coda ? ' \u2014 \u00e8 in coda: il servizio imparer\u00e0 a costruirlo.'
+                 : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
+  casoEl.classList.add('on');
+}
+
+function nascondiCaso(){
+  if (!casoEl.classList.contains('on')) return;
+  casoEl.classList.remove('on');
+  respinto = null;
+  // il riquadro stava al posto del modello: se un modello non c'e', torna l'invito
+  if (!model) document.getElementById('empty').style.display = '';
+}
+
+document.getElementById('caso-mostra').onclick = async () => {
+  if (!respinto) return;
+  const blob = respinto;
+  nascondiCaso();
+  glbBlob = blob;
+  show(await blob.arrayBuffer());
+  setFase('pronto');
+  setStatus('Modello respinto dal controllo AI: guardalo sapendo che probabilmente \u00e8 sbagliato', 'err');
+};
+
+/** I nomi dei PDF per il server, percent-encoded: un header HTTP e' latin-1. */
+function nomiPdf(p){
+  return (p.nomi && p.nomi.length ? p.nomi : [p.name]).map(n => encodeURIComponent(n));
 }
 
 async function handle(lista){
   // la lista si copia SUBITO: chi chiama azzera il campo file appena torna
   const files = Array.from(lista || []).filter(Boolean);
   if (!files.length) return;
+  nascondiCaso();
   const file = files[0];
   if (files.length === 1 && /\.glb$/i.test(file.name)){   // comodo per guardare un GLB gia' pronto
     glbBlob = file; glbName = file.name;
@@ -850,7 +948,7 @@ function ricevi(lista){
 
 async function procedi(kind, extra){
   const c = corpo(pending);
-  const opts = Object.assign({kind, parti: c.parti}, extra);
+  const opts = Object.assign({kind, parti: c.parti, nomi: nomiPdf(pending)}, extra);
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
@@ -860,8 +958,7 @@ async function procedi(kind, extra){
       setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
     }
-    await build(c.buf, pending.name, opts);
-    setStatus(info.title || 'Modello pronto','');
+    esitoFinale(await build(c.buf, pending.name, opts), info.title || 'Modello pronto');
   }catch(err){
     const m = testoErrore(err);
     setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
@@ -869,12 +966,8 @@ async function procedi(kind, extra){
   }
 }
 
-function annulla(){
-  pending = null; glbBlob = null; attesiPezzi = 0;
-  params.classList.remove('on');
-  packtype.classList.remove('on');
-  pezziEl.classList.remove('on');
-  setMeta([]); setTitolo('');
+/** Il modello fuori dal viewer, con la memoria che occupava. */
+function togliModello(){
   // il viewer sta dietro a three.js: se non si e' caricato i tasti devono
   // tornare a posto lo stesso, quindi la parte 3D va protetta
   try{
@@ -897,8 +990,18 @@ function annulla(){
     render();
     dita.clear(); pizzico = 0;
     stage.classList.remove('vivo', 'presa');
-    document.getElementById('empty').style.display = '';
   }catch(e){}
+}
+
+function annulla(){
+  pending = null; glbBlob = null; attesiPezzi = 0;
+  params.classList.remove('on');
+  packtype.classList.remove('on');
+  pezziEl.classList.remove('on');
+  setMeta([]); setTitolo('');
+  nascondiCaso();
+  togliModello();
+  document.getElementById('empty').style.display = '';
   setStatus(backendUp ? (API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale')
                       : OFFLINE,
             backendUp ? '' : 'err');
@@ -931,14 +1034,15 @@ document.getElementById('go').onclick = async () => {
   }
   params.classList.remove('on');
   try{
-    await build(pending.buf, pending.name,
+    const v = await build(pending.buf, pending.name,
                 {kind:'flowpack', teeth: document.getElementById('teeth').value,
+                 nomi: nomiPdf(pending),
                  scatola: document.getElementById('scatola').checked,
                  pinne: Number(document.getElementById('pinne').value),
                  soft:  document.getElementById('softauto').checked
                           ? 'auto'
                           : Number(document.getElementById('soft').value)});
-    setStatus('Modello pronto','');
+    esitoFinale(v, 'Modello pronto');
   }catch(err){ setStatus(testoErrore(err).slice(0,200),'err'); }
 };
 dlBtn.onclick = () => {

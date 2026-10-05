@@ -22,6 +22,9 @@ mappata sulle facce giuste.
 | `server.py` | backend HTTP: `/api/analyze`, `/api/build`, `/api/analyze-ai` |
 | `agent.py` | ciclo di tool use: Claude orchestra, il codice misura |
 | `pack3d/tools.py` | strumenti esposti all'agente, controllo visivo compreso |
+| `pack3d/controllo.py` | il controllo dell'AI: il modello accanto all'artwork prima della consegna |
+| `pack3d/vista.py` | il modello visto da quattro lati, dal GLB e senza GPU |
+| `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato |
 | `REGOLE.md` | le regole del progetto, usate come system prompt |
 | `pack3d_studio.html` | l'interfaccia: viewer 3D, caricamento PDF, parametri |
 | `PASSI.md` | l'agente: chiave API, strumenti, ciclo di tool use |
