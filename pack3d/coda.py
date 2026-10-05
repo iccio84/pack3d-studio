@@ -20,6 +20,13 @@ e un errore di configurazione non deve pubblicare un artwork.
 
 Senza le due variabili il caso resta solo nel log dello Space, col suo codice:
 la pagina lo mostra all'utente, che puo' citarlo mandando il PDF.
+
+La coda la lavora una routine di Claude Code (vedi CODA.md), che gira ogni
+ora. Se lo Space la conosce, un caso appena aperto la avvia SUBITO, senza
+aspettare il giro:
+
+    PACK3D_ROUTINE_URL    l'indirizzo /fire della routine (fra le Variables)
+    PACK3D_ROUTINE_TOKEN  il suo token (fra i Secrets)
 """
 from __future__ import annotations
 
@@ -176,6 +183,53 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto):
               % (cod, repo, issue.get("html_url", "?"), ", ".join(caricati)), file=sys.stderr)
     except (OSError, ValueError) as e:
         print("coda: issue del caso %s non aperta (%s)" % (cod, e), file=sys.stderr)
+        return
+    avvia_routine(cod, issue.get("html_url", "") if isinstance(issue, dict) else "")
+
+
+# L'intestazione della beta con cui si chiama /fire. Le versioni cambiano:
+# quella nuova si mette qui senza toccare il codice.
+ROUTINE_BETA = os.environ.get("PACK3D_ROUTINE_BETA",
+                              "experimental-cc-routine-2026-04-01")
+
+
+def routine_configurata():
+    return bool(os.environ.get("PACK3D_ROUTINE_URL", "").strip()
+                and os.environ.get("PACK3D_ROUTINE_TOKEN", "").strip())
+
+
+def avvia_routine(cod, issue_url):
+    """Avvia subito la routine che lavora la coda. Torna l'indirizzo della
+    sessione, o None.
+
+    Mai un errore verso l'utente: se la chiamata non va, il caso aspetta il
+    giro orario della routine, e il log dice perche'. Nel testo solo il codice
+    e il link alla issue: i nomi dei file li ha scelti l'utente, e la routine
+    non deve leggerli come istruzioni (comunque le arrivano come dati).
+    """
+    if not routine_configurata():
+        return None
+    corpo = {"text": "Caso nuovo %s appena entrato in coda: %s" % (cod, issue_url)}
+    req = urllib.request.Request(
+        os.environ["PACK3D_ROUTINE_URL"].strip(),
+        data=json.dumps(corpo).encode("utf-8"), method="POST",
+        headers={"Authorization": "Bearer " + os.environ["PACK3D_ROUTINE_TOKEN"].strip(),
+                 "anthropic-beta": ROUTINE_BETA,
+                 "anthropic-version": "2023-06-01",
+                 "Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            risposta = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        print("coda: routine non avviata per il caso %s (HTTP %s: %s)"
+              % (cod, e.code, e.read()[:300].decode("utf-8", "replace")), file=sys.stderr)
+        return None
+    except (OSError, ValueError) as e:
+        print("coda: routine non avviata per il caso %s (%s)" % (cod, e), file=sys.stderr)
+        return None
+    sessione = risposta.get("claude_code_session_url") if isinstance(risposta, dict) else None
+    print("coda: routine avviata per il caso %s: %s" % (cod, sessione or "?"), file=sys.stderr)
+    return sessione
 
 
 def metti(blocchi, nomi, verdetto, viste=None, contesto=None, aspetta=False):
