@@ -2021,6 +2021,16 @@ sicurezza, e i casi che la sessione non sa risolvere prendono l'etichetta
 `da-guardare`: senza, ogni caso nuovo avvierebbe un giro che riprova il
 vecchio.
 
+In coda vanno anche i **dubbi** del controllo, non solo i modelli respinti.
+Il modello all'utente arriva lo stesso, con sopra l'avviso che il caso e' in
+verifica e dove arrivera' il modello giusto se va corretto. Un dubbio puo'
+essere un difetto vero che il controllo non se l'e' sentita di chiamare tale,
+e allora si corregge come un caso respinto; oppure un falso allarme su una
+cosa stampata davvero, e allora il codice non si tocca. La regola per il
+controllo, in quel caso, si propone in bozza e non si unisce da sola: un
+controllo che impara a non vedere una cosa smette di vederla anche quando e'
+un difetto.
+
 Il **parco** sono i casi di prova: 26 PDF, 25 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li

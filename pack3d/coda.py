@@ -1,10 +1,13 @@
 """
-La coda dei casi nuovi: i pack che il controllo dell'AI ha respinto.
+La coda dei casi nuovi: i pack che il controllo dell'AI ha respinto, o sui
+quali ha un dubbio.
 
 Un modello respinto e' un pack che il codice non sa ancora costruire. Non
 deve sparire con la risposta: va messo da parte, con quello che serve a chi
 poi insegna al codice a costruirlo - i PDF, le viste del modello sbagliato e
-la diagnosi del controllo.
+la diagnosi del controllo. Un dubbio pure: il modello all'utente arriva lo
+stesso, ma qualcuno lo deve guardare, e se il difetto c'e' davvero si
+corregge come un caso respinto.
 
 Dove va, lo decide chi gestisce lo Space. I PDF sono artwork di clienti,
 quindi la coda va solo in un repository GitHub PRIVATO:
@@ -21,9 +24,9 @@ e un errore di configurazione non deve pubblicare un artwork.
 Senza le due variabili il caso resta solo nel log dello Space, col suo codice:
 la pagina lo mostra all'utente, che puo' citarlo mandando il PDF.
 
-La coda la lavora una routine di Claude Code (vedi CODA.md), che gira ogni
-ora. Se lo Space la conosce, un caso appena aperto la avvia SUBITO, senza
-aspettare il giro:
+La coda la lavora una routine di Claude Code (vedi CODA.md), che gira una
+volta al giorno. Se lo Space la conosce, un caso appena aperto la avvia
+SUBITO, senza aspettare il giro:
 
     PACK3D_ROUTINE_URL    l'indirizzo /fire della routine (fra le Variables)
     PACK3D_ROUTINE_TOKEN  il suo token (fra i Secrets)
@@ -108,9 +111,16 @@ def _nome_file(nome):
 
 
 def _corpo_issue(cod, nomi, verdetto, contesto, cartella):
-    righe = ["Il controllo dell'AI ha respinto il modello costruito da questi PDF.", ""]
+    if verdetto.get("esito") == "dubbio":
+        testa = ("Il controllo dell'AI ha un dubbio sul modello costruito da questi "
+                 "PDF. L'utente il modello l'ha avuto: va guardato, e corretto solo "
+                 "se il difetto c'e' davvero.")
+    else:
+        testa = "Il controllo dell'AI ha respinto il modello costruito da questi PDF."
+    righe = [testa, ""]
     righe += ["| | |", "|---|---|",
               "| codice | `%s` |" % cod,
+              "| esito del controllo | %s |" % (verdetto.get("esito") or "-"),
               "| PDF | %s |" % ", ".join(nomi),
               "| dichiarato | %s |" % (contesto.get("dichiarato") or "-"),
               "| riconosciuto dal codice | %s |" % (contesto.get("riconosciuto") or "-"),
