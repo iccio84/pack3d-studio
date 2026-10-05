@@ -2014,11 +2014,12 @@ Il metodo, e le condizioni per unire senza chiedere, sono in CODA.md.
 
 Quando un caso entra in coda, lo Space avvia **subito** la routine col suo
 trigger API (`coda.avvia_routine`, vedi DEPLOY.md), e il lavoro comincia
-entro un minuto. Un giro al giorno resta come rete di sicurezza, e i casi che
-la sessione non sa risolvere prendono l'etichetta `da-guardare`: senza,
-ogni caso nuovo avvierebbe un giro che riprova il vecchio. Solo per un caso nuovo, mai per lo stesso PDF ricaricato; e nel testo
-della chiamata solo il codice e il link alla issue, mai i nomi dei file, che
-sono testo dell'utente.
+entro un minuto: solo per un caso nuovo, mai per lo stesso PDF ricaricato, e
+nel testo della chiamata solo il codice e il link alla issue, mai i nomi dei
+file, che sono testo dell'utente. Un giro al giorno resta come rete di
+sicurezza, e i casi che la sessione non sa risolvere prendono l'etichetta
+`da-guardare`: senza, ogni caso nuovo avvierebbe un giro che riprova il
+vecchio.
 
 Il **parco** sono i casi di prova: 26 PDF, 25 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
@@ -2034,6 +2035,17 @@ sapere quando lo Space e' ripartito col codice nuovo, `/api/ping` restituisce
 l'**impronta** dei file del codice in esecuzione (`pack3d/versione.py`): non
 git, che nell'immagine dello Space non c'e'. Senza questa attesa la prova
 girava sul codice vecchio, e diceva il falso.
+
+Il modello approvato va poi in **Glam Lab**, il viewer dove si guardano i
+pack (`prove/parco.py glam`): proprio il GLB della prova sullo Space - se il
+verdetto non e' "ok", o il file non e' quello provato, non parte niente. Va
+fra i "Casi risolti" col nome che Glam da' a un modello costruito dal PDF, il
+nome del file senza `.pdf` e il tipo, cosi' prende il posto del modello
+sbagliato che l'utente aveva costruito, invece di finirgli accanto. La prima
+prova, col Yogurette, ha trovato due cose: Cloudflare, davanti a Glam,
+respinge l'intestazione di serie di Python (errore 1010) e vuole un
+User-Agent suo; e il token sbagliato da' un 401 che il proxy dell'ambiente
+segnala come "upstream auth failed", con la credenziale allegata.
 
 ## Quando la pulizia deterministica non basta
 

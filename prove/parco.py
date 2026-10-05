@@ -7,6 +7,7 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
+    python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py versione [--codice DIR]
 
 `costruisci` avvia un server col codice di DIR (di serie quello di questo
@@ -26,6 +27,13 @@ e stampa il verdetto del controllo dell'AI. Esce con 0 se e' "ok", 1 se e'
 "dubbio", 2 se e' "sbagliato", 3 se il controllo non c'e' stato, 4 se lo
 Space non e' ripartito in tempo. Attenzione: sullo Space il controllo e la
 coda sono accesi, e un caso "sbagliato" va in coda come quelli degli utenti.
+
+`glam` manda a Glam Lab, il viewer dove si guardano i pack, il modello che
+`spazio` ha appena costruito sullo Space - solo se il controllo ha detto "ok",
+e proprio quel GLB, non una costruzione nuova. Lo mette fra i "Casi risolti"
+col nome che Glam gli darebbe costruendolo dal PDF, cosi' prende il posto di
+quello sbagliato. Il token non sta qui: lo aggiunge l'ambiente cloud alle
+richieste per quel sito (API credentials, vedi DEPLOY.md).
 
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
@@ -317,6 +325,72 @@ def spazio(args):
     raise SystemExit(ESITI.get(controllo.get("esito"), 3))
 
 
+# come encodeURIComponent, che e' quello che Glam decodifica
+_URI = "-_.!~*'()"
+
+
+def nome_glam(caso):
+    """Il nome che Glam da' al modello quando lo costruisce dal PDF: il nome
+    del primo file senza `.pdf`, al massimo 60 caratteri, e il tipo. `glam`
+    nel manifesto vince: la coda toglie spazi e simboli dai nomi dei file, e
+    allora quello del parco non e' piu' quello che l'utente ha caricato."""
+    if caso.get("glam"):
+        return caso["glam"]
+    base = os.path.basename(caso["file"][0])
+    if base.lower().endswith(".pdf"):
+        base = base[:-4]
+    tipo = "Flowpack" if (caso.get("opzioni") or {}).get("kind") == "flowpack" \
+        else "Cartotecnico"
+    return "%s — %s" % (base[:60] or "Pack", tipo)
+
+
+def glam(args):
+    """Il modello che lo Space ha appena approvato, nel viewer Glam Lab."""
+    caso = _casi(args.casi, [args.nome])[0]
+    base = os.path.join(args.uscita, args.nome + "_spazio")
+    try:
+        with open(base + ".json", encoding="utf-8") as fh:
+            esito = json.load(fh)
+        with open(base + ".glb", "rb") as fh:
+            glb = fh.read()
+    except (OSError, ValueError):
+        raise SystemExit("manca la prova sullo Space di %s in %s: prima `spazio`"
+                         % (args.nome, args.uscita))
+    verdetto = (esito.get("controllo") or {}).get("esito")
+    if verdetto != "ok":
+        raise SystemExit("lo Space non ha approvato %s (%s): in Glam va solo un "
+                         "modello approvato" % (args.nome, verdetto or "nessun controllo"))
+    if hashlib.md5(glb).hexdigest() != esito.get("md5"):
+        raise SystemExit("%s.glb non e' il modello provato sullo Space" % base)
+    nome = nome_glam(caso)
+    # Glam sta dietro Cloudflare, che respinge l'intestazione di serie di
+    # urllib ("Python-urllib/3.x": errore 1010) prima che arrivi al sito
+    req = urllib.request.Request(
+        args.url.rstrip("/") + "/api/import-model", data=glb, method="POST",
+        headers={"Content-Type": "model/gltf-binary",
+                 "X-Model-Name": quote(nome, safe=_URI),
+                 "X-Model-Category": quote(args.categoria, safe=_URI),
+                 "User-Agent": "pack3d-studio"})
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            risposta = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        testo = e.read().decode("utf-8", "replace")[:300]
+        if e.code == 401:
+            print("Glam rifiuta il token (401): la credenziale dell'ambiente "
+                  "cloud per questo sito manca, o non e' uguale al secret "
+                  "PACK3D_IMPORT_TOKEN di Glam")
+        else:
+            print("Glam non ha preso il modello (HTTP %d): %s" % (e.code, testo))
+        raise SystemExit(1)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print("Glam non risponde: %s" % e)
+        raise SystemExit(1)
+    print("in Glam: \"%s\" fra \"%s\" (id %s)" % (
+        risposta.get("name", nome), risposta.get("category", args.categoria),
+        risposta.get("id", "?")))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cosa", required=True)
@@ -343,6 +417,16 @@ def main():
     s.add_argument("--attendi", type=int, default=25,
                    help="minuti di attesa massima per la ripartenza dello Space")
     s.set_defaults(fai=spazio)
+    g = sub.add_parser("glam", help="manda a Glam Lab il modello che lo Space "
+                                    "ha appena approvato")
+    g.add_argument("url", help="per esempio https://glam-lab-view.lovable.app")
+    g.add_argument("casi", help="clone del repository privato dei casi")
+    g.add_argument("nome", help="il caso del parco, gia' provato con `spazio`")
+    g.add_argument("--uscita", default="/tmp/parco_spazio",
+                   help="la cartella dove `spazio` ha salvato GLB e verdetto")
+    g.add_argument("--categoria", default="Casi risolti",
+                   help="la categoria del modello in Glam")
+    g.set_defaults(fai=glam)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")
     v.add_argument("--codice", help="cartella del codice (di serie questo)")
