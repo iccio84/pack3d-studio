@@ -2004,11 +2004,13 @@ costruirlo.
 
 ### Chi lavora la coda, e il parco che la protegge
 
-Ogni mattina una sessione automatica di Claude Code prende i casi aperti e li
-lavora come e' stato lavorato il primo, il Yogurette: riproduce, trova la
-causa, scrive una regola generale, la prova su **tutto il parco** prima e dopo,
-e se tutto torna unisce da sola - quindi pubblica sullo Space. Il metodo, e le
-condizioni per unire senza chiedere, sono in CODA.md.
+Ogni ora una sessione automatica di Claude Code guarda la coda e, se c'e' un
+caso libero, lo lavora come e' stato lavorato il primo, il Yogurette:
+riproduce, trova la causa, scrive una regola generale, la prova su **tutto il
+parco** prima e dopo, e se tutto torna unisce da sola - quindi pubblica sullo
+Space. Un caso alla volta: l'etichetta `in-lavorazione` sulla issue tiene
+lontane le sessioni dei giri dopo finche' quella che l'ha preso non ha finito.
+Il metodo, e le condizioni per unire senza chiedere, sono in CODA.md.
 
 Il **parco** sono i casi di prova: 26 PDF, 25 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
