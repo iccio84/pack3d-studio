@@ -79,8 +79,9 @@ si rifa' senza: una costruzione e due chiamate in piu', solo su quei modelli. La
 secondi della risposta, ma il posto di costruzione si libera prima: il
 prossimo utente non aspetta Claude.
 
-I modelli respinti, e quelli su cui il controllo ha un dubbio, vanno in coda
-solo se c'e' un repository **privato**:
+I modelli respinti, quelli su cui il controllo ha un dubbio e le costruzioni
+che si fermano con un errore vanno in coda solo se c'e' un repository
+**privato**:
 
 1. Su GitHub crea un repository **privato**, per esempio `pack3d-casi`.
 2. Crea un token *fine-grained* (Settings -> Developer settings -> Personal

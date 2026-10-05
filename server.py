@@ -1920,6 +1920,7 @@ class Handler(BaseHTTPRequestHandler):
                     # "saldature di testa non riconosciute") lanciava, il posto
                     # non tornava indietro, e dopo MAX_JOBS tentativi il server
                     # rispondeva 503 a chiunque fino al riavvio.
+                    info = None
                     try:
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
@@ -2033,6 +2034,27 @@ class Handler(BaseHTTPRequestHandler):
                                 meta.append("controllo AI non fatto: le viste del "
                                             "modello non sono riuscite (%s)" % e)
                         traccia("totale", t0)
+                    except Exception as e:
+                        # Il codice non ha saputo costruirlo: e' un caso nuovo
+                        # come un modello respinto, e senza modello il
+                        # controllo dell'AI non ha niente da guardare. Prima
+                        # finiva solo nel log, e nessuno lo riprendeva: va in
+                        # coda coi PDF e l'errore, e la pagina lo dice.
+                        traceback.print_exc()
+                        errore = "%s: %s" % (type(e).__name__, e)
+                        verdetto = dict(
+                            esito="errore", motivo=errore, difetti=[],
+                            pack_nel_pdf="",
+                            modello="nessuno: la costruzione si e' fermata")
+                        ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                                   riconosciuto=(info.get("title") or info.get("kind")
+                                                 if info else "-"),
+                                   avvisi=[errore], nomi=nomi,
+                                   opzioni={k: opts[k] for k in OPZIONI_CASO
+                                            if k in opts})
+                        verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                            blocchi, nomi, verdetto, None, ctx)
+                        return self._send(500, errore, controllo=verdetto)
                     finally:
                         _slots.release()
                     verdetto = None
