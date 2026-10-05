@@ -336,9 +336,10 @@ SCHEMA_INCHIOSTRI = {
     "type": "object",
     "properties": {
         "tecnici": {"type": "array", "items": {"type": "string"}},
+        "oggetti": {"type": "array", "items": {"type": "integer"}},
         "motivo": {"type": "string"},
     },
-    "required": ["tecnici", "motivo"],
+    "required": ["tecnici", "oggetti", "motivo"],
     "additionalProperties": False,
 }
 
@@ -362,9 +363,19 @@ stampata - un logo, un testo, un fondo, un'immagine, un'icona: togliendolo
 sparirebbe anche quella. Nel dubbio lascialo fuori: un segno tecnico rimasto
 e' meno grave di un logo perso.
 
+Se c'e', ricevi anche la pagina coi PIENI CANDIDATI numerati in magenta:
+rettangoli pieni allineati alle linee del disegno, di qualsiasi colore,
+compreso il nero della quadricromia. Alcuni sono segni del disegno che sul
+pack non si stampano - per esempio i blocchetti neri ai capi di una fascia di
+saldatura, o la campitura di una zona tecnica - altri sono grafica: un fondo,
+una fascia colorata, il colore delle pinne. Scegli solo quelli che sono
+chiaramente segni del disegno, e nel dubbio lasciali.
+
 - tecnici: i nomi degli inchiostri scelti, scritti come nella tavola; vuoto se
   nessuno e' solo tecnico;
-- motivo: in una frase, che cosa dipingono quelli scelti.
+- oggetti: i numeri dei pieni candidati che sono segni del disegno; vuoto se
+  nessuno, o se non ti ho mostrato candidati;
+- motivo: in una frase, che cosa dipingono gli inchiostri e i pieni scelti.
 """
 
 
@@ -435,22 +446,46 @@ def tavola_inchiostri(pdfs, pagine, dpi=36, lato=330, colonne=4):
     return _jpeg(tav), voci
 
 
-def inchiostri_tecnici(pdfs, quadro, verdetto, modello=None, client=None):
-    """Gli inchiostri spot che Claude riconosce come solo tecnici.
+def pagina_candidati(pagina, foglio, riquadri, primo=1):
+    """La pagina coi pieni candidati contornati in magenta e numerati.
 
-    Torna dict(tecnici=[nomi], motivo, offerti) o dict(errore=...), e non
-    lancia mai: senza correzione resta il modello di prima.
+    `pagina` e' il jpeg di `prepara`, `foglio` le sue misure in mm, i
+    riquadri in punti nel telaio di misura (y in giu', come la resa).
+    """
+    from PIL import Image, ImageDraw
+    im = Image.open(io.BytesIO(pagina)).convert("RGB")
+    s = im.width / (foglio[0] * 72.0 / 25.4)
+    d = ImageDraw.Draw(im)
+    font = vista._carattere(18)
+    for k, (x0, y0, x1, y1) in enumerate(riquadri):
+        a, b, c, e = x0 * s, y0 * s, x1 * s, y1 * s
+        d.rectangle([a - 2, b - 2, c + 2, e + 2], outline=(225, 0, 125), width=3)
+        etichetta = str(primo + k)
+        d.rectangle([c + 3, b, c + 9 + 10 * len(etichetta), b + 22], fill=(225, 0, 125))
+        d.text((c + 6, b + 1), etichetta, fill=(255, 255, 255), font=font)
+    return _jpeg(im)
+
+
+def segni_tecnici(pdfs, quadro, verdetto, candidati=None, modello=None, client=None):
+    """Quello che Claude riconosce come disegno tecnico rimasto stampato.
+
+    Gli inchiostri spot solo tecnici, e fra i `candidati` - una lista di
+    riquadri per pezzo, da `strati.candidati_tecnici` - i pieni che sono segni
+    del disegno. Torna dict(tecnici=[nomi], oggetti=[riquadri], motivo,
+    offerti) o dict(errore=...), e non lancia mai: senza correzione resta il
+    modello di prima.
     """
     try:
-        return _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client)
+        return _segni_tecnici(pdfs, quadro, verdetto, candidati or [], modello, client)
     except Exception as e:                        # noqa: BLE001
         return {"errore": "%s: %s" % (type(e).__name__, str(e)[:200])}
 
 
-def _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client):
+def _segni_tecnici(pdfs, quadro, verdetto, candidati, modello, client):
     tav, voci = tavola_inchiostri(pdfs, quadro["pagine"])
-    if not voci:
-        return {"errore": "il file non ha inchiostri spot da togliere"}
+    numerati = [r for per_pezzo in candidati for r in per_pezzo]
+    if not voci and not numerati:
+        return {"errore": "il file non ha inchiostri spot ne' pieni allineati al disegno"}
     modello = modello or modello_ai()
     elenco = "\n".join("%d. %s - %.1f%% del foglio%s"
                        % (i + 1, n, 100 * c, " (pezzo %d)" % p if len(pdfs) > 1 else "")
@@ -461,11 +496,20 @@ def _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client):
         contenuto += [{"type": "text", "text": "Pagina del PDF%s:"
                        % (" %d" % (k + 1) if len(quadro["pagine"]) > 1 else "")},
                       _immagine(dati)]
-    contenuto += [{"type": "text", "text": "La tavola degli inchiostri spot:"},
-                  _immagine(tav),
-                  {"type": "text", "text": "Il controllo ha detto: %s\n%s\n\nGli inchiostri:\n%s"
-                   "\n\nQuali dipingono solo cose tecniche?"
-                   % (verdetto.get("motivo", ""), difetti, elenco)}]
+    if tav is not None:
+        contenuto += [{"type": "text", "text": "La tavola degli inchiostri spot:"},
+                      _immagine(tav)]
+    primo = 1
+    for k, per_pezzo in enumerate(candidati):
+        if per_pezzo:
+            contenuto += [{"type": "text", "text": "La pagina%s coi pieni candidati numerati:"
+                           % (" %d" % (k + 1) if len(pdfs) > 1 else "")},
+                          _immagine(pagina_candidati(quadro["pagine"][k], quadro["fogli"][k],
+                                                     per_pezzo, primo))]
+            primo += len(per_pezzo)
+    contenuto += [{"type": "text", "text": "Il controllo ha detto: %s\n%s\n\nGli inchiostri:\n%s"
+                   "\n\nPieni candidati: %d.\n\nQuali dipingono solo cose tecniche?"
+                   % (verdetto.get("motivo", ""), difetti, elenco or "nessuno", len(numerati))}]
     dati, errore = _chiama(contenuto, ISTRUZIONI_INCHIOSTRI, SCHEMA_INCHIOSTRI,
                            modello, client)
     if errore:
@@ -478,8 +522,16 @@ def _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client):
         chiave = re.sub(r"\s+-\s+[\d.,]+%.*$", "", chiave).strip()
         if chiave in noti and chiave not in scelti:
             scelti.append(chiave)
-    return {"tecnici": scelti, "motivo": str(dati.get("motivo", "")).strip(),
-            "offerti": len(voci)}
+    oggetti = []
+    for n in dati.get("oggetti") or []:
+        try:
+            n = int(n)
+        except (TypeError, ValueError):
+            continue
+        if 1 <= n <= len(numerati) and numerati[n - 1] not in oggetti:
+            oggetti.append(numerati[n - 1])
+    return {"tecnici": scelti, "oggetti": oggetti,
+            "motivo": str(dati.get("motivo", "")).strip(), "offerti": len(voci)}
 
 
 def nota_correzione(scelta):
@@ -491,23 +543,30 @@ def nota_correzione(scelta):
     e il modello della versione coi livelli e' bianco nello stesso punto. Chi
     guarda la pagina vede la fascia colorata e non lo puo' sapere.
     """
-    return ("il modello e' stato appena rifatto togliendo gli inchiostri %s, "
-            "che dipingevano solo il disegno tecnico (%s). Dove sul foglio c'erano "
-            "solo loro non c'e' stampa, e sul modello quelle zone restano bianche "
-            "o del colore del film: non e' un difetto."
-            % (", ".join(scelta.get("tecnici") or []), scelta.get("motivo") or "-"))
+    return ("il modello e' stato appena rifatto togliendo %s, che erano solo "
+            "disegno tecnico (%s). Dove sul foglio c'erano solo loro non c'e' stampa, "
+            "e sul modello quelle zone restano bianche o del colore del film: non e' "
+            "un difetto." % (_cosa_tolto(scelta), scelta.get("motivo") or "-"))
+
+
+def _cosa_tolto(scelta):
+    parti = []
+    if scelta.get("tecnici"):
+        parti.append("gli inchiostri %s" % ", ".join(scelta["tecnici"]))
+    n = len(scelta.get("oggetti") or [])
+    if n:
+        parti.append("%d %s del disegno in quadricromia" % (n, "segno" if n == 1 else "segni"))
+    return " e ".join(parti) or "niente"
 
 
 def avviso_correzione(scelta, prima, dopo, tenuto):
     """La riga sulla correzione, per chi guarda il modello."""
-    tolti = ", ".join(scelta.get("tecnici") or [])
+    tolti = _cosa_tolto(scelta)
     if tenuto:
-        return ("correzione AI: tolti gli inchiostri tecnici %s (%s). Prima il "
-                "controllo diceva: %s" % (tolti, scelta.get("motivo") or "-",
-                                          prima.get("motivo", "")))
-    return ("correzione AI scartata: senza gli inchiostri %s il controllo dice "
-            "%s (%s), e resta il modello di prima"
-            % (tolti, dopo.get("esito"), dopo.get("motivo", "")))
+        return ("correzione AI: tolti %s (%s). Prima il controllo diceva: %s"
+                % (tolti, scelta.get("motivo") or "-", prima.get("motivo", "")))
+    return ("correzione AI scartata: senza %s il controllo dice %s (%s), e resta "
+            "il modello di prima" % (tolti, dopo.get("esito"), dopo.get("motivo", "")))
 
 
 # --------------------------------------------------------------------------- #

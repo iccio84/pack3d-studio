@@ -1946,9 +1946,24 @@ verdetto), la costruzione prova a correggersi:
    perche' la correzione e' stata scartata.
 
 Sul Mandarino senza livelli: sette lastre tolte, il fronte intero, il retro
-come nella versione coi livelli. Restano i blocchetti neri sulle pinne, ai capi
-della fascia: sono in nero di quadricromia, che e' anche il nero della grafica,
-e il nero di processo non si offre mai.
+come nella versione coi livelli.
+
+Restavano i **blocchetti neri** sulle pinne, ai capi della fascia: segni del
+disegno che sul pack non si stampano - lo ha confermato chi i pack li fa - ma
+in nero di quadricromia, che e' anche il nero della grafica, e il nero di
+processo non si offre mai fra gli inchiostri. Quindi la correzione guarda anche
+gli OGGETTI:
+
+- `strati.candidati_tecnici` cerca dentro il DT con la grafica i rettangoli
+  pieni con due lati opposti sulle linee del disegno, non grandi come un fondo
+  (al massimo il 15% del DT). Sul Mandarino sono cinque: le due fasce
+  arancioni delle pinne, la fascia della saldatura e i due blocchetti;
+- Claude li vede numerati in magenta sulla pagina, nella stessa chiamata degli
+  inchiostri, e dice quali sono segni del disegno; un fondo o una fascia
+  colorata sono grafica, e nel dubbio si lasciano;
+- quelli scelti si spengono nella resa della grafica, oggetto per oggetto
+  (`strati.spegnendo`), come i livelli tecnici: il file non si tocca, e la
+  geometria esce identica.
 
 Sullo Space, col Claude vero, la scelta e' stata la stessa sette lastre su
 tredici. Il secondo controllo pero' restava in dubbio per "una fascia bianca a
@@ -3969,10 +3984,9 @@ Astucci, con la quota letta due volte che chiude il conto:
   scelte a mano guardando la tavola. Un file dove il disegno tecnico usa le
   stesse Pantone della grafica non si corregge cosi', e il controllo lo lascia
   in dubbio.
-- I **blocchetti neri** ai capi della fascia di saldatura del Mandarino, sulle
-  pinne, restano: sono in nero di quadricromia. Se siano segni del disegno o
-  tacche di fotocellula stampate davvero, il file senza livelli non lo dice -
-  in quello coi livelli stanno su `technical-drawing`.
+- I **pieni candidati** sono solo rettangoli allineati alle linee del
+  disegno. Un segno tecnico in quadricromia di un'altra forma - un tratteggio
+  a mano, un cerchio - non arriva a Claude, e resta.
 - Il **cono** e' stato costruito su un file solo, il Camy Apolo. Da li'
   vengono la lettura dell'ultimo taglio come piega del **risvolto** (il DT
   lo chiama "last cutting of cone", e la fascia sopra e' larga 3,5 mm), il
