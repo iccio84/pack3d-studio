@@ -2143,7 +2143,7 @@ def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
         return None, "correzione AI non riuscita: %s" % e
     finally:
         _slots.release()
-    ctx2 = dict(ctx, avvisi=list(avvisi))
+    ctx2 = dict(ctx, avvisi=list(avvisi), nota=controllo.nota_correzione(scelta))
     verdetto2 = controllo.giudica(quadro2, ctx2)
     traccia("correzione", t, verdetto2["esito"])
     tenuto = controllo.migliore(verdetto, verdetto2)

@@ -1950,6 +1950,15 @@ come nella versione coi livelli. Restano i blocchetti neri sulle pinne, ai capi
 della fascia: sono in nero di quadricromia, che e' anche il nero della grafica,
 e il nero di processo non si offre mai.
 
+Sullo Space, col Claude vero, la scelta e' stata la stessa sette lastre su
+tredici. Il secondo controllo pero' restava in dubbio per "una fascia bianca a
+tutta altezza": e' la zona della saldatura, che sotto la campitura tecnica non
+ha stampa - bianca anche nel modello della versione coi livelli - e chi guarda
+la pagina vede la fascia colorata e non lo puo' sapere. Quindi il secondo
+controllo riceve una nota (`controllo.nota_correzione`): quali inchiostri sono
+andati via, cosa dipingevano, e che dove c'erano solo loro il modello resta
+senza stampa.
+
 La seconda costruzione usa pdfium come la prima, quindi aspetta il suo posto
 (`PACK3D_CORREZIONE_ATTESA`, 240 s); se non arriva si consegna il primo
 modello. `PACK3D_CORREZIONE=0` spegne la correzione e lascia il controllo.
@@ -3956,9 +3965,14 @@ Astucci, con la quota letta due volte che chiude il conto:
 - La **coda** e' stata provata con un GitHub finto: un repository privato vero
   non l'ha ancora vista.
 - La **correzione degli inchiostri** e' provata su un file solo, il Mandarino
-  senza livelli, con un'API finta che sceglie quello che avrei scelto io
-  guardando la tavola. Un file dove il disegno tecnico usa le stesse Pantone
-  della grafica non si corregge cosi', e il controllo lo lascia in dubbio.
+  senza livelli: sullo Space il Claude vero ha scelto le stesse sette lastre
+  scelte a mano guardando la tavola. Un file dove il disegno tecnico usa le
+  stesse Pantone della grafica non si corregge cosi', e il controllo lo lascia
+  in dubbio.
+- I **blocchetti neri** ai capi della fascia di saldatura del Mandarino, sulle
+  pinne, restano: sono in nero di quadricromia. Se siano segni del disegno o
+  tacche di fotocellula stampate davvero, il file senza livelli non lo dice -
+  in quello coi livelli stanno su `technical-drawing`.
 - Il **cono** e' stato costruito su un file solo, il Camy Apolo. Da li'
   vengono la lettura dell'ultimo taglio come piega del **risvolto** (il DT
   lo chiama "last cutting of cone", e la fascia sopra e' larga 3,5 mm), il

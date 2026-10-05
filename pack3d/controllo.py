@@ -178,6 +178,8 @@ def _riassunto(contesto, ingombro, fogli=()):
     if ingombro:
         righe.append("Misure del modello: %.0f x %.0f x %.0f mm (larghezza x altezza x "
                      "profondita')." % tuple(ingombro))
+    if contesto.get("nota"):
+        righe.append("Da sapere: %s" % contesto["nota"])
     avvisi = [str(a)[:240] for a in contesto.get("avvisi") or []][:40]
     if avvisi:
         righe.append("Avvisi della costruzione:")
@@ -478,6 +480,22 @@ def _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client):
             scelti.append(chiave)
     return {"tecnici": scelti, "motivo": str(dati.get("motivo", "")).strip(),
             "offerti": len(voci)}
+
+
+def nota_correzione(scelta):
+    """Cosa deve sapere il secondo controllo, che guarda il modello corretto.
+
+    Sul KP T1 Mandarino il primo verdetto vero dopo una correzione era ancora
+    un dubbio: "sul retro c'e' una fascia bianca a tutta altezza". Era la
+    zona della saldatura: sotto la campitura tecnica il foglio non ha stampa,
+    e il modello della versione coi livelli e' bianco nello stesso punto. Chi
+    guarda la pagina vede la fascia colorata e non lo puo' sapere.
+    """
+    return ("il modello e' stato appena rifatto togliendo gli inchiostri %s, "
+            "che dipingevano solo il disegno tecnico (%s). Dove sul foglio c'erano "
+            "solo loro non c'e' stampa, e sul modello quelle zone restano bianche "
+            "o del colore del film: non e' un difetto."
+            % (", ".join(scelta.get("tecnici") or []), scelta.get("motivo") or "-"))
 
 
 def avviso_correzione(scelta, prima, dopo, tenuto):
