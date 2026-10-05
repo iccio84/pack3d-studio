@@ -1946,9 +1946,33 @@ verdetto), la costruzione prova a correggersi:
    perche' la correzione e' stata scartata.
 
 Sul Mandarino senza livelli: sette lastre tolte, il fronte intero, il retro
-come nella versione coi livelli. Restano i blocchetti neri sulle pinne, ai capi
-della fascia: sono in nero di quadricromia, che e' anche il nero della grafica,
-e il nero di processo non si offre mai.
+come nella versione coi livelli.
+
+Restavano i **blocchetti neri** sulle pinne, ai capi della fascia: segni del
+disegno che sul pack non si stampano - lo ha confermato chi i pack li fa - ma
+in nero di quadricromia, che e' anche il nero della grafica, e il nero di
+processo non si offre mai fra gli inchiostri. Quindi la correzione guarda anche
+gli OGGETTI:
+
+- `strati.candidati_tecnici` cerca dentro il DT con la grafica i rettangoli
+  pieni con due lati opposti sulle linee del disegno, non grandi come un fondo
+  (al massimo il 15% del DT). Sul Mandarino sono cinque: le due fasce
+  arancioni delle pinne, la fascia della saldatura e i due blocchetti;
+- Claude li vede numerati in magenta sulla pagina, nella stessa chiamata degli
+  inchiostri, e dice quali sono segni del disegno; un fondo o una fascia
+  colorata sono grafica, e nel dubbio si lasciano;
+- quelli scelti si spengono nella resa della grafica, oggetto per oggetto
+  (`strati.spegnendo`), come i livelli tecnici: il file non si tocca, e la
+  geometria esce identica.
+
+Sullo Space, col Claude vero, la scelta e' stata la stessa sette lastre su
+tredici. Il secondo controllo pero' restava in dubbio per "una fascia bianca a
+tutta altezza": e' la zona della saldatura, che sotto la campitura tecnica non
+ha stampa - bianca anche nel modello della versione coi livelli - e chi guarda
+la pagina vede la fascia colorata e non lo puo' sapere. Quindi il secondo
+controllo riceve una nota (`controllo.nota_correzione`): quali inchiostri sono
+andati via, cosa dipingevano, e che dove c'erano solo loro il modello resta
+senza stampa.
 
 La seconda costruzione usa pdfium come la prima, quindi aspetta il suo posto
 (`PACK3D_CORREZIONE_ATTESA`, 240 s); se non arriva si consegna il primo
@@ -3076,11 +3100,34 @@ sul T1 Mandarino, stesso identico disegno, e' uno solo da 340. Scartati i
 pezzi, lo steso si fermava sulla saldatura: passo **141 invece di 149**, corpo
 125 invece di 133, e la verifica delle UV che gridava "rientri diversi (8 e 10
 mm)". Prima della soglia, i tratti della stessa penna sullo stesso asse che si
-toccano si ricuciono (`flowpack._ricuci`): mezzo punto di vuoto al massimo,
-cosi' un tratteggio vero resta tratteggio. Col taglio ricucito il Cheesecake
-esce identico al Mandarino, 136 x 149, corpo 133, pinne 8 e gola 10 (135,5
-prima che i capi dello steso si prendessero sul taglio: vedi *I capi dello
-steso sono il taglio, non il centro del gruppo*).
+toccano si ricuciono (`flowpack._ricuci`): mezzo punto di vuoto al massimo.
+Col taglio ricucito il Cheesecake esce identico al Mandarino, 136 x 149, corpo
+133, pinne 8 e gola 10 (135,5 prima che i capi dello steso si prendessero sul
+taglio: vedi *I capi dello steso sono il taglio, non il centro del gruppo*).
+
+**Un tratteggio e' una linea, comunque sia disegnato.** Una piega tratteggiata
+si disegna in due modi che a vederli sono identici: un tracciato solo con il
+motivo del tratteggio, che il PDF tratteggia quando stampa, o un tracciato per
+ogni trattino. Il primo il solutore lo legge come una linea; il secondo erano
+trattini da pochi millimetri, tutti sotto la soglia, e la piega spariva. Sul
+**Yogurette Ice Cream Stick** (Ferrero 1688..., il primo caso arrivato dalla
+coda) le quattro pieghe del prodotto sono 23 trattini da 6 mm ciascuna, con
+vuoti da 1,5: sparite tutte e quattro, nessuna chiusura a pinna tornava, e
+l'unica lettura rimasta era il tubo piatto **girato di 90 gradi** - le fasce
+della pinna lunga prese per le saldature di testa, il gelato di traverso, il
+logo capovolto sul retro. Il controllo dell'AI l'ha respinto e il caso e'
+finito in coda.
+
+Adesso un **motivo regolare** di almeno quattro trattini sulla stessa retta,
+della stessa penna, con i vuoti tutti uguali e i trattini tutti uguali (il
+primo e l'ultimo possono essere piu' corti, il motivo si ferma dove finisce la
+linea) diventa una linea sola, da capo a capo (`flowpack._tratteggi`). Pezzi
+diversi che per caso stanno sulla stessa retta un motivo non ce l'hanno, e
+restano pezzi. Con le pieghe il Yogurette chiude a pinna nel verso giusto, e
+torna al millimetro: nastro 165 = 17,5 | 20 | 25 | 40 | 25 | 20 | 17,5,
+fronte 40 x 25, passo 170 con saldature da 13, corpo 144. Sugli altri
+diciassette file del confronto (parco e caricati) l'analisi esce identica: i
+loro tratteggi, se ci sono, sono disegnati col motivo del tratto.
 
 **Un ripiego non deve mai essere muto.** Se `analyze_auto` fallisce, la
 costruzione passa al solutore vecchio: il modello che ne esce non e' sbagliato
@@ -3645,6 +3692,40 @@ resta sempre un ventesimo di millimetro sopra (`FALDA_SOPRA`): non si vede, e
 decide chi sta sopra - la falda, come nel pack vero. Sui flowpack a pinna del
 parco si spostano solo quei vertici, di 0,05 mm, e texture e UV non cambiano.
 
+### Della falda si vede la fascia dell'altro capo del nastro
+
+I due bordi del nastro si saldano a pinna, e la pinna si corica sul retro. Ma
+**quale faccia resta in vista** non e' una scelta: e' geometria. Dalla
+cucitura ogni fascia sale con la faccia stampata rivolta verso il retro da cui
+arriva. Coricandosi su un retro, la fascia che viene da li' gli va contro e
+sparisce; resta in vista l'altra, che continua il retro dall'altra parte della
+cucitura come un film ripiegato su se stesso.
+
+Il modello corica la falda sul primo tratto del retro, quello che parte da g0,
+e la texture ci metteva la fascia di g0: la faccia **nascosta**. Il DT del
+Yogurette lo dice con i nomi - la fascia di g0 e' "Neutral Area", bianca, la
+striscia del retro sotto la falda e' "Covered Area", e la fascia di g1 e'
+marrone come la zona della scadenza accanto alla cucitura, col box bianco
+della scadenza che attraversa la piega. Sul modello c'era una striscia bianca
+dove il pack ha 27 mm di marrone, e il box tagliato a meta'.
+
+Adesso la falda prende la fascia oltre **g1** (`fin_on_surface`), a partire
+dalla cucitura. Cambiano tutti i dodici flowpack a pinna che ho, e in meglio:
+dove le due fasce sono diverse, quella di g0 e' la neutra - bianca,
+tratteggiata (Milch-Schnitte, Nutella B-ready), con le **tacche nere della
+fotocellula** (Kinder Cards, Ferrero 159 e 174, Yogurette) - e quelle tacche
+finivano sul retro e nei denti delle testate. Adesso il retro continua sulla falda: arancio
+e rosso sul Mandarino e sul Cheesecake, rosso sul Milch-Schnitte, marrone e
+rosso nelle testate del Happy Hippo. Su Colazione, Brioss e Ferrero 176 le due
+fasce sono stampate uguali e non si vede differenza. Pillow, astucci e vassoi
+restano al byte.
+
+Un'assunzione non verificata: in tutti i file visti la fascia neutra sta dalla
+parte di g0, e la falda va coricata li'. Se un file la avesse dall'altro capo,
+la falda andrebbe coricata sull'altro retro, e sul modello si vedrebbe la
+fascia neutra. Il segno da cercare e' quello: tacche della fotocellula o
+tratteggio sulla falda vista.
+
 ## Coppe e contenitori conici
 
 La coppa da gelato - il Nutella POT 500 - arriva in **due PDF**: il
@@ -3953,12 +4034,23 @@ Astucci, con la quota letta due volte che chiude il conto:
   artwork, si vede sbagliato a colpo d'occhio. Con una chiave vera non sono
   ancora passati. Le prime costruzioni sullo Space vanno guardate insieme al
   verdetto.
-- La **coda** e' stata provata con un GitHub finto: un repository privato vero
-  non l'ha ancora vista.
+- La **coda** e' stata provata con un GitHub finto, e poi dal vero col primo
+  caso, il Yogurette: PDF, verdetto e viste nel repository privato, e la sua
+  issue. Il caso si e' risolto insegnando al solutore i tratteggi a trattini
+  separati e la faccia giusta della falda (vedi *Un tratteggio e' una linea* e
+  *Della falda si vede la fascia dell'altro capo del nastro*).
+- La **falda** si corica sempre dalla parte di g0, dove in tutti i file visti
+  sta la fascia neutra. Un file con la fascia neutra dall'altro capo non l'ho
+  mai visto: sul modello si riconoscerebbe dalle tacche della fotocellula o
+  dal tratteggio sulla falda.
 - La **correzione degli inchiostri** e' provata su un file solo, il Mandarino
-  senza livelli, con un'API finta che sceglie quello che avrei scelto io
-  guardando la tavola. Un file dove il disegno tecnico usa le stesse Pantone
-  della grafica non si corregge cosi', e il controllo lo lascia in dubbio.
+  senza livelli: sullo Space il Claude vero ha scelto le stesse sette lastre
+  scelte a mano guardando la tavola. Un file dove il disegno tecnico usa le
+  stesse Pantone della grafica non si corregge cosi', e il controllo lo lascia
+  in dubbio.
+- I **pieni candidati** sono solo rettangoli allineati alle linee del
+  disegno. Un segno tecnico in quadricromia di un'altra forma - un tratteggio
+  a mano, un cerchio - non arriva a Claude, e resta.
 - Il **cono** e' stato costruito su un file solo, il Camy Apolo. Da li'
   vengono la lettura dell'ultimo taglio come piega del **risvolto** (il DT
   lo chiama "last cutting of cone", e la fascia sopra e' larga 3,5 mm), il

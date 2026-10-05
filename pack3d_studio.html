@@ -776,7 +776,9 @@ function esitoFinale(v, titolo){
   if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 ' + da, ''); return; }
   if (v.esito === 'dubbio'){
     // una riga sola in fondo al visore: il motivo intero e' nei cartellini
-    setStatus('Il controllo AI ha un dubbio: ' + (v.motivo || 'guarda bene il modello').slice(0, 160), 'dubbio');
+    setStatus((v.corretto ? 'Corretto dall\u2019AI, ma resta un dubbio: '
+                          : 'Il controllo AI ha un dubbio: ')
+              + (v.motivo || 'guarda bene il modello').slice(0, 160), 'dubbio');
     return;
   }
   setStatus('Caso nuovo: modello respinto dal controllo AI', 'err');

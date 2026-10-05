@@ -34,6 +34,7 @@ che c'era davvero - niente maschera, niente pixel inventati.
 """
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import os
 import re
@@ -460,6 +461,9 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
                 dai_livelli[0] += 1
                 continue
             t = raw.FPDFPageObj_GetType(o)
+            if _SPENTI and t == raw.FPDF_PAGEOBJ_PATH and _spento(o, m):
+                dt.append(o)
+                continue
             if (linee is not None
                     and t in (raw.FPDF_PAGEOBJ_FORM, raw.FPDF_PAGEOBJ_PATH)
                     and _velo(o, m, t, linee)):
@@ -518,6 +522,108 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
         else:
             grafica.append(o)
     return dt, contorni, grafica, dai_livelli[0], etichette[0], veli[0]
+
+
+# --------------------------------------------------------------------------- #
+# i segni scelti a occhio: la correzione dell'AI
+# --------------------------------------------------------------------------- #
+#
+# Sul KP T1 Mandarino senza livelli, ai capi della fascia di saldatura ci sono
+# due blocchetti neri: segni del disegno, che sul pack non si stampano - lo dice
+# chi i pack li fa, e nella versione coi livelli stanno su `technical-drawing`.
+# Sono in nero di quadricromia, quindi non si tolgono per inchiostro, e sbordano
+# oltre il taglio, quindi non ricalcano una cella del DT come un velo. Li
+# riconosce la correzione dell'AI guardandoli (`controllo.segni_tecnici`), fra
+# i candidati di `candidati_tecnici`: qui si dice solo quali oggetti spegnere.
+
+SPENTO_TOLLERANZA = 0.6   # punti fra il riquadro scelto e quello dell'oggetto
+CANDIDATO_LATO_MIN = 3.0  # punti: sotto e' un tratto, e i tratti li prende gia' la stima
+CANDIDATO_QUOTA = 0.15    # della superficie del DT: oltre e' un fondo, e i fondi sono grafica
+_SPENTI = []
+
+
+@contextlib.contextmanager
+def spegnendo(riquadri):
+    """Durante il blocco, gli oggetti con quei riquadri vanno nel livello DT.
+
+    I riquadri sono nel telaio di misura della pagina, che e' lo stesso delle
+    copie che la costruzione si fa strada facendo (pagina unica, fuori dal DT
+    tolto, livelli spenti). Valgono per la costruzione in corso, e le
+    costruzioni sono una alla volta: vedi `server.MAX_JOBS`.
+    """
+    _SPENTI[:] = [tuple(float(v) for v in r) for r in riquadri or ()]
+    try:
+        yield
+    finally:
+        _SPENTI.clear()
+
+
+def _spento(o, m):
+    r = _riquadro(o, m)
+    if r is None:
+        return False
+    return any(all(abs(a - b) <= SPENTO_TOLLERANZA for a, b in zip(r, s))
+               for s in _SPENTI)
+
+
+def candidati_tecnici(pdf, regione, page_no=0):
+    """I pieni che potrebbero essere segni del disegno: `[(x0, y0, x1, y1)]`.
+
+    Rettangoli pieni - al massimo sei segmenti - con due lati opposti sulle
+    linee del DT, larghi e alti almeno CANDIDATO_LATO_MIN, non piu' grandi di
+    CANDIDATO_QUOTA di `regione` - il DT con la grafica, `(x0, y0, x1, y1)` in
+    punti nel telaio di misura - e che la toccano. Sono solo candidati: quali
+    siano segni del disegno lo decide chi li guarda. Usa pdfium: dentro il
+    posto di costruzione.
+    """
+    import bisect
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+    from .tracciati import _componi, _matrice, _telaio
+    xs, ys = linee_dt(pdf, page_no)
+    if not xs or not ys:
+        return []
+    rx0, ry0, rx1, ry1 = regione
+    massimo = CANDIDATO_QUOTA * (rx1 - rx0) * (ry1 - ry0)
+
+    def sulla(v, linee):
+        i = bisect.bisect_left(linee, v - VELO_TOLLERANZA)
+        return i < len(linee) and linee[i] <= v + VELO_TOLLERANZA
+
+    trovati = []
+
+    def giro(cont, quanti, prendi, m):
+        for i in range(quanti(cont)):
+            o = prendi(cont, i)
+            t = raw.FPDFPageObj_GetType(o)
+            if t == raw.FPDF_PAGEOBJ_FORM:
+                giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject,
+                     _componi(m, _matrice(o)))
+                continue
+            if t != raw.FPDF_PAGEOBJ_PATH or raw.FPDFPath_CountSegments(o) > 6:
+                continue
+            pieno, tratto = ctypes.c_int(), ctypes.c_int()
+            raw.FPDFPath_GetDrawMode(o, ctypes.byref(pieno), ctypes.byref(tratto))
+            r = _riquadro(o, m) if pieno.value else None
+            if r is None:
+                continue
+            x0, y0, x1, y1 = r
+            if (x1 - x0 < CANDIDATO_LATO_MIN or y1 - y0 < CANDIDATO_LATO_MIN
+                    or (x1 - x0) * (y1 - y0) > massimo
+                    or x1 < rx0 or x0 > rx1 or y1 < ry0 or y0 > ry1):
+                continue
+            if (sulla(x0, xs) and sulla(x1, xs)) or (sulla(y0, ys) and sulla(y1, ys)):
+                if not any(all(abs(a - b) <= SPENTO_TOLLERANZA for a, b in zip(r, q))
+                           for q in trovati):
+                    trovati.append(r)
+
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        page = doc[page_no]
+        giro(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject, _telaio(page))
+    finally:
+        doc.close()
+    return trovati
 
 
 # --------------------------------------------------------------------------- #

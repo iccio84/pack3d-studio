@@ -36,7 +36,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, coda, controllo, dieline as dl, folding,
-                    exporters, nero, plancia, vassoio, verifica)
+                    exporters, nero, plancia, strati, vassoio, verifica)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -2123,18 +2123,26 @@ def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
     Non lancia: una correzione che non riesce lascia il modello di prima.
     """
     t = traccia("correzione")
-    scelta = controllo.inchiostri_tecnici(pdfs, quadro, verdetto)
+    # i pieni candidati si cercano con pdfium: dentro il posto
+    candidati = []
+    if _slots.acquire(timeout=CORREZIONE_ATTESA):
+        try:
+            candidati = [_candidati(p) for p in pdfs]
+        finally:
+            _slots.release()
+    scelta = controllo.segni_tecnici(pdfs, quadro, verdetto, candidati)
     if "errore" in scelta:
         return None, "correzione AI non fatta: %s" % scelta["errore"]
-    if not scelta["tecnici"]:
-        return None, ("correzione AI non fatta: nessun inchiostro spot del file "
-                      "e' solo tecnico (%s)" % (scelta.get("motivo") or "-"))
+    if not scelta["tecnici"] and not scelta["oggetti"]:
+        return None, ("correzione AI non fatta: niente nel file e' solo disegno "
+                      "tecnico (%s)" % (scelta.get("motivo") or "-"))
     # la seconda costruzione usa pdfium come la prima: dentro il posto
     if not _slots.acquire(timeout=CORREZIONE_ATTESA):
         return None, "correzione AI non fatta: il server era occupato"
     try:
         uscita = os.path.join(cartella, "corretto.glb")
-        avvisi = costruisci(list(aree) + scelta["tecnici"], uscita)
+        with strati.spegnendo(scelta["oggetti"]):
+            avvisi = costruisci(list(aree) + scelta["tecnici"], uscita)
         with open(uscita, "rb") as fh:
             glb = fh.read()
         quadro2 = controllo.prepara(pdfs, uscita)
@@ -2143,7 +2151,7 @@ def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
         return None, "correzione AI non riuscita: %s" % e
     finally:
         _slots.release()
-    ctx2 = dict(ctx, avvisi=list(avvisi))
+    ctx2 = dict(ctx, avvisi=list(avvisi), nota=controllo.nota_correzione(scelta))
     verdetto2 = controllo.giudica(quadro2, ctx2)
     traccia("correzione", t, verdetto2["esito"])
     tenuto = controllo.migliore(verdetto, verdetto2)
@@ -2151,8 +2159,25 @@ def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
     if not tenuto:
         return None, riga
     verdetto2["corretto"] = True
-    verdetto2["tolti"] = list(scelta["tecnici"])
+    verdetto2["tolti"] = list(scelta["tecnici"]) + (
+        ["%d segni in quadricromia" % len(scelta["oggetti"])] if scelta["oggetti"] else [])
     return (glb, avvisi, quadro2, verdetto2, ctx2), riga
+
+
+def _candidati(pdf):
+    """I pieni allineati al disegno, dentro il DT con la grafica: vedi
+    `strati.candidati_tecnici`. Vuoto se il DT non si trova."""
+    try:
+        from pack3d import tools
+        dt = tools.dt_principale(pdf)
+        if not dt:
+            return []
+        k = 72.0 / 25.4
+        x, y, w, h = dt
+        return strati.candidati_tecnici(pdf, (x * k, y * k, (x + w) * k, (y + h) * k))
+    except Exception:
+        traceback.print_exc()
+        return []
 
 if __name__ == "__main__":
     # PORT e HOST arrivano dall'ambiente sui servizi di hosting; in locale

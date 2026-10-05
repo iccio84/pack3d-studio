@@ -709,10 +709,23 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
     quindi va costruita come superficie offset della sezione a partire dalla
     cucitura. Cosi' segue pancia, raccordi e grinze del pack invece di
     tagliarli.
+
+    La falda si corica sul primo tratto del retro, quello che parte da g0, e
+    di lei si vede la faccia della fascia che sta oltre g1, l'altro capo del
+    nastro. E' geometria: dalla cucitura ogni fascia sale con la faccia
+    stampata rivolta verso il retro da cui arriva, quindi coricandosi su quel
+    retro la fascia di g0 gli va contro e non si vede - resta in vista
+    l'altra, che continua il retro dall'altra parte come un film ripiegato
+    su se stesso. Il DT lo dice con i nomi: sul Yogurette la fascia oltre g0
+    e' "Neutral Area", bianca, e la striscia sotto la falda "Covered Area";
+    la fascia oltre g1 e' marrone come la fascia del retro accanto, e il box
+    della scadenza la attraversa. La texture prendeva la fascia di g0, la
+    faccia nascosta: sul retro c'era una striscia bianca dove il pack ha
+    il marrone.
     """
     jmax = max(2, int(round(fp.side_fin / G * nv)))
     y0s, web = fp.sheet[1], fp.sheet[3] - fp.sheet[1]
-    g0 = fp.girth_span[0]
+    g1 = fp.girth_span[1]
     half = fp.L / 2.0
     nu = grid.shape[0]
 
@@ -735,7 +748,7 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
             V[i, j] = p + lift * n
             s = j / nv * G                      # arco dalla cucitura
             UV[i, j] = (grid[i, j, 0] - grid[0, 0, 0]) / (grid[-1, 0, 0] - grid[0, 0, 0]), \
-                       (g0 - y0s - s / PT2MM) / web
+                       (g1 - y0s + s / PT2MM) / web
         UV[i, :, 0] = (x - grid[0, 0, 0]) / (grid[-1, 0, 0] - grid[0, 0, 0])
         if u_tubo is not None:
             # la falda e' lo stesso film del tubo sotto di lei: stessa u,
@@ -1031,10 +1044,80 @@ SCALA_ANALISI = 150 / 72.0
 
 
 # Quanto possono distare, in punti, due pezzi della stessa linea per essere
-# ricuciti: si toccano, al disegno. Un tratteggio vero ha i vuoti di un punto e
-# piu', e resta tratteggio.
+# ricuciti: si toccano, al disegno. Un tratteggio ha i vuoti di un punto e
+# piu', e non si ricuce cosi': lo riunisce `_tratteggi`, se il motivo e'
+# regolare.
 RICUCI_VUOTO = 0.5
 RICUCI_ASSE = 0.3
+
+# Un tratteggio disegnato a trattini separati: quanti trattini almeno, di
+# quanto possono scostarsi dalla mediana vuoti e trattini (in frazione o in
+# punti, il piu' largo dei due), e quanto puo' essere lungo il vuoto rispetto
+# al trattino. Il motivo si controlla su una finestra di TRATTEGGIO_FINESTRA
+# pezzi che scorre lungo la linea: guardarlo ogni volta da capo costava il
+# quadrato dei trattini.
+TRATTEGGIO_MIN = 4
+TRATTEGGIO_SCARTO = 0.25
+TRATTEGGIO_SCARTO_PT = 0.5
+TRATTEGGIO_VUOTO_MAX = 2.0
+TRATTEGGIO_FINESTRA = 8
+
+
+def _motivo(pezzi):
+    """Vero se i pezzi `(a, b)` in fila sono un motivo regolare di trattini.
+
+    I vuoti tutti uguali, i trattini di mezzo tutti uguali, e il primo e
+    l'ultimo non piu' lunghi degli altri: possono essere piu' corti, perche'
+    il motivo si ferma dove finisce la linea.
+    """
+    def mediana(v):
+        return sorted(v)[len(v) // 2]
+
+    def uguali(v, m):
+        return all(abs(x - m) <= max(TRATTEGGIO_SCARTO_PT, TRATTEGGIO_SCARTO * m)
+                   for x in v)
+
+    vuoti = [q[0] - p[1] for p, q in zip(pezzi, pezzi[1:])]
+    lun = [b - a for a, b in pezzi]
+    dentro = lun[1:-1]
+    trattino = mediana(dentro) if dentro else max(lun)
+    tetto = trattino + max(TRATTEGGIO_SCARTO_PT, TRATTEGGIO_SCARTO * trattino)
+    vuoto = mediana(vuoti)
+    return (min(vuoti) > RICUCI_VUOTO and uguali(vuoti, vuoto)
+            and uguali(dentro, trattino) and lun[0] <= tetto and lun[-1] <= tetto
+            and vuoto <= TRATTEGGIO_VUOTO_MAX * trattino)
+
+
+def _tratteggi(pezzi):
+    """I pezzi `(a, b)` di una retta, ordinati, con i tratteggi riuniti.
+
+    Una piega tratteggiata si disegna in due modi che a vederli sono
+    identici: un tracciato solo col motivo del tratteggio, che il PDF
+    tratteggia quando stampa, o un tracciato per trattino. Il primo il
+    solutore lo legge come una linea, il secondo no: sono trattini da pochi
+    millimetri, tutti sotto la soglia, e la piega sparisce. Sul Yogurette
+    (Ferrero 1688...) sparivano cosi' tutte e quattro le pieghe del
+    prodotto, 23 trattini da 6 mm l'una, e senza di loro l'unica lettura che
+    chiudeva era quella girata di 90 gradi: le fasce della pinna prese per
+    le saldature di testa.
+
+    Si riunisce solo un motivo REGOLARE di almeno TRATTEGGIO_MIN trattini
+    (vedi `_motivo`): pezzi diversi che per caso stanno sulla stessa retta un
+    motivo non ce l'hanno, e restano pezzi.
+    """
+    fuori, i = [], 0
+    while i < len(pezzi):
+        j = i + 1
+        while (j < len(pezzi) and _motivo(
+                pezzi[max(i, j + 1 - TRATTEGGIO_FINESTRA):j + 1])):
+            j += 1
+        if j - i >= TRATTEGGIO_MIN:
+            fuori.append((pezzi[i][0], pezzi[j - 1][1]))
+            i = j
+        else:
+            fuori.append(pezzi[i])
+            i += 1
+    return fuori
 
 
 def _ricuci(S):
@@ -1046,6 +1129,9 @@ def _ricuci(S):
     - il piu' lungo 96 punti contro una soglia di 135 - mentre sul T1
     Mandarino, stesso disegno, e' uno da 340: lo steso si fermava sulla
     saldatura, e il passo usciva 141 mm invece di 149.
+
+    Per la stessa ragione un tratteggio disegnato a trattini separati diventa
+    una linea sola: vedi `_tratteggi`.
     """
     per_penna = {}
     for s in S:
@@ -1065,14 +1151,16 @@ def _ricuci(S):
         for linea in linee:
             linea.sort(key=lambda s: s[2])
             c = linea[0][1]
+            pezzi = []
             a, b = linea[0][2], linea[0][3]
             for s in linea[1:]:
                 if s[2] <= b + RICUCI_VUOTO:
                     b = max(b, s[3])
                 else:
-                    fuori.append((k, c, a, b, st))
+                    pezzi.append((a, b))
                     a, b = s[2], s[3]
-            fuori.append((k, c, a, b, st))
+            pezzi.append((a, b))
+            fuori.extend((k, c, a, b, st) for a, b in _tratteggi(pezzi))
     return fuori
 
 
