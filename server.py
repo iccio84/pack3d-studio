@@ -36,8 +36,8 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, coda, controllo, dieline as dl, folding,
-                    exporters, nero, plancia, strati, vassoio, verifica,
-                    versione)
+                    exporters, nero, plancia, pouch, strati, vassoio,
+                    verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -926,6 +926,60 @@ def falda_sospetta(fp):
             % (fp.side_fin, FALDA_VISTA_MAX, fp.T))
 
 
+def analisi_pouch(pdf):
+    """Il pouch dallo steso: nastro, passo e saldature laterali le legge il
+    lettore del flowpack, che ha lo stesso nastro; la struttura attraverso il
+    nastro - piega in cima, pannelli, soffietto - `pack3d.pouch`."""
+    try:
+        _box, fp, _rip = analisi_flowpack(pdf)
+    except Exception as e:
+        raise ValueError("pouch: il nastro non si legge (%s)" % str(e)[:120])
+    return pouch.leggi(pdf, fp)
+
+
+def build_pouch(pdf, out_glb, quality="hd", lastre_extra=(),
+                colata_riquadro=None):
+    """La busta stand-up col soffietto: vedi `pack3d.pouch`.
+
+    La texture e' lo steso intero, pulito come quello di un flowpack, e la
+    maglia ne prende le posizioni: fronte e retro dalla piega in giu', la base
+    dal corpo del soffietto. Il fronte lo decide la grafica.
+    """
+    dpi, tmax = risoluzione(quality)
+    pdf, n_pagine = artwork.pagina_unica(pdf)
+    pu = analisi_pouch(pdf)
+    conti = {}
+    clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                            regione=pu.foglio, conti=conti)
+    deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+    avvisi = list(pu.avvisi)
+    pagine = avviso_pagine(n_pagine)
+    if pagine:
+        avvisi.append(pagine)
+    fuori = artwork.avviso_fuori_dt(conti)
+    if fuori:
+        avvisi.append(fuori)
+    avvisi.extend(artwork.avvisi_gda(conti))
+    rgb = avviso_quadricromia(clean, regione=pu.foglio)
+    if rgb:
+        avvisi.append(rgb)
+    if lastre:
+        avvisi.append("lastre tecniche e coperture tolte per nome: %s"
+                      % ", ".join(lastre))
+    sh = pu.foglio
+    lato_pt = max(sh[2] - sh[0], sh[3] - sh[1])
+    dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+    tex = folding.rasterize_panels(
+        clean, {"film": Panel(sh[0], sh[1], sh[2], sh[3], "film")},
+        dpi=dpi_tex, inset_px=0, clean=True, note=avvisi,
+        nero_deciso=deciso_nero, colata_riquadro=colata_riquadro)["film"]
+    fronte_b, perche = pouch.quale_fronte(pu, tex)
+    avvisi.append(perche)
+    V, UV, T = pouch.maglia(pu, fronte_b)
+    exporters.write_glb_mesh(V, UV, T, tex, out_glb, tex_max=tmax)
+    return pouch.dichiara(pu) + avvisi
+
+
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None):
@@ -1445,7 +1499,10 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  # il cono gelato col lid e' della stessa famiglia: pezzi
                  # tondi, uno steso a settore e una chiusura
                  "cono": "coppa", "cono gelato": "coppa", "cone": "coppa",
-                 "lid": "coppa"}
+                 "lid": "coppa",
+                 # la busta stand-up col soffietto, vedi `pack3d.pouch`
+                 "pouch": "pouch", "doypack": "pouch", "stand-up": "pouch",
+                 "standup": "pouch", "busta": "pouch", "bag": "pouch"}
 
 
 def normalizza_kind(kind):
@@ -1454,10 +1511,11 @@ def normalizza_kind(kind):
     return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
 
 
-KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa")
+KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch")
 # come l'utente ha chiamato il pack, per il controllo dell'AI
 NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
-             "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato"}
+             "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato",
+             "pouch": "pouch (busta stand-up col soffietto sul fondo)"}
 
 
 def dichiarazione(kind, pezzi):
@@ -1522,6 +1580,10 @@ def _analyze_pdf(pdf, kind=None):
                          % (kind, " o ".join("'%s'" % k for k in KIND_NOTI)))
     if kind == "coppa":
         return analisi_coppa([pdf])
+    if kind == "pouch":
+        pu = analisi_pouch(pdf)
+        return dict(kind="pouch", title="Pouch",
+                    meta=pouch.dichiara(pu) + list(pu.avvisi))
     case = CASI.get(_sig(pdf))
     if case and kind in (None, "flowpack"):
         return dict(kind="flowpack", title=case["name"],
@@ -1954,6 +2016,9 @@ class Handler(BaseHTTPRequestHandler):
                         elif info["kind"] == "vassoio":
                             def costruisci(lastre, uscita):
                                 return build_vassoio(pdf, uscita, q, lastre, col_riq)
+                        elif info["kind"] == "pouch":
+                            def costruisci(lastre, uscita):
+                                return build_pouch(pdf, uscita, q, lastre, col_riq)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una

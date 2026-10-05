@@ -49,5 +49,6 @@ un GLB scaricabile.
 
 Tipologie coperte: astuccio a fasciatura verticale, astuccio a fasciatura
 orizzontale, flowpack, vassoio espositore e display con plancia - la scatola
-chiusa che si apre in espositore, costruita aperta. Per i flowpack vengono
-chieste zigrinatura e tipo di gonfiore prima di costruire.
+chiusa che si apre in espositore, costruita aperta - e pouch, la busta
+stand-up col soffietto sul fondo. Per i flowpack vengono chieste zigrinatura
+e tipo di gonfiore prima di costruire.
