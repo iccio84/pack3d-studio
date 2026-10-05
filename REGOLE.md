@@ -2039,13 +2039,20 @@ girava sul codice vecchio, e diceva il falso.
 Il modello approvato va poi in **Glam Lab**, il viewer dove si guardano i
 pack (`prove/parco.py glam`): proprio il GLB della prova sullo Space - se il
 verdetto non e' "ok", o il file non e' quello provato, non parte niente. Va
-fra i "Casi risolti" col nome che Glam da' a un modello costruito dal PDF, il
-nome del file senza `.pdf` e il tipo, cosi' prende il posto del modello
-sbagliato che l'utente aveva costruito, invece di finirgli accanto. La prima
-prova, col Yogurette, ha trovato due cose: Cloudflare, davanti a Glam,
-respinge l'intestazione di serie di Python (errore 1010) e vuole un
-User-Agent suo; e il token sbagliato da' un 401 che il proxy dell'ambiente
-segnala come "upstream auth failed", con la credenziale allegata.
+nella sezione "Costruisci modello 3D da PDF", cartella "Casi risolti", col
+nome del PDF senza `.pdf`: lo stesso che Glam da' a un modello costruito da
+li', cosi' prende il posto di quello sbagliato se l'utente l'aveva salvato,
+invece di finirgli accanto. E chi carica un PDF lo sa subito: quando il
+controllo respinge il modello e il caso va in coda, il riquadro della pagina
+gli dice dove e con che nome trovera' il modello corretto. Senza coda non
+promette niente, perche' nessuno lo correggerebbe.
+
+La prima prova, col Yogurette, ha trovato tre cose. Cloudflare, davanti a
+Glam, respinge l'intestazione di serie di Python (errore 1010) e vuole un
+User-Agent suo. Il token sbagliato da' un 401 che il proxy dell'ambiente
+segnala come "upstream auth failed", con la credenziale allegata. E Glam
+sceglie la sezione dal percorso del file, non dalla categoria: il primo
+import, salvato senza `/pdf/` nel percorso, e' finito fra i "Modelli 3D".
 
 ## Quando la pulizia deterministica non basta
 
