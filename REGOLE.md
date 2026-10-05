@@ -1915,6 +1915,45 @@ apposta, e allora tace.
 Un "sbagliato" puo' essere sbagliato lui: per questo il modello resta a un
 clic, e non si butta.
 
+### La correzione: gli inchiostri tecnici li sceglie chi li vede
+
+Il primo verdetto vero, sullo Space, e' stato un dubbio sul KP T1 Mandarino:
+"sul retro resta una fascia azzurro-verde a tutta altezza, sembra il
+tratteggio tecnico della zona di saldatura". Aveva ragione. Il file esiste in
+due versioni con lo stesso nome: in quella coi livelli la fascia, i due box
+dell'EAN e i blocchetti neri stanno su `notes` e `technical-drawing` e il
+modello esce pulito; in quella senza livelli sono pieni come la grafica, e
+niente li distingue - ne' un livello, ne' un nome di lastra, ne' una
+didascalia. Pero' ognuno e' dipinto con una Pantone **sua**, che la grafica non
+usa: la fascia col 571 C, i box col 346 C e il 3405 C, linee e quote col 350 C
+e il 341 C.
+
+Quando il controllo vede segni tecnici rimasti (`residui_tecnici` nel
+verdetto), la costruzione prova a correggersi:
+
+1. `controllo.tavola_inchiostri` separa le lastre spot con Ghostscript e fa una
+   tavola con un riquadro per inchiostro: in magenta dove dipinge, sulla pagina
+   sbiadita. Sul Mandarino si legge a colpo d'occhio quali dipingono solo il
+   disegno e quali la grafica.
+2. `controllo.inchiostri_tecnici` chiede a Claude quali sono **solo**
+   tecnici. Un inchiostro che dipinge anche un pezzo di grafica non si sceglie
+   mai: togliendolo sparirebbe anche quella, e nel dubbio si lascia.
+3. La costruzione si rifa' con quelle lastre tolte, con lo stesso meccanismo
+   delle aree riservate che l'agente vede guardando (`aree_da_agente`), e il
+   modello nuovo ripassa dal controllo.
+4. Si consegna il nuovo se il suo verdetto non e' peggiore del primo, se no
+   resta il primo. Un cartellino dice quali inchiostri sono andati via, o
+   perche' la correzione e' stata scartata.
+
+Sul Mandarino senza livelli: sette lastre tolte, il fronte intero, il retro
+come nella versione coi livelli. Restano i blocchetti neri sulle pinne, ai capi
+della fascia: sono in nero di quadricromia, che e' anche il nero della grafica,
+e il nero di processo non si offre mai.
+
+La seconda costruzione usa pdfium come la prima, quindi aspetta il suo posto
+(`PACK3D_CORREZIONE_ATTESA`, 240 s); se non arriva si consegna il primo
+modello. `PACK3D_CORREZIONE=0` spegne la correzione e lascia il controllo.
+
 ### La coda dei casi nuovi
 
 Un modello respinto e' un pack che il codice non sa ancora costruire. Non
@@ -3916,6 +3955,10 @@ Astucci, con la quota letta due volte che chiude il conto:
   verdetto.
 - La **coda** e' stata provata con un GitHub finto: un repository privato vero
   non l'ha ancora vista.
+- La **correzione degli inchiostri** e' provata su un file solo, il Mandarino
+  senza livelli, con un'API finta che sceglie quello che avrei scelto io
+  guardando la tavola. Un file dove il disegno tecnico usa le stesse Pantone
+  della grafica non si corregge cosi', e il controllo lo lascia in dubbio.
 - Il **cono** e' stato costruito su un file solo, il Camy Apolo. Da li'
   vengono la lettura dell'ultimo taglio come piega del **risvolto** (il DT
   lo chiama "last cutting of cone", e la fascia sopra e' larga 3,5 mm), il

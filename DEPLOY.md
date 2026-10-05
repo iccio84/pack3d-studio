@@ -57,6 +57,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_MODEL_CONTROLLO` | Variables | un modello di Claude | solo se il controllo deve usare un modello diverso dall'agente |
 | `PACK3D_EFFORT_CONTROLLO` | Variables | `low`, `medium`, `high` | quanto ragiona il controllo; `medium` se manca. Vuoto per non mandarlo, coi modelli che non lo accettano |
 | `PACK3D_CONTROLLO` | Variables | `0` | spegne il controllo apposta, senza togliere la chiave |
+| `PACK3D_CORREZIONE` | Variables | `0` | spegne solo la correzione degli inchiostri tecnici, e lascia il controllo |
 | `PACK3D_CODA_REPO` | Variables | `utente/repository` | dove vanno i **casi nuovi**: un repository GitHub **privato**, vedi sotto |
 | `PACK3D_CODA_TOKEN` | Secrets | un token GitHub | scrittura su contenuti e issue di quel repository, e di nient'altro |
 | `OPENAI_API_KEY` | Secrets | la chiave | solo il controllo visivo dell'agente |
@@ -70,7 +71,9 @@ Con `ANTHROPIC_API_KEY` ogni costruzione finisce con una chiamata a Claude:
 le prime pagine dei PDF e quattro viste del modello, e Claude dice se e' il
 pack giusto (vedi REGOLE.md, *Il controllo dell'AI prima della consegna*).
 Costa qualche centesimo di dollaro a costruzione, a seconda del modello; con
-"Scegli tu" sul flowpack le chiamate sono due. La costruzione si allunga dei
+"Scegli tu" sul flowpack le chiamate sono due. Quando il controllo vede segni
+del disegno tecnico rimasti, Claude sceglie gli inchiostri tecnici e il modello
+si rifa' senza: una costruzione e due chiamate in piu', solo su quei modelli. La costruzione si allunga dei
 secondi della risposta, ma il posto di costruzione si libera prima: il
 prossimo utente non aspetta Claude.
 
