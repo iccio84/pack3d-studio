@@ -90,7 +90,7 @@ Ogni caso respinto diventa una cartella `casi/<data>_<codice>/` coi PDF, le
 viste e la diagnosi, piu' una issue. Se il repository non e' privato non si
 carica niente, e il log lo dice.
 
-La coda la lavora ogni mattina una **routine di Claude Code** (claude.ai/code,
+La coda la lavora ogni ora una **routine di Claude Code** (claude.ai/code,
 Routines): una sessione nuova che segue CODA.md, prova ogni correzione sul
 parco del repository privato (`parco/`) e, se tutto torna, unisce da sola la
 PR - quindi pubblica sullo Space. Poi prova il caso sullo Space vero

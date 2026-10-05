@@ -1,6 +1,6 @@
 # La coda dei casi nuovi: come si lavora un caso
 
-Queste sono le istruzioni per la sessione di Claude Code che ogni giorno
+Queste sono le istruzioni per la sessione di Claude Code che ogni ora
 prende i casi nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a
 mano. Il perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il
 metodo.
@@ -21,15 +21,18 @@ metodo.
 - **Lo Space** si aggiorna da solo a ogni push su `main` (workflow
   "Sync to Hugging Face Spaces"). Unire una PR vuol dire pubblicare.
 
-## Il giro di ogni giorno
+## Il giro di ogni ora
 
-1. **Prepara.** Servono tutti e due i repository: se `pack3d-casi` non e' nella
-   sessione aggiungilo con accesso in scrittura. Lavora sul ramo che la
+1. **Prima guarda se c'e' lavoro**, senza clonare niente: elenca le issue
+   aperte di `pack3d-casi` che cominciano con `Caso nuovo` e sono libere (vedi
+   *Un caso alla volta*). Se non ce ne sono, hai finito: niente da segnalare.
+   Il giro parte ogni ora, e quasi sempre finisce qui: deve costare poco.
+2. **Prepara.** Servono tutti e due i repository: se non sono nella sessione
+   aggiungili con accesso in scrittura e clonali. Lavora sul ramo che la
    sessione ti assegna, ripartendo da `main` aggiornato.
-2. **Elenca** le issue aperte di `pack3d-casi` che cominciano con
-   `Caso nuovo`. Se non ce ne sono, hai finito: niente da segnalare.
-   Al massimo **tre casi per giro**, dal piu' vecchio: gli altri al giro dopo.
-3. **Per ogni caso:**
+3. Al massimo **un caso per giro**, il piu' vecchio libero: gli altri ai giri
+   dopo, che sono fra un'ora.
+4. **Per il caso:**
    1. **Leggi** `verdetto.json` - motivo, difetti, avvisi, opzioni - e guarda
       `viste_modello.jpg` accanto al PDF (rendi la pagina: `pack3d.vista.pagina`).
    2. **Mettilo nel parco**: copia i PDF in `parco/pdf/`, aggiungi la voce a
@@ -53,6 +56,22 @@ metodo.
       leggendo il `come_deve_venire` di ognuno.
    6. **Scrivi la regola** in REGOLE.md: il caso, la causa, la regola, cosa
       cambia sul parco. Come le altre: con i numeri.
+
+## Un caso alla volta
+
+Un giro parte ogni ora, e un caso puo' chiedere piu' di un'ora: due sessioni
+non devono lavorare lo stesso caso, ne' unire due correzioni una sopra
+l'altra senza saperlo.
+
+- Un caso e' **libero** se la sua issue non ha l'etichetta `in-lavorazione`,
+  oppure ce l'ha da piu' di **sei ore** (guarda quando e' stata messa negli
+  eventi della issue): allora la sessione che l'aveva preso e' morta, e lo
+  riprendi scrivendolo nel commento.
+- Prima di toccare il caso, mettigli l'etichetta `in-lavorazione` e un
+  commento col link a questa sessione. Alla fine, risolto o no, toglila.
+- Prima del parco prima e dopo, e di nuovo prima di unire, riparti da `main`
+  aggiornato: un'altra sessione puo' aver unito qualcosa nel frattempo, e il
+  confronto va fatto contro quello che c'e' davvero sul sito.
 
 ## Quando si unisce da soli
 
@@ -81,7 +100,7 @@ la causa, la regola, il link alla PR e il verdetto dello Space.
 
 - **"ok"** (uscita 0): chiudi la issue come risolta.
 - **"dubbio" o "sbagliato"** (uscita 1 o 2): la issue resta aperta, col
-  verdetto e i difetti nel commento. Il caso torna il giorno dopo.
+  verdetto e i difetti nel commento. Il caso torna al giro dopo.
 - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
   stato (uscita 3): scrivilo sulla issue e lasciala aperta.
 
