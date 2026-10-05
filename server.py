@@ -36,7 +36,8 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, coda, controllo, dieline as dl, folding,
-                    exporters, nero, plancia, strati, vassoio, verifica)
+                    exporters, nero, plancia, strati, vassoio, verifica,
+                    versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -1467,6 +1468,10 @@ def dichiarazione(kind, pezzi):
 
 # Le scelte dell'utente che cambiano il modello: vanno in coda col caso, e chi
 # lo riprende lo ricostruisce con le stesse (vedi prove/parco.py e CODA.md).
+# L'impronta dei file del codice in esecuzione, calcolata una volta all'avvio:
+# la restituisce /api/ping (vedi pack3d/versione.py).
+VERSIONE = versione.impronta(HERE)
+
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
                 "spessore", "quality")
 
@@ -1817,7 +1822,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path.startswith("/api/ping"):
-            return self._send(200, json.dumps({"ok": True}))
+            # con l'impronta del codice: dopo una pubblicazione dice se lo
+            # Space e' gia' ripartito con quello nuovo (prove/parco.py spazio)
+            return self._send(200, json.dumps({"ok": True, "versione": VERSIONE}))
         path = os.path.join(HERE, "pack3d_studio.html")
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")

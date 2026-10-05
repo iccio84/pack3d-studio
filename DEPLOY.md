@@ -93,9 +93,11 @@ carica niente, e il log lo dice.
 La coda la lavora ogni mattina una **routine di Claude Code** (claude.ai/code,
 Routines): una sessione nuova che segue CODA.md, prova ogni correzione sul
 parco del repository privato (`parco/`) e, se tutto torna, unisce da sola la
-PR - quindi pubblica sullo Space. Per verificare il caso anche sullo Space vero
-dopo la pubblicazione, nella rete dell'ambiente cloud va consentito il dominio
-dello Space (`*.hf.space`); senza, la verifica resta quella in locale.
+PR - quindi pubblica sullo Space. Poi prova il caso sullo Space vero
+(`prove/parco.py spazio`), aspettando che `/api/ping` dica l'impronta del
+codice appena unito. Per questo nella rete dell'ambiente cloud e' consentito
+il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`
+fra gli Allowed domains, con la lista di base dei package manager.
 
 ### I 16 GB non comprano due costruzioni insieme
 
