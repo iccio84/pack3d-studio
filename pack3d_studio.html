@@ -250,7 +250,7 @@
     <button id="riprova" type="button" hidden>Riprova</button>
   </div>
   <div id="caso" role="alert">
-    <strong>Caso nuovo: il modello non &egrave; il tuo pack</strong>
+    <strong id="caso-titolo">Caso nuovo: il modello non &egrave; il tuo pack</strong>
     <div class="riga" id="caso-pdf"></div>
     <div class="riga" id="caso-mod"></div>
     <div class="riga" id="caso-perche"></div>
@@ -729,10 +729,17 @@ async function post(p, buf, opts){
     // basta: il massimo dell'inutile proprio quando serve capire.
     // I secondi non sono un dettaglio: un tempo scaduto cade sempre allo
     // stesso valore, una memoria esaurita cade quando il picco arriva.
-    throw new Error(t || ('il server ha chiuso senza rispondere dopo ' + secondi
+    const err = new Error(t || ('il server ha chiuso senza rispondere dopo ' + secondi
       + ' s (HTTP ' + r.status + '): la costruzione non e\' arrivata in fondo, '
       + 'per memoria esaurita o per tempo scaduto. Dimmi quanti secondi e so '
       + 'quale dei due.'));
+    // una costruzione che si ferma va in coda come un caso nuovo: il server
+    // lo dice nello stesso header del verdetto del controllo
+    try{
+      const c = r.headers.get('X-Pack3d-Controllo');
+      if (c) err.verdetto = JSON.parse(decodeURIComponent(c));
+    }catch(e){}
+    throw err;
   }
   return r;
 }
@@ -753,7 +760,17 @@ async function analyze(buf, opts){
 async function build(buf, name, opts){
   nascondiCaso();
   setStatus('Costruzione del modello…','busy');
-  const r = await post('/api/build', buf, opts);
+  glbName = name.replace(/\.pdf$/i,'') + '.glb';
+  let r;
+  try{
+    r = await post('/api/build', buf, opts);
+  }catch(err){
+    // Il codice non ha saputo costruirlo. Se il caso e' andato in coda, il
+    // riquadro del caso nuovo lo dice come per un modello respinto; l'errore
+    // resta nella riga di stato, la scrive chi ha chiamato.
+    if (err.verdetto && err.verdetto.codice) mostraCaso(err.verdetto, null);
+    throw err;
+  }
   // gli avvisi della costruzione arrivano in un header: il corpo e' il GLB
   try{
     const m = r.headers.get('X-Pack3d-Meta');
@@ -767,7 +784,6 @@ async function build(buf, name, opts){
     if (c) verdetto = JSON.parse(decodeURIComponent(c));
   }catch(e){}
   const blob = await r.blob();
-  glbName = name.replace(/\.pdf$/i,'') + '.glb';
   if (verdetto && verdetto.esito === 'sbagliato'){
     // respinto: non va nel viewer come se fosse buono
     glbBlob = null;
@@ -817,9 +833,16 @@ function mostraCaso(v, blob){
   respinto = blob;
   togliModello();
   document.getElementById('empty').style.display = 'none';
+  // senza modello (la costruzione si e' fermata) non c'e' niente da mostrare
+  // comunque, e la frase sul modello non avrebbe senso
+  const errore = v.esito === 'errore';
+  document.getElementById('caso-titolo').textContent = errore
+    ? 'Caso nuovo: il codice non sa ancora costruire questo pack'
+    : 'Caso nuovo: il modello non è il tuo pack';
+  document.getElementById('caso-mostra').hidden = !blob;
   document.getElementById('caso-pdf').textContent = v.pack_nel_pdf ? 'Nel PDF: ' + v.pack_nel_pdf : '';
-  document.getElementById('caso-mod').textContent = v.modello ? 'Il modello: ' + v.modello : '';
-  document.getElementById('caso-perche').textContent = v.motivo || '';
+  document.getElementById('caso-mod').textContent = v.modello && !errore ? 'Il modello: ' + v.modello : '';
+  document.getElementById('caso-perche').textContent = (v.motivo || '').replace(/^[A-Za-z]*Error: /, '');
   // senza coda nessuno lo correggera': meglio non promettere niente
   document.getElementById('caso-dove').textContent = v.in_coda
     ? 'Quando sar\u00e0 corretto, troverai il modello giusto in Glam Lab, nella sezione '

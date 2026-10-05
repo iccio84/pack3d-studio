@@ -2031,6 +2031,17 @@ controllo, in quel caso, si propone in bozza e non si unisce da sola: un
 controllo che impara a non vedere una cosa smette di vederla anche quando e'
 un difetto.
 
+E in coda vanno le costruzioni che si **fermano con un errore**. Erano il
+caso nuovo piu' chiaro di tutti e l'unico che restava fuori: senza modello il
+controllo dell'AI non ha niente da guardare, e l'errore finiva solo nel log
+dello Space. Il primo e' stato un pack dichiarato vassoio espositore, con una
+fustella di dieci colonne e quattro fasce dove il lettore dei vassoi ne
+conosce cinque e tre. Adesso il caso va in coda coi PDF e l'errore, e la pagina,
+al posto del modello che non c'e', dice che il codice non sa ancora
+costruirlo e dove arrivera' il modello quando sapra'. Un errore puo' anche
+venire da un tipo dichiarato male: allora il codice non sbaglia a
+rifiutarlo, e il modello si fa col tipo giusto.
+
 Il **parco** sono i casi di prova: 26 PDF, 25 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li

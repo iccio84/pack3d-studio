@@ -1,13 +1,15 @@
 """
-La coda dei casi nuovi: i pack che il controllo dell'AI ha respinto, o sui
-quali ha un dubbio.
+La coda dei casi nuovi: i pack che il controllo dell'AI ha respinto o sui
+quali ha un dubbio, e quelli che il codice non ha saputo costruire affatto.
 
 Un modello respinto e' un pack che il codice non sa ancora costruire. Non
 deve sparire con la risposta: va messo da parte, con quello che serve a chi
 poi insegna al codice a costruirlo - i PDF, le viste del modello sbagliato e
 la diagnosi del controllo. Un dubbio pure: il modello all'utente arriva lo
 stesso, ma qualcuno lo deve guardare, e se il difetto c'e' davvero si
-corregge come un caso respinto.
+corregge come un caso respinto. E una costruzione che si ferma con un errore
+e' il caso nuovo piu' chiaro di tutti: li' non c'e' nemmeno un modello da
+controllare, e in coda vanno i PDF e l'errore.
 
 Dove va, lo decide chi gestisce lo Space. I PDF sono artwork di clienti,
 quindi la coda va solo in un repository GitHub PRIVATO:
@@ -115,6 +117,11 @@ def _corpo_issue(cod, nomi, verdetto, contesto, cartella):
         testa = ("Il controllo dell'AI ha un dubbio sul modello costruito da questi "
                  "PDF. L'utente il modello l'ha avuto: va guardato, e corretto solo "
                  "se il difetto c'e' davvero.")
+    elif verdetto.get("esito") == "errore":
+        testa = ("Il codice non e' riuscito a costruire il modello da questi PDF: "
+                 "la costruzione si e' fermata con un errore, e il controllo "
+                 "dell'AI non ha avuto niente da guardare. L'utente non ha "
+                 "nessun modello.")
     else:
         testa = "Il controllo dell'AI ha respinto il modello costruito da questi PDF."
     righe = [testa, ""]

@@ -13,7 +13,8 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
   - `casi/<data>_<codice>/`: i PDF del caso, `verdetto.json` (il giudizio
     dell'AI, gli avvisi della costruzione e le opzioni scelte dall'utente in
     `contesto.opzioni`) e `viste_modello.jpg` (il modello respinto, o
-    quello su cui il controllo ha avuto un dubbio).
+    quello su cui il controllo ha avuto un dubbio; manca se la costruzione
+    si e' fermata con un errore, e allora l'errore e' in `motivo`).
   - Una **issue aperta per ogni caso**, titolo `Caso nuovo <codice>: <file>`.
   - `parco/`: i PDF di prova (`parco/pdf/`), il manifesto `parco/parco.json`
     con le opzioni e com'e' giusto ogni modello, e in `parco/riferimento/` le
@@ -47,7 +48,8 @@ dallo Space avesse perso.
    avvia il suo giro, e quelli rimasti li prende il giro di sicurezza.
 4. **Per il caso:**
    1. **Leggi** `verdetto.json` - esito, motivo, difetti, avvisi, opzioni;
-      se l'esito e' `dubbio`, vedi *Un caso col dubbio* - e guarda
+      se l'esito e' `dubbio`, vedi *Un caso col dubbio*, se e' `errore`
+      *Un caso che non si costruisce* - e guarda
       `viste_modello.jpg` accanto al PDF (rendi la pagina: `pack3d.vista.pagina`).
    2. **Mettilo nel parco**: copia i PDF in `parco/pdf/`, aggiungi la voce a
       `parco/parco.json` con le opzioni del caso (`contesto.opzioni`; se
@@ -166,6 +168,26 @@ accanto al PDF e rileggendo i difetti:
   quello che il controllo considera un difetto non si cambia mai da soli,
   perche' una regola sbagliata lo renderebbe cieco proprio sui difetti veri.
 - **Non sai dire**: come un caso che non si risolve, qui sotto.
+
+## Un caso che non si costruisce
+
+In coda vanno anche le costruzioni che si fermano con un errore (`esito:
+errore`, l'errore in `motivo`): l'utente non ha nessun modello, e il
+controllo dell'AI non ha avuto niente da guardare. Riproduci l'errore, poi
+guarda il PDF:
+
+- **Il tipo dichiarato non e' quello del pack** - per esempio un astuccio
+  dichiarato vassoio - e col tipo giusto il modello viene giusto: il codice
+  non sbaglia a rifiutarlo. Metti il caso nel parco col tipo giusto nelle
+  opzioni, cosi' la prova sullo Space lo costruisce come va, e se lo Space
+  dice "ok" il modello va in Glam come quello di un caso risolto. Sulla issue
+  scrivi quale tipo andava dichiarato. Se l'errore non lo diceva chiaro,
+  correggi il messaggio: e' una modifica come le altre, col parco prima e
+  dopo.
+- **Il tipo e' giusto e il codice non conosce quella fustella**: e' un caso
+  nuovo come gli altri, con la stessa strada e le stesse condizioni per
+  unire. La correzione e' una regola generale per quella famiglia di
+  fustelle, mai una misura cucita su quel PDF.
 
 ## Un caso che non si risolve
 
