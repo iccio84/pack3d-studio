@@ -771,7 +771,9 @@ async function build(buf, name, opts){
 /** La riga di stato a costruzione finita, secondo il controllo dell'AI. */
 function esitoFinale(v, titolo){
   if (!v || v.esito === 'non controllato'){ setStatus(titolo, ''); return; }
-  if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 controllato dall\u2019AI', ''); return; }
+  // corretto: l'AI ha tolto lastre tecniche e il modello e' stato rifatto
+  const da = v.corretto ? 'corretto e controllato dall\u2019AI' : 'controllato dall\u2019AI';
+  if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 ' + da, ''); return; }
   if (v.esito === 'dubbio'){
     // una riga sola in fondo al visore: il motivo intero e' nei cartellini
     setStatus('Il controllo AI ha un dubbio: ' + (v.motivo || 'guarda bene il modello').slice(0, 160), 'dubbio');

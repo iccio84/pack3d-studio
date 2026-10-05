@@ -1928,18 +1928,25 @@ class Handler(BaseHTTPRequestHandler):
                         # dichiara la colata, e l'unica cosa che resta e'
                         # quello che l'agente ha guardato
                         col_riq = colata_da_agente(opts.get("params"))
+                        # La costruzione e' una funzione delle lastre da
+                        # togliere e del file d'uscita: la correzione dell'AI
+                        # la rifa' con le lastre tecniche che ha riconosciuto,
+                        # con tutto il resto uguale.
                         if info["kind"] == "coppa":
-                            avvisi = build_coppa(pdfs, out, q, aree,
-                                                 dichiarato=kind or "coppa",
-                                                 carta=carta)
+                            def costruisci(lastre, uscita):
+                                return build_coppa(pdfs, uscita, q, lastre,
+                                                   dichiarato=kind or "coppa",
+                                                   carta=carta)
                         elif info["kind"] == "vassoio":
-                            avvisi = build_vassoio(pdf, out, q, aree, col_riq)
+                            def costruisci(lastre, uscita):
+                                return build_vassoio(pdf, uscita, q, lastre, col_riq)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
                             # variabile che su questo ramo non esisteva.
-                            avvisi = build_carton(pdf, out, q, aree, col_riq,
-                                                  carta=carta)
+                            def costruisci(lastre, uscita):
+                                return build_carton(pdf, uscita, q, lastre, col_riq,
+                                                    carta=carta)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":
@@ -1987,11 +1994,13 @@ class Handler(BaseHTTPRequestHandler):
                             pinne = opts.get("pinne")
                             if pinne in (None, "", "auto"):
                                 pinne = pinne_da_agente(opts.get("params"))
-                            avvisi = build_flowpack(
-                                pdf, out, int(opts.get("teeth", 20)),
-                                str(soft), case, q,
-                                sezione_da_agente(opts.get("params")),
-                                scatola, pinne, aree, col_riq)
+                            def costruisci(lastre, uscita):
+                                return build_flowpack(
+                                    pdf, uscita, int(opts.get("teeth", 20)),
+                                    str(soft), case, q,
+                                    sezione_da_agente(opts.get("params")),
+                                    scatola, pinne, lastre, col_riq)
+                        avvisi = costruisci(aree, out)
                         traccia("costruzione", t1,
                                 "%d kB" % (os.path.getsize(out) // 1024))
                         with open(out, "rb") as fh:
@@ -2020,10 +2029,21 @@ class Handler(BaseHTTPRequestHandler):
                                    riconosciuto=info.get("title") or info["kind"],
                                    avvisi=list(meta), nomi=nomi)
                         verdetto = controllo.giudica(quadro, ctx)
+                        traccia("controllo", t2, verdetto["esito"])
+                        riga = None
+                        if (controllo.correggibile(verdetto)
+                                and controllo.correzione_attiva()):
+                            nuovo, riga = correggi(costruisci, aree, pdfs, td,
+                                                   quadro, verdetto, ctx)
+                            if nuovo is not None:
+                                glb, avvisi_corr, quadro, verdetto, ctx = nuovo
+                                meta = avvisi_ingresso + list(avvisi_corr)
+                            ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
                         if verdetto["esito"] == "sbagliato":
                             verdetto["codice"], verdetto["in_coda"] = coda.metti(
                                 blocchi, nomi, verdetto, quadro["viste"], ctx)
-                        traccia("controllo", t2, verdetto["esito"])
+                        if riga:
+                            meta.insert(0, riga)
                         meta.insert(0, controllo.avviso(verdetto))
                     elif controllo.manca_la_chiave():
                         # spento perche' manca la chiave, non perche' qualcuno
@@ -2083,6 +2103,56 @@ MAX_UPLOAD = 60 * 1024 * 1024
 # due thread*, e DEPLOY.md per i numeri per fase.
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "1"))
 _slots = threading.Semaphore(MAX_JOBS)
+
+# Quanto la correzione aspetta che il posto di costruzione si liberi. Chi ha
+# chiesto il modello sta gia' aspettando: oltre, si consegna quello di prima.
+CORREZIONE_ATTESA = float(os.environ.get("PACK3D_CORREZIONE_ATTESA", "240"))
+
+
+def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
+    """La seconda costruzione, senza le lastre tecniche che Claude riconosce.
+
+    Il controllo ha visto segni del disegno tecnico rimasti stampati: Claude
+    guarda dove dipinge ogni inchiostro spot e dice quali sono solo tecnici
+    (`controllo.inchiostri_tecnici`), la costruzione si rifa' senza, e il
+    modello nuovo ripassa dal controllo. Si consegna il nuovo se il verdetto
+    non e' peggiore, se no resta il primo.
+
+    Torna `(nuovo, riga)`: `nuovo` e' (glb, avvisi, quadro, verdetto, ctx) del
+    modello corretto, o None se resta il primo; `riga` dice com'e' andata.
+    Non lancia: una correzione che non riesce lascia il modello di prima.
+    """
+    t = traccia("correzione")
+    scelta = controllo.inchiostri_tecnici(pdfs, quadro, verdetto)
+    if "errore" in scelta:
+        return None, "correzione AI non fatta: %s" % scelta["errore"]
+    if not scelta["tecnici"]:
+        return None, ("correzione AI non fatta: nessun inchiostro spot del file "
+                      "e' solo tecnico (%s)" % (scelta.get("motivo") or "-"))
+    # la seconda costruzione usa pdfium come la prima: dentro il posto
+    if not _slots.acquire(timeout=CORREZIONE_ATTESA):
+        return None, "correzione AI non fatta: il server era occupato"
+    try:
+        uscita = os.path.join(cartella, "corretto.glb")
+        avvisi = costruisci(list(aree) + scelta["tecnici"], uscita)
+        with open(uscita, "rb") as fh:
+            glb = fh.read()
+        quadro2 = controllo.prepara(pdfs, uscita)
+    except Exception as e:
+        traceback.print_exc()
+        return None, "correzione AI non riuscita: %s" % e
+    finally:
+        _slots.release()
+    ctx2 = dict(ctx, avvisi=list(avvisi))
+    verdetto2 = controllo.giudica(quadro2, ctx2)
+    traccia("correzione", t, verdetto2["esito"])
+    tenuto = controllo.migliore(verdetto, verdetto2)
+    riga = controllo.avviso_correzione(scelta, verdetto, verdetto2, tenuto)
+    if not tenuto:
+        return None, riga
+    verdetto2["corretto"] = True
+    verdetto2["tolti"] = list(scelta["tecnici"])
+    return (glb, avvisi, quadro2, verdetto2, ctx2), riga
 
 if __name__ == "__main__":
     # PORT e HOST arrivano dall'ambiente sui servizi di hosting; in locale

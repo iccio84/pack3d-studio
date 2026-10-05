@@ -46,8 +46,10 @@ SCHEMA_VERDETTO = {
         "modello": {"type": "string"},
         "motivo": {"type": "string"},
         "difetti": {"type": "array", "items": {"type": "string"}},
+        "residui_tecnici": {"type": "boolean"},
     },
-    "required": ["esito", "pack_nel_pdf", "modello", "motivo", "difetti"],
+    "required": ["esito", "pack_nel_pdf", "modello", "motivo", "difetti",
+                 "residui_tecnici"],
     "additionalProperties": False,
 }
 
@@ -101,7 +103,11 @@ programmatore:
 - pack_nel_pdf: che pack c'e' nel PDF (tipo, pezzi, forma), in una frase;
 - modello: cosa mostra il modello, in una frase;
 - motivo: perche' l'esito, in una o due frasi;
-- difetti: i difetti che vedi, uno per voce; vuoto se non ce ne sono.
+- difetti: i difetti che vedi, uno per voce; vuoto se non ce ne sono;
+- residui_tecnici: vero se fra i difetti ci sono segni del disegno tecnico
+  rimasti stampati sul modello - linee di fustella, quote, zone di saldatura
+  o di colla tratteggiate o campite, box segnaposto colorati - falso
+  altrimenti.
 """
 
 
@@ -281,6 +287,7 @@ def _giudica(quadro, contesto, modello, client, t0):
     v = {k: dati.get(k, "") for k in ("esito", "pack_nel_pdf", "modello", "motivo")}
     v = {k: str(x).strip() for k, x in v.items()}
     v["difetti"] = [str(d).strip() for d in dati.get("difetti") or [] if str(d).strip()][:12]
+    v["residui_tecnici"] = bool(dati.get("residui_tecnici"))
     v["secondi"] = round(time.time() - t0, 1)
     return v
 
@@ -296,6 +303,193 @@ def avviso(verdetto):
     if esito == "sbagliato":
         return "CASO NUOVO, MODELLO RESPINTO DAL CONTROLLO AI: %s" % motivo
     return "controllo AI non fatto: %s" % motivo
+
+
+# --------------------------------------------------------------------------- #
+# la correzione: gli inchiostri del disegno tecnico, scelti guardando
+# --------------------------------------------------------------------------- #
+#
+# Il caso che l'ha fatta nascere: il KP T1 Mandarino esiste in due versioni con
+# lo stesso nome. In quella coi livelli il disegno tecnico sta su "notes" e
+# "technical-drawing" e il modello esce pulito; in quella senza livelli la
+# fascia della saldatura e i due box dell'EAN sono pieni come la grafica, e
+# restavano stampati sul retro. Niente nel file dice che sono tecnici - ne' un
+# livello, ne' un nome, ne' una didascalia - e il controllo li vedeva al primo
+# colpo. Pero' ognuno era dipinto con una Pantone SUA, che la grafica non usa:
+# la fascia col 571 C, i box col 346 C e il 3405 C. Togliendo quelle tre lastre
+# il retro torna come nella versione coi livelli.
+#
+# Quindi, quando il controllo vede segni tecnici rimasti, Claude guarda dove
+# dipinge ogni inchiostro spot del file e dice quali sono solo tecnici; la
+# costruzione si rifa' senza, e il modello nuovo passa di nuovo dal controllo.
+# Il nero di quadricromia non e' mai fra le scelte: e' anche il nero della
+# grafica, e i segni tecnici in nero restano.
+
+# l'ordine dei verdetti: a parita' si tiene il modello corretto
+RANGO = {NON_CONTROLLATO: -1, "sbagliato": 0, "dubbio": 1, "ok": 2}
+# sopra questa quota d'inchiostro il pixel conta come dipinto (come techink)
+INCHIOSTRO_PIENO = 0.25
+
+SCHEMA_INCHIOSTRI = {
+    "type": "object",
+    "properties": {
+        "tecnici": {"type": "array", "items": {"type": "string"}},
+        "motivo": {"type": "string"},
+    },
+    "required": ["tecnici", "motivo"],
+    "additionalProperties": False,
+}
+
+ISTRUZIONI_INCHIOSTRI = """\
+Sei il controllo qualita' di pack3d. Sul modello 3D costruito da questo PDF
+sono rimasti stampati segni del disegno tecnico. Il file non li separa dalla
+grafica con un livello, ma spesso il disegno tecnico e' dipinto con inchiostri
+spot suoi, che la grafica non usa: togliendo quegli inchiostri il modello torna
+pulito.
+
+Ricevi la pagina del PDF e una tavola con un riquadro per ogni inchiostro spot
+del file: in magenta dove quell'inchiostro dipinge, sulla pagina sbiadita.
+
+Dimmi quali inchiostri dipingono SOLO cose tecniche: linee di fustella e del
+disegno, quote, zone di saldatura o di colla tratteggiate o campite, box
+segnaposto (EAN, lotto, scadenza, aree riservate), legende, cartigli,
+miniature, crocini, barre e campioni di controllo.
+
+Non mettere un inchiostro che dipinge anche solo una parte della grafica
+stampata - un logo, un testo, un fondo, un'immagine, un'icona: togliendolo
+sparirebbe anche quella. Nel dubbio lascialo fuori: un segno tecnico rimasto
+e' meno grave di un logo perso.
+
+- tecnici: i nomi degli inchiostri scelti, scritti come nella tavola; vuoto se
+  nessuno e' solo tecnico;
+- motivo: in una frase, che cosa dipingono quelli scelti.
+"""
+
+
+def correzione_attiva():
+    """La correzione si spegne da sola con PACK3D_CORREZIONE=0."""
+    return os.environ.get("PACK3D_CORREZIONE", "1").strip().lower() not in (
+        "0", "no", "off", "false")
+
+
+def correggibile(verdetto):
+    """Il controllo ha visto segni tecnici rimasti su un modello non buono."""
+    return (bool(verdetto) and verdetto.get("esito") in ("dubbio", "sbagliato")
+            and bool(verdetto.get("residui_tecnici")))
+
+
+def migliore(primo, secondo):
+    """Se il secondo verdetto non e' peggio del primo."""
+    return RANGO.get(secondo.get("esito"), -1) >= RANGO.get(primo.get("esito"), -1)
+
+
+def tavola_inchiostri(pdfs, pagine, dpi=36, lato=330, colonne=4):
+    """La tavola degli inchiostri spot: (jpeg, [(nome, copertura, pezzo)]).
+
+    Un riquadro per inchiostro, in magenta dove dipinge, sulla pagina
+    sbiadita - `pagine` sono le pagine gia' rese da `prepara`. Le lastre le
+    separa Ghostscript, in un processo suo: si puo' fare fuori dal posto di
+    costruzione. Vuota se Ghostscript non c'e' o il file e' solo quadricromia.
+    """
+    import numpy as np
+    from PIL import Image, ImageDraw
+    from . import techink
+
+    riquadri, voci = [], []
+    for k, pdf in enumerate(pdfs):
+        mappe = techink.mappe_lastre(pdf, 0, dpi)
+        if not mappe:
+            continue
+        fondo = Image.open(io.BytesIO(pagine[k])).convert("L")
+        for nome, m in sorted(mappe.items()):
+            pieno = (255 - m.astype(np.int16)) / 255.0 >= INCHIOSTRO_PIENO
+            copertura = float(pieno.mean())
+            if copertura <= 0:
+                continue
+            h, w = m.shape
+            f = np.asarray(fondo.resize((w, h), Image.BILINEAR), np.float32)
+            chiaro = 255.0 - (255.0 - f) * 0.22
+            rgb = np.repeat(chiaro[..., None], 3, axis=2)
+            rgb[pieno] = (225, 0, 125)
+            im = Image.fromarray(rgb.astype(np.uint8))
+            im = im.resize((lato, max(1, int(round(lato * h / w)))), Image.LANCZOS)
+            riquadri.append(im)
+            voci.append((nome, copertura, k + 1))
+    if not riquadri:
+        return None, []
+    righe = (len(riquadri) + colonne - 1) // colonne
+    alto = max(r.height for r in riquadri) + 26
+    tav = Image.new("RGB", (colonne * (lato + 8), righe * (alto + 8)), (255, 255, 255))
+    d = ImageDraw.Draw(tav)
+    font = vista._carattere(13)
+    for i, (r, (nome, copertura, pezzo)) in enumerate(zip(riquadri, voci)):
+        x, y = (i % colonne) * (lato + 8), (i // colonne) * (alto + 8)
+        etichetta = "%d. %s - %.1f%%" % (i + 1, nome, 100 * copertura)
+        if len(pdfs) > 1:
+            etichetta += " - pezzo %d" % pezzo
+        d.text((x + 2, y + 4), etichetta, fill=(40, 40, 50), font=font)
+        tav.paste(r, (x, y + 26))
+        d.rectangle([x, y + 26, x + r.width - 1, y + 26 + r.height - 1], outline=(200, 200, 205))
+    return _jpeg(tav), voci
+
+
+def inchiostri_tecnici(pdfs, quadro, verdetto, modello=None, client=None):
+    """Gli inchiostri spot che Claude riconosce come solo tecnici.
+
+    Torna dict(tecnici=[nomi], motivo, offerti) o dict(errore=...), e non
+    lancia mai: senza correzione resta il modello di prima.
+    """
+    try:
+        return _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client)
+    except Exception as e:                        # noqa: BLE001
+        return {"errore": "%s: %s" % (type(e).__name__, str(e)[:200])}
+
+
+def _inchiostri_tecnici(pdfs, quadro, verdetto, modello, client):
+    tav, voci = tavola_inchiostri(pdfs, quadro["pagine"])
+    if not voci:
+        return {"errore": "il file non ha inchiostri spot da togliere"}
+    modello = modello or modello_ai()
+    elenco = "\n".join("%d. %s - %.1f%% del foglio%s"
+                       % (i + 1, n, 100 * c, " (pezzo %d)" % p if len(pdfs) > 1 else "")
+                       for i, (n, c, p) in enumerate(voci))
+    difetti = "\n".join("- " + d for d in verdetto.get("difetti") or [])
+    contenuto = []
+    for k, dati in enumerate(quadro["pagine"]):
+        contenuto += [{"type": "text", "text": "Pagina del PDF%s:"
+                       % (" %d" % (k + 1) if len(quadro["pagine"]) > 1 else "")},
+                      _immagine(dati)]
+    contenuto += [{"type": "text", "text": "La tavola degli inchiostri spot:"},
+                  _immagine(tav),
+                  {"type": "text", "text": "Il controllo ha detto: %s\n%s\n\nGli inchiostri:\n%s"
+                   "\n\nQuali dipingono solo cose tecniche?"
+                   % (verdetto.get("motivo", ""), difetti, elenco)}]
+    dati, errore = _chiama(contenuto, ISTRUZIONI_INCHIOSTRI, SCHEMA_INCHIOSTRI,
+                           modello, client)
+    if errore:
+        return {"errore": errore}
+    noti = {n: n for n, _c, _p in voci}
+    scelti = []
+    for t in dati.get("tecnici") or []:
+        # "PANTONE 571 C", "3. pantone 571 c": si riconosce il nome com'e' in tavola
+        chiave = re.sub(r"^\s*\d+\.\s*", "", str(t)).strip().lower()
+        chiave = re.sub(r"\s+-\s+[\d.,]+%.*$", "", chiave).strip()
+        if chiave in noti and chiave not in scelti:
+            scelti.append(chiave)
+    return {"tecnici": scelti, "motivo": str(dati.get("motivo", "")).strip(),
+            "offerti": len(voci)}
+
+
+def avviso_correzione(scelta, prima, dopo, tenuto):
+    """La riga sulla correzione, per chi guarda il modello."""
+    tolti = ", ".join(scelta.get("tecnici") or [])
+    if tenuto:
+        return ("correzione AI: tolti gli inchiostri tecnici %s (%s). Prima il "
+                "controllo diceva: %s" % (tolti, scelta.get("motivo") or "-",
+                                          prima.get("motivo", "")))
+    return ("correzione AI scartata: senza gli inchiostri %s il controllo dice "
+            "%s (%s), e resta il modello di prima"
+            % (tolti, dopo.get("esito"), dopo.get("motivo", "")))
 
 
 # --------------------------------------------------------------------------- #
