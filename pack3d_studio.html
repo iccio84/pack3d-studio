@@ -88,6 +88,7 @@
   #caso strong{color:var(--destructive);font-weight:600;font-size:15px}
   #caso .riga{max-width:560px;color:var(--foreground)}
   #caso .riga:empty{display:none}
+  #caso .dove{font-weight:600;margin-top:6px}
   #caso .codice{max-width:560px;font-size:11px}
   #caso button{pointer-events:auto;margin-top:10px}
   /* i cartellini della costruzione parlano di un modello che non si vede: con
@@ -243,6 +244,7 @@
     <div class="riga" id="caso-pdf"></div>
     <div class="riga" id="caso-mod"></div>
     <div class="riga" id="caso-perche"></div>
+    <div class="riga dove" id="caso-dove"></div>
     <div class="codice" id="caso-codice"></div>
     <button id="caso-mostra" type="button">Mostra comunque il modello</button>
   </div>
@@ -789,6 +791,16 @@ const casoEl = document.getElementById('caso');
 // il GLB respinto, tenuto da parte per chi lo vuole guardare lo stesso
 let respinto = null;
 
+// Un caso in coda, quando la routine l'ha risolto e lo Space l'ha approvato,
+// arriva in Glam Lab (`prove/parco.py glam`): nella sezione dei modelli
+// costruiti da PDF, in questa cartella, col nome del PDF - lo stesso che Glam
+// da' a un modello costruito da qui. La cartella e' la --categoria di serie.
+const GLAM_CARTELLA = 'Casi risolti';
+
+function nomeInGlam(){
+  return glbName.replace(/\.glb$/i, '').slice(0, 120) || 'Pack';
+}
+
 function mostraCaso(v, blob){
   respinto = blob;
   togliModello();
@@ -796,8 +808,14 @@ function mostraCaso(v, blob){
   document.getElementById('caso-pdf').textContent = v.pack_nel_pdf ? 'Nel PDF: ' + v.pack_nel_pdf : '';
   document.getElementById('caso-mod').textContent = v.modello ? 'Il modello: ' + v.modello : '';
   document.getElementById('caso-perche').textContent = v.motivo || '';
+  // senza coda nessuno lo correggera': meglio non promettere niente
+  document.getElementById('caso-dove').textContent = v.in_coda
+    ? 'Quando sar\u00e0 corretto, troverai il modello giusto in Glam Lab, nella sezione '
+      + '\u00abCostruisci modello 3D da PDF\u00bb, cartella \u00ab' + GLAM_CARTELLA
+      + '\u00bb, col nome \u00ab' + nomeInGlam() + '\u00bb.'
+    : '';
   document.getElementById('caso-codice').textContent = 'Codice del caso: ' + (v.codice || '-')
-    + (v.in_coda ? ' \u2014 \u00e8 in coda: il servizio imparer\u00e0 a costruirlo.'
+    + (v.in_coda ? ' \u2014 \u00e8 in coda per la correzione.'
                  : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
   casoEl.classList.add('on');
 }

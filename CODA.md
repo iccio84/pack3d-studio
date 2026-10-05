@@ -20,9 +20,12 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
 - **Lo Space** si aggiorna da solo a ogni push su `main` (workflow
   "Sync to Hugging Face Spaces"). Unire una PR vuol dire pubblicare.
 - **Glam Lab** (`glam-lab-view.lovable.app`): il viewer dove si guardano i
-  pack. Ci finisce il modello di ogni caso risolto, con `prove/parco.py glam`.
-  Il token lo aggiunge l'ambiente cloud alle richieste per quel sito: non sta
-  nel codice, ne' nella sessione, ne' va chiesto a nessuno.
+  pack. Il modello di ogni caso risolto va, con `prove/parco.py glam`, nella
+  sezione "Costruisci modello 3D da PDF", cartella "Casi risolti", col nome
+  del PDF: e' li' che la pagina dello Space, quando respinge un modello e
+  mette il caso in coda, dice all'utente di cercarlo. Il token lo aggiunge
+  l'ambiente cloud alle richieste per quel sito: non sta nel codice, ne' nella
+  sessione, ne' va chiesto a nessuno.
 
 ## Il giro
 
@@ -48,11 +51,11 @@ dallo Space avesse perso.
       `parco/parco.json` con le opzioni del caso (`contesto.opzioni`; se
       mancano: flowpack `teeth` 20 e `soft` 5, cartotecnico `pezzi` = numero di
       PDF e `spessore` 2) e `come_deve_venire` scritto guardando il PDF. Se il
-      nome del primo PDF nel titolo della issue non e' uguale a quello del
-      file nella cartella - la coda toglie spazi e simboli - aggiungi `glam`:
-      il nome del titolo senza `.pdf`, al massimo 60 caratteri, seguito da
-      ` — Flowpack` o ` — Cartotecnico`. E' il nome che Glam ha dato al
-      modello sbagliato, e quello corretto deve prenderne il posto.
+      primo nome in `contesto.nomi` di `verdetto.json` non e' uguale a quello
+      del file nella cartella - la coda toglie spazi e simboli - aggiungi
+      `glam`: quel nome senza `.pdf`, al massimo 120 caratteri. E' il nome
+      che la pagina ha annunciato all'utente, e quello che Glam ha dato al
+      modello sbagliato, se l'utente l'ha salvato.
    3. **Riproduci** col codice di oggi:
       `python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>`.
    4. **Trova la causa** nel codice. La correzione e' una **regola generale**:
@@ -119,11 +122,13 @@ stato, com'e' andato l'invio a Glam.
 
       python3 prove/parco.py glam https://glam-lab-view.lovable.app ../pack3d-casi <nome>
 
-  che prende il GLB appena approvato sullo Space e lo mette fra i "Casi
-  risolti", al posto del modello sbagliato con lo stesso nome. Nel commento
-  scrivi il nome che ha in Glam, o la risposta di Glam se non l'ha preso: il
-  caso e' risolto lo stesso, e il PDF si puo' ricostruire in Glam a mano.
-  Poi chiudi la issue come risolta.
+  che prende il GLB appena approvato sullo Space e lo mette nella sezione
+  "Costruisci modello 3D da PDF", cartella "Casi risolti", col nome del PDF:
+  dove la pagina ha detto all'utente di cercarlo. Se l'utente aveva salvato
+  quello sbagliato con lo stesso nome, il corretto ne prende il posto. Nel
+  commento scrivi il nome che ha in Glam, o la risposta di Glam se non l'ha
+  preso: il caso e' risolto lo stesso, e il PDF si puo' ricostruire in Glam a
+  mano. Poi chiudi la issue come risolta.
 - **"dubbio" o "sbagliato"** (uscita 1 o 2): la issue resta aperta, col
   verdetto e i difetti nel commento, e prende l'etichetta `da-guardare`.
 - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'

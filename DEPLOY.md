@@ -123,8 +123,12 @@ anteprima e la sua intestazione beta puo' cambiare: la nuova si mette in
 Un caso che lo Space approva finisce anche in **Glam Lab**
 (`glam-lab-view.lovable.app`), il viewer dove si guardano i pack:
 `prove/parco.py glam` manda il GLB appena provato al punto d'ingresso
-`POST /api/import-model` di Glam, che lo mette fra i "Casi risolti" al posto
-del modello con lo stesso nome. Per collegarli:
+`POST /api/import-model` di Glam, che lo mette nella sezione "Costruisci
+modello 3D da PDF", cartella "Casi risolti", col nome del PDF, al posto del
+modello con lo stesso nome. E' quello che la pagina dello Space annuncia
+quando respinge un modello e mette il caso in coda. Glam sceglie la sezione
+dal percorso del file: i modelli costruiti da PDF hanno `/pdf/` nel
+percorso, e il punto d'ingresso li salva allo stesso modo. Per collegarli:
 
 1. In Glam (Lovable), scheda **Cloud** -> **Secrets**:
    `PACK3D_IMPORT_TOKEN`, una stringa casuale di 64 lettere e numeri, e

@@ -30,10 +30,12 @@ coda sono accesi, e un caso "sbagliato" va in coda come quelli degli utenti.
 
 `glam` manda a Glam Lab, il viewer dove si guardano i pack, il modello che
 `spazio` ha appena costruito sullo Space - solo se il controllo ha detto "ok",
-e proprio quel GLB, non una costruzione nuova. Lo mette fra i "Casi risolti"
-col nome che Glam gli darebbe costruendolo dal PDF, cosi' prende il posto di
-quello sbagliato. Il token non sta qui: lo aggiunge l'ambiente cloud alle
-richieste per quel sito (API credentials, vedi DEPLOY.md).
+e proprio quel GLB, non una costruzione nuova. Glam lo mette nella sezione
+"Costruisci modello 3D da PDF", cartella "Casi risolti", col nome del PDF:
+quello che Glam da' a un modello costruito da li', e quello che la pagina
+annuncia a chi ha caricato il caso respinto. Il token non sta qui: lo
+aggiunge l'ambiente cloud alle richieste per quel sito (API credentials,
+vedi DEPLOY.md).
 
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
@@ -330,18 +332,17 @@ _URI = "-_.!~*'()"
 
 
 def nome_glam(caso):
-    """Il nome che Glam da' al modello quando lo costruisce dal PDF: il nome
-    del primo file senza `.pdf`, al massimo 60 caratteri, e il tipo. `glam`
-    nel manifesto vince: la coda toglie spazi e simboli dai nomi dei file, e
-    allora quello del parco non e' piu' quello che l'utente ha caricato."""
+    """Il nome del modello in Glam: il nome del primo PDF senza `.pdf`, come
+    lo chiama Glam costruendolo dal PDF e come lo annuncia la pagina dello
+    Space (`nomeInGlam`). Al massimo 120 caratteri: di piu' Glam non ne
+    accetta. `glam` nel manifesto vince: la coda toglie spazi e simboli dai
+    nomi dei file, e allora quello del parco non e' piu' quello caricato."""
     if caso.get("glam"):
         return caso["glam"]
     base = os.path.basename(caso["file"][0])
     if base.lower().endswith(".pdf"):
         base = base[:-4]
-    tipo = "Flowpack" if (caso.get("opzioni") or {}).get("kind") == "flowpack" \
-        else "Cartotecnico"
-    return "%s — %s" % (base[:60] or "Pack", tipo)
+    return base[:120] or "Pack"
 
 
 def glam(args):
@@ -424,8 +425,9 @@ def main():
     g.add_argument("nome", help="il caso del parco, gia' provato con `spazio`")
     g.add_argument("--uscita", default="/tmp/parco_spazio",
                    help="la cartella dove `spazio` ha salvato GLB e verdetto")
+    # la stessa che annuncia la pagina dello Space (GLAM_CARTELLA)
     g.add_argument("--categoria", default="Casi risolti",
-                   help="la categoria del modello in Glam")
+                   help="la cartella del modello in Glam")
     g.set_defaults(fai=glam)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")
