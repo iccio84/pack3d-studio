@@ -120,6 +120,27 @@ Space dice perche' e il caso aspetta il giro di sicurezza. L'endpoint e' in
 anteprima e la sua intestazione beta puo' cambiare: la nuova si mette in
 `PACK3D_ROUTINE_BETA`, senza toccare il codice.
 
+Un caso che lo Space approva finisce anche in **Glam Lab**
+(`glam-lab-view.lovable.app`), il viewer dove si guardano i pack:
+`prove/parco.py glam` manda il GLB appena provato al punto d'ingresso
+`POST /api/import-model` di Glam, che lo mette fra i "Casi risolti" al posto
+del modello con lo stesso nome. Per collegarli:
+
+1. In Glam (Lovable), scheda **Cloud** -> **Secrets**:
+   `PACK3D_IMPORT_TOKEN`, una stringa casuale di 64 lettere e numeri, e
+   `PACK3D_IMPORT_OWNER_EMAIL`, l'email dell'account del **sito** Glam a cui
+   vanno i modelli. Poi **Publish** -> **Update**.
+2. Nell'ambiente cloud della routine, sezione **API credentials**: una
+   credenziale con Allowed websites `glam-lab-view.lovable.app`, header
+   `Authorization`, prefisso `Bearer` e come valore lo stesso token, senza
+   "Bearer" davanti. Il proxy dell'ambiente la aggiunge alle richieste per
+   quel sito: il token non sta ne' nel codice ne' nella sessione, e il
+   dominio diventa raggiungibile.
+
+Se Glam risponde 401, i due valori non sono uguali. Nessuno dei due si puo'
+rileggere: si genera un token nuovo e si mette in tutti e due i posti. La
+credenziale non si modifica: si cancella e si aggiunge di nuovo.
+
 ### I 16 GB non comprano due costruzioni insieme
 
 E' la prima cosa che ho provato arrivando su una macchina grande, e non

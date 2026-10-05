@@ -26,7 +26,7 @@ mappata sulle facce giuste.
 | `pack3d/vista.py` | il modello visto da quattro lati, dal GLB e senza GPU |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato |
 | `CODA.md` | come si lavora un caso della coda, anche dalla sessione automatica |
-| `prove/parco.py` | il parco: tutti i casi di prova ricostruiti come dal sito, prima e dopo una modifica |
+| `prove/parco.py` | il parco: tutti i casi di prova ricostruiti come dal sito, prima e dopo una modifica; la prova sullo Space e l'invio a Glam Lab |
 | `REGOLE.md` | le regole del progetto, usate come system prompt |
 | `pack3d_studio.html` | l'interfaccia: viewer 3D, caricamento PDF, parametri |
 | `PASSI.md` | l'agente: chiave API, strumenti, ciclo di tool use |
