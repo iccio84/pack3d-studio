@@ -92,8 +92,8 @@ Ogni caso respinto diventa una cartella `casi/<data>_<codice>/` coi PDF, le
 viste e la diagnosi, piu' una issue. Se il repository non e' privato non si
 carica niente, e il log lo dice.
 
-La coda la lavora ogni ora una **routine di Claude Code** (claude.ai/code,
-Routines): una sessione nuova che segue CODA.md, prova ogni correzione sul
+La coda la lavora una **routine di Claude Code** (claude.ai/code, Routines):
+una sessione nuova che segue CODA.md, prova ogni correzione sul
 parco del repository privato (`parco/`) e, se tutto torna, unisce da sola la
 PR - quindi pubblica sullo Space. Poi prova il caso sullo Space vero
 (`prove/parco.py spazio`), aspettando che `/api/ping` dica l'impronta del
@@ -101,9 +101,9 @@ codice appena unito. Per questo nella rete dell'ambiente cloud e' consentito
 il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`
 fra gli Allowed domains, con la lista di base dei package manager.
 
-Il giro orario e' la rete di sicurezza. Di solito la routine parte **subito**:
-quando un caso entra in coda, lo Space la avvia col suo trigger API
-(`coda.avvia_routine`). Per collegarli:
+La routine parte **subito**: quando un caso entra in coda, lo Space la avvia
+col suo trigger API (`coda.avvia_routine`). Parte anche una volta al giorno,
+alle 6:56, come rete di sicurezza. Per collegarli:
 
 1. Su claude.ai/code/routines apri la routine, menu accanto al nome ->
    **Edit**; in **Select a trigger** clicca **Add another trigger** ->
@@ -116,7 +116,7 @@ quando un caso entra in coda, lo Space la avvia col suo trigger API
 Lo Space la avvia solo per un caso nuovo, non quando lo stesso PDF viene
 ricaricato mentre la sua issue e' aperta. Nel testo della chiamata c'e' solo
 il codice del caso e il link alla issue. Se la chiamata non va, il log dello
-Space dice perche' e il caso aspetta il giro orario. L'endpoint e' in
+Space dice perche' e il caso aspetta il giro di sicurezza. L'endpoint e' in
 anteprima e la sua intestazione beta puo' cambiare: la nuova si mette in
 `PACK3D_ROUTINE_BETA`, senza toccare il codice.
 
