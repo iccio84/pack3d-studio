@@ -2018,6 +2018,13 @@ costruzioni al byte, con le viste affiancate dei modelli che cambiano. Ogni
 caso risolto dalla coda entra nel parco: da quel momento nessuna modifica puo'
 romperlo senza che si veda.
 
+Dopo la pubblicazione la sessione prova il caso **sullo Space vero**, col
+controllo dell'AI acceso, e chiude la issue solo se il verdetto e' "ok". Per
+sapere quando lo Space e' ripartito col codice nuovo, `/api/ping` restituisce
+l'**impronta** dei file del codice in esecuzione (`pack3d/versione.py`): non
+git, che nell'immagine dello Space non c'e'. Senza questa attesa la prova
+girava sul codice vecchio, e diceva il falso.
+
 ## Quando la pulizia deterministica non basta
 
 Alcune pulizie non si chiudono con criteri numerici, e non per mancanza di

@@ -6,6 +6,8 @@ e' pubblico. Qui c'e' solo lo strumento.
 
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
+    python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
+    python3 prove/parco.py versione [--codice DIR]
 
 `costruisci` avvia un server col codice di DIR (di serie quello di questo
 repository), con il controllo dell'AI e la coda spenti, e per ogni caso di
@@ -16,6 +18,17 @@ costruzione e le quattro viste (`pack3d.vista`).
 `confronta` dice quali modelli sono cambiati fra due costruzioni, con gli
 avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
 Le immagini finiscono in DIR, di serie DOPO/confronto.
+
+`spazio` prova un caso sullo Space vero, dopo una pubblicazione: aspetta che
+/api/ping dica la versione di questo clone (`pack3d/versione.py`), cioe' che
+lo Space sia ripartito col codice nuovo, poi costruisce il caso come la pagina
+e stampa il verdetto del controllo dell'AI. Esce con 0 se e' "ok", 1 se e'
+"dubbio", 2 se e' "sbagliato", 3 se il controllo non c'e' stato, 4 se lo
+Space non e' ripartito in tempo. Attenzione: sullo Space il controllo e la
+coda sono accesi, e un caso "sbagliato" va in coda come quelli degli utenti.
+
+`versione` stampa l'impronta del codice di DIR, quella che /api/ping
+restituisce.
 
 Il flusso per ogni correzione - vedi CODA.md:
 
@@ -98,7 +111,8 @@ def _avvia(codice, log):
 
 
 def _costruisci_caso(url, cartella, caso):
-    """(stato, glb o None, avvisi, secondi) di un caso, come lo chiede la pagina."""
+    """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
+    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento."""
     files = [os.path.join(cartella, "parco", "pdf", f) for f in caso["file"]]
     blocchi = []
     for f in files:
@@ -117,10 +131,12 @@ def _costruisci_caso(url, cartella, caso):
         with urllib.request.urlopen(req, timeout=ATTESA_COSTRUZIONE) as r:
             glb = r.read()
             avvisi = json.loads(unquote(r.headers.get("X-Pack3d-Meta") or "[]"))
-            return r.status, glb, avvisi, time.time() - t
+            controllo = r.headers.get("X-Pack3d-Controllo")
+            controllo = json.loads(unquote(controllo)) if controllo else None
+            return r.status, glb, avvisi, time.time() - t, controllo
     except urllib.error.HTTPError as e:
         testo = e.read().decode("utf-8", "replace")
-        return e.code, None, [testo[:1000]], time.time() - t
+        return e.code, None, [testo[:1000]], time.time() - t, None
 
 
 def costruisci(args):
@@ -134,7 +150,7 @@ def costruisci(args):
             riassunto = {}
             for caso in casi:
                 nome = caso["nome"]
-                stato, glb, avvisi, sec = _costruisci_caso(url, args.casi, caso)
+                stato, glb, avvisi, sec, _ = _costruisci_caso(url, args.casi, caso)
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
                              file=caso["file"], opzioni=caso.get("opzioni"),
                              avvisi=avvisi, md5=None)
@@ -236,6 +252,71 @@ def confronta(args):
         (": le viste affiancate sono in %s" % uscita) if cambiati else ""))
 
 
+def versione_del_codice(args):
+    from pack3d import versione
+    print(versione.impronta(os.path.abspath(args.codice or QUI)))
+
+
+def _versione_in_linea(url):
+    """La versione che /api/ping dice, o perche' non la dice."""
+    try:
+        with urllib.request.urlopen(url + "/api/ping", timeout=30) as r:
+            return json.loads(r.read().decode("utf-8")).get("versione") or "senza versione"
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        # mentre lo Space riparte risponde con un errore o con una pagina
+        return "non risponde (%s)" % str(e)[:80]
+
+
+ESITI = {"ok": 0, "dubbio": 1, "sbagliato": 2}
+
+
+def spazio(args):
+    """Un caso del parco sullo Space vero, appena ripartito col codice di qui."""
+    from pack3d import versione, vista
+    caso = _casi(args.casi, [args.nome])[0]
+    url = args.url.rstrip("/")
+    attesa = versione.impronta(QUI)
+    fine = time.time() + args.attendi * 60
+    while True:
+        in_linea = _versione_in_linea(url)
+        if in_linea == attesa:
+            break
+        if time.time() > fine:
+            print("lo Space non e' ripartito col codice di qui in %d minuti: "
+                  "dice %s, aspettavo %s" % (args.attendi, in_linea, attesa))
+            raise SystemExit(4)
+        print("lo Space dice %s, aspetto %s" % (in_linea, attesa))
+        sys.stdout.flush()
+        time.sleep(30)
+    print("lo Space e' alla versione %s: costruisco %s" % (attesa, args.nome))
+    sys.stdout.flush()
+    stato, glb, avvisi, sec, controllo = _costruisci_caso(url, args.casi, caso)
+    os.makedirs(args.uscita, exist_ok=True)
+    esito = dict(nome=args.nome, url=url, versione=attesa, stato=stato,
+                 secondi=round(sec, 1), avvisi=avvisi, controllo=controllo)
+    if glb is not None:
+        f = os.path.join(args.uscita, args.nome + "_spazio.glb")
+        with open(f, "wb") as fh:
+            fh.write(glb)
+        esito["md5"] = hashlib.md5(glb).hexdigest()
+        im, _ingombro = vista.viste(f, 512)
+        im.save(os.path.join(args.uscita, args.nome + "_spazio_viste.png"))
+    with open(os.path.join(args.uscita, args.nome + "_spazio.json"), "w",
+              encoding="utf-8") as fh:
+        json.dump(esito, fh, indent=1, ensure_ascii=False)
+    if stato != 200:
+        print("costruzione fallita sullo Space (%d): %s" % (stato, avvisi[0][:300]))
+        raise SystemExit(3)
+    if not controllo:
+        print("costruito in %.0f s, ma il controllo dell'AI non c'e' stato" % sec)
+        raise SystemExit(3)
+    print("costruito in %.0f s - controllo dell'AI: %s" % (sec, controllo.get("esito")))
+    print("  %s" % controllo.get("motivo", ""))
+    for d in controllo.get("difetti") or []:
+        print("  - %s" % d)
+    raise SystemExit(ESITI.get(controllo.get("esito"), 3))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cosa", required=True)
@@ -252,6 +333,20 @@ def main():
     k.add_argument("dopo")
     k.add_argument("--immagini", help="dove salvare le viste affiancate")
     k.set_defaults(fai=confronta)
+    s = sub.add_parser("spazio", help="prova un caso sullo Space vero, "
+                                      "appena ripartito col codice di qui")
+    s.add_argument("url", help="per esempio https://iccio-maurizio.hf.space")
+    s.add_argument("casi", help="clone del repository privato dei casi")
+    s.add_argument("nome", help="il caso del parco da provare")
+    s.add_argument("--uscita", default="/tmp/parco_spazio",
+                   help="dove salvare GLB, viste e verdetto")
+    s.add_argument("--attendi", type=int, default=25,
+                   help="minuti di attesa massima per la ripartenza dello Space")
+    s.set_defaults(fai=spazio)
+    v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
+                                        "/api/ping")
+    v.add_argument("--codice", help="cartella del codice (di serie questo)")
+    v.set_defaults(fai=versione_del_codice)
     args = ap.parse_args()
     args.fai(args)
 

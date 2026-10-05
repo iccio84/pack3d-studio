@@ -68,9 +68,25 @@ La PR si unisce senza chiedere **solo se sono vere tutte**:
 
 Allora: commit, push, PR verso `main`, unione con merge commit, e controlla
 che il workflow "Sync to Hugging Face Spaces" sul commit di unione finisca con
-**success**. Poi, in `pack3d-casi`: aggiorna `parco/riferimento/` con le viste
-nuove del caso e dei casi cambiati, commit e push; commenta la issue con la
-causa, la regola e il link alla PR, e chiudila come risolta.
+**success**. Poi, da un clone di `main` aggiornato, la **prova sullo Space
+vero**:
+
+    python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi <nome>
+
+Aspetta che lo Space riparta col codice nuovo - `/api/ping` dice l'impronta
+del codice in esecuzione - e costruisce il caso come un utente, col controllo
+dell'AI acceso. Poi, in `pack3d-casi`: aggiorna `parco/riferimento/` con le
+viste nuove del caso e dei casi cambiati, commit e push; commenta la issue con
+la causa, la regola, il link alla PR e il verdetto dello Space.
+
+- **"ok"** (uscita 0): chiudi la issue come risolta.
+- **"dubbio" o "sbagliato"** (uscita 1 o 2): la issue resta aperta, col
+  verdetto e i difetti nel commento. Il caso torna il giorno dopo.
+- **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
+  stato (uscita 3): scrivilo sulla issue e lasciala aperta.
+
+La prova sullo Space va fatta **prima** di chiudere la issue: finche' e'
+aperta, un verdetto "sbagliato" non ne apre una seconda.
 
 Se anche **una sola** cosa e' falsa o dubbia, **non si unisce**: la PR resta
 aperta come bozza, e sulla issue va un commento con la diagnosi, cosa e'
