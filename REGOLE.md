@@ -2004,18 +2004,19 @@ costruirlo.
 
 ### Chi lavora la coda, e il parco che la protegge
 
-Ogni ora una sessione automatica di Claude Code guarda la coda e, se c'e' un
-caso libero, lo lavora come e' stato lavorato il primo, il Yogurette:
+Una sessione automatica di Claude Code guarda la coda e, se c'e' un caso
+libero, lo lavora come e' stato lavorato il primo, il Yogurette:
 riproduce, trova la causa, scrive una regola generale, la prova su **tutto il
 parco** prima e dopo, e se tutto torna unisce da sola - quindi pubblica sullo
 Space. Un caso alla volta: l'etichetta `in-lavorazione` sulla issue tiene
 lontane le sessioni dei giri dopo finche' quella che l'ha preso non ha finito.
 Il metodo, e le condizioni per unire senza chiedere, sono in CODA.md.
 
-Il giro orario e' la rete di sicurezza: quando un caso entra in coda, lo
-Space avvia **subito** la routine col suo trigger API (`coda.avvia_routine`,
-vedi DEPLOY.md), e il lavoro comincia entro un minuto invece che entro
-un'ora. Solo per un caso nuovo, mai per lo stesso PDF ricaricato; e nel testo
+Quando un caso entra in coda, lo Space avvia **subito** la routine col suo
+trigger API (`coda.avvia_routine`, vedi DEPLOY.md), e il lavoro comincia
+entro un minuto. Un giro al giorno resta come rete di sicurezza, e i casi che
+la sessione non sa risolvere prendono l'etichetta `da-guardare`: senza,
+ogni caso nuovo avvierebbe un giro che riprova il vecchio. Solo per un caso nuovo, mai per lo stesso PDF ricaricato; e nel testo
 della chiamata solo il codice e il link alla issue, mai i nomi dei file, che
 sono testo dell'utente.
 

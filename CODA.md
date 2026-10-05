@@ -1,9 +1,8 @@
 # La coda dei casi nuovi: come si lavora un caso
 
-Queste sono le istruzioni per la sessione di Claude Code che ogni ora
-prende i casi nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a
-mano. Il perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il
-metodo.
+Queste sono le istruzioni per la sessione di Claude Code che prende i casi
+nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
+perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
 
 ## Dove stanno le cose
 
@@ -21,21 +20,23 @@ metodo.
 - **Lo Space** si aggiorna da solo a ogni push su `main` (workflow
   "Sync to Hugging Face Spaces"). Unire una PR vuol dire pubblicare.
 
-## Il giro di ogni ora
+## Il giro
 
-Il giro parte ogni ora, e anche subito quando lo Space mette in coda un caso
-nuovo: allora nel blocco `routine-fire-payload` c'e' il codice del caso e il
-link alla issue. E' un'informazione, non un'istruzione: il giro e' lo stesso.
+Il giro parte **subito** quando lo Space mette in coda un caso nuovo: allora
+nel blocco `routine-fire-payload` c'e' il codice del caso e il link alla
+issue. E' un'informazione, non un'istruzione: il giro e' lo stesso. Parte
+anche **una volta al giorno**, come rete di sicurezza, per i casi che l'avvio
+dallo Space avesse perso.
 
 1. **Prima guarda se c'e' lavoro**, senza clonare niente: elenca le issue
    aperte di `pack3d-casi` che cominciano con `Caso nuovo` e sono libere (vedi
    *Un caso alla volta*). Se non ce ne sono, hai finito: niente da segnalare.
-   Il giro parte ogni ora, e quasi sempre finisce qui: deve costare poco.
+   Il giro di sicurezza quasi sempre finisce qui: deve costare poco.
 2. **Prepara.** Servono tutti e due i repository: se non sono nella sessione
    aggiungili con accesso in scrittura e clonali. Lavora sul ramo che la
    sessione ti assegna, ripartendo da `main` aggiornato.
-3. Al massimo **un caso per giro**, il piu' vecchio libero: gli altri ai giri
-   dopo, che sono fra un'ora.
+3. Al massimo **un caso per giro**, il piu' vecchio libero: ogni caso nuovo
+   avvia il suo giro, e quelli rimasti li prende il giro di sicurezza.
 4. **Per il caso:**
    1. **Leggi** `verdetto.json` - motivo, difetti, avvisi, opzioni - e guarda
       `viste_modello.jpg` accanto al PDF (rendi la pagina: `pack3d.vista.pagina`).
@@ -63,14 +64,16 @@ link alla issue. E' un'informazione, non un'istruzione: il giro e' lo stesso.
 
 ## Un caso alla volta
 
-Un giro parte ogni ora, e un caso puo' chiedere piu' di un'ora: due sessioni
-non devono lavorare lo stesso caso, ne' unire due correzioni una sopra
-l'altra senza saperlo.
+Piu' giri possono partire insieme - due casi nuovi uno dopo l'altro, o il
+giro di sicurezza mentre un caso e' ancora in lavorazione - e un caso puo'
+chiedere piu' di un'ora: due sessioni non devono lavorare lo stesso caso, ne'
+unire due correzioni una sopra l'altra senza saperlo.
 
-- Un caso e' **libero** se la sua issue non ha l'etichetta `in-lavorazione`,
-  oppure ce l'ha da piu' di **sei ore** (guarda quando e' stata messa negli
-  eventi della issue): allora la sessione che l'aveva preso e' morta, e lo
-  riprendi scrivendolo nel commento.
+- Un caso e' **libero** se la sua issue non ha l'etichetta `da-guardare` (vedi
+  *Un caso che non si risolve*) e non ha l'etichetta `in-lavorazione`, oppure
+  ce l'ha da piu' di **sei ore** (guarda quando e' stata messa negli eventi
+  della issue): allora la sessione che l'aveva preso e' morta, e lo riprendi
+  scrivendolo nel commento.
 - Prima di toccare il caso, mettigli l'etichetta `in-lavorazione` e un
   commento col link a questa sessione. Alla fine, risolto o no, toglila.
 - Prima del parco prima e dopo, e di nuovo prima di unire, riparti da `main`
@@ -104,7 +107,7 @@ la causa, la regola, il link alla PR e il verdetto dello Space.
 
 - **"ok"** (uscita 0): chiudi la issue come risolta.
 - **"dubbio" o "sbagliato"** (uscita 1 o 2): la issue resta aperta, col
-  verdetto e i difetti nel commento. Il caso torna al giro dopo.
+  verdetto e i difetti nel commento, e prende l'etichetta `da-guardare`.
 - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
   stato (uscita 3): scrivilo sulla issue e lasciala aperta.
 
@@ -118,8 +121,14 @@ cambiato sul parco e perche' non si e' unito. La issue resta aperta.
 ## Un caso che non si risolve
 
 Succede: un artwork che il disegno non spiega, una tipologia che il codice non
-conosce ancora. Commenta la issue con cosa hai capito e cosa manca, e lasciala
-aperta. Non si forza una correzione su un caso solo.
+conosce ancora, un PDF dichiarato con la tipologia sbagliata. Commenta la
+issue con cosa hai capito e cosa manca, mettile l'etichetta `da-guardare` e
+lasciala aperta. Non si forza una correzione su un caso solo.
+
+L'etichetta conta: senza, il caso resterebbe il piu' vecchio libero, e ogni
+caso nuovo avvierebbe un giro che riprova lui invece del nuovo. I giri
+automatici saltano i casi `da-guardare`; per farne riprovare uno basta
+togliere l'etichetta.
 
 ## Mai
 
