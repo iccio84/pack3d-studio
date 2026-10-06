@@ -57,20 +57,26 @@ def build(args):
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso,
                                 fianchi_sul_fronte=d.fianchi_su == "front")
+    # il fronte curvo, come il server: vedi `dieline._fronte_curvo`
+    if d.curva_mm:
+        folding.curva_fronte(faces, d.dims_mm, d.curva_mm,
+                             {k: d.panels[k].h_mm for k in ("top", "bottom")
+                              if k in d.panels})
+        print("  avviso   : fronte curvo, freccia %.1f mm" % d.curva_mm)
     # il marchio orizzontale e dritto, come il server: vedi `folding.gira_facce`
     if esito.get("marchio"):
         folding.gira_facce(faces, esito["marchio"])
         print("  avviso   : modello girato di %d gradi attorno al fronte "
               "perche' il marchio si legga orizzontale e dritto"
               % esito["marchio"])
-    _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
+    _ok, verifiche = verifica.facce_astuccio(faces, d.panels, d.curva_mm)
     # l'apertura a strappo aperta (`--apertura`) o incisa nelle facce, come
     # il server: vedi `pack3d.apertura` e `pack3d.incisioni`. Solo nel GLB:
     # il render e l'OBJ restano dell'astuccio chiuso e liscio.
     from . import apertura, incisioni
     nomi = [f["name"] for f in faces if f["name"] in d.panels]
     aperta = None
-    if args.apertura:
+    if args.apertura and not d.curva_mm:
         liscio = [dict(f) for f in faces]
         aperta = apertura.apri(pdf, d.panels, nomi, faces, args.apertura,
                                esito.get("girate"), folding.SPESSORE_CRT)
@@ -81,7 +87,7 @@ def build(args):
         else:
             print("  avviso   : nessuna apertura a strappo con la sua "
                   "cerniera: l'astuccio esce chiuso")
-    tagli = {} if aperta else incisioni.tagli(pdf, d.panels, nomi)
+    tagli = {} if aperta or d.curva_mm else incisioni.tagli(pdf, d.panels, nomi)
     if tagli:
         n = incisioni.incidi(faces, tagli, d.panels, esito.get("girate"),
                              folding.SPESSORE_CRT)

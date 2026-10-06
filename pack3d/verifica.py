@@ -290,8 +290,12 @@ def fronte_flowpack(V, UV, nv, fp, texture, foglio, scala):
                      % max(scarti) if scarti else ""))
 
 
-def facce_astuccio(faces, panels):
+def facce_astuccio(faces, panels, curva_mm=0.0):
     """Ogni faccia contro il suo pannello, e il fronte davanti. `(ok, righe)`.
+
+    Con `curva_mm` il fronte e' curvo (`folding.curva_fronte`): cielo e fondo
+    sono a D, e in mezzo sono profondi quanto la scatola piu' la freccia -
+    che e' la lunghezza della loro aletta.
 
     Per un astuccio le UV sono i quattro angoli del ritaglio, quindi il
     confronto col DT e' sulle proporzioni: la faccia sul solido e il pannello
@@ -322,6 +326,8 @@ def facce_astuccio(faces, panels):
             righe.append("FACCIA SPECCHIATA: %s" % nome)
         p = panels[nome]
         lati_f = sorted((float(np.linalg.norm(du)), float(np.linalg.norm(dv))))
+        if curva_mm and nome in ("top", "bottom"):
+            lati_f = sorted((lati_f[0] + curva_mm, lati_f[1]))
         lati_p = sorted((p.w_mm, p.h_mm))
         rap_f = lati_f[0] / max(lati_f[1], 1e-9)
         rap_p = lati_p[0] / max(lati_p[1], 1e-9)

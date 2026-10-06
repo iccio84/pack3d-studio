@@ -349,6 +349,14 @@ def nota_incisioni(meta):
             "rimasto stampato, e la grafica sotto e' intera.")
 
 
+# La riga che dice il fronte curvo, anche al controllo dell'AI: il cielo a D
+# che sporge in mezzo e' la scatola, non un difetto.
+FRONTE_CURVO = ("fronte curvo: le alette di cielo e fondo sono piu' lunghe "
+                "della profondita' e il fronte piu' largo del retro, quindi il "
+                "fronte si incurva verso fuori di %.1f mm in mezzo e cielo e "
+                "fondo sono a D")
+
+
 def incidi_apertura(pdf, d, faces, girate, spessore):
     """I tagli dell'apertura a strappo incisi nelle facce. La riga per chi
     guarda il modello, o None se l'astuccio non ha un'apertura.
@@ -536,7 +544,12 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                                 fianchi_sul_fronte=d.fianchi_su == "front")
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
-    _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
+    _ok, verifiche = verifica.facce_astuccio(faces, d.panels, d.curva_mm)
+    # il fronte curvo, se la fustella lo dice: vedi `dieline._fronte_curvo`
+    if d.curva_mm:
+        folding.curva_fronte(faces, d.dims_mm, d.curva_mm,
+                             {k: d.panels[k].h_mm for k in ("top", "bottom")
+                              if k in d.panels})
     # e le misure del disegno contro le quote che il file scrive, come per le
     # testate del flowpack: le quote non costruiscono, confermano
     riscontro = quotature.riscontro_astuccio(pdf, d)
@@ -550,14 +563,18 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # `pack3d.apertura` e `pack3d.incisioni`. Sulle facce finite, dopo il
     # giro del marchio.
     spessore = folding.SPESSORE_CRT if carta is None else carta
+    # sul fronte curvo l'apertura a strappo non si apre ne' si incide: le
+    # facce sono gia' maglie, e i tagli andrebbero piegati con loro
     aperta, riga_aperta = (apri_apertura(pdf, d, faces, esito.get("girate"),
                                          spessore, apertura)
-                           if apertura else (False, None))
-    incisa = (None if aperta else
+                           if apertura and not d.curva_mm else (False, None))
+    incisa = (None if aperta or d.curva_mm else
               incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if d.curva_mm:
+        meta.append(FRONTE_CURVO % d.curva_mm)
     if riga_aperta:
         meta.append(riga_aperta)
     if incisa:

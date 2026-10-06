@@ -324,6 +324,100 @@ def guscio(faces, spessore=SPESSORE_CRT, interno=INTERNO, taglio=TAGLIO):
     return out
 
 
+# Colonne in cui si divide una faccia che il fronte curvo piega: con 48 la
+# corda di ogni colonna si scosta dall'arco meno di un centesimo di mm su una
+# freccia di 10.
+COLONNE_CURVA = 48
+
+
+def curva_fronte(faces, dims_mm, freccia, alette=None, colonne=COLONNE_CURVA):
+    """L'astuccio a fronte curvo (`dieline._fronte_curvo`): il fronte si
+    incurva verso fuori di `freccia` mm in mezzo, retro e fianchi restano
+    piani, cielo e fondo diventano a D.
+
+    E' una deformazione di tutto il guscio, interno e coste compresi: ogni
+    punto avanza di `freccia * b(x) * (z + D/2) / D`, con b(x) = 1 - (2x/W)^2
+    - zero sul retro e sui fianchi, la freccia intera in mezzo al fronte. La
+    parabola e l'arco con la stessa freccia differiscono meno della carta.
+
+    Le texture seguono la carta, non lo spazio:
+    - lungo il fronte (e lungo la piega di cielo e fondo) la u va per
+      lunghezza d'arco, perche' il fronte e' piu' largo della sua corda;
+    - su cielo e fondo `alette` dice quanto e' lunga ogni aletta (mm): dalla
+      piega col fronte se ne prende quanto e' profondo il cielo in quel
+      punto, D ai lati e D + freccia in mezzo, che e' dove la fustella
+      taglia l'aletta.
+    Ogni faccia toccata porta la sua `maglia`; il `quad` resta quello piano.
+    """
+    W, _H, D = dims_mm
+    alette = alette or {}
+    if freccia <= 0 or W <= 0 or D <= 0:
+        return faces
+
+    def b(x):
+        return np.clip(1.0 - (2.0 * x / W) ** 2, 0.0, 1.0)
+
+    def sposta(P):
+        P = np.array(P, float)
+        P[..., 2] = P[..., 2] + freccia * b(P[..., 0]) * (P[..., 2] + D / 2.0) / D
+        return P
+
+    # lunghezza d'arco lungo il fronte, per la u
+    xs = np.linspace(-W / 2.0, W / 2.0, 2001)
+    zs = freccia * b(xs)
+    arco = np.concatenate([[0.0], np.cumsum(np.hypot(np.diff(xs), np.diff(zs)))])
+    arco /= arco[-1]
+
+    def u_arco(x):
+        return np.interp(x, xs, arco)
+
+    for f in faces:
+        q = np.array(f["quad"], float)
+        lu, lv = abs(q[1, 0] - q[0, 0]), abs(q[3, 0] - q[0, 0])
+        if max(lu, lv) < 1e-6:
+            continue                 # tutta a x costante: un fianco
+        if np.allclose(q[:, 2], -D / 2.0, atol=1e-6):
+            continue                 # il retro non si muove
+        nu, nv = (colonne, 1) if lu >= lv else (1, colonne)
+        uv = np.array(f["uv"], float)
+        su, sv = np.linspace(0, 1, nu + 1), np.linspace(0, 1, nv + 1)
+        S, T_ = np.meshgrid(su, sv)                       # (nv+1, nu+1)
+        S, T_ = S[..., None], T_[..., None]
+        P = ((1 - S) * (1 - T_) * q[0] + S * (1 - T_) * q[1]
+             + S * T_ * q[2] + (1 - S) * T_ * q[3])
+        UVg = ((1 - S) * (1 - T_) * uv[0] + S * (1 - T_) * uv[1]
+               + S * T_ * uv[2] + (1 - S) * T_ * uv[3])
+        nome = f["name"]
+        if nome in ("front", "top", "bottom"):
+            # u lungo la x: per lunghezza d'arco
+            UVg[..., 0] = u_arco(P[..., 0]) if q[1, 0] > q[0, 0] \
+                else 1.0 - u_arco(P[..., 0])
+        if nome in ("top", "bottom") and alette.get(nome):
+            # v: 0 sul bordo lontano dal fronte per il cielo, sul fronte per il
+            # fondo (FOLD_H); quanto ne copre il D in quel punto
+            k = np.clip((D + freccia * b(P[..., 0])) / alette[nome], 0.0, 1.0)
+            if nome == "top":
+                UVg[..., 1] = 1.0 - (1.0 - UVg[..., 1]) * k
+            else:
+                UVg[..., 1] = UVg[..., 1] * k
+        P = sposta(P)
+        V = P.reshape(-1, 3)
+        UVm = UVg.reshape(-1, 2)
+        idx = lambda i, j: i * (nu + 1) + j           # noqa: E731
+        T, N = [], np.zeros_like(V)
+        for i in range(nv):
+            for j in range(nu):
+                a, bb, c, d_ = idx(i, j), idx(i, j + 1), idx(i + 1, j + 1), idx(i + 1, j)
+                T += [(a, c, bb), (a, d_, c)]
+                e1, e2 = V[bb] - V[a], V[d_] - V[a]
+                n = -np.cross(e1, e2)
+                for k_ in (a, bb, c, d_):
+                    N[k_] += n
+        N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-12)
+        f["maglia"] = ((V, N, UVm, np.array(T, np.int64)), None)
+    return faces
+
+
 def gira_facce(faces, gradi):
     """Le facce del modello finito girate di `gradi` (multiplo di 90) in senso
     antiorario attorno alla normale del fronte, perche' il marchio si legga
@@ -337,6 +431,14 @@ def gira_facce(faces, gradi):
     for f in faces:
         f["quad"] = [tuple(float(c) for c in p) for p in
                      gira_attorno_al_fronte(np.array(f["quad"], float), gradi)]
+        if f.get("maglia"):
+            # il fronte curvo: la maglia gira con la faccia, normali comprese
+            f["maglia"] = tuple(
+                None if m is None else
+                (gira_attorno_al_fronte(np.asarray(m[0], float), gradi),
+                 gira_attorno_al_fronte(np.asarray(m[1], float), gradi),
+                 m[2], m[3])
+                for m in f["maglia"])
     return faces
 
 

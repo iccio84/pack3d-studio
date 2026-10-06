@@ -3414,6 +3414,75 @@ l'unica cosa aperiodica del disegno: fra le fasi che distano un periodo si
 sceglie quella che somiglia di piu' confrontando le IMMAGINI, dove la goccia
 pesa poco in percentuale ma e' l'unica cosa che cambia.
 
+#### La fila della fasciatura orizzontale puo' cominciare da un fianco
+
+`detect_layout` riconosce la fasciatura orizzontale da quattro colonne che si
+alternano larga-stretta, ma l'alternanza vale nei due versi: `W D W D` e
+`D W D W` passano tutte e due. `solve_carton_h` invece dava per scontato che la
+prima delle quattro fosse larga, e chiamava fronte la colonna 0. Su un DT
+disegnato `fianco | retro | fianco | fronte | patta` - la patta rastremata non
+attraversa la fascia per il 96% e non entra fra le colonne, quindi la sola
+quaterna trovata comincia dal fianco - il fronte era il fianco da 15,5 mm,
+l'astuccio usciva 15,8 x 100,3 x 139,0 invece di 139,0 x 100,3 x 15,8, girato
+col fianco verso chi guarda, e la scelta del fronte dall'aletta stampata
+confrontava due fianchi senza aletta.
+
+La regola: **fronte e retro sono sempre le due colonne larghe**. Se la prima
+della quaterna e' piu' stretta della seconda il giro dei nomi parte dalla
+seconda (`fronte, fianco destro, retro, fianco sinistro` restano in ordine
+ciclico), e la scelta fra le due larghe con l'aletta stampata guarda quelle
+due. La profondita' e' la media delle due strette, dovunque stiano.
+
+Sul parco: 29 casi identici al byte, cambia solo il caso nuovo (DT che
+comincia dal fianco), che adesso ha il fronte davanti, il retro dietro e le
+quote giuste.
+
+#### Il fronte curvo: cielo e fondo a D
+
+Lo stesso astuccio, girato giusto, restava aperto sopra e sotto: le alette del
+fronte sono lunghe 25,0 e 25,2 mm su una scatola profonda 15,8, e `flap`
+accetta al massimo 1,3 volte la profondita'. Non erano alette sbagliate: chi
+ha il pack in mano l'ha detto - "e' un mastello, il fronte curva per chiudere
+il pack". Il fronte si incurva verso fuori, i fianchi restano piani, e cielo e
+fondo sono a D: profondi quanto la scatola ai lati, di piu' in mezzo. Le
+alette lo disegnano da sole: il loro taglio e' curvo, circa 15,5 mm ai capi e
+25 in mezzo, e nessuna piega a D le divide.
+
+La regola (`dieline._fronte_curvo`), solo quando nessuna aletta si trova
+entro 1,3 volte la profondita': il fronte e' curvo se due misure indipendenti
+tornano insieme -
+
+- le alette alta e bassa del fronte sono lunghe uguali (entro il 10%), fra
+  1,3 e 2,5 volte la profondita'; la **freccia** e' quello che avanza;
+- il fronte e' piu' largo del retro di quanto un arco con quella freccia e'
+  piu' lungo della sua corda, `8 f^2 / 3 c`, entro un millimetro.
+
+Sul caso nuovo: freccia 25,1 - 15,75 = 9,4 mm, retro 138,0, arco previsto 139,7,
+fronte misurato 140,0. Un astuccio piatto ha fronte e retro uguali, e la
+seconda prova lo esclude anche con alette lunghe.
+
+Il solido (`folding.curva_fronte`) e' la scatola di sempre deformata: ogni
+punto avanza di `f * b(x) * (z + D/2) / D`, con `b(x) = 1 - (2x/W)^2`. Sul
+retro e sui fianchi lo spostamento e' zero, sul fronte e' la freccia in
+mezzo; la parabola e l'arco con la stessa freccia differiscono meno della
+carta. Le facce toccate diventano maglie a 48 colonne, interno e coste
+compresi. Le texture seguono la carta:
+
+- lungo il fronte e lungo la piega di cielo e fondo la u va per lunghezza
+  d'arco;
+- su cielo e fondo, dalla piega col fronte si prende tanta aletta quanto il
+  cielo e' profondo in quel punto: 15,8 mm ai lati, 25 in mezzo, cioe' dove
+  la fustella la taglia.
+
+`verifica.facce_astuccio` confronta cielo e fondo col pannello nel loro punto
+piu' profondo, e una riga d'avviso dice il fronte curvo anche al controllo
+dell'AI. Sul fronte curvo l'apertura a strappo non si apre ne' si incide (le
+facce sono gia' maglie): oggi nessun astuccio del parco ha le due cose.
+
+Sul parco: 29 casi identici al byte; cambia solo il caso nuovo, che adesso e'
+chiuso sopra e sotto, col logo dell'aletta dritto sul cielo e il fronte curvo
+con i biscotti davanti.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due
