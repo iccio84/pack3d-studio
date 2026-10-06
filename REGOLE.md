@@ -3076,6 +3076,86 @@ coste sono spesse 0,45 mm. Il modello era giusto e il render sbagliato lo
 stesso, perche' il difetto non stava nella geometria. Il controllo visivo
 **dopo** quello numerico non e' una ripetizione.
 
+### L'apertura a strappo si incide, non si disegna
+
+Un astuccio con l'apertura a strappo - il Kinder Choco Fresh T5 "with frontal
+opening": una finestra sul fronte che si stacca tirando la linguetta sotto il
+fondo - chiuso, in mano, fa vedere i suoi tagli: i due lati e le due
+diagonali della finestra, la linguetta, la mezzaluna per il dito. Il modello
+li fa vedere allo stesso modo: **solchi** nella faccia, modellati, che la luce
+fa leggere. Non righe disegnate sopra la grafica: la grafica resta quella del
+file, intera, perche' sul cartone il taglio non e' stampato. L'astuccio resta
+chiuso. Lo fa `pack3d/incisioni.py`.
+
+#### Si incide solo quello che ha la firma dell'apertura
+
+Dentro le facce la fustella ha anche altro: il contorno di un pannello
+disegnato un millimetro dentro la sua cella, gli smussi agli angoli dei
+fianchi, i tratti di un riquadro d'area. Incidere ogni tratto che sta dentro
+una faccia li incideva tutti, e quattro astucci del parco uscivano con solchi
+che sulla scatola vera non ci sono. Un tratto qualsiasi non dice cos'e', e un
+solco sbagliato e' peggio di nessun solco.
+
+L'apertura a strappo invece si riconosce, perche' e' fatta di **due** tagli:
+
+- quello sul lato stampato, che si vede;
+- accanto, fra 1,5 e 5 mm e per almeno 10 mm, il **taglio parziale dal
+  rovescio**. Nella legenda dei disegni Ferrero e' la riga con le stanghette,
+  e cosi' lo si legge: un tratto attraversato quasi di traverso (piu' di 60
+  gradi) da almeno due spunte, trattini piu' corti di 2,6 mm.
+
+E' la coppia che fa staccare il cartone pulito fra i due tagli. Con l'apertura
+si incidono i tagli che la continuano - che ne toccano un estremo: la
+linguetta, anche quando gira su un'altra faccia - e quelli a meno di 3 mm,
+come la mezzaluna. Il taglio dal rovescio **non** si incide: sta sulla faccia
+interna del cartoncino, da fuori non si vede. Le spunte nemmeno: sono un segno
+del disegno, non un taglio.
+
+I tratti sono quelli della penna del disegno tecnico (`dieline._technical_pens`)
+che stanno **dentro** un pannello di una faccia del solido, almeno 0,6 punti
+dentro il bordo: il bordo e' una piega o il contorno. Un rettangolo chiuso non
+c'entra mai: e' il riquadro di un'area. Le linee si cuciono sul foglio intero,
+attraverso le pieghe, e si tagliano alle facce solo alla fine: la linguetta
+che gira sotto il fondo esce in due pezzi, uno sul fronte e uno sul fondo.
+Misurato sul Choco Fresh: due linee da 125,2 mm sul fronte, lati e diagonali
+compresi; sul fondo la linguetta (52,1 mm) e la mezzaluna (25,0 mm). Nessun
+altro astuccio del parco ha la firma, e tutti escono identici al byte.
+
+#### Il solco
+
+- A V: largo 0,35 mm in superficie, profondo 0,22 mm sulla linea, e mai piu'
+  di meta' dello spessore del cartoncino (vedi *Un astuccio ha uno spessore*):
+  la faccia interna non si tocca.
+- Le pareti hanno la tinta della costa (`folding.TAGLIO`): sono cartoncino
+  tagliato. In un materiale suo, "solco".
+- La faccia incisa si triangola con Delaunay sui campioni del solco - la linea
+  e i suoi due bordi, ogni 0,15 mm - piu' i quattro angoli. I campioni sono
+  piu' fitti della larghezza del solco: un triangolo che lo scavalcasse avrebbe
+  nel cerchio circoscritto i punti della linea, e Delaunay non lo fa.
+- I bordi del solco stanno **a fior di faccia**: una profondita' sotto un
+  quinto di quella piena si azzera. Senza, l'arrotondamento dei punti dava ai
+  bordi qualche micron, e ogni triangolo grande che li toccava - mezza faccia
+  - finiva nel solco, grigio e storto.
+- Le linee passano dal foglio alla texture della faccia col **giro** che
+  `artwork.gira_sulla_grafica` ha dato alla texture (`esito["girate"]`), e si
+  incide sulle facce finite, dopo `folding.gira_facce`. Provato col foglio
+  girato di 90, 180 e 270 gradi: stesso modello, stesse viste.
+- La faccia tiene il suo `quad`, che serve alle verifiche, al guscio e alle
+  viste; l'esportatore GLB, se c'e' `maglia`, scrive quella. Il GLB del Choco
+  Fresh passa da 1,2 a 2,3 MB. L'OBJ e il render della riga di comando restano
+  lisci.
+- Un guasto nell'incisione non ferma la costruzione: l'astuccio esce chiuso e
+  liscio, e l'avviso lo dice.
+
+#### Il controllo dell'AI deve sapere cosa sono quelle righe
+
+Nelle viste i solchi sono righe sottili color cartone che seguono la fustella:
+a chi non lo sa sembrano disegno tecnico rimasto stampato, che e' un difetto.
+Quando il modello e' inciso, il contesto del controllo porta un "Da sapere":
+sono i tagli dell'apertura a strappo, incisi come sulla scatola vera, e la
+grafica sotto e' intera. Non cambia cosa e' un difetto; dice cosa sono quelle
+righe. Vale anche per la correzione, che la nota la somma alla sua.
+
 ### La colata si rimette con l'inchiostro del file
 
 **Adesso di solito non serve.** L'ombra della colata e' sempre un'immagine in

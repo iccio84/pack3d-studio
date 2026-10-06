@@ -70,31 +70,34 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048):
         views.append(v)
         return len(views) - 1
 
-    for f in faces:
-        quad = np.array(f["quad"], np.float32) * unit_scale
-        nrm = np.tile(_normal(f["quad"]).astype(np.float32), (4, 1))
-        uv = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32)
-        idx = np.array([0, 2, 1, 0, 3, 2], np.uint16)
-
-        vp = add_view(quad.tobytes(), 34962)
-        accessors.append({"bufferView": vp, "componentType": 5126, "count": 4,
-                          "type": "VEC3",
-                          "min": quad.min(0).tolist(), "max": quad.max(0).tolist()})
+    def primitiva(pos, nrm, uv, idx, materiale):
+        pos = np.asarray(pos, np.float32)
+        vp = add_view(pos.tobytes(), 34962)
+        accessors.append({"bufferView": vp, "componentType": 5126,
+                          "count": len(pos), "type": "VEC3",
+                          "min": pos.min(0).tolist(), "max": pos.max(0).tolist()})
         a_pos = len(accessors) - 1
-        vn = add_view(nrm.tobytes(), 34962)
-        accessors.append({"bufferView": vn, "componentType": 5126, "count": 4,
-                          "type": "VEC3"})
+        vn = add_view(np.asarray(nrm, np.float32).tobytes(), 34962)
+        accessors.append({"bufferView": vn, "componentType": 5126,
+                          "count": len(pos), "type": "VEC3"})
         a_nrm = len(accessors) - 1
-        vt = add_view(uv.tobytes(), 34962)
-        accessors.append({"bufferView": vt, "componentType": 5126, "count": 4,
-                          "type": "VEC2"})
+        vt = add_view(np.asarray(uv, np.float32).tobytes(), 34962)
+        accessors.append({"bufferView": vt, "componentType": 5126,
+                          "count": len(pos), "type": "VEC2"})
         a_uv = len(accessors) - 1
-        vi = add_view(idx.tobytes(), 34963)
-        accessors.append({"bufferView": vi, "componentType": 5123, "count": 6,
-                          "type": "SCALAR"})
-        a_idx = len(accessors) - 1
+        # una faccia incisa ha piu' di 65 535 vertici solo in teoria; il
+        # quad ne ha quattro, e resta a 16 bit come e' sempre stato
+        grandi = len(pos) > 65535
+        ix = np.asarray(idx, np.uint32 if grandi else np.uint16).reshape(-1)
+        vi = add_view(ix.tobytes(), 34963)
+        accessors.append({"bufferView": vi,
+                          "componentType": 5125 if grandi else 5123,
+                          "count": len(ix), "type": "SCALAR"})
+        prims.append({"attributes": {"POSITION": a_pos, "NORMAL": a_nrm,
+                                     "TEXCOORD_0": a_uv},
+                      "indices": len(accessors) - 1, "material": materiale})
 
-        im = f["tex"]
+    def materiale(nome, im):
         if max(im.size) > tex_max:
             r = tex_max / max(im.size)
             im = im.resize((max(1, int(im.width * r)), max(1, int(im.height * r))))
@@ -104,15 +107,40 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048):
         images.append({"bufferView": iv, "mimeType": "image/jpeg"})
         textures.append({"source": len(images) - 1})
         materials.append({
-            "name": f["name"],
+            "name": nome,
             "pbrMetallicRoughness": {
                 "baseColorTexture": {"index": len(textures) - 1},
                 "metallicFactor": 0.0, "roughnessFactor": 0.85,
             },
         })
-        prims.append({"attributes": {"POSITION": a_pos, "NORMAL": a_nrm,
-                                     "TEXCOORD_0": a_uv},
-                      "indices": a_idx, "material": len(materials) - 1})
+        return len(materials) - 1
+
+    solco = None
+    for f in faces:
+        if f.get("maglia"):
+            # la faccia incisa (`incisioni.incidi`): la superficie con la sua
+            # texture, il solco con la tinta del cartoncino tagliato
+            m = materiale(f["name"], f["tex"])
+            sup, inc = f["maglia"]
+            if sup is not None:
+                V, N, UV, T = sup
+                primitiva(np.asarray(V) * unit_scale, N, UV, T, m)
+            if inc is not None:
+                if solco is None:
+                    from PIL import Image
+                    from .folding import TAGLIO
+                    solco = materiale("solco", Image.new("RGB", (4, 4), TAGLIO))
+                V, N, UV, T = inc
+                primitiva(np.asarray(V) * unit_scale, N, UV, T, solco)
+            continue
+        quad = np.array(f["quad"], np.float32) * unit_scale
+        nrm = np.tile(_normal(f["quad"]).astype(np.float32), (4, 1))
+        uv = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32)
+        idx = np.array([0, 2, 1, 0, 3, 2], np.uint16)
+        # prima i vertici e poi l'immagine, come e' sempre stato: un astuccio
+        # senza incisioni esce identico al byte
+        primitiva(quad, nrm, uv, idx, len(materials))
+        materiale(f["name"], f["tex"])
 
     gltf = {
         "asset": {"version": "2.0", "generator": "pack3d"},

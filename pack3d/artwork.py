@@ -823,7 +823,8 @@ def verso_della_grafica(pdf, panels, page_no=0):
         return {}
 
 
-def gira_sulla_grafica(tex, panels, verso, attesi=None, restano=None):
+def gira_sulla_grafica(tex, panels, verso, attesi=None, restano=None,
+                       girate=None):
     """Rimette dritte le texture seguendo la grafica. (fatte, non fatte).
 
     La regola e' che il modello segue la GRAFICA e non il disegno tecnico: il
@@ -853,7 +854,9 @@ def gira_sulla_grafica(tex, panels, verso, attesi=None, restano=None):
 
     In `restano`, se e' un dizionario, finiscono le facce lasciate girate e
     di quanto (gradi orari): quella del fronte la raddrizza poi il modello
-    intero, vedi `folding.gira_facce`.
+    intero, vedi `folding.gira_facce`. In `girate` quelle girate davvero, coi
+    gradi di GIRO_TEXTURE: servono a chi mette sulla texture qualcosa preso
+    dal foglio, come i tagli di `incisioni`.
     """
     attesi = attesi or {}
     fatte, no = [], []
@@ -867,6 +870,8 @@ def gira_sulla_grafica(tex, panels, verso, attesi=None, restano=None):
         if gradi == 180 or quadrato:
             tex[nome] = tex[nome].transpose(GIRO_TEXTURE[gradi])
             fatte.append("%s di %d" % (nome, gradi))
+            if girate is not None:
+                girate[nome] = gradi
         else:
             no.append("%s (%d gradi, %.0f x %.0f)"
                       % (nome, gradi, lati[0] * PT2MM, lati[1] * PT2MM))
@@ -1301,14 +1306,15 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
             avvisi.append(scelta)
     attesi = (verso_atteso(dieline.layout, dieline.fianchi_su)
               if dieline is not None else {})
-    restano = {}
+    restano, girate = {}, {}
     giri, storti = gira_sulla_grafica(
         tex, panels, verso_della_grafica(pulito, panels, page_no), attesi,
-        restano)
+        restano, girate)
     if esito is not None:
         # il fronte che non si e' potuto girare senza stirarlo: lo raddrizza
         # il modello intero, girato attorno alla normale del fronte
         esito["marchio"] = restano.get("front", 0)
+        esito["girate"] = girate
     if lastre:
         avvisi.append("lastre tecniche e coperture tolte per nome: %s"
                       % ", ".join(lastre))
