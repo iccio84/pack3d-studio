@@ -101,6 +101,38 @@
   #verifica.on{display:block}
   #caso .codice{max-width:560px;font-size:11px}
   #caso button{pointer-events:auto;margin-top:10px}
+  /* Col riquadro acceso il modello non si vede, e sotto non c'e' niente da
+     toccare: il riquadro prende il puntatore, cosi' la nota si scrive e,
+     su uno schermo basso, il riquadro scorre. */
+  #caso.on{pointer-events:auto;overflow-y:auto;justify-content:safe center;
+           padding:44px 20px 24px}
+  /* la riga di stato ripete il motivo che il riquadro dice gia', e su un
+     telefono gli finiva sopra; torna con la costruzione dopo (handle e build
+     chiudono il riquadro) */
+  #caso.on ~ #status{display:none}
+  /* su un telefono il riquadro scorre, e il nome del file in alto gli
+     finirebbe sopra: lo dice gia' la riga di dove arrivera' il modello */
+  @media (max-width:600px){#stage:has(#caso.on) #titolo{display:none}}
+  #nota{width:min(560px,100%);display:flex;flex-direction:column;gap:8px;
+        margin-top:10px;text-align:left;color:var(--foreground)}
+  #nota[hidden]{display:none}
+  #nota label[for=nota-testo]{font-size:13px}
+  #nota textarea{font:inherit;font-size:13px;line-height:1.45;resize:vertical;
+    padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius-sm);
+    background:var(--surface);color:var(--foreground)}
+  #nota textarea:focus{outline:none;border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
+  #nota .azioni{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #nota .azioni button{margin-top:0}
+  #nota .bottone{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    padding:10px 16px;border-radius:var(--radius);border:1px solid var(--border);
+    background:var(--background);color:var(--muted-foreground);cursor:pointer}
+  #nota .bottone:hover{border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
+  #nota-foto-nome{font-size:12px;color:var(--muted-foreground);flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #nota-esito{font-size:12px;color:var(--muted-foreground)}
+  #nota-esito:empty{display:none}
+  #nota-esito.ok{color:var(--foreground);font-weight:600}
+  #nota-esito.err{color:var(--destructive)}
   /* i cartellini della costruzione parlano di un modello che non si vede: con
      una ventina di righe coprivano il riquadro. Tornano con "Mostra comunque". */
   #caso.on ~ #meta{display:none}
@@ -255,7 +287,21 @@
     <div class="riga" id="caso-mod"></div>
     <div class="riga" id="caso-perche"></div>
     <div class="riga dove" id="caso-dove"></div>
+    <div class="riga" id="caso-quando"></div>
     <div class="codice" id="caso-codice"></div>
+    <div id="nota" hidden>
+      <label for="nota-testo">Vuoi dirci com'&egrave; fatto o come si monta il pack?
+        Aiuta chi lo corregge. Facoltativo.</label>
+      <textarea id="nota-testo" rows="3" maxlength="2000"
+        placeholder="Per esempio: il coperchio si alza sul retro e fa da cartello"></textarea>
+      <div class="azioni">
+        <label class="bottone" for="nota-foto">Aggiungi una foto</label>
+        <input type="file" id="nota-foto" accept="image/*" hidden>
+        <span id="nota-foto-nome"></span>
+        <button id="nota-invia" type="button" class="primary">Invia la nota</button>
+      </div>
+      <div id="nota-esito" role="status"></div>
+    </div>
     <button id="caso-mostra" type="button">Mostra comunque il modello</button>
   </div>
   <div id="verifica" role="status"></div>
@@ -826,6 +872,33 @@ let respinto = null;
 // da' a un modello costruito da qui. La cartella e' la --categoria di serie.
 const GLAM_CARTELLA = 'Casi risolti';
 
+// Quanto aspetta, di solito, chi ha un caso in coda: la routine parte appena
+// il caso entra, e un caso che risolve da sola - correzione, pubblicazione,
+// prova sullo Space, invio a Glam - le prende meno di un'ora (il primo
+// display col coperchio sul retro: 27 minuti). Con una domanda all'utente
+// dipende da quando arriva la risposta.
+const STIMA = 'Di solito arriva entro un\u2019ora.';
+
+// Glam Lab dice di saper mostrare i casi in correzione - lo stato, e le
+// domande della routine a chi ha caricato il PDF - mettendo casi=1
+// nell'indirizzo di questa pagina. Senza, le domande in Glam non si
+// promettono: non le vedrebbe nessuno.
+const GLAM_CASI = new URLSearchParams(location.search).get('casi') === '1';
+
+/** Dice a Glam Lab, che ospita la pagina, che un caso e' entrato in coda: Glam
+ *  lo lega all'utente che l'ha caricato, e a lui manda il modello corretto,
+ *  lo stato e le domande. Solo alla finestra della stessa origine: Glam serve
+ *  la pagina dal suo dominio, e il codice del caso non va a chi la incornicia
+ *  da fuori. */
+function avvisaGlam(v){
+  if (!v || !v.codice || !v.in_coda) return;
+  try{
+    if (window.parent === window) return;
+    window.parent.postMessage({type:'pack3d:caso', codice:v.codice, nome:nomeInGlam(),
+      cartella:GLAM_CARTELLA, esito:v.esito || '', stima:STIMA}, location.origin);
+  }catch(e){ /* senza Glam la pagina va lo stesso */ }
+}
+
 function nomeInGlam(){
   return glbName.replace(/\.glb$/i, '').slice(0, 120) || 'Pack';
 }
@@ -850,10 +923,16 @@ function mostraCaso(v, blob){
       + '\u00abCostruisci modello 3D da PDF\u00bb, cartella \u00ab' + GLAM_CARTELLA
       + '\u00bb, col nome \u00ab' + nomeInGlam() + '\u00bb.'
     : '';
+  document.getElementById('caso-quando').textContent = v.in_coda
+    ? STIMA + (GLAM_CASI ? ' Se ci serve un\u2019informazione su com\u2019\u00e8 fatto o come si'
+        + ' monta il pack, te la chiediamo qui in Glam Lab, fra i tuoi casi in correzione.' : '')
+    : '';
   document.getElementById('caso-codice').textContent = 'Codice del caso: ' + (v.codice || '-')
     + (v.in_coda ? ' \u2014 \u00e8 in coda per la correzione.'
                  : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
+  mostraNota(v);
   casoEl.classList.add('on');
+  avvisaGlam(v);
 }
 
 // Un dubbio in coda: il modello resta, e sopra c'e' scritto che qualcuno lo
@@ -864,18 +943,103 @@ function mostraVerifica(v){
   verificaEl.textContent = 'Il controllo AI ha un dubbio, e il caso è andato in verifica (codice '
     + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
     + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
-    + '», col nome «' + nomeInGlam() + '».';
+    + '», col nome «' + nomeInGlam() + '». ' + STIMA;
   verificaEl.classList.add('on');
+  avvisaGlam(v);
 }
 
 function nascondiCaso(){
   verificaEl.classList.remove('on');
   if (!casoEl.classList.contains('on')) return;
   casoEl.classList.remove('on');
+  mostraNota(null);
   respinto = null;
   // il riquadro stava al posto del modello: se un modello non c'e', torna l'invito
   if (!model) document.getElementById('empty').style.display = '';
 }
+
+/* --------------- la nota di chi ha caricato il PDF ------------------ */
+// Un caso in coda lo corregge la routine, che del pack sa solo quello che
+// c'e' nel PDF. Chi l'ha caricato puo' dirle com'e' fatto o come si monta,
+// anche con una foto: la nota finisce sulla issue del caso (/api/nota) e la
+// routine la legge come una descrizione del pack. Il primo display col
+// coperchio sul retro si e' fermato proprio per questo: come stava il
+// coperchio, a display montato, dal disegno non si capiva.
+const notaEl = document.getElementById('nota');
+const notaTesto = document.getElementById('nota-testo');
+const notaFoto = document.getElementById('nota-foto');
+const notaInvia = document.getElementById('nota-invia');
+const notaEsito = document.getElementById('nota-esito');
+let notaCodice = null;
+
+function esitoNota(testo, cls){
+  notaEsito.textContent = testo;
+  notaEsito.className = cls || '';
+}
+
+function mostraNota(v){
+  notaCodice = v && v.in_coda && v.codice ? v.codice : null;
+  notaEl.hidden = !notaCodice;
+  notaTesto.value = '';
+  notaTesto.disabled = false;
+  notaFoto.value = '';
+  document.getElementById('nota-foto-nome').textContent = '';
+  notaInvia.disabled = false;
+  esitoNota('');
+}
+
+notaFoto.addEventListener('change', () => {
+  const f = notaFoto.files[0];
+  document.getElementById('nota-foto-nome').textContent = f ? f.name : '';
+});
+
+/** La foto rimpicciolita a 1600 px sul lato lungo, in JPEG: quella di un
+ *  telefono pesa dieci volte tanto, e i dettagli di un pack si vedono lo
+ *  stesso. */
+async function fotoRidotta(file){
+  const src = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((ok, no) => {
+      const i = new Image();
+      i.onload = () => ok(i);
+      i.onerror = () => no(new Error('la foto non si apre: usa una JPEG o una PNG'));
+      i.src = src;
+    });
+    const k = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(img.naturalWidth * k));
+    c.height = Math.max(1, Math.round(img.naturalHeight * k));
+    c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+    return c.toDataURL('image/jpeg', 0.85);
+  }finally{
+    URL.revokeObjectURL(src);
+  }
+}
+
+notaInvia.addEventListener('click', async () => {
+  if (!notaCodice) return;
+  const testo = notaTesto.value.trim();
+  const file = notaFoto.files[0];
+  if (!testo && !file){ esitoNota('Scrivi qualcosa o aggiungi una foto.', 'err'); return; }
+  notaInvia.disabled = true;
+  esitoNota('Invio della nota\u2026');
+  try{
+    const foto = file ? await fotoRidotta(file) : null;
+    const r = await fetch(url('/api/nota'), {method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({codice: notaCodice, nota: testo, foto})});
+    if (!r.ok){
+      let t = (await r.text()).slice(0, 200).trim();
+      if (t.charAt(0) === '<') t = '';
+      throw new Error(t || ('HTTP ' + r.status));
+    }
+    notaTesto.disabled = true;
+    esitoNota('Grazie: la nota \u00e8 arrivata a chi corregge il caso.', 'ok');
+  }catch(err){
+    notaInvia.disabled = false;
+    esitoNota('Nota non inviata: ' + testoErrore(err), 'err');
+  }
+});
 
 document.getElementById('caso-mostra').onclick = async () => {
   if (!respinto) return;

@@ -62,6 +62,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_CODA_TOKEN` | Secrets | un token GitHub | scrittura su contenuti e issue di quel repository, e di nient'altro |
 | `PACK3D_ROUTINE_URL` | Variables | l'indirizzo `/fire` della routine | un caso appena entrato in coda **avvia subito** la routine che la lavora, vedi sotto |
 | `PACK3D_ROUTINE_TOKEN` | Secrets | il token della routine | quello generato nel trigger API della routine; serve solo ad avviarla |
+| `PACK3D_RISPOSTE_TOKEN` | Secrets | una stringa casuale lunga | la stessa nei segreti di Glam Lab: con questa Glam manda allo Space le **risposte** degli utenti alle domande della routine, vedi sotto |
 | `OPENAI_API_KEY` | Secrets | la chiave | solo il controllo visivo dell'agente |
 
 Le chiavi vanno in **Secrets**, non in Variables: le Variables si leggono in
@@ -156,6 +157,36 @@ percorso, e il punto d'ingresso li salva allo stesso modo. Per collegarli:
 Se Glam risponde 401, i due valori non sono uguali. Nessuno dei due si puo'
 rileggere: si genera un token nuovo e si mette in tutti e due i posti. La
 credenziale non si modifica: si cancella e si aggiunge di nuovo.
+
+#### Chi ha caricato il PDF segue il caso da Glam
+
+Chi usa solo Glam non vede la issue, ne' la sessione della routine: quello
+che gli serve arriva in Glam. Il contratto fra i due e il testo da dare a
+Lovable sono in **GLAM.md**; qui il collegamento.
+
+- Quando un caso entra in coda, la pagina dello Space - che Glam ospita dal
+  suo dominio - lo dice a Glam con un messaggio (`pack3d:caso`, col codice
+  del caso), e Glam lo lega all'utente che l'ha caricato. Glam aggiunge
+  `casi=1` all'indirizzo della pagina: e' il segnale che sa mostrare i casi,
+  e solo allora la pagina promette le domande in Glam.
+- La routine dice a Glam a che punto e' il caso, e gli fa le domande, con
+  `prove/parco.py caso` (`POST /api/pack3d-case`, la stessa credenziale
+  dell'import); il modello corretto, con `prove/parco.py glam`, va all'utente
+  del caso (`X-Pack3d-Codice`).
+- La risposta Glam la manda allo Space, `POST /api/risposta` con
+  `Authorization: Bearer <PACK3D_RISPOSTE_TOKEN>`: lo Space la scrive sulla
+  issue, toglie `da-guardare` e rilancia la routine. Per collegarli genera
+  una stringa casuale di 64 lettere e numeri e mettila **uguale** in due
+  posti: nello Space, Settings -> Secrets, `PACK3D_RISPOSTE_TOKEN`; in Glam
+  (Lovable), Cloud -> Secrets, `PACK3D_RISPOSTE_TOKEN`. Come per l'import,
+  non si rilegge: se non va, se ne genera una nuova e si rimette in tutti e
+  due.
+- La **nota** che l'utente puo' lasciare nella pagina, appena il caso entra
+  in coda, va allo Space (`POST /api/nota`) senza token: porta solo il
+  codice del caso, che conosce chi l'ha caricato, e lo Space la accetta
+  solo per un caso in coda, al massimo otto voci per caso e sessanta
+  all'ora. Anche lei finisce sulla issue, con l'eventuale foto nella
+  cartella del caso.
 
 ### I 16 GB non comprano due costruzioni insieme
 
