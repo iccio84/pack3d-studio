@@ -3414,6 +3414,29 @@ l'unica cosa aperiodica del disegno: fra le fasi che distano un periodo si
 sceglie quella che somiglia di piu' confrontando le IMMAGINI, dove la goccia
 pesa poco in percentuale ma e' l'unica cosa che cambia.
 
+#### La fila della fasciatura orizzontale puo' cominciare da un fianco
+
+`detect_layout` riconosce la fasciatura orizzontale da quattro colonne che si
+alternano larga-stretta, ma l'alternanza vale nei due versi: `W D W D` e
+`D W D W` passano tutte e due. `solve_carton_h` invece dava per scontato che la
+prima delle quattro fosse larga, e chiamava fronte la colonna 0. Su un DT
+disegnato `fianco | retro | fianco | fronte | patta` - la patta rastremata non
+attraversa la fascia per il 96% e non entra fra le colonne, quindi la sola
+quaterna trovata comincia dal fianco - il fronte era il fianco da 15,5 mm,
+l'astuccio usciva 15,8 x 100,3 x 139,0 invece di 139,0 x 100,3 x 15,8, girato
+col fianco verso chi guarda, e la scelta del fronte dall'aletta stampata
+confrontava due fianchi senza aletta.
+
+La regola: **fronte e retro sono sempre le due colonne larghe**. Se la prima
+della quaterna e' piu' stretta della seconda il giro dei nomi parte dalla
+seconda (`fronte, fianco destro, retro, fianco sinistro` restano in ordine
+ciclico), e la scelta fra le due larghe con l'aletta stampata guarda quelle
+due. La profondita' e' la media delle due strette, dovunque stiano.
+
+Sul parco: 29 casi identici al byte, cambia solo il caso nuovo (DT che
+comincia dal fianco), che adesso ha il fronte davanti, il retro dietro e le
+quote giuste.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due

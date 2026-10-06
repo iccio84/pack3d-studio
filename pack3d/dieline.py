@@ -751,9 +751,9 @@ def solve_carton_h(d: Dieline, pdf_path=None) -> Dieline:
     y0, y1 = body[0], body[1]
     quad = [(cols[i + k], cols[i + k + 1]) for k in range(4)]
 
-    # Dei due pannelli larghi, il fronte e' quello la cui aletta superiore e'
-    # stampata: e' quella che diventa il cielo visibile della scatola.
-    Dpt = ((quad[1][1] - quad[1][0]) + (quad[3][1] - quad[3][0])) / 2.0
+    # Profondita': la media dei due pannelli stretti, dovunque stiano.
+    Dpt = min((quad[0][1] - quad[0][0]) + (quad[2][1] - quad[2][0]),
+              (quad[1][1] - quad[1][0]) + (quad[3][1] - quad[3][0])) / 2.0
 
     def flap(x0, x1, side):
         """Aletta di chiusura: si prende il bordo piu' esterno compatibile con
@@ -768,18 +768,25 @@ def solve_carton_h(d: Dieline, pdf_path=None) -> Dieline:
 
     # Dei due pannelli larghi, il fronte e' quello la cui aletta superiore e'
     # stampata: e' quella che diventa il cielo visibile della scatola.
-    order = [0, 1, 2, 3]
+    # La fila puo' cominciare da un fianco (FIANCO-RETRO-FIANCO-FRONTE): i
+    # pannelli larghi sono allora il secondo e il quarto, e il giro dei nomi
+    # parte da li'. Fronte e retro sono sempre i due larghi.
+    w0 = quad[0][1] - quad[0][0]
+    w1 = quad[1][1] - quad[1][0]
+    s = 1 if w0 < w1 else 0
+    order = [s, s + 1, (s + 2) % 4, (s + 3) % 4]
     if pdf_path:
         def flap_ink(k):
             x0, x1 = quad[k]
             y = flap(x0, x1, "top")
             return -1.0 if y is None else _ink(pdf_path, (x0, y, x1, y0))
-        a, b = flap_ink(0), flap_ink(2)
+        ka, kb = order[0], order[2]
+        a, b = flap_ink(ka), flap_ink(kb)
         if max(a, b) < 3.0:                      # entrambe le alette neutre
-            x0, x1 = quad[0]; a = _ink(pdf_path, (x0, y0, x1, y1))
-            x0, x1 = quad[2]; b = _ink(pdf_path, (x0, y0, x1, y1))
+            x0, x1 = quad[ka]; a = _ink(pdf_path, (x0, y0, x1, y1))
+            x0, x1 = quad[kb]; b = _ink(pdf_path, (x0, y0, x1, y1))
         if b > a * 1.25 and b > a + 4.0:
-            order = [2, 3, 0, 1]
+            order = order[2:] + order[:2]
     names = ["front", "right", "back", "left"]
     P = {}
     for name, k in zip(names, order):
