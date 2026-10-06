@@ -25,6 +25,7 @@ mappata sulle facce giuste.
 | `pack3d/controllo.py` | il controllo dell'AI: il modello accanto all'artwork prima della consegna |
 | `pack3d/vista.py` | il modello visto da quattro lati, dal GLB e senza GPU |
 | `pack3d/incisioni.py` | l'apertura a strappo di un astuccio: i suoi tagli incisi come solchi nel modello chiuso |
+| `pack3d/apertura.py` | la stessa apertura aperta di tot gradi sulla sua cerniera, con la scatola appoggiata sul retro |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |
 | `CODA.md` | come si lavora un caso della coda, anche dalla sessione automatica |
 | `GLAM.md` | come chi ha caricato il PDF segue il suo caso da Glam Lab: stato, domande, risposte, modello corretto; il testo per Lovable |
@@ -53,5 +54,7 @@ Tipologie coperte: astuccio a fasciatura verticale, astuccio a fasciatura
 orizzontale, flowpack, vassoio espositore e display con plancia - la scatola
 chiusa che si apre in espositore, costruita aperta - e pouch, la busta
 stand-up col soffietto sul fondo. Un astuccio con l'apertura a strappo esce
-chiuso, coi tagli dell'apertura incisi nel cartone come sulla scatola vera. Per i flowpack vengono chieste zigrinatura
-e tipo di gonfiore prima di costruire.
+chiuso, coi tagli dell'apertura incisi nel cartone come sulla scatola vera.
+Con l'opzione `apertura` (in gradi) esce aperto: la finestra sollevata sulla
+sua cerniera e la scatola appoggiata sul retro. Per i flowpack vengono
+chieste zigrinatura e tipo di gonfiore prima di costruire.
