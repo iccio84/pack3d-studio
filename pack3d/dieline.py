@@ -58,6 +58,9 @@ class Dieline:
     # I fianchi dell'altra fascia alta, quando le portano tutte e due: quali
     # sono quelli che si vedono lo dice la stampa. Vedi `solve_carton`.
     fianchi_alt: dict = field(default_factory=dict)
+    # Freccia in mm del fronte curvo di un astuccio a fasciatura orizzontale
+    # (il "mastello"): 0 = fronte piatto. Vedi `_fronte_curvo`.
+    curva_mm: float = 0.0
 
     def cols_in_row(self, y0, y1, cover=0.8):
         """Cordonature verticali che attraversano davvero la fascia [y0, y1]."""
@@ -795,6 +798,11 @@ def solve_carton_h(d: Dieline, pdf_path=None) -> Dieline:
 
     fx0, fx1 = quad[order[0]]
     yt, yb = flap(fx0, fx1, "top"), flap(fx0, fx1, "bottom")
+    if yt is None and yb is None:
+        bx0, bx1 = quad[order[2]]
+        curvo = _fronte_curvo(d, (fx0, fx1), (bx0, bx1), y0, y1, Dpt)
+        if curvo:
+            yt, yb, d.curva_mm = curvo
     if yt is not None:
         P["top"] = Panel(fx0, yt, fx1, y0, "top")
     if yb is not None:
@@ -807,6 +815,42 @@ def solve_carton_h(d: Dieline, pdf_path=None) -> Dieline:
     D = (P["left"].w_mm + P["right"].w_mm) / 2
     d.dims_mm = (round(W, 1), round(P["front"].h_mm, 1), round(D, 1))
     return d
+
+
+def _fronte_curvo(d: Dieline, fronte, retro, y0, y1, Dpt):
+    """Il fronte curvo (il "mastello"): `(y aletta alta, y aletta bassa,
+    freccia mm)`, o None.
+
+    Su un astuccio a fronte curvo il fronte si incurva verso fuori, i fianchi
+    restano piani e il cielo e il fondo sono a D: profondi quanto la scatola
+    ai lati e di piu' in mezzo. Le alette del fronte che li chiudono sono
+    allora piu' lunghe della profondita' - quanto la freccia - e nessuna
+    piega a D le divide. Lo si riconosce da due misure indipendenti che
+    devono tornare insieme:
+
+    - le alette alta e bassa del fronte sono lunghe uguali, piu' di 1,3 e
+      meno di 2,5 volte la profondita': la freccia e' quello che avanza;
+    - il fronte e' piu' largo del retro di quanto un arco con quella freccia
+      e' piu' lungo della sua corda (8 f^2 / 3 c), entro un millimetro.
+    """
+    fx0, fx1 = fronte
+    rs = d.rows_in_col(fx0, fx1)
+    alto = [y for y in rs if Dpt * 1.3 < (y0 - y) <= Dpt * 2.5]
+    basso = [y for y in rs if Dpt * 1.3 < (y - y1) <= Dpt * 2.5]
+    if not alto or not basso:
+        return None
+    yt, yb = max(alto), min(basso)          # la piu' vicina al fronte
+    lt, lb = (y0 - yt) * PT2MM, (yb - y1) * PT2MM
+    if abs(lt - lb) > 0.1 * max(lt, lb):
+        return None
+    D = Dpt * PT2MM
+    freccia = (lt + lb) / 2.0 - D
+    corda = (retro[1] - retro[0]) * PT2MM
+    largo = (fx1 - fx0) * PT2MM
+    arco = corda + 8.0 * freccia ** 2 / (3.0 * corda)
+    if largo - corda < 0.5 or abs(largo - arco) > 1.0:
+        return None
+    return yt, yb, round(freccia, 1)
 
 
 def dichiara_apertura(d: Dieline):
@@ -843,7 +887,8 @@ def check(d: Dieline):
     for k in ("top", "bottom"):
         if k in P:
             depth = P[k].h_mm if d.layout != "vwrap" else P[k].h_mm
-            if abs(depth - D) / max(D, 1) > 0.06:
+            # col fronte curvo l'aletta e' lunga quanto il cielo in mezzo
+            if abs(depth - D - d.curva_mm) / max(D, 1) > 0.06:
                 msgs.append(f"aletta '{k}' profonda {depth:.1f} mm contro "
                             f"{D:.1f} mm di scatola: texture riscalata")
     for k in ("front", "back", "left", "right"):
