@@ -52,6 +52,29 @@ bianco della cresta.
 Quello che la costruzione NON fa: le falde incollate sotto il coperchio non si
 vedono piu' - stanno fra le due facce della plancia, o sono venute via con la
 finestra - e non si costruiscono.
+
+**Il coperchio sul retro.** Il secondo display del parco, un "ready to
+display" da tre file di trenta pezzi, e' della stessa famiglia, montato in un
+altro modo. E' un vassoio con il fronte basso, e il coperchio e' incernierato sul
+bordo alto del RETRO, non su un fianco: sul foglio continua il retro, oltre
+la sua riga esterna. Lo attraversa UNA riga sola, parallela alla cerniera -
+un mezzo taglio, non la doppia cordonatura del Tronky - e oltre la riga c'e'
+la parte con la grafica grande, con una linguetta che entra nella parte
+attaccata al retro e ne esce col suo contorno perforato. In mm:
+
+    colonne   103 | 174 | 103                 fianco, fondo, fianco
+    fasce     65 | 215 | 104 | 99 | 113       fronte, fondo, retro, coperchio
+
+A display montato, l'ha confermato chi lo monta (issue #3 dei casi): il
+coperchio ruota di 90 gradi sulla cerniera e la parte attaccata al retro ne
+diventa il prolungamento in alto, con la stampa verso dietro; l'altra si
+ripiega di 180 gradi in avanti sulla riga e le scende davanti, con la stampa
+verso chi guarda. La linguetta, che e' sua, spunta sopra la riga come
+cresta, e il suo piede - 14 mm piu' lungo - entra nella scatola davanti al
+retro. E' la plancia del Tronky con il dorso largo uno spessore e la cerniera
+sul retro: si riconosce da li', ed e' l'unica lettura possibile, perche' il
+coperchio sta su UNA sola delle due testate, quella alta. Il fronte e' la
+testata bassa, e non ha finestra da strappare.
 """
 from __future__ import annotations
 
@@ -82,6 +105,18 @@ COPERCHIO = (0.9, 1.1)
 # Le due righe della doppia cordonatura: fra una piega vera a 180 gradi e due
 # righe che non c'entrano l'una con l'altra.
 DOPPIA = (3.0 * MM, 20.0 * MM)
+# Il coperchio sul retro: la riga che lo attraversa arriva ai suoi lati a meno
+# di questo - fra la riga e il lato c'e' l'intaglio a V della piega...
+PIEGA_BORDO = 10.0 * MM
+# ...il fronte e' la testata bassa, al piu' questa parte del retro...
+FRONTE_BASSO = 0.8
+# ...e il bordo di un fianco ne copre almeno questa parte: gli angoli del
+# fianco sono stondati, e sul display T3x30 la riga dritta e' l'83%.
+COPRE_FIANCO = 0.75
+# La linguetta si stacca dalla parte dietro su un contorno PERFORATO: per
+# dividere le due parti i tratti si chiudono di tanto, in mm per lato. Copre i
+# punti di tenuta da due millimetri.
+CHIUDI = 1.25
 # La finestra parte dal bordo alto della parete, a meno di questo...
 FINESTRA_BORDO = 15.0 * MM
 # ...e i suoi lati sono lunghi almeno questa parte della parete.
@@ -97,6 +132,11 @@ class Plancia:
     finiscono i fianchi, che non sono quelle del fondo: sul Tronky stanno 1,5
     mm piu' dentro, per lo spessore. `pieghe` sono le due righe della doppia
     cordonatura del coperchio, dall'alto.
+
+    `cerniera` dice dove sta il coperchio: "fianco" (il Tronky) o "retro" (il
+    display T3x30). Sul retro `lato_coperchio` e' la testata del retro, le
+    due `pieghe` sono la stessa riga - il dorso e' largo uno spessore - e
+    `finestra` e' None.
     """
     fondo: tuple              # (x0, y0, x1, y1)
     bordi: dict               # {"ovest": x, "est": x, "nord": y, "sud": y}
@@ -107,6 +147,7 @@ class Plancia:
     fronte: str               # "nord" o "sud": la parete con la finestra
     finestra: tuple           # (x0, y0, x1, y1): il riquadro della finestra
     warnings: list = field(default_factory=list)
+    cerniera: str = "fianco"  # "fianco" o "retro": dove sta il coperchio
 
     @property
     def retro(self):
@@ -130,6 +171,9 @@ class Plancia:
         _x0, y0, _x1, y1 = self.coperchio
         a, b = self.pieghe
         nord, dorso, sud = (a - y0) * PT2MM, (b - a) * PT2MM, (y1 - b) * PT2MM
+        if self.cerniera == "retro":
+            # la parte dietro e' quella attaccata al retro
+            return (sud, dorso, nord) if self.retro == "sud" else (nord, dorso, sud)
         return (nord, dorso, sud) if self.fronte == "nord" else (sud, dorso, nord)
 
     @property
@@ -181,7 +225,7 @@ def _su(corse, c, a, b, quota=COPRE):
     return None
 
 
-def _prima(corse, c, verso, a, b):
+def _prima(corse, c, verso, a, b, quota=COPRE):
     """La prima corsa oltre `c` nel verso dato che copre [a, b], o None.
 
     Cosi' si trova il bordo esterno di una parete: la riga parallela piu'
@@ -189,7 +233,8 @@ def _prima(corse, c, verso, a, b):
     in parte - il fondo della finestra, il riquadro della scadenza - non sono
     un bordo, e si saltano.
     """
-    oltre = [r for r in corse if (r[0] - c) * verso > GRIGLIA and _copre(r, a, b)]
+    oltre = [r for r in corse
+             if (r[0] - c) * verso > GRIGLIA and _copre(r, a, b, quota)]
     if not oltre:
         return None
     return min(oltre, key=lambda r: abs(r[0] - c))
@@ -279,7 +324,8 @@ def riconosci(d):
                 continue
             if _su(V, x0, y0, y1) is None or _su(V, x1, y0, y1) is None:
                 continue
-            p = _attorno(V, H, x0, y0, x1, y1)
+            p = (_attorno(V, H, x0, y0, x1, y1)
+                 or _sul_retro(V, H, x0, y0, x1, y1))
             if p is not None:
                 return p
     return None
@@ -336,6 +382,100 @@ def _attorno(V, H, x0, y0, x1, y1):
     return p
 
 
+def _piega_sola(H, x0, y0, x1, y1):
+    """La riga che attraversa il coperchio sul retro, o None.
+
+    Come in `_pieghe` una riga che arriva a tutti e due i lati, magari
+    interrotta in mezzo - qui la interrompe la linguetta - ma ai lati si
+    ferma prima, sull'intaglio a V della piega: si accetta fino a
+    `PIEGA_BORDO`. Ce ne deve essere UNA: due sono la doppia cordonatura del
+    Tronky, e il suo coperchio sta sul fianco.
+    """
+    livelli = []
+    for r in H:
+        if not (y0 + 5 * MM < r[0] < y1 - 5 * MM):
+            continue
+        if not 0 <= r[1] - x0 <= PIEGA_BORDO:
+            continue
+        if not any(abs(s[0] - r[0]) <= GRIGLIA and 0 <= x1 - s[2] <= PIEGA_BORDO
+                   for s in H):
+            continue
+        if not any(abs(l - r[0]) <= GRIGLIA for l in livelli):
+            livelli.append(r[0])
+    return livelli[0] if len(livelli) == 1 else None
+
+
+# la cordonatura fra il fondo e una parete, in punti: vedi `vassoio`
+CORDONATURA = 6.0 * MM
+
+
+def _fine_fianco(H, c, verso, a, b):
+    """La riga dove finisce il fianco fra le colonne [a, b], vicino a `c`.
+
+    Il fianco e' piu' corto del fondo dello spessore di fronte e retro: sul
+    display col coperchio sul retro finisce 2 mm prima, sulla cordonatura della sua aletta.
+    Se non c'e' una riga cosi', finisce dove finisce il fondo.
+    """
+    vicine = [r for r in H if 0 <= (r[0] - c) * verso <= CORDONATURA
+              and _copre(r, a, b, COPRE_FIANCO)]
+    if not vicine:
+        return c
+    return min(vicine, key=lambda r: abs(r[0] - c))[0]
+
+
+def _sul_retro(V, H, x0, y0, x1, y1):
+    """Il display col coperchio sul RETRO attorno al fondo dato, o None.
+
+    Vedi *Il coperchio sul retro* in cima al modulo. Il fondo ha i fianchi a
+    ovest e a est e le testate a nord e a sud; oltre UNA sola testata c'e' un
+    coperchio lungo quanto il fondo e largo quanto lui, attraversato da una
+    riga sola. Quella testata e' il retro, l'altra il fronte, e il fronte
+    deve essere basso: e' da li' che si prende il prodotto. Se manca un
+    pezzo, o le testate sono alte uguali, non e' questa famiglia.
+    """
+    ovest = _prima(V, x0, -1, y0, y1, COPRE_FIANCO)
+    est = _prima(V, x1, +1, y0, y1, COPRE_FIANCO)
+    nord = _prima(H, y0, -1, x0, x1)
+    sud = _prima(H, y1, +1, x0, x1)
+    if None in (ovest, est, nord, sud):
+        return None
+    lungo = y1 - y0
+    cand = []
+    for lato, bordo, verso in (("nord", nord, -1), ("sud", sud, +1)):
+        oltre = _prima(H, bordo[0], verso, x0, x1)
+        if oltre is None:
+            continue
+        if COPERCHIO[0] <= abs(oltre[0] - bordo[0]) / lungo <= COPERCHIO[1]:
+            cand.append((lato, bordo, oltre))
+    if len(cand) != 1:
+        return None
+    retro, bordo, oltre = cand[0]
+    cy0, cy1 = sorted((bordo[0], oltre[0]))
+    cx0, cx1 = max(oltre[1], x0), min(oltre[2], x1)
+    piega = _piega_sola(H, cx0, cy0, cx1, cy1)
+    if piega is None:
+        return None
+    fronte = "nord" if retro == "sud" else "sud"
+    ya = _fine_fianco(H, y0, +1, ovest[0], x0)
+    yb = _fine_fianco(H, y1, -1, ovest[0], x0)
+    p = Plancia(fondo=(x0, y0, x1, y1),
+                bordi={"ovest": ovest[0], "est": est[0], "nord": nord[0],
+                       "sud": sud[0]},
+                fianchi=(ya, yb), coperchio=(cx0, cy0, cx1, cy1),
+                lato_coperchio=retro, pieghe=(piega, piega), fronte=fronte,
+                finestra=None, cerniera="retro")
+    alt = p.pareti
+    if alt[fronte] > FRONTE_BASSO * alt[retro]:
+        return None
+    davanti, _dorso, dietro = p.parti_coperchio
+    if davanti <= dietro:
+        p.warnings.append(
+            "la parte davanti del coperchio (%.1f mm) non e' piu' lunga di "
+            "quella dietro (%.1f): la plancia non ha il piede che entra nella "
+            "scatola, e non si vede cosa la tenga in piedi" % (davanti, dietro))
+    return p
+
+
 def di_traverso(d):
     """`Plancia` dalla griglia TRASPOSTA, o None: il display girato di un quarto.
 
@@ -385,8 +525,22 @@ def dichiara(p):
     """Le righe che dicono cosa si e' riconosciuto, per chi guarda il modello."""
     x0, y0, x1, y1 = p.fondo
     davanti, dorso, dietro = p.parti_coperchio
-    fx0, fy0, fx1, fy1 = p.finestra
     alt = p.pareti
+    if p.cerniera == "retro":
+        return [
+            "display con plancia, coperchio sul retro",
+            "fondo %.1f x %.1f mm, pareti %s mm"
+            % ((x1 - x0) * PT2MM, (y1 - y0) * PT2MM,
+               " / ".join("%s %.1f" % (k, a) for k, a in alt.items())),
+            "aperto a espositore: il fronte e' la testata bassa, il coperchio "
+            "alzato sul retro e ripiegato in avanti sulla riga che lo "
+            "attraversa",
+            "plancia alta %.1f mm sopra il retro, piu' la linguetta: davanti "
+            "la parte oltre la riga (%.1f mm, il piede entra %.1f mm nella "
+            "scatola), dietro quella attaccata al retro"
+            % (dietro, davanti, davanti - dietro),
+        ] + list(p.warnings)
+    fx0, fy0, fx1, fy1 = p.finestra
     return [
         "display con plancia",
         "fondo %.1f x %.1f mm, pareti %s mm"
@@ -600,6 +754,21 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
         "aletta sud-est": rett(fx1, yb, b["est"], bot),
     }
 
+    righe = {
+        "fondo": (P(fx0), P(fx1), Q(fy0), Q(fy1)),
+        "bordi": {"ovest": P(b["ovest"]), "est": P(b["est"]),
+                  "nord": Q(b["nord"]), "sud": Q(b["sud"])},
+        "fianchi": (Q(ya), Q(yb)),
+        "pieghe": (Q(p.pieghe[0]), Q(p.pieghe[1])),
+    }
+    cx0, cy0, cx1, cy1 = p.coperchio
+    righe["coperchio"] = (P(cx0), Q(cy0), P(cx1), Q(cy1))
+    if p.cerniera == "retro":
+        _coperchio_sul_retro(m, p, tratto, rett(cx0, cy0, cx1, cy1), P, Q,
+                             px_mm)
+        return Pezzi(maschere=m, righe=righe, origine=(ox, oy), scala=scala,
+                     lato=(W, H))
+
     # La finestra: la zona che sta sotto il bordo alto del fronte, a meta'
     # della finestra, e con lei le zone che la toccano e ci stanno dentro - il
     # mezzo tondo per il dito, che senza la finestra resta un buco.
@@ -629,7 +798,6 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
 
     # Il coperchio: la parte davanti, quella dietro, e fra le due il dorso,
     # che sono le strisce fra le due righe della doppia cordonatura.
-    cx0, cy0, cx1, cy1 = p.coperchio
     xm = (cx0 + cx1) / 2.0
     sopra, sotto = zona(xm, cy0 + 3.0 * MM), zona(xm, cy1 - 3.0 * MM)
     if sopra == sotto:
@@ -641,16 +809,46 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
     m["plancia davanti"] = davanti
     m["plancia dietro"] = dietro
     m["plancia dorso"] = cop & ~nord_c & ~sud_c
-    righe = {
-        "fondo": (P(fx0), P(fx1), Q(fy0), Q(fy1)),
-        "bordi": {"ovest": P(b["ovest"]), "est": P(b["est"]),
-                  "nord": Q(b["nord"]), "sud": Q(b["sud"])},
-        "fianchi": (Q(ya), Q(yb)),
-        "coperchio": (P(cx0), Q(cy0), P(cx1), Q(cy1)),
-        "pieghe": (Q(p.pieghe[0]), Q(p.pieghe[1])),
-    }
     return Pezzi(maschere=m, righe=righe, origine=(ox, oy), scala=scala,
                  lato=(W, H))
+
+
+def _coperchio_sul_retro(m, p, tratto, cop, P, Q, px_mm):
+    """Le due parti del coperchio sul retro, in `m`: davanti e dietro.
+
+    La riga le divide ai lati, ma in mezzo la linguetta - che e' della parte
+    davanti - si stacca dalla parte dietro su un contorno PERFORATO: sui
+    tratti cosi' come sono le due parti sono una zona sola. Si chiudono i
+    tratti di `CHIUDI` per lato, quanto basta a chiudere la perforazione e i
+    punti di tenuta, e la parte davanti e' la zona chiusa oltre la riga, con
+    dentro la linguetta. Il resto del coperchio e' la parte dietro, col buco
+    della linguetta.
+    """
+    import numpy as np
+    from scipy.ndimage import binary_dilation, label
+
+    chiuso = binary_dilation(tratto, iterations=max(1, int(round(CHIUDI * px_mm))))
+    lab, _n = label(~chiuso)
+    zone = _al_piu_vicino(chiuso, lab)
+    cx0, cy0, cx1, cy1 = p.coperchio
+    piega = p.pieghe[0]
+    verso = +1 if p.retro == "sud" else -1     # dalla cerniera verso il bordo
+    H, W = zone.shape
+
+    def zona(x, y):
+        return int(zone[min(max(Q(y), 0), H - 1), min(max(P(x), 0), W - 1)])
+
+    xm = (cx0 + cx1) / 2.0
+    oltre = zona(xm, piega + verso * 5.0 * MM)
+    # la parte dietro si cerca accanto a un lato, dove non c'e' la linguetta
+    x_lato = cx0 + 0.05 * (cx1 - cx0)
+    if zona(x_lato, piega - verso * 5.0 * MM) == oltre:
+        raise ValueError("display con plancia: la riga del coperchio non ne "
+                         "separa le due parti")
+    davanti = cop & (zone == oltre)
+    m["plancia davanti"] = davanti
+    m["plancia dietro"] = cop & ~davanti
+    m["plancia dorso"] = np.zeros_like(cop)
 
 
 # --------------------------------------------------------------------------- #
@@ -698,6 +896,12 @@ def mesh(p, pz, px_mm, spessore=SPESSORE, alt_texture=None, parti=None):
     telaio = corpo(maglia, mk, r["fondo"], px_mm, spessore, alte=p.pareti,
                    fondo_mm=((fx1 - fx0) * PT2MM, (fy1 - fy0) * PT2MM))
     xL, xR = telaio["xL"], telaio["xR"]
+    if p.cerniera == "retro":
+        _plancia_sul_retro(maglia, p, pz, telaio, spessore)
+        V, UV, T = maglia.array()
+        if p.fronte == "sud":
+            V = gira(V)
+        return V, UV, T
 
     # La plancia. `sgn` dice da che parte del foglio sta il retro: +1 se e' la
     # parete sud, e allora la cerniera e' l'ultima riga della parte dietro.
@@ -772,3 +976,44 @@ def mesh(p, pz, px_mm, spessore=SPESSORE, alt_texture=None, parti=None):
     if p.fronte == "sud":
         V = gira(V)
     return V, UV, T
+
+
+def _plancia_sul_retro(maglia, p, pz, telaio, spessore):
+    """La plancia del coperchio sul retro: vedi in cima al modulo.
+
+    La parte dietro sta in piedi sul retro, nel suo piano, con la stampa
+    verso dietro: dalla cerniera, all'altezza del retro, alla riga. La parte
+    davanti scende dalla riga con la stampa verso chi guarda, uno spessore
+    davanti alla parte dietro - la piega a 180 gradi di un cartone sottile,
+    il dorso del Tronky largo uno spessore - e la linguetta, che sul foglio
+    sta oltre la riga, spunta sopra come cresta. In larghezza il coperchio
+    sta dove sta sul foglio rispetto al fondo: continua il retro.
+    """
+    from .vassoio import _ingombro, _stira
+
+    mk, r = pz.maschere, pz.righe
+    davanti, dietro = mk["plancia davanti"], mk["plancia dietro"]
+    e_b, e_a = _ingombro(dietro, "colonne"), _ingombro(davanti, "colonne")
+    if e_b is None or e_a is None:
+        raise ValueError("display con plancia: il coperchio non si divide in "
+                         "parte davanti e parte dietro")
+    sgn = 1 if p.retro == "sud" else -1
+    z_r = telaio["zB"] if sgn > 0 else telaio["zT"]
+    o = -1.0 if sgn > 0 else 1.0          # il verso di fuori del retro, in z
+    base = telaio["alt"][p.retro]
+    davanti_mm, _dorso, dietro_mm = p.parti_coperchio
+    cima = base + dietro_mm
+    z_a = z_r - o * 2.0 * spessore
+    cerniera, piega_b = (e_b[0], e_b[1]) if sgn > 0 else (e_b[1], e_b[0])
+    h_b = _stira(cerniera, piega_b, base, cima)
+    piega_a = r["pieghe"][0]
+    piede = e_a[1] if sgn > 0 else e_a[0]
+    h_a = _stira(piega_a, piede, cima, cima - davanti_mm)
+    c0, c1 = r["fondo"][0], r["fondo"][1]
+    fx = _stira(c0, c1, telaio["xL"], telaio["xR"])
+    # Le righe sulla piega NON sono pieghe per `pezzo`: le due parti stanno
+    # su due piani, e la cima di ognuna e' un taglio con la sua costa.
+    maglia.pezzo(dietro, "colonne", lambda X, Y: (fx(X), h_b(Y), z_r),
+                 (0, 0, -o), [], "plancia dietro")
+    maglia.pezzo(davanti, "colonne", lambda X, Y: (fx(X), h_a(Y), z_a),
+                 (0, 0, o), [], "plancia davanti")

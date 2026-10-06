@@ -242,7 +242,8 @@ TOOLS = [
                      "griglia della fustella, quale testata va davanti e il "
                      "riscontro con le quote scritte nel file. Se non e' un "
                      "vassoio aperto riconosce il display con plancia - la "
-                     "scatola chiusa col coperchio su un fianco che si apre "
+                     "scatola chiusa col coperchio su un fianco o sul retro "
+                     "che si apre "
                      "in espositore - e ne da' fondo, pareti, coperchio e "
                      "plancia.",
          input_schema={"type": "object", "properties": {}}),

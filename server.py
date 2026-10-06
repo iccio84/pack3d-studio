@@ -1678,7 +1678,8 @@ def _analyze_pdf(pdf, kind=None):
                     max(0, len({round(t, 2) for t in grezza.ys}) - 1))
             raise ValueError(
                 "vassoio: un espositore ha cinque colonne e tre fasce, un "
-                "display con plancia un coperchio sul fianco; questa fustella "
+                "display con plancia un coperchio sul fianco o sul retro; "
+                "questa fustella "
                 "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
         if v is not None:
             return dict(kind="vassoio", title="Vassoio espositore",
