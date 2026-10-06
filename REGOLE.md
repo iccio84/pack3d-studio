@@ -2042,6 +2042,12 @@ costruirlo e dove arrivera' il modello quando sapra'. Un errore puo' anche
 venire da un tipo dichiarato male: allora il codice non sbaglia a
 rifiutarlo, e il modello si fa col tipo giusto.
 
+Vale anche per la **lettura**, non solo per la costruzione. La pagina chiede
+prima di leggere il PDF (`/api/analyze`) e costruisce solo se la lettura va:
+quel vassoio si fermava gia' li', e la costruzione - dove la coda lo
+aspettava - non partiva mai. Una lettura che si ferma va in coda allo stesso
+modo, e la pagina mostra lo stesso riquadro.
+
 Il **parco** sono i casi di prova: 27 PDF, 26 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li

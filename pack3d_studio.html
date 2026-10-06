@@ -1031,6 +1031,13 @@ async function procedi(kind, extra){
     }
     esitoFinale(await build(c.buf, pending.name, opts), info.title || 'Modello pronto');
   }catch(err){
+    // La lettura viene prima della costruzione: un PDF che il codice non sa
+    // leggere si ferma qui, e va in coda da qui. Il riquadro lo dice come per
+    // una costruzione che si ferma (in quel caso l'ha gia' mostrato build).
+    if (err.verdetto && err.verdetto.codice && !casoEl.classList.contains('on')){
+      glbName = pending.name.replace(/\.pdf$/i,'') + '.glb';
+      mostraCaso(err.verdetto, null);
+    }
     const m = testoErrore(err);
     setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
                                      : m.slice(0,200), 'err');
