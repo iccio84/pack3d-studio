@@ -64,6 +64,16 @@ def build(args):
               "perche' il marchio si legga orizzontale e dritto"
               % esito["marchio"])
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
+    # l'apertura a strappo incisa nelle facce, come il server: vedi
+    # `pack3d.incisioni`. Solo nel GLB: il render e l'OBJ restano lisci.
+    from . import incisioni
+    tagli = incisioni.tagli(pdf, d.panels,
+                            [f["name"] for f in faces if f["name"] in d.panels])
+    if tagli:
+        n = incisioni.incidi(faces, tagli, d.panels, esito.get("girate"),
+                             folding.SPESSORE_CRT)
+        print("  avviso   : apertura a strappo incisa nel GLB: %d tagli su %s"
+              % (n, ", ".join(sorted(tagli))))
     riscontro = quote.riscontro_astuccio(pdf, d)
     verifiche = verifiche + ([riscontro] if riscontro else [])
     for m in verifiche:

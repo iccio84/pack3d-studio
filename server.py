@@ -333,6 +333,47 @@ def avviso_pagine(pdf):
             "sono lo stesso pack in altre lingue" % n)
 
 
+# Il controllo dell'AI vede i solchi dell'apertura come righe sottili: senza
+# saperlo, una riga che segue la fustella sembra disegno tecnico rimasto. Non
+# cambia cosa e' un difetto: gli dice cosa sono quelle righe.
+INCISA = "apertura a strappo incisa nel modello"
+
+
+def nota_incisioni(meta):
+    """La riga "da sapere" per il controllo, se il modello ha i solchi."""
+    if not any(str(m).startswith(INCISA) for m in meta or ()):
+        return None
+    return ("le righe sottili color cartone sulle facce sono i tagli "
+            "dell'apertura a strappo, incisi nel cartone come solchi, come si "
+            "vedono sulla scatola vera chiusa: non sono disegno tecnico "
+            "rimasto stampato, e la grafica sotto e' intera.")
+
+
+def incidi_apertura(pdf, d, faces, girate, spessore):
+    """I tagli dell'apertura a strappo incisi nelle facce. La riga per chi
+    guarda il modello, o None se l'astuccio non ha un'apertura.
+
+    Un guasto qui non ferma la costruzione: l'astuccio esce come sempre,
+    senza solchi, e la riga lo dice.
+    """
+    from pack3d import incisioni
+    try:
+        nomi = [f["name"] for f in faces if f["name"] in d.panels]
+        tg = incisioni.tagli(pdf, d.panels, nomi)
+        if not tg:
+            return None
+        n = incisioni.incidi(faces, tg, d.panels, girate, spessore)
+    except Exception as e:                        # noqa: BLE001
+        traceback.print_exc()
+        for f in faces:
+            f.pop("maglia", None)
+        return ("apertura a strappo riconosciuta ma non incisa (%s): "
+                "l'astuccio esce chiuso e liscio" % type(e).__name__)
+    return ("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - la "
+            "grafica resta intera, il taglio dal rovescio non si vede da fuori"
+            % (INCISA, n, ", ".join(sorted(tg)), incisioni.LARGHEZZA))
+
+
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                  colata_riquadro=None, carta=None):
     """L'astuccio. `carta` e' lo spessore del cartoncino in mm se l'utente
@@ -378,9 +419,15 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     marchio = esito.get("marchio", 0)
     if marchio:
         folding.gira_facce(faces, marchio)
+    # l'apertura a strappo incisa nelle facce, come sul cartone: vedi
+    # `pack3d.incisioni`. Sulle facce finite, dopo il giro del marchio.
+    incisa = incidi_apertura(pdf, d, faces, esito.get("girate"),
+                             folding.SPESSORE_CRT if carta is None else carta)
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if incisa:
+        meta.append(incisa)
     if carta is not None:
         meta.append("cartoncino: %.2f mm - dichiarato" % carta)
     if marchio:
@@ -2212,6 +2259,9 @@ class Handler(BaseHTTPRequestHandler):
                                    # riprende lo ricostruisca uguale
                                    opzioni={k: opts[k] for k in OPZIONI_CASO
                                             if k in opts})
+                        nota = nota_incisioni(meta)
+                        if nota:
+                            ctx["nota"] = nota
                         verdetto = controllo.giudica(quadro, ctx)
                         traccia("controllo", t2, verdetto["esito"])
                         riga = None
@@ -2338,7 +2388,9 @@ def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
         return None, "correzione AI non riuscita: %s" % e
     finally:
         _slots.release()
-    ctx2 = dict(ctx, avvisi=list(avvisi), nota=controllo.nota_correzione(scelta))
+    ctx2 = dict(ctx, avvisi=list(avvisi),
+                nota=" ".join(n for n in (ctx.get("nota"),
+                                          controllo.nota_correzione(scelta)) if n))
     verdetto2 = controllo.giudica(quadro2, ctx2)
     traccia("correzione", t, verdetto2["esito"])
     tenuto = controllo.migliore(verdetto, verdetto2)

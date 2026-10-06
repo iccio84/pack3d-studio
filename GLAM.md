@@ -26,7 +26,7 @@ ospita, solo se è della stessa origine, questo messaggio:
 ```js
 { type: "pack3d:caso",
   codice: "b312f1e238",                 // 10 cifre esadecimali
-  nome: "FERRERO_158074379880291532",   // il nome che avrà il modello in Glam
+  nome: "NOME_DEL_PDF",                 // il nome che avrà il modello in Glam
   cartella: "Casi risolti",             // dove arriverà
   esito: "errore",                      // "errore", "sbagliato" o "dubbio"
   stima: "Di solito arriva entro un’ora." }
@@ -48,7 +48,7 @@ l'ambiente cloud) e un corpo JSON:
 
 ```json
 { "codice": "b312f1e238",
-  "nome": "FERRERO_158074379880291532",
+  "nome": "NOME_DEL_PDF",
   "stato": "domanda",
   "messaggio": "…",
   "domanda": "Come sta il coperchio quando il display è montato?",
