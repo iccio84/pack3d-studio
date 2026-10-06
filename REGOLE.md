@@ -3457,7 +3457,7 @@ tornano insieme -
 - il fronte e' piu' largo del retro di quanto un arco con quella freccia e'
   piu' lungo della sua corda, `8 f^2 / 3 c`, entro un millimetro.
 
-Sul Bueno: freccia 25,1 - 15,75 = 9,4 mm, retro 138,0, arco previsto 139,7,
+Sul caso nuovo: freccia 25,1 - 15,75 = 9,4 mm, retro 138,0, arco previsto 139,7,
 fronte misurato 140,0. Un astuccio piatto ha fronte e retro uguali, e la
 seconda prova lo esclude anche con alette lunghe.
 
