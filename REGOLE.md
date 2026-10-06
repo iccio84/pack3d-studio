@@ -416,6 +416,7 @@ allora si gira la scatola intera, guscio, interno e coste
 | Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". Con "Scegli tu" il livello lo sceglie Claude guardando l'artwork, con le regole qui sotto; senza chiave API si ripiega sul 5 e lo si grida. | `gonfiore()` in `server.py`, `controllo.rigonfiamento` |
 | Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
 | Solo flowpack: chiedere se il **film avvolge una scatola**. | casella `scatola`, `parametri_costruzione.avvolge_scatola` |
+| Solo astuccio con l'**apertura a strappo**, quando l'analisi la trova: chiedere se lo si vuole **chiuso**, coi tagli modellati, o **aperto** di quanti gradi (proposti 60). Senza apertura la domanda non c'e'. | pannello `strappo`, `strappo_astuccio` in `server.py`, `apertura` nell'intestazione |
 
 ### Il cartotecnico dice di quanti pezzi e' fatto
 
@@ -465,6 +466,31 @@ lo dice. **Senza dichiarazione** - dall'API - ogni famiglia tiene il suo:
 0,45 l'astuccio (`PACK3D_SPESSORE_CRT`), 0,35 la coppa (dal cartiglio del
 Nutella POT), 0,10 il cono, e i modelli restano quelli di prima byte per
 byte.
+
+### L'apertura a strappo: chiusa o aperta
+
+Quando l'astuccio ha un'apertura a strappo, la pagina chiede come lo si
+vuole: **chiuso**, coi tagli modellati come solchi nel cartone (vedi
+*L'apertura a strappo si incide, non si disegna*), o **aperto** di quanti
+gradi, con la finestra sollevata sulla sua cerniera e la scatola appoggiata
+sulla faccia opposta (vedi *L'apertura a strappo, aperta*). Si propone
+chiuso; aperto, si propongono 60 gradi e si digita da 1 a 180.
+
+La domanda si fa solo se c'e' qualcosa da chiedere. L'analisi che la pagina
+chiede prima di costruire (`/api/analyze`) cerca l'apertura con la **stessa
+lettura** della costruzione (`apertura.trova`, che e' `apertura._leggi`): la
+firma del taglio davanti col taglio dal rovescio accanto, e la cerniera su
+una piega. Se la trova, la risposta porta `strappo` - dove sta la finestra, a
+quale piega resta attaccata, su che faccia gira la linguetta - e un
+cartellino; la pagina mostra il pannello con quella frase, e la costruzione
+riceve `apertura` in gradi (0 chiusa). Un astuccio senza apertura non vede
+nessun pannello, e si costruisce subito come prima.
+
+La lettura costa: sul Choco Fresh 2,5 secondi in piu' nell'analisi, mezzo
+secondo su un astuccio senza apertura. Per questo la fa solo l'analisi
+chiesta dalla pagina, e non quella che `/api/build` rifa' prima di
+costruire. In Glam Lab la pagina e' la stessa, dentro la cornice: la domanda
+arriva anche li', senza toccare Glam.
 
 ### La dichiarazione vale anche quando dice di no
 
@@ -3173,9 +3199,10 @@ residui stampati".
 ### L'apertura a strappo, aperta
 
 Lo stesso astuccio si puo' volere **aperto**: la finestra sollevata di tot
-gradi, come quando la si e' appena strappata. Lo chiede chi carica, con
-l'opzione `apertura` in gradi (0 chiusa, fino a 180); di serie resta chiuso,
-coi solchi. Quanto aprire lo dice l'utente; da dove si apre, come si strappa e
+gradi, come quando la si e' appena strappata. Lo sceglie chi carica: la
+pagina lo chiede quando l'analisi trova l'apertura (vedi *L'apertura a
+strappo: chiusa o aperta*), e la costruzione riceve l'opzione `apertura` in
+gradi (0 chiusa, fino a 180); senza, resta chiuso, coi solchi. Quanto aprire lo dice l'utente; da dove si apre, come si strappa e
 come sta la scatola aperta lo dice la fustella, e lo fa `pack3d/apertura.py`.
 
 - **La cerniera** e' la piega su cui finiscono i due capi del contorno dei

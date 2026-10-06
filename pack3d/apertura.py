@@ -453,6 +453,60 @@ def _apri_faccia(quad, p, giro, P, Pin, lunette, spessore):
 
 
 # --------------------------------------------------------------------------- #
+# l'apertura letta dalla fustella
+# --------------------------------------------------------------------------- #
+def _leggi(pdf, panels, facce):
+    """L'apertura a strappo con la sua cerniera, letta sul foglio, o None.
+
+    E' la stessa lettura per chi chiede se c'e' (`trova`, dall'analisi, per
+    la domanda all'utente) e per chi la apre (`apri`): la domanda si fa solo
+    su un'apertura che la costruzione sa aprire.
+    """
+    trovata = incisioni.firma(pdf, panels, facce)
+    if trovata is None:
+        return None
+    aperture, vicini, rovescio = trovata
+    if len(aperture) != 1:
+        return None
+    catena = _cuci(aperture[0])
+    if catena is None:
+        return None
+    cerniera = _cerniera(catena, panels, facce)
+    if cerniera is None:
+        return None
+    nome_c, piega, lato, oltre = cerniera
+    dentro, sfogliati = _strato_di_dentro(catena, rovescio, lato)
+    lunette, liberi = _lunette(catena, vicini)
+    toccate = [nome for nome in facce if nome in panels and any(
+        _dentro_pannello(q, panels[nome], -0.5) for poli in [catena] + lunette
+        for q in poli)]
+    if nome_c not in toccate:
+        return None
+    return {"catena": catena, "dentro": dentro, "sfogliati": sfogliati,
+            "rovescio": rovescio, "lunette": lunette, "liberi": liberi,
+            "cerniera": nome_c, "piega": piega, "oltre": oltre,
+            "toccate": toccate}
+
+
+def trova(pdf, panels, facce):
+    """Se l'astuccio ha un'apertura a strappo che si puo' aprire: dove sta.
+
+    {"faccia": la faccia della finestra, "piega_con": la faccia oltre la
+    cerniera, "altre": le facce su cui gira la linguetta, "cerniera_mm",
+    "sfoglia": se fra i due tagli il cartoncino si sfoglia, "lunette"}, o
+    None.
+    """
+    a = _leggi(pdf, panels, facce)
+    if a is None:
+        return None
+    (ax, ay), (bx, by) = a["piega"]
+    return {"faccia": a["cerniera"], "piega_con": a["oltre"],
+            "altre": [n for n in a["toccate"] if n != a["cerniera"]],
+            "cerniera_mm": round(math.hypot(bx - ax, by - ay) * PT2MM, 1),
+            "sfoglia": bool(a["sfogliati"]), "lunette": len(a["lunette"])}
+
+
+# --------------------------------------------------------------------------- #
 # l'astuccio aperto
 # --------------------------------------------------------------------------- #
 def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
@@ -472,37 +526,18 @@ def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
         raise ValueError("l'apertura va da 1 a %d gradi" % GRADI_MAX)
     spessore = float(spessore or SPESSORE_CRT)
     girate = girate or {}
-    trovata = incisioni.firma(pdf, panels, facce)
-    if trovata is None:
+    a = _leggi(pdf, panels, facce)
+    if a is None:
         return None
-    aperture, vicini, rovescio = trovata
-    if len(aperture) != 1:
-        return None
-    catena = _cuci(aperture[0])
-    if catena is None:
-        return None
-    cerniera = _cerniera(catena, panels, facce)
-    if cerniera is None:
-        return None
-    nome_c, piega, lato, oltre = cerniera
+    catena, rovescio = a["catena"], a["rovescio"]
+    lunette, liberi, sfogliati = a["lunette"], a["liberi"], a["sfogliati"]
+    nome_c, piega, oltre = a["cerniera"], a["piega"], a["oltre"]
     p_c = panels[nome_c]
-    dentro, sfogliati = _strato_di_dentro(catena, rovescio, lato)
-    lunette, liberi = _lunette(catena, vicini)
     # i poligoni chiusi: il contorno torna lungo la cerniera
-    P, Pin = catena, dentro
+    P, Pin = catena, a["dentro"]
 
     per_nome = {f["name"]: f for f in faces}
-    if nome_c not in per_nome:
-        return None
-    toccate = []
-    for nome in facce:
-        p = panels.get(nome)
-        f = per_nome.get(nome)
-        if p is None or f is None:
-            continue
-        if not any(_dentro_pannello(q, p, -0.5) for poli in [P] + lunette for q in poli):
-            continue
-        toccate.append(nome)
+    toccate = [n for n in a["toccate"] if n in per_nome]
     if nome_c not in toccate:
         return None
 

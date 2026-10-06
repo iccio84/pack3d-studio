@@ -55,6 +55,6 @@ orizzontale, flowpack, vassoio espositore e display con plancia - la scatola
 chiusa che si apre in espositore, costruita aperta - e pouch, la busta
 stand-up col soffietto sul fondo. Un astuccio con l'apertura a strappo esce
 chiuso, coi tagli dell'apertura incisi nel cartone come sulla scatola vera.
-Con l'opzione `apertura` (in gradi) esce aperto: la finestra sollevata sulla
-sua cerniera e la scatola appoggiata sul retro. Per i flowpack vengono
-chieste zigrinatura e tipo di gonfiore prima di costruire.
+La pagina chiede se lo si vuole cosi' o aperto di tot gradi: la finestra
+sollevata sulla sua cerniera e la scatola appoggiata sul retro. Per i
+flowpack vengono chieste zigrinatura e tipo di gonfiore prima di costruire.
