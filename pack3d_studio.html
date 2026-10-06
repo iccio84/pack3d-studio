@@ -221,7 +221,7 @@
   .pannello > .tit{display:block;margin-bottom:12px}
   #packtype .scelte{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 
-  #params .griglia, #pezzi .griglia{display:grid;gap:14px;border:1px solid var(--border);
+  #params .griglia, #pezzi .griglia, #strappo .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   .fld{display:flex;flex-direction:column;gap:7px}
@@ -236,9 +236,10 @@
              cursor:pointer}
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
-  #go, #avanti{width:100%;max-width:300px;margin:6px auto 0;display:block}
-  #spessore{display:flex;gap:8px;flex-wrap:wrap}
-  #spessore button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
+  #go, #avanti, #strappo-go{width:100%;max-width:300px;margin:6px auto 0;display:block}
+  #spessore, #strappo-scelta{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore button[aria-pressed="true"],
+  #strappo-scelta button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
     background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
   .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:10px;
         color:var(--muted-foreground)}
@@ -339,6 +340,25 @@
     </div>
     </div>
     <button id="avanti" class="primary">Continua</button>
+  </div>
+
+  <div id="strappo" class="pannello">
+    <span class="tit">L&rsquo;astuccio ha un&rsquo;apertura a strappo: come lo vuoi?</span>
+    <div class="griglia">
+    <div class="fld">
+      <div id="strappo-scelta" role="group" aria-label="Apertura a strappo">
+        <button type="button" data-a="chiusa" aria-pressed="true">Chiuso &middot; tagli modellati</button>
+        <button type="button" data-a="aperta" aria-pressed="false">Aperto</button>
+      </div>
+      <p class="note" id="strappo-dove"></p>
+    </div>
+    <div class="fld">
+      <label for="strappo-gradi">Di quanti gradi si apre la finestra <b id="strappo-val">chiusa</b></label>
+      <input id="strappo-gradi" type="number" min="1" max="180" step="1" value="60" disabled>
+      <p class="note">Chiuso, i tagli si vedono come solchi nel cartone e la grafica resta intera. Aperto, la finestra ruota sulla sua cerniera con la linguetta, e la scatola appoggia sulla faccia opposta: 90 la tiene in piedi, 180 la stende dall&rsquo;altra parte.</p>
+    </div>
+    </div>
+    <button id="strappo-go" class="primary">Costruisci</button>
   </div>
 
   <div id="params" class="pannello">
@@ -588,6 +608,13 @@ const NOMI_SPESSORE = {1: 'carta', 2: 'cartoncino', 3: 'cartoncino spesso'};
 // lo spessore della carta dichiarato nel pannello dei pezzi, 0 finche' non si
 // sceglie: come i pezzi si dichiara, non si indovina
 let spessoreScelto = 0;
+// L'apertura a strappo: se l'analisi la trova, prima di costruire si chiede
+// se l'astuccio si vuole chiuso, coi tagli modellati, o aperto di tot gradi.
+const strappoEl = document.getElementById('strappo');
+const strappoScelta = document.getElementById('strappo-scelta');
+const strappoGradi = document.getElementById('strappo-gradi');
+const strappoVal = document.getElementById('strappo-val');
+let aperturaScelta = 'chiusa';
 const dlBtn = document.getElementById('download');
 const upBtn = document.getElementById('upload');
 const annBtn = document.getElementById('annulla');
@@ -1077,7 +1104,7 @@ async function handle(lista){
   pending = {buf: bufs[0], bufs, name: file.name, nomi: files.map(f => f.name)};
   attesiPezzi = 0; pezziEl.classList.remove('on');
   setTitolo(files.map(f => f.name).join(' + '));
-  params.classList.remove('on'); setMeta([]);
+  params.classList.remove('on'); strappoEl.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
   setFase('lavoro');
   setStatus(files.length > 1 ? files.length + ' PDF: insieme vanno solo per un cartotecnico in piu\' pezzi'
@@ -1193,19 +1220,78 @@ async function procedi(kind, extra){
       setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
     }
-    esitoFinale(await build(c.buf, pending.name, opts), info.title || 'Modello pronto');
-  }catch(err){
-    // La lettura viene prima della costruzione: un PDF che il codice non sa
-    // leggere si ferma qui, e va in coda da qui. Il riquadro lo dice come per
-    // una costruzione che si ferma (in quel caso l'ha gia' mostrato build).
-    if (err.verdetto && err.verdetto.codice && !casoEl.classList.contains('on')){
-      glbName = pending.name.replace(/\.pdf$/i,'') + '.glb';
-      mostraCaso(err.verdetto, null);
+    if (info.strappo){
+      chiediStrappo(c, opts, info);
+      return;
     }
-    const m = testoErrore(err);
-    setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
-                                     : m.slice(0,200), 'err');
+    esitoFinale(await build(c.buf, pending.name, opts), info.title || 'Modello pronto');
+  }catch(err){ fermato(err); }
+}
+
+/** Una lettura o una costruzione che si e' fermata: la riga di stato, e il
+ *  riquadro del caso se e' andato in coda. */
+function fermato(err){
+  // La lettura viene prima della costruzione: un PDF che il codice non sa
+  // leggere si ferma qui, e va in coda da qui. Il riquadro lo dice come per
+  // una costruzione che si ferma (in quel caso l'ha gia' mostrato build).
+  if (err.verdetto && err.verdetto.codice && !casoEl.classList.contains('on')){
+    glbName = pending.name.replace(/\.pdf$/i,'') + '.glb';
+    mostraCaso(err.verdetto, null);
   }
+  const m = testoErrore(err);
+  setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
+                                   : m.slice(0,200), 'err');
+}
+
+/* ------------------------- apertura a strappo -------------------------- */
+// L'analisi ha trovato un'apertura a strappo con la sua cerniera (vedi
+// `pack3d/apertura.py`): chiuso, i tagli si modellano come solchi; aperto,
+// la finestra ruota sulla cerniera e la scatola appoggia sulla faccia
+// opposta. Lo decide chi carica il PDF, come i pezzi e lo spessore.
+function chiediStrappo(c, opts, info){
+  const s = info.strappo;
+  pending.strappo = {c, opts, titolo: info.title || 'Modello pronto'};
+  document.getElementById('strappo-dove').textContent =
+    'Dal disegno: ' + (s.dove || 'la finestra resta attaccata a una piega') + '.';
+  strappoGradi.max = String(s.gradi_max || 180);
+  strappoGradi.value = String(s.gradi || 60);
+  scegliStrappo('chiusa');
+  strappoEl.classList.add('on');
+  setStatus('Apertura a strappo: chiuso coi tagli modellati, o aperto di quanti gradi?','');
+}
+
+/** Chiuso o aperto: i gradi si digitano solo per l'astuccio aperto. */
+function scegliStrappo(a){
+  aperturaScelta = a;
+  strappoScelta.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.a === a)));
+  strappoGradi.disabled = a !== 'aperta';
+  mostraGradi();
+}
+
+function mostraGradi(){
+  const g = parseInt(strappoGradi.value, 10);
+  strappoVal.textContent = aperturaScelta !== 'aperta' ? 'chiusa'
+    : (g >= 1 && g <= Number(strappoGradi.max) ? g + '\u00b0' : 'da 1 a ' + strappoGradi.max);
+}
+
+async function strappoAvanti(){
+  if (!pending || !pending.strappo) return;
+  const s = pending.strappo;
+  let gradi = 0;
+  if (aperturaScelta === 'aperta'){
+    gradi = parseInt(strappoGradi.value, 10);
+    const max = Number(strappoGradi.max) || 180;
+    if (!(gradi >= 1 && gradi <= max)){
+      setStatus('Digita di quanti gradi si apre la finestra, da 1 a ' + max,'err');
+      return;
+    }
+  }
+  strappoEl.classList.remove('on');
+  try{
+    esitoFinale(await build(s.c.buf, pending.name,
+                            Object.assign({}, s.opts, {apertura: gradi})), s.titolo);
+  }catch(err){ fermato(err); }
 }
 
 /** Il modello fuori dal viewer, con la memoria che occupava. */
@@ -1240,6 +1326,7 @@ function annulla(){
   params.classList.remove('on');
   packtype.classList.remove('on');
   pezziEl.classList.remove('on');
+  strappoEl.classList.remove('on');
   setMeta([]); setTitolo('');
   nascondiCaso();
   togliModello();
@@ -1260,6 +1347,12 @@ cercaBackend();
 document.getElementById('upload').onclick = () => document.getElementById('file').click();
 document.getElementById('file').onchange = e => { ricevi(e.target.files); e.target.value=''; };
 avanti.onclick = () => pezziAvanti(true);
+strappoScelta.querySelectorAll('button').forEach(b => {
+  b.onclick = () => { scegliStrappo(b.dataset.a); if (b.dataset.a === 'aperta') strappoGradi.focus(); };
+});
+strappoGradi.oninput = mostraGradi;
+strappoGradi.onkeydown = e => { if (e.key === 'Enter') strappoAvanti(); };
+document.getElementById('strappo-go').onclick = strappoAvanti;
 spessoreEl.querySelectorAll('button').forEach(b => {
   b.onclick = () => scegliSpessore(Number(b.dataset.s));
 });

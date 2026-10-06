@@ -377,6 +377,9 @@ def incidi_apertura(pdf, d, faces, girate, spessore):
 # L'astuccio con l'apertura a strappo APERTA: vedi `pack3d.apertura`. I nomi
 # delle facce in italiano, per la riga che lo dice.
 APERTA = "astuccio aperto"
+# Di quanti gradi la pagina propone di aprirla, quando chiede: la finestra
+# sollevata quanto basta a guardarci dentro, ma ancora sopra il buco.
+GRADI_PROPOSTI = 60
 NOMI_FACCE = {"front": "fronte", "back": "retro", "top": "cielo",
               "bottom": "fondo", "left": "fianco sinistro",
               "right": "fianco destro"}
@@ -440,6 +443,43 @@ def apri_apertura(pdf, d, faces, girate, spessore, gradi):
         riga += ("; %d tagli vicini all'apertura non disegnati"
                  % info["tagli_liberi"])
     return True, riga
+
+
+def facce_astuccio(d):
+    """I pannelli che sul solido sono facce, nell'ordine in cui le fa
+    `folding.build_faces`: senza alette ne' lembi incollati."""
+    from pack3d import folding
+    return ([n for n in folding.FOLDS.get(d.layout, {}) if n in d.panels]
+            + [n for n in folding.FASCE_RETRO if n in d.panels])
+
+
+def strappo_astuccio(pdf, d):
+    """Se l'astuccio ha un'apertura a strappo che si sa aprire: la domanda
+    per l'utente, chiusa coi tagli modellati o aperta di quanti gradi. None
+    se non ce l'ha, o se leggerla non riesce: la domanda allora non si fa, e
+    l'astuccio esce chiuso come sempre.
+
+    {"dove": la frase che dice dov'e', "faccia", "piega_con", "altre",
+    "gradi": quelli proposti, "gradi_max"}.
+    """
+    from pack3d import apertura
+    try:
+        t = apertura.trova(pdf, d.panels, facce_astuccio(d))
+    except Exception:                             # noqa: BLE001
+        traceback.print_exc()
+        return None
+    if t is None:
+        return None
+
+    def nome(n):
+        return NOMI_FACCE.get(n, n or "?")
+    dove = ("la finestra sta sul %s e resta attaccata alla piega col %s"
+            % (nome(t["faccia"]), nome(t["piega_con"])))
+    if t["altre"]:
+        dove += ", la linguetta gira sul %s" % " e sul ".join(
+            nome(n) for n in t["altre"])
+    return dict(t, dove=dove, gradi=GRADI_PROPOSTI,
+                gradi_max=apertura.GRADI_MAX)
 
 
 def nota_apertura(meta):
@@ -1720,7 +1760,7 @@ def spessore_carta(valore):
                          "cartoncino spesso")
 
 
-def analyze_pdf(pdf, kind=None):
+def analyze_pdf(pdf, kind=None, strappo=False):
     """`kind` arriva dall'utente: la tipologia si dichiara, non si indovina.
     Il riconoscimento automatico sbaglia (il solutore astuccio risolve anche
     certi flowpack) e sbagliare qui compromette tutto il resto.
@@ -1728,14 +1768,18 @@ def analyze_pdf(pdf, kind=None):
     Tutte le famiglie si misurano sulla prima pagina sola: se ce ne sono
     altre, il primo cartellino lo dice. Vedi `avviso_pagine`."""
     pdf, n_pagine = artwork.pagina_unica(pdf)
-    info = _analyze_pdf(pdf, kind)
+    info = _analyze_pdf(pdf, kind, strappo)
     pagine = avviso_pagine(n_pagine)
     if pagine and isinstance(info.get("meta"), list):
         info["meta"].insert(0, pagine)
     return info
 
 
-def _analyze_pdf(pdf, kind=None):
+def _analyze_pdf(pdf, kind=None, strappo=False):
+    """`strappo`: sull'astuccio, guardare anche se ha un'apertura a strappo,
+    per chiedere all'utente se la vuole chiusa o aperta (`strappo_astuccio`).
+    Solo dall'analisi che la pagina chiede prima di costruire: la costruzione
+    non la ripete."""
     kind = normalizza_kind(kind)
     if kind is not None and kind not in KIND_NOTI:
         # Cadere nel ramo flowpack e' peggio che fermarsi: e' lo stesso difetto
@@ -1868,8 +1912,14 @@ def _analyze_pdf(pdf, kind=None):
                 rgb = avviso_quadricromia(pdf, regione=d.bbox)
                 if rgb:
                     meta.insert(0, rgb)
-                return dict(kind="carton", title="Astuccio %s" % d.layout,
-                            meta=meta)
+                letto = dict(kind="carton", title="Astuccio %s" % d.layout,
+                             meta=meta)
+                s = strappo_astuccio(pdf, d) if strappo else None
+                if s:
+                    meta.append("apertura a strappo: %s - si puo' avere chiusa, "
+                                "coi tagli modellati, o aperta" % s["dove"])
+                    letto["strappo"] = s
+                return letto
         except Exception as e:
             if kind == "carton":
                 # Dichiarato cartotecnico e non e' un astuccio: puo' essere
@@ -2205,7 +2255,7 @@ class Handler(BaseHTTPRequestHandler):
                     # PDF che il codice non sa leggere si ferma qui, e la
                     # costruzione non parte mai. Va in coda da qui.
                     try:
-                        letto = analyze_pdf(pdf, kind)
+                        letto = analyze_pdf(pdf, kind, strappo=True)
                     except Exception as e:
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
                                                       blocchi)
