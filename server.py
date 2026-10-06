@@ -926,6 +926,30 @@ def falda_sospetta(fp):
             % (fp.side_fin, FALDA_VISTA_MAX, fp.T))
 
 
+def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None):
+    """`(errore, verdetto)` di una lettura o di una costruzione che si e'
+    fermata, col caso gia' messo in coda.
+
+    Il codice non ha saputo leggerlo o costruirlo: e' un caso nuovo come un
+    modello respinto, e senza modello il controllo dell'AI non ha niente da
+    guardare. Prima finiva solo nel log, e nessuno lo riprendeva: va in coda
+    coi PDF e l'errore, e la pagina lo dice. Vale per la lettura come per la
+    costruzione, perche' la pagina chiede prima la lettura: un PDF che si
+    ferma li' la costruzione non la vede mai.
+    """
+    traceback.print_exc()
+    errore = "%s: %s" % (type(e).__name__, e)
+    verdetto = dict(esito="errore", motivo=errore, difetti=[], pack_nel_pdf="",
+                    modello="nessuno: la costruzione si e' fermata")
+    ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+               riconosciuto=(info.get("title") or info.get("kind")) if info else "-",
+               avvisi=[errore], nomi=nomi,
+               opzioni={k: opts[k] for k in OPZIONI_CASO if k in opts})
+    verdetto["codice"], verdetto["in_coda"] = coda.metti(blocchi, nomi, verdetto,
+                                                         None, ctx)
+    return errore, verdetto
+
+
 def analisi_pouch(pdf):
     """Il pouch dallo steso: nastro, passo e saldature laterali le legge il
     lettore del flowpack, che ha lo stesso nastro; la struttura attraverso il
@@ -1963,15 +1987,29 @@ class Handler(BaseHTTPRequestHandler):
                         and self.path.startswith("/api/analyze")):
                     # anche da /api/analyze-ai: i pezzi li misura il codice,
                     # l'agente non ha niente da aggiungere
-                    return self._send(200, json.dumps(analisi_coppa(pdfs,
-                                                                    kind)))
+                    try:
+                        letto = analisi_coppa(pdfs, kind)
+                    except Exception as e:
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
+                                                      blocchi)
+                        return self._send(500, errore, controllo=verdetto)
+                    return self._send(200, json.dumps(letto))
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
                     par, tr = agent.analyse(pdf, kind, opts)
                     par["_chiamate"] = [t["tool"] for t in tr]
                     return self._send(200, json.dumps(par, ensure_ascii=False))
                 if self.path.startswith("/api/analyze"):
-                    return self._send(200, json.dumps(analyze_pdf(pdf, kind)))
+                    # La pagina chiede la lettura prima della costruzione: un
+                    # PDF che il codice non sa leggere si ferma qui, e la
+                    # costruzione non parte mai. Va in coda da qui.
+                    try:
+                        letto = analyze_pdf(pdf, kind)
+                    except Exception as e:
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
+                                                      blocchi)
+                        return self._send(500, errore, controllo=verdetto)
+                    return self._send(200, json.dumps(letto))
                 if self.path.startswith("/api/build"):
                     if not _slots.acquire(blocking=False):
                         return self._send(503, "Server occupato: riprova fra qualche "
@@ -2100,25 +2138,8 @@ class Handler(BaseHTTPRequestHandler):
                                             "modello non sono riuscite (%s)" % e)
                         traccia("totale", t0)
                     except Exception as e:
-                        # Il codice non ha saputo costruirlo: e' un caso nuovo
-                        # come un modello respinto, e senza modello il
-                        # controllo dell'AI non ha niente da guardare. Prima
-                        # finiva solo nel log, e nessuno lo riprendeva: va in
-                        # coda coi PDF e l'errore, e la pagina lo dice.
-                        traceback.print_exc()
-                        errore = "%s: %s" % (type(e).__name__, e)
-                        verdetto = dict(
-                            esito="errore", motivo=errore, difetti=[],
-                            pack_nel_pdf="",
-                            modello="nessuno: la costruzione si e' fermata")
-                        ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
-                                   riconosciuto=(info.get("title") or info.get("kind")
-                                                 if info else "-"),
-                                   avvisi=[errore], nomi=nomi,
-                                   opzioni={k: opts[k] for k in OPZIONI_CASO
-                                            if k in opts})
-                        verdetto["codice"], verdetto["in_coda"] = coda.metti(
-                            blocchi, nomi, verdetto, None, ctx)
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
+                                                      blocchi, info)
                         return self._send(500, errore, controllo=verdetto)
                     finally:
                         _slots.release()
