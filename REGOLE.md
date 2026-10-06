@@ -1915,6 +1915,16 @@ apposta, e allora tace.
 Un "sbagliato" puo' essere sbagliato lui: per questo il modello resta a un
 clic, e non si butta.
 
+**Il fondo non lo vede.** Nessuna delle quattro viste mostra la faccia di
+sotto, e un difetto che sta solo li' passa. Sul Kinder Choco Fresh T5 il box
+verde `Best Before Area` (PANTONE 346 C) sta sul fondo, e il verdetto e'
+stato ok. Il file lo nomina solo nella legenda, dove la didascalia e' in
+curve, e in una nota scritta con un font senza tabella dei caratteri - pdfium
+legge `%HVW%HIRUH$UHD`, cioe' "BestBeforeArea" coi codici spostati di 29.
+Nessuna delle strade per nome lo trova (vedi *Le aree riservate non
+compaiono mai nel render*), e l'occhio che dovrebbe vederlo sul fondo non
+guarda.
+
 ### La correzione: gli inchiostri tecnici li sceglie chi li vede
 
 Il primo verdetto vero, sullo Space, e' stato un dubbio sul KP T1 Mandarino:
@@ -2048,7 +2058,7 @@ quel vassoio si fermava gia' li', e la costruzione - dove la coda lo
 aspettava - non partiva mai. Una lettura che si ferma va in coda allo stesso
 modo, e la pagina mostra lo stesso riquadro.
 
-Il **parco** sono i casi di prova: 28 PDF, 27 casi di tutte le famiglie,
+Il **parco** sono i casi di prova: 29 PDF, 28 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li
 chiede la pagina, con un server del codice da provare, e confronta due
@@ -3118,8 +3128,9 @@ c'entra mai: e' il riquadro di un'area. Le linee si cuciono sul foglio intero,
 attraverso le pieghe, e si tagliano alle facce solo alla fine: la linguetta
 che gira sotto il fondo esce in due pezzi, uno sul fronte e uno sul fondo.
 Misurato sul Choco Fresh: due linee da 125,2 mm sul fronte, lati e diagonali
-compresi; sul fondo la linguetta (52,1 mm) e la mezzaluna (25,0 mm). Nessun
-altro astuccio del parco ha la firma, e tutti escono identici al byte.
+compresi; sul fondo la linguetta (52,1 mm) e la mezzaluna (25,0 mm). Il
+Choco Fresh e' nel parco; nessun altro astuccio del parco ha la firma, e
+tutti escono identici al byte.
 
 #### Il solco
 
@@ -3155,6 +3166,9 @@ Quando il modello e' inciso, il contesto del controllo porta un "Da sapere":
 sono i tagli dell'apertura a strappo, incisi come sulla scatola vera, e la
 grafica sotto e' intera. Non cambia cosa e' un difetto; dice cosa sono quelle
 righe. Vale anche per la correzione, che la nota la somma alla sua.
+Sullo Space il Choco Fresh e' passato al primo colpo, ok: "Le righe sottili
+sul fronte sono i tagli dell'apertura a strappo incisi nel cartone, non
+residui stampati".
 
 ### La colata si rimette con l'inchiostro del file
 
