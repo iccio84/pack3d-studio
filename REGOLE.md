@@ -2673,6 +2673,78 @@ vero la giunta c'e'; c'era gia' prima. Se su un file si vedesse nel verso
 giusto, il rimedio e' allargare la stampa oltre il taglio nella texture, come
 si fa ai bordi delle isole UV.
 
+### Il coperchio sul retro
+
+Il secondo display con plancia del parco arriva da un altro studio di
+fustelle, ed e' montato in un altro modo: un display da banco "ready to
+display" per tre file di trenta pezzi. Dichiarato "vassoio" si fermava con un
+errore -
+dieci colonne e quattro fasce - e dichiarato cartotecnico usciva una scatola
+chiusa sbagliata, col pannello del coperchio stirato a fare da fronte.
+
+E' un vassoio col fronte basso, e il coperchio e' incernierato sul bordo alto
+del **retro**: sul foglio continua il retro, oltre la sua riga esterna. In mm,
+col foglio girato di un quarto:
+
+    colonne   103,5 | 174 | 103,5              fianco, fondo, fianco
+    fasce     65 | 215 | 104 | 99 | 113        fronte, fondo, retro, coperchio
+
+Lo attraversa UNA riga, parallela alla cerniera: un mezzo taglio, non la
+doppia cordonatura del Tronky. Oltre la riga c'e' la parte con la grafica
+grande; una sua linguetta, 114 mm di larghezza, entra per 41 mm nella parte
+attaccata al retro e se ne stacca su un contorno perforato.
+
+Come sta a display montato dal DT non si capiva con certezza, e l'ha detto
+chi lo monta (issue #3 dei casi): il coperchio ruota di 90 gradi sulla
+cerniera e la parte da 99 diventa il prolungamento del retro, con la stampa
+verso dietro - solo il fondo colore; la parte da 113 si ripiega di 180 gradi
+in avanti sulla riga e le scende davanti, con la stampa verso chi guarda; la
+linguetta spunta sopra la riga come cresta, col marchio, e il piede entra 14
+mm nella scatola davanti al retro (99 + 104 - 113 = 90). E' la plancia del
+Tronky con il dorso largo uno spessore e la cerniera sul retro, e la grafica
+lo conferma: sul foglio la parte da 113 ha l'alto verso la riga, e ripiegata
+cosi' va dritta.
+
+La regola (`plancia._sul_retro`), per questa famiglia e non per il file:
+
+- il fondo e le pareti come per il Tronky, ma il bordo di un **fianco** basta
+  che ne copra il 75%: gli angoli dei fianchi sono stondati, e la riga dritta
+  qui e' l'83% del fondo. Il fianco finisce sulla riga della sua aletta, 2 mm
+  dentro il fondo, come sul Tronky finiva 1,5 mm dentro (`_fine_fianco`);
+- il **coperchio** sta oltre UNA sola delle due testate, lungo quanto il fondo
+  fra il 90 e il 110% (212 contro 215) e largo quanto lui: quella testata e'
+  il retro, l'altra il fronte;
+- il fronte e' la testata **bassa**, al piu' l'80% del retro (65 contro 104):
+  e' da li' che si prende il prodotto, e non ha una finestra da strappare;
+- la riga che attraversa il coperchio e' UNA, e arriva ai due lati a meno di
+  10 mm: fra la riga e il lato c'e' l'intaglio a V della piega. Due righe
+  sono la doppia cordonatura del Tronky, e il suo coperchio sta sul fianco.
+
+Il Tronky non cade qui: oltre fronte e retro ha due falde da 25 mm, non un
+coperchio, e girato di un quarto la sua plancia avrebbe due righe e le testate
+alte uguali.
+
+Le due parti del coperchio non si separano sui tratti cosi' come sono: il
+contorno della linguetta e' perforato, e la punta ha i punti di tenuta da 2
+mm. Si chiudono i tratti di 1,25 mm per lato, solo per dividere il coperchio
+(`plancia._coperchio_sul_retro`): la parte davanti e' la zona oltre la riga,
+con dentro la linguetta; la parte dietro e' il resto, col buco della
+linguetta, che si vede solo da dietro.
+
+Nella maglia (`plancia._plancia_sul_retro`) la parte dietro sta nel piano del
+retro dalla sua cima in su, la parte davanti due spessori piu' avanti - le
+due facce interne si toccano - e la cima di ognuna e' un taglio con la sua
+costa, non una piega: le due parti stanno su due piani. In larghezza il
+coperchio sta dove sta sul foglio rispetto al fondo, perche' continua il
+retro.
+
+Sul parco cambia solo questo caso: prima si fermava, ora il display e' 174 x
+215 x 244 mm - retro 104, plancia 99 sopra, linguetta 41 sopra la plancia -
+con le pareti sulle loro righe entro 0,3 mm, la plancia che guarda davanti e
+nessuna feritoia. Il fronte resta intero: il DT ci disegna una V perforata
+dal bordo alto al mezzo tondo da 12 mm, ma il montaggio confermato non la
+strappa, e il modello non la toglie.
+
 ## Astucci
 
 `dieline.py` isola il tratto della fustella scegliendo la penna che accumula
