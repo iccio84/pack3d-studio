@@ -222,11 +222,48 @@ def _attraversa(spunta, linea):
     return False
 
 
-def tagli(pdf, panels, facce, page_no=0):
-    """{faccia: [linea, ...]} i tagli d'apertura da incidere, in punti PDF.
+def firma(pdf, panels, facce, page_no=0):
+    """(aperture, vicini, rovescio) dell'apertura a strappo, o None.
 
     `panels` sono i pannelli dell'astuccio risolto, `facce` i nomi di quelli
-    che sul solido sono facce (non alette ne' lembi incollati).
+    che sul solido sono facce (non alette ne' lembi incollati). Tutto in punti
+    PDF, sul foglio intero: `aperture` sono i gruppi di tagli sul lato
+    stampato che hanno accanto il taglio dal rovescio, con quelli che li
+    continuano; `vicini` i gruppi a un passo, come la mezzaluna per il dito;
+    `rovescio` i tagli dal rovescio. Vedi `tagli` per come si riconosce.
+    """
+    percorsi = _tratti_tecnici(pdf, page_no)
+    if not percorsi:
+        return None
+    quadri = [panels[n] for n in facce if n in panels]
+    if not quadri:
+        return None
+    # i tratti che stanno dentro almeno una faccia, interi: le linee si cuciono
+    # sul foglio, attraverso le pieghe, e si tagliano alle facce solo alla fine
+    segmenti = [sg for sg in _segmenti(percorsi)
+                if any(_dentro_pannello(sg, p) is not None for p in quadri)]
+    if not segmenti:
+        return None
+    linee = _catene(segmenti)
+    corta = [len(l) == 2 and _lunghezza(l) < SPUNTA for l in linee]
+    spunte = [l for l, c in zip(linee, corta) if c]
+    resto = [l for l, c in zip(linee, corta) if not c]
+    rovescio = [l for l in resto
+                if sum(1 for sp in spunte if _attraversa(sp, l)) >= SPUNTE_MIN]
+    visibili = [l for l in resto if not any(l is r for r in rovescio)]
+    if not rovescio or not visibili:
+        return None
+    gruppi = _gruppi(visibili)
+    aperture = [g for g in gruppi if any(_accanto(l, rovescio) for l in g)]
+    if not aperture:
+        return None
+    vicini = [g for g in gruppi if not any(g is a for a in aperture)
+              and any(_distanza_gruppi(g, a) <= VICINO * MM for a in aperture)]
+    return aperture, vicini, rovescio
+
+
+def tagli(pdf, panels, facce, page_no=0):
+    """{faccia: [linea, ...]} i tagli d'apertura da incidere, in punti PDF.
 
     Si incide solo un'APERTURA A STRAPPO, e la si riconosce dalla sua firma:
     un taglio sul lato stampato con accanto, a pochi millimetri, il taglio dal
@@ -241,33 +278,10 @@ def tagli(pdf, panels, facce, page_no=0):
     Ogni linea esce tagliata alla sua faccia: la linguetta che gira sotto il
     fondo esce in due pezzi, uno sul fronte e uno sul fondo.
     """
-    percorsi = _tratti_tecnici(pdf, page_no)
-    if not percorsi:
+    trovata = firma(pdf, panels, facce, page_no)
+    if trovata is None:
         return {}
-    quadri = [panels[n] for n in facce if n in panels]
-    if not quadri:
-        return {}
-    # i tratti che stanno dentro almeno una faccia, interi: le linee si cuciono
-    # sul foglio, attraverso le pieghe, e si tagliano alle facce solo alla fine
-    segmenti = [sg for sg in _segmenti(percorsi)
-                if any(_dentro_pannello(sg, p) is not None for p in quadri)]
-    if not segmenti:
-        return {}
-    linee = _catene(segmenti)
-    corta = [len(l) == 2 and _lunghezza(l) < SPUNTA for l in linee]
-    spunte = [l for l, c in zip(linee, corta) if c]
-    resto = [l for l, c in zip(linee, corta) if not c]
-    rovescio = [l for l in resto
-                if sum(1 for sp in spunte if _attraversa(sp, l)) >= SPUNTE_MIN]
-    visibili = [l for l in resto if not any(l is r for r in rovescio)]
-    if not rovescio or not visibili:
-        return {}
-    gruppi = _gruppi(visibili)
-    aperture = [g for g in gruppi if any(_accanto(l, rovescio) for l in g)]
-    if not aperture:
-        return {}
-    vicini = [g for g in gruppi if not any(g is a for a in aperture)
-              and any(_distanza_gruppi(g, a) <= VICINO * MM for a in aperture)]
+    aperture, vicini, _rovescio = trovata
     scelte = [l for g in aperture + vicini for l in g]
     out = {}
     for nome in facce:

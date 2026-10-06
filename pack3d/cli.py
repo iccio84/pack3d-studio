@@ -64,11 +64,24 @@ def build(args):
               "perche' il marchio si legga orizzontale e dritto"
               % esito["marchio"])
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels)
-    # l'apertura a strappo incisa nelle facce, come il server: vedi
-    # `pack3d.incisioni`. Solo nel GLB: il render e l'OBJ restano lisci.
-    from . import incisioni
-    tagli = incisioni.tagli(pdf, d.panels,
-                            [f["name"] for f in faces if f["name"] in d.panels])
+    # l'apertura a strappo aperta (`--apertura`) o incisa nelle facce, come
+    # il server: vedi `pack3d.apertura` e `pack3d.incisioni`. Solo nel GLB:
+    # il render e l'OBJ restano dell'astuccio chiuso e liscio.
+    from . import apertura, incisioni
+    nomi = [f["name"] for f in faces if f["name"] in d.panels]
+    aperta = None
+    if args.apertura:
+        liscio = [dict(f) for f in faces]
+        aperta = apertura.apri(pdf, d.panels, nomi, faces, args.apertura,
+                               esito.get("girate"), folding.SPESSORE_CRT)
+        if aperta:
+            print("  avviso   : apertura a strappo aperta nel GLB di %g gradi, "
+                  "cerniera sul %s, appoggiato sul %s"
+                  % (aperta["gradi"], aperta["cerniera"], aperta["appoggia"]))
+        else:
+            print("  avviso   : nessuna apertura a strappo con la sua "
+                  "cerniera: l'astuccio esce chiuso")
+    tagli = {} if aperta else incisioni.tagli(pdf, d.panels, nomi)
     if tagli:
         n = incisioni.incidi(faces, tagli, d.panels, esito.get("girate"),
                              folding.SPESSORE_CRT)
@@ -90,7 +103,9 @@ def build(args):
         from .camera import frame
         cam = frame(preset_camera(args.preset, size=args.size), d.dims_mm, args.size)
 
-    img, alpha = studio.studio_render(faces, cam, size=args.size,
+    # il render e l'OBJ sono dei quad: dell'astuccio chiuso, nel suo verso
+    piane = liscio if aperta else faces
+    img, alpha = studio.studio_render(piane, cam, size=args.size,
                                       shadow=True, dims_mm=d.dims_mm)
     png = os.path.join(args.out, f"{base}_3d.png")
     img.convert("RGBA").putalpha(alpha) or None
@@ -100,7 +115,7 @@ def build(args):
     print("render      :", png)
 
     objdir = os.path.join(args.out, "obj")
-    obj = exporters.write_obj(faces, objdir, basename=base)
+    obj = exporters.write_obj(piane, objdir, basename=base)
     glb = exporters.write_glb(faces, os.path.join(args.out, f"{base}.glb"),
                               tex_max=tmax)
     print("obj         :", obj)
@@ -144,6 +159,9 @@ def main(argv=None):
                    help="forza i dpi della texture; di serie quelli della qualita'")
     b.add_argument("--size", type=int, default=2000)
     b.add_argument("--learn", action="store_true")
+    b.add_argument("--apertura", type=float, default=None,
+                   help="gradi di cui aprire l'apertura a strappo di un "
+                        "astuccio (solo nel GLB)")
     b.set_defaults(func=build)
     a = ap.parse_args(argv)
     a.func(a)

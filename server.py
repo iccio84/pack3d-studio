@@ -374,10 +374,96 @@ def incidi_apertura(pdf, d, faces, girate, spessore):
             % (INCISA, n, ", ".join(sorted(tg)), incisioni.LARGHEZZA))
 
 
+# L'astuccio con l'apertura a strappo APERTA: vedi `pack3d.apertura`. I nomi
+# delle facce in italiano, per la riga che lo dice.
+APERTA = "astuccio aperto"
+NOMI_FACCE = {"front": "fronte", "back": "retro", "top": "cielo",
+              "bottom": "fondo", "left": "fianco sinistro",
+              "right": "fianco destro"}
+
+
+def apertura_gradi(valore):
+    """I gradi di cui aprire l'apertura a strappo, None se resta chiusa.
+    ValueError se non e' un angolo da 0 a `apertura.GRADI_MAX`."""
+    from pack3d import apertura
+    if valore in (None, "", False):
+        return None
+    try:
+        g = float(valore)
+    except (TypeError, ValueError):
+        g = float("nan")
+    if g != g or not 0 <= g <= apertura.GRADI_MAX:
+        raise ValueError("L'apertura a strappo si dice in gradi, da 0 (chiusa) "
+                         "a %d" % apertura.GRADI_MAX)
+    return g or None
+
+
+def apri_apertura(pdf, d, faces, girate, spessore, gradi):
+    """L'astuccio con l'apertura a strappo aperta di `gradi`: (fatto, riga).
+
+    `fatto` e' falso se l'astuccio resta chiuso - il disegno non ha
+    un'apertura con la sua cerniera, o un guasto - e la riga dice perche'.
+    Un guasto non ferma la costruzione: le facce tornano come erano.
+    """
+    from pack3d import apertura
+    nomi = [f["name"] for f in faces if f["name"] in d.panels]
+    prima = [dict(f) for f in faces]
+    try:
+        info = apertura.apri(pdf, d.panels, nomi, faces, gradi, girate, spessore)
+    except Exception as e:                        # noqa: BLE001
+        traceback.print_exc()
+        faces[:] = prima
+        return False, ("apertura a strappo non aperta (%s): l'astuccio esce "
+                       "chiuso" % type(e).__name__)
+    if info is None:
+        return False, ("aperto di %g gradi chiesto, ma il disegno non ha "
+                       "un'apertura a strappo con la sua cerniera: l'astuccio "
+                       "esce chiuso" % gradi)
+
+    def nome(n):
+        return NOMI_FACCE.get(n, n or "?")
+    altre = [nome(n) for n in info["facce"] if n != info["cerniera"]]
+    riga = ("%s di %g gradi: la finestra a strappo del %s ruota sulla piega col "
+            "%s (cerniera di %.0f mm)%s, e la scatola appoggia sul %s"
+            % (APERTA, info["gradi"], nome(info["cerniera"]),
+               nome(info["piega_con"]), info["cerniera_mm"],
+               ", con la linguetta che gira sul %s" % " e sul ".join(altre)
+               if altre else "", nome(info["appoggia"])))
+    if info["sfogliatura_mm"]:
+        riga += ("; attorno al buco e sotto la finestra %.1f mm di cartoncino "
+                 "sfogliato, fra il taglio davanti e quello dal rovescio"
+                 % info["sfogliatura_mm"])
+    if info["lunette"]:
+        riga += ("; la lunetta per il dito spinta dentro" if info["lunette"] == 1
+                 else "; %d lunette per il dito spinte dentro" % info["lunette"])
+    if info["tagli_liberi"]:
+        riga += ("; %d tagli vicini all'apertura non disegnati"
+                 % info["tagli_liberi"])
+    return True, riga
+
+
+def nota_apertura(meta):
+    """La riga "da sapere" per il controllo, se l'astuccio e' aperto."""
+    riga = next((str(m) for m in meta or () if str(m).startswith(APERTA)), None)
+    if riga is None:
+        return None
+    return ("l'astuccio e' mostrato APERTO, come l'ha chiesto chi l'ha "
+            "caricato (%s). Le viste lo mostrano quindi sdraiato, con la "
+            "finestra sollevata: nella vista 'fronte' si vede il rovescio non "
+            "stampato della finestra, e il suo lato stampato si vede dal "
+            "retro, con la grafica capovolta come sulla scatola vera. Dentro "
+            "e' cartoncino non stampato, e la cornice chiara attorno al buco e "
+            "sotto la finestra e' il cartoncino sfogliato dallo strappo. Non "
+            "sono difetti: il modello va confrontato col PDF per la grafica "
+            "di ogni faccia, non per la posa." % riga)
+
+
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
-                 colata_riquadro=None, carta=None):
+                 colata_riquadro=None, carta=None, apertura=None):
     """L'astuccio. `carta` e' lo spessore del cartoncino in mm se l'utente
-    l'ha dichiarato (`SPESSORI_CARTA`); senza, `folding.SPESSORE_CRT`."""
+    l'ha dichiarato (`SPESSORI_CARTA`); senza, `folding.SPESSORE_CRT`. Con
+    `apertura`, in gradi, l'apertura a strappo esce aperta: vedi
+    `apri_apertura`."""
     dpi, tmax = risoluzione(quality)
     # L'ordine e' quello delle regole: una pagina sola, poi le quote lette
     # sul file intero - note e miniature comprese - poi via tutto quello che
@@ -419,13 +505,21 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     marchio = esito.get("marchio", 0)
     if marchio:
         folding.gira_facce(faces, marchio)
-    # l'apertura a strappo incisa nelle facce, come sul cartone: vedi
-    # `pack3d.incisioni`. Sulle facce finite, dopo il giro del marchio.
-    incisa = incidi_apertura(pdf, d, faces, esito.get("girate"),
-                             folding.SPESSORE_CRT if carta is None else carta)
+    # l'apertura a strappo aperta, se l'ha chiesto chi carica (`apertura`),
+    # oppure incisa nelle facce, come sul cartone chiuso: vedi
+    # `pack3d.apertura` e `pack3d.incisioni`. Sulle facce finite, dopo il
+    # giro del marchio.
+    spessore = folding.SPESSORE_CRT if carta is None else carta
+    aperta, riga_aperta = (apri_apertura(pdf, d, faces, esito.get("girate"),
+                                         spessore, apertura)
+                           if apertura else (False, None))
+    incisa = (None if aperta else
+              incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
     exporters.write_glb(faces, out_glb, tex_max=tmax)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if riga_aperta:
+        meta.append(riga_aperta)
     if incisa:
         meta.append(incisa)
     if carta is not None:
@@ -1603,7 +1697,7 @@ def dichiarazione(kind, pezzi):
 VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
-                "spessore", "quality")
+                "spessore", "apertura", "quality")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2081,6 +2175,7 @@ class Handler(BaseHTTPRequestHandler):
                                              else "pezzi", len(pdfs)))
                 try:
                     carta = spessore_carta(opts.get("spessore"))
+                    gradi_aperta = apertura_gradi(opts.get("apertura"))
                 except ValueError as e:
                     return self._send(400, str(e))
                 # (`coppa` resta per chi chiama l'API: dalla pagina la coppa
@@ -2169,7 +2264,8 @@ class Handler(BaseHTTPRequestHandler):
                             # variabile che su questo ramo non esisteva.
                             def costruisci(lastre, uscita):
                                 return build_carton(pdf, uscita, q, lastre, col_riq,
-                                                    carta=carta)
+                                                    carta=carta,
+                                                    apertura=gradi_aperta)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":
@@ -2259,7 +2355,7 @@ class Handler(BaseHTTPRequestHandler):
                                    # riprende lo ricostruisca uguale
                                    opzioni={k: opts[k] for k in OPZIONI_CASO
                                             if k in opts})
-                        nota = nota_incisioni(meta)
+                        nota = nota_apertura(meta) or nota_incisioni(meta)
                         if nota:
                             ctx["nota"] = nota
                         verdetto = controllo.giudica(quadro, ctx)

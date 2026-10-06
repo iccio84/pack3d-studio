@@ -3170,6 +3170,63 @@ Sullo Space il Choco Fresh e' passato al primo colpo, ok: "Le righe sottili
 sul fronte sono i tagli dell'apertura a strappo incisi nel cartone, non
 residui stampati".
 
+### L'apertura a strappo, aperta
+
+Lo stesso astuccio si puo' volere **aperto**: la finestra sollevata di tot
+gradi, come quando la si e' appena strappata. Lo chiede chi carica, con
+l'opzione `apertura` in gradi (0 chiusa, fino a 180); di serie resta chiuso,
+coi solchi. Quanto aprire lo dice l'utente; da dove si apre, come si strappa e
+come sta la scatola aperta lo dice la fustella, e lo fa `pack3d/apertura.py`.
+
+- **La cerniera** e' la piega su cui finiscono i due capi del contorno dei
+  tagli d'apertura: il contorno parte da una piega, gira attorno alla finestra
+  e alla linguetta e torna sulla stessa piega, e fra i due capi la finestra
+  resta attaccata. Sul Choco Fresh e' la piega fra fronte e cielo, 126 mm. Se
+  i capi non stanno sulla stessa piega - o la piega e' un bordo libero - la
+  cerniera non c'e', e l'astuccio esce chiuso con l'avviso che lo dice.
+- **La finestra si porta dietro la linguetta**: il contorno attraversa la
+  piega col fondo, e il pezzo che si solleva e' finestra piu' linguetta, piegate
+  come erano. Ruota rigido attorno alla cerniera, verso fuori.
+- **Il cartoncino si sfoglia fra i due tagli.** Il taglio davanti e quello dal
+  rovescio corrono a 3 mm, e strappando il cartoncino si divide nello spessore:
+  la scatola tiene lo strato di dentro fino al taglio dal rovescio, la
+  finestra lo strato di fuori fino al taglio davanti. Attorno al buco resta una
+  cornice di 3 mm di cartoncino chiaro a mezzo spessore, e sotto la finestra la
+  stessa cornice rovesciata. Sul Choco Fresh il taglio dal rovescio si ferma
+  2 mm prima della cerniera: si allunga fino alla piega (fino a 5 mm, oltre non
+  si sa dove vada e il taglio si fa passante).
+- **La lunetta va dentro.** La mezzaluna per il dito si attacca coi due capi
+  alla punta della linguetta e chiude con lei un pezzo a se': e' quello che si
+  spinge col dito per prendere la linguetta. Aperta la scatola, al suo posto
+  c'e' il buco, e la tacca nel fondo segue la mezzaluna. Un taglio vicino che
+  non si attacca coi due capi non si disegna, e l'avviso lo conta.
+- **La scatola appoggia sulla faccia opposta alla cerniera**, cioe' sul retro:
+  la finestra guarda in alto, la cerniera sta dietro e la linguetta viene
+  verso chi guarda. Della finestra sollevata, dal davanti si vede il rovescio;
+  la grafica, guardata dal lato stampato, si legge capovolta. E' come sta la
+  scatola vera: la cerniera e' in cima alla grafica.
+
+Ogni faccia attraversata dal contorno si **triangola una volta sola**, con
+Delaunay sui bordi campionati ogni 0,25 mm - il contorno, il taglio dal
+rovescio, la lunetta - e ogni triangolo prende una zona: scatola intera,
+finestra intera, striscia sfogliata, lunetta. La zona dice chi ha cartoncino
+e fra quali profondita': da li' vengono la superficie stampata (la texture
+della faccia), il rovescio, la cornice sfogliata e i bordi del taglio, che
+stanno esattamente dove due zone si toccano e solo per lo spessore che da una
+parte c'e' e dall'altra no. Niente si incolla dopo: scatola e finestra
+escono dagli stessi triangoli, e chiuse coinciderebbero.
+
+Misurato sul Choco Fresh: il foglio girato di 90, 180 e 270 gradi da' lo
+stesso modello aperto (viste identiche). A 60 gradi l'ingombro e' 168 x 109 x
+95 mm, la scatola sdraiata e la finestra che sale di 82 mm; il GLB passa da
+2,3 a 2,6 MB. Un astuccio senza apertura a strappo, chiesto aperto, esce
+chiuso e lo dice.
+
+Il controllo dell'AI riceve un "Da sapere": l'astuccio e' mostrato aperto come
+l'ha chiesto chi l'ha caricato, sdraiato, con la grafica della finestra
+capovolta vista dal lato stampato, l'interno di cartoncino non stampato e la
+cornice sfogliata. Come per i solchi, non cambia cosa e' un difetto.
+
 ### La colata si rimette con l'inchiostro del file
 
 **Adesso di solito non serve.** L'ombra della colata e' sempre un'immagine in
