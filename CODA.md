@@ -37,13 +37,19 @@ issue. E' un'informazione, non un'istruzione: il giro e' lo stesso. Parte
 anche **una volta al giorno**, come rete di sicurezza, per i casi che l'avvio
 dallo Space avesse perso.
 
-1. **Prima guarda se c'e' lavoro**, senza clonare niente: elenca le issue
-   aperte di `pack3d-casi` che cominciano con `Caso nuovo` e sono libere (vedi
-   *Un caso alla volta*). Se non ce ne sono, hai finito: niente da segnalare.
-   Il giro di sicurezza quasi sempre finisce qui: deve costare poco.
-2. **Prepara.** Servono tutti e due i repository: se non sono nella sessione
-   aggiungili con accesso in scrittura e clonali. Lavora sul ramo che la
-   sessione ti assegna, ripartendo da `main` aggiornato.
+1. **Prima guarda se c'e' lavoro**: elenca le issue aperte di `pack3d-casi`
+   che cominciano con `Caso nuovo` e sono libere (vedi *Un caso alla volta*).
+   Prendile dall'elenco delle issue del repository e filtra tu titolo ed
+   etichette, non dalla ricerca di GitHub: la ricerca vede le issue nuove con
+   qualche minuto di ritardo, e lo Space avvia il giro un secondo dopo averne
+   aperta una. Se non ce ne sono, hai finito: niente da segnalare. Il giro di
+   sicurezza quasi sempre finisce qui: deve costare poco.
+2. **Prepara.** Servono tutti e due i repository. La routine li trova gia'
+   clonati, perche' sono fra i suoi repository; a mano, se non sono nella
+   sessione, aggiungili con accesso in scrittura e clonali. Nel codice lavora
+   sul ramo che la sessione ti assegna, ripartendo da `main` aggiornato; in
+   `pack3d-casi`, che e' il registro dei casi, i commit vanno direttamente su
+   `main`.
 3. Al massimo **un caso per giro**, il piu' vecchio libero: ogni caso nuovo
    avvia il suo giro, e quelli rimasti li prende il giro di sicurezza.
 4. **Per il caso:**
