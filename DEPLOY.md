@@ -103,6 +103,16 @@ codice appena unito. Per questo nella rete dell'ambiente cloud e' consentito
 il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`
 fra gli Allowed domains, con la lista di base dei package manager.
 
+Nella configurazione della routine (claude.ai/code/routines, menu accanto al
+nome -> **Edit**) ci devono essere **tutti e due i repository**,
+`iccio84/pack3d-casi` e `iccio84/pack3d-studio`: ogni giro li clona
+all'avvio. Una routine arriva solo ai repository della sua configurazione e
+durante il giro non puo' aggiungerne: senza, GitHub le risponde 403, "GitHub
+access to this repository is not enabled for this session", anche sul
+repository pubblico. Il 6 ottobre due giri si sono chiusi cosi' in meno di un
+minuto, senza toccare il caso. L'ambiente e' quello con la rete per lo Space,
+qui sopra, e la credenziale di Glam, qui sotto.
+
 La routine parte **subito**: quando un caso entra in coda, lo Space la avvia
 col suo trigger API (`coda.avvia_routine`). Parte anche una volta al giorno,
 alle 6:56, come rete di sicurezza. Per collegarli:
