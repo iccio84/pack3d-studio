@@ -12,6 +12,7 @@ FormData non e' clonabile, mentre un ArrayBuffer lo e'.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -1916,7 +1917,64 @@ class Handler(BaseHTTPRequestHandler):
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")
 
+    # La voce di chi ha caricato il PDF, dopo che il caso e' entrato in coda
+    # (`coda.aggiungi`): una nota dalla pagina, o la risposta a una domanda
+    # della routine, da Glam Lab. Corpi JSON, non PDF; la foto e' un data URL.
+    VOCE_MAX = 9 * 1024 * 1024
+
+    def _voce(self):
+        risposta = self.path.startswith("/api/risposta")
+        if risposta:
+            # Solo Glam: il token sta nei suoi segreti e in quelli dello Space,
+            # e da nessun'altra parte. La nota invece arriva dalla pagina, che
+            # e' pubblica, e porta solo il codice del caso.
+            atteso = os.environ.get("PACK3D_RISPOSTE_TOKEN", "").strip()
+            if not atteso:
+                return self._send(503, "Le risposte da Glam Lab non sono "
+                                       "configurate (PACK3D_RISPOSTE_TOKEN)")
+            dato = (self.headers.get("Authorization") or "").strip()
+            if not hmac.compare_digest(dato.encode("utf-8"),
+                                       ("Bearer " + atteso).encode("utf-8")):
+                return self._send(401, "Token non valido")
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        if n <= 0:
+            return self._send(400, "Corpo vuoto")
+        if n > self.VOCE_MAX:
+            return self._send(413, "Troppo grande: la foto al massimo %d MB"
+                              % (coda.FOTO_MAX // (1024 * 1024)))
+        try:
+            corpo = json.loads(self.rfile.read(n).decode("utf-8"))
+            if not isinstance(corpo, dict):
+                raise ValueError("serve un oggetto JSON")
+            foto = coda.foto_da_testo(corpo.get("foto"))
+        except (ValueError, UnicodeDecodeError) as e:
+            return self._send(400, str(e) or "JSON non valido")
+        cod = str(corpo.get("codice") or "").strip().lower()
+        try:
+            esito = coda.aggiungi(
+                cod, corpo.get("risposta" if risposta else "nota"), foto,
+                via="risposta" if risposta else "nota",
+                scelta=corpo.get("scelta") if risposta else None)
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        except coda.Troppe as e:
+            return self._send(429, str(e))
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except ValueError as e:
+            return self._send(400, str(e))
+        except OSError as e:
+            print("voce sul caso %s non arrivata: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps(esito))
+
     def do_POST(self):
+        if self.path.startswith("/api/nota") or self.path.startswith("/api/risposta"):
+            return self._voce()
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:

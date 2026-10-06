@@ -8,6 +8,8 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
+    python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
+                                [--domanda TESTO --opzione TESTO ...]
     python3 prove/parco.py versione [--codice DIR]
 
 `costruisci` avvia un server col codice di DIR (di serie quello di questo
@@ -36,6 +38,15 @@ quello che Glam da' a un modello costruito da li', e quello che la pagina
 annuncia a chi ha caricato il caso respinto. Il token non sta qui: lo
 aggiunge l'ambiente cloud alle richieste per quel sito (API credentials,
 vedi DEPLOY.md).
+
+Con `codice` nel manifesto - il caso arrivato dalla coda - `glam` lo dice a
+Glam (X-Pack3d-Codice), che mette il modello a chi ha caricato quel caso.
+
+`caso` dice a Glam Lab a che punto e' un caso della coda, per chi l'ha
+caricato: in lavorazione, una domanda (con le risposte fra cui scegliere),
+risolto, non risolto. Il caso e' quello di CASI/casi/<data>_<CODICE>, e il
+nome quello che la pagina gli ha annunciato. La risposta a una domanda torna
+dallo Space, sulla issue del caso (`coda.aggiungi`).
 
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
@@ -366,12 +377,16 @@ def glam(args):
     nome = nome_glam(caso)
     # Glam sta dietro Cloudflare, che respinge l'intestazione di serie di
     # urllib ("Python-urllib/3.x": errore 1010) prima che arrivi al sito
+    intestazioni = {"Content-Type": "model/gltf-binary",
+                    "X-Model-Name": quote(nome, safe=_URI),
+                    "X-Model-Category": quote(args.categoria, safe=_URI),
+                    "User-Agent": "pack3d-studio"}
+    # il caso della coda: Glam mette il modello a chi l'ha caricato
+    if caso.get("codice"):
+        intestazioni["X-Pack3d-Codice"] = caso["codice"]
     req = urllib.request.Request(
         args.url.rstrip("/") + "/api/import-model", data=glb, method="POST",
-        headers={"Content-Type": "model/gltf-binary",
-                 "X-Model-Name": quote(nome, safe=_URI),
-                 "X-Model-Category": quote(args.categoria, safe=_URI),
-                 "User-Agent": "pack3d-studio"})
+        headers=intestazioni)
     try:
         with urllib.request.urlopen(req, timeout=300) as r:
             risposta = json.loads(r.read().decode("utf-8") or "{}")
@@ -387,9 +402,84 @@ def glam(args):
     except (urllib.error.URLError, OSError, ValueError) as e:
         print("Glam non risponde: %s" % e)
         raise SystemExit(1)
-    print("in Glam: \"%s\" fra \"%s\" (id %s)" % (
+    print("in Glam: \"%s\" fra \"%s\" (id %s)%s" % (
         risposta.get("name", nome), risposta.get("category", args.categoria),
-        risposta.get("id", "?")))
+        risposta.get("id", "?"),
+        ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
+
+
+# Gli stati di un caso della coda, come li mostra Glam a chi l'ha caricato.
+# "in-coda" non c'e': lo dice la pagina, quando il caso entra.
+STATI = ("in-lavorazione", "domanda", "risolto", "non-risolto")
+
+
+def _caso_in_coda(casi, cod):
+    """(cartella del caso nel repository privato, il suo verdetto.json)."""
+    if not cod or len(cod) != 10 or any(c not in "0123456789abcdef" for c in cod):
+        raise SystemExit("il codice di un caso e' di 10 cifre esadecimali: %r" % cod)
+    radice = os.path.join(casi, "casi")
+    for d in sorted(os.listdir(radice) if os.path.isdir(radice) else []):
+        if d.endswith("_" + cod):
+            try:
+                with open(os.path.join(radice, d, "verdetto.json"), encoding="utf-8") as fh:
+                    return os.path.join(radice, d), json.load(fh)
+            except (OSError, ValueError):
+                break
+    raise SystemExit("il caso %s non c'e' in %s" % (cod, radice))
+
+
+def nome_del_caso(verdetto):
+    """Il nome che la pagina ha annunciato a chi ha caricato il caso: il primo
+    PDF senza `.pdf`, al massimo 120 caratteri (`nomeInGlam`)."""
+    nomi = (verdetto.get("contesto") or {}).get("nomi") or []
+    base = str(nomi[0]) if nomi else ""
+    if base.lower().endswith(".pdf"):
+        base = base[:-4]
+    return base[:120] or "Pack"
+
+
+def caso(args):
+    """A che punto e' un caso della coda, in Glam Lab per chi l'ha caricato."""
+    _cartella, verdetto = _caso_in_coda(args.casi, args.codice)
+    corpo = {"codice": args.codice, "nome": nome_del_caso(verdetto),
+             "stato": args.stato}
+    if args.messaggio:
+        corpo["messaggio"] = args.messaggio.strip()[:500]
+    if args.stato == "domanda":
+        if not (args.domanda or "").strip():
+            raise SystemExit("con --stato domanda ci vuole la domanda: --domanda")
+        opzioni = [o.strip()[:120] for o in args.opzione or [] if o.strip()]
+        if len(opzioni) > 4:
+            raise SystemExit("al massimo quattro risposte fra cui scegliere")
+        corpo["domanda"] = args.domanda.strip()[:500]
+        corpo["opzioni"] = opzioni
+    elif args.domanda or args.opzione:
+        raise SystemExit("--domanda e --opzione vanno con --stato domanda")
+    req = urllib.request.Request(
+        args.url.rstrip("/") + "/api/pack3d-case", method="POST",
+        data=json.dumps(corpo, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json", "User-Agent": "pack3d-studio"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            risposta = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        testo = e.read().decode("utf-8", "replace")[:300]
+        if e.code == 401:
+            print("Glam rifiuta il token (401): la credenziale dell'ambiente "
+                  "cloud per questo sito manca, o non e' uguale al secret "
+                  "PACK3D_IMPORT_TOKEN di Glam")
+        elif e.code == 404:
+            print("Glam non conosce ancora i casi della coda (404 su "
+                  "/api/pack3d-case): vedi DEPLOY.md, Glam Lab")
+        else:
+            print("Glam non ha preso lo stato del caso (HTTP %d): %s" % (e.code, testo))
+        raise SystemExit(1)
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print("Glam non risponde: %s" % e)
+        raise SystemExit(1)
+    print("in Glam: caso %s \"%s\" -> %s%s" % (
+        args.codice, corpo["nome"], args.stato,
+        " (utenti: %s)" % risposta["utenti"] if "utenti" in risposta else ""))
 
 
 def main():
@@ -429,6 +519,17 @@ def main():
     g.add_argument("--categoria", default="Casi risolti",
                    help="la cartella del modello in Glam")
     g.set_defaults(fai=glam)
+    q = sub.add_parser("caso", help="dice a Glam Lab a che punto e' un caso "
+                                    "della coda, per chi l'ha caricato")
+    q.add_argument("url", help="per esempio https://glam-lab-view.lovable.app")
+    q.add_argument("casi", help="clone del repository privato dei casi")
+    q.add_argument("codice", help="il codice del caso, 10 cifre esadecimali")
+    q.add_argument("--stato", required=True, choices=STATI)
+    q.add_argument("--messaggio", help="due righe per l'utente, in parole sue")
+    q.add_argument("--domanda", help="con --stato domanda: la domanda all'utente")
+    q.add_argument("--opzione", action="append",
+                   help="una risposta fra cui scegliere (ripetibile, al massimo 4)")
+    q.set_defaults(fai=caso)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")
     v.add_argument("--codice", help="cartella del codice (di serie questo)")

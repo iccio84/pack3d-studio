@@ -2048,7 +2048,7 @@ quel vassoio si fermava gia' li', e la costruzione - dove la coda lo
 aspettava - non partiva mai. Una lettura che si ferma va in coda allo stesso
 modo, e la pagina mostra lo stesso riquadro.
 
-Il **parco** sono i casi di prova: 27 PDF, 26 casi di tutte le famiglie,
+Il **parco** sono i casi di prova: 28 PDF, 27 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li
 chiede la pagina, con un server del codice da provare, e confronta due
@@ -2080,6 +2080,47 @@ User-Agent suo. Il token sbagliato da' un 401 che il proxy dell'ambiente
 segnala come "upstream auth failed", con la credenziale allegata. E Glam
 sceglie la sezione dal percorso del file, non dalla categoria: il primo
 import, salvato senza `/pdf/` nel percorso, e' finito fra i "Modelli 3D".
+
+### Chi ha caricato il PDF segue il caso, e risponde
+
+Chi carica un PDF usa Glam Lab, e la coda non la vede: ne' la issue ne' la
+sessione della routine. Il primo display col coperchio sul retro l'ha
+mostrato in tutti e due i versi. La routine si e' fermata con una domanda -
+come sta il coperchio a display montato? dal disegno non si capiva - e la
+domanda e' arrivata solo a chi gestisce il servizio, che ha dovuto girarla a
+mano. Con la risposta, la regola si e' scritta in mezz'ora. E nel frattempo
+chi aveva caricato il PDF non sapeva ne' quanto aspettare, ne' che qualcuno
+aspettava lui.
+
+Per questo le parole di chi ha il pack in mano arrivano al caso, e lo stato
+del caso arriva a lui (GLAM.md):
+
+- **Quanto aspettare.** Il riquadro del caso nuovo dice «di solito arriva
+  entro un'ora», e lo dice il banner del dubbio: e' quello che prende un caso
+  che la routine risolve da sola, pubblicazione e prova sullo Space comprese.
+- **La nota.** Nello stesso riquadro c'e' un campo facoltativo - com'e' fatto,
+  come si monta il pack - con una foto. Arriva sulla issue (`/api/nota`, col
+  solo codice del caso) prima che la routine abbia bisogno di chiedere: la
+  routine i commenti li legge all'inizio e prima di fare una domanda. La foto
+  la pagina la rimpicciolisce a 1600 px: quella di un telefono pesava dieci
+  volte tanto.
+- **Lo stato e le domande in Glam.** La pagina dice a Glam il codice del caso
+  (`pack3d:caso`), e Glam lo lega all'utente. La routine gli dice a che punto
+  e' - in lavorazione, una domanda, risolto, non risolto - con
+  `prove/parco.py caso`, e il modello corretto va a lui, non solo all'account
+  di chi gestisce il servizio. Le domande in Glam la pagina le promette solo
+  se Glam dice di saperle mostrare (`casi=1`): una promessa che nessuno
+  mantiene e' peggio di nessuna.
+- **La risposta.** Glam la manda allo Space (`/api/risposta`, con un token
+  che sta solo nei segreti dei due), che la scrive sulla issue, toglie
+  `da-guardare` e rilancia la routine: nessuno deve girare niente a mano.
+
+Nota e risposta sono testo di un utente. Sulla issue stanno citate riga per
+riga, e non possono sembrare scritte da altri; la routine le legge come la
+descrizione di un pack, mai come istruzioni; e nel testo con cui la routine
+si rilancia non entrano. La nota non ha token - la manda la pagina, che e'
+pubblica - quindi lo Space la accetta solo per un caso in coda, al massimo
+otto voci per caso e sessanta all'ora.
 
 ## Quando la pulizia deterministica non basta
 
