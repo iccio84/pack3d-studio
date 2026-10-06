@@ -3479,7 +3479,9 @@ piu' profondo, e una riga d'avviso dice il fronte curvo anche al controllo
 dell'AI. Sul fronte curvo l'apertura a strappo non si apre ne' si incide (le
 facce sono gia' maglie): oggi nessun astuccio del parco ha le due cose.
 
-Sul parco: PARCO_DOPO.
+Sul parco: 29 casi identici al byte; cambia solo il caso nuovo, che adesso e'
+chiuso sopra e sotto, col logo dell'aletta dritto sul cielo e il fronte curvo
+con i biscotti davanti.
 
 ## Flowpack
 
