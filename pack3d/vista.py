@@ -72,7 +72,8 @@ def leggi_glb(sorgente):
 
     `sorgente` e' un percorso o i byte del file. Torna una lista di dict con
     verts (Nx3, metri, gia' nel riferimento della scena), normals (Nx3 o
-    None), uvs (Nx2), tris (Mx3) e tex (HxWx3 uint8): una per primitiva.
+    None), uvs (Nx2), tris (Mx3) e tex (HxWx3 uint8): una per primitiva,
+    tranne le trasparenti - la pellicola delle finestre - che si saltano.
     """
     if isinstance(sorgente, (bytes, bytearray)):
         d = bytes(sorgente)
@@ -150,6 +151,13 @@ def leggi_glb(sorgente):
             lin = M[:3, :3]
             for prim in J["meshes"][nodo["mesh"]]["primitives"]:
                 if prim.get("mode", 4) != 4:
+                    continue
+                m = prim.get("material")
+                if m is not None and (J.get("materials") or [{}])[m].get(
+                        "alphaMode") == "BLEND":
+                    # la pellicola trasparente delle finestre: qui si
+                    # dipingerebbe opaca, e il controllo guarda la grafica e
+                    # la forma, che sono quelle di sempre
                     continue
                 att = prim["attributes"]
                 V = accessor(att["POSITION"]).astype(float)

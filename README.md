@@ -28,6 +28,7 @@ mappata sulle facce giuste.
 | `pack3d/apertura.py` | la stessa apertura aperta di tot gradi sulla sua cerniera, con la scatola appoggiata sul retro |
 | `pack3d/ballotin.py` | il ballotin, la scatola a tronco di piramide con gli spigoli a lente: la fustella letta faccia per faccia |
 | `pack3d/materiali.py` | il materiale del film dai DT secondari: alluminio, white plate e vernice opaca diventano metallo e ruvidita' nel GLB |
+| `pack3d/rilievo.py` | l'embossing (o il debossing) dalla sua lastra: una mappa delle normali che mette in rilievo marchi e disegni sul modello |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |
 | `CODA.md` | come si lavora un caso della coda, anche dalla sessione automatica |
 | `GLAM.md` | come chi ha caricato il PDF segue il suo caso da Glam Lab: stato, domande, risposte, modello corretto; il testo per Lovable |
@@ -59,5 +60,9 @@ apre in espositore, costruita aperta - e pouch, la busta stand-up col
 soffietto sul fondo. Un astuccio con l'apertura a strappo esce
 chiuso, coi tagli dell'apertura incisi nel cartone come sulla scatola vera.
 La pagina chiede se lo si vuole cosi' o aperto di tot gradi: la finestra
-sollevata sulla sua cerniera e la scatola appoggiata sul retro. Per i
-flowpack vengono chieste zigrinatura e tipo di gonfiore prima di costruire.
+sollevata sulla sua cerniera e la scatola appoggiata sul retro. Un pack con
+le finestre - il ballotin, l'astuccio col retro aperto fra due falde - fa
+chiedere se ci va la pellicola trasparente, che di solito c'e' ma non
+sempre. Se il DT ha la lastra dell'embossing, marchi e disegni escono in
+rilievo. Per i flowpack vengono chieste zigrinatura e tipo di gonfiore prima
+di costruire.

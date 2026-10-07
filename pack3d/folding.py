@@ -324,6 +324,55 @@ def guscio(faces, spessore=SPESSORE_CRT, interno=INTERNO, taglio=TAGLIO):
     return out
 
 
+# La pellicola della finestra del retro, sull'astuccio aperto: una lastra di
+# plastica trasparente incollata dall'interno sulle due falde, fino a
+# PELLICOLA_FALDA mm oltre il bordo di ognuna (mai oltre i quattro quinti
+# della falda), e a PELLICOLA_SCOSTO mm dal rovescio - il suo spessore.
+PELLICOLA_FALDA = 8.0
+PELLICOLA_SCOSTO = 0.05
+
+
+def pellicola_retro(faces, spessore=SPESSORE_CRT, falda=PELLICOLA_FALDA):
+    """(V, T) della pellicola sulla finestra del retro di un astuccio aperto,
+    quella fra le due falde, in mm e sulle facce finite - girate, curvate,
+    come sono; None se le falde non ci sono.
+
+    La finestra e' la fascia fra i due bordi delle falde che si guardano: la
+    pellicola la copre, sale sotto ogni falda di `falda` mm, sta uno
+    spessore di cartoncino piu' in dentro del retro e uno piu' stretta per
+    parte, per non bucare i fianchi."""
+    per_nome = {f["name"]: f for f in faces}
+    falde = [per_nome.get(n) for n in FASCE_RETRO]
+    if any(f is None for f in falde):
+        return None
+    quad = [np.array(f["quad"], float) for f in falde]
+    centri = [q.mean(0) for q in quad]
+    bordi = []
+    for k, q in enumerate(quad):
+        # il lato che guarda l'altra falda, e la direzione che sale nella falda
+        altra = centri[1 - k]
+        i = min(range(4), key=lambda i: np.linalg.norm(
+            (q[i] + q[(i + 1) % 4]) / 2 - altra))
+        E0, E1 = q[i], q[(i + 1) % 4]
+        lontano = (q[(i + 2) % 4] + q[(i + 3) % 4]) / 2
+        su = lontano - (E0 + E1) / 2
+        alta = float(np.linalg.norm(su))
+        if alta <= 0:
+            return None
+        su /= alta
+        g = min(falda, 0.8 * alta)
+        bordi.append((E0 + su * g, E1 + su * g))
+    u = bordi[0][1] - bordi[0][0]
+    u /= np.linalg.norm(u)
+    # da sinistra a destra lungo il bordo, per tutte e due le falde
+    (a0, a1), (b0, b1) = [sorted(e, key=lambda p: float(p @ u)) for e in bordi]
+    dentro = spessore + PELLICOLA_SCOSTO
+    V = np.array([a0 + u * dentro, a1 - u * dentro, b1 - u * dentro, b0 + u * dentro])
+    n = _normale([tuple(p) for p in falde[0]["quad"]])
+    V = V - np.asarray(n, float) * dentro
+    return V, np.array([[0, 1, 2], [0, 2, 3]])
+
+
 # Colonne in cui si divide una faccia che il fronte curvo piega: con 48 la
 # corda di ogni colonna si scosta dall'arco meno di un centesimo di mm su una
 # freccia di 10.

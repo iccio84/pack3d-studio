@@ -176,6 +176,15 @@ def processing_steps(reader, page):
 # poteva toglierle era l'euristica sul tratto, che un pieno non lo vede: sulla
 # texture di K Colazione Piu' restavano stampate sul pack due fasce `TEXT
 # AREA`, una `COVERED AREA` e un riquadro `BEST BEFORE AREA`.
+#
+# E i RILIEVI, per la stessa ragione delle vernici: l'embossing e' una
+# lavorazione a secco, non un inchiostro, e la sua lastra e' un pieno grande
+# quanto i marchi che spinge in fuori. Sul ballotin Raffaello sta su un
+# livello suo, che si spegne; un file che la mettesse fra la grafica la
+# farebbe dipingere a pdfium col colore di ripiego sopra i marchi. Sul
+# modello il rilievo c'e' lo stesso: lo fa `rilievo.py`, dal file originale.
+RILIEVO_FRASI = ("emboss", "deboss", "rilievo", "goffr", "pragung",
+                 "praegung", "pr\u00e4gung", "gaufrage")
 COPERTURE_FRASI = (
     "varnish", "vernice", "lack", "coating",
     "cold seal", "coldseal", "opaque white", "underprint", "coprente",
@@ -183,7 +192,7 @@ COPERTURE_FRASI = (
     "covered area", "text area", "best before area",
     "bar code area", "barcode area", "print free area", "printfree area",
     "neutral area", "area riservata",
-)
+) + RILIEVO_FRASI
 # "white" solo intero: come sottostringa prenderebbe "White Chocolate", che e'
 # un colore dell'artwork. Stessa cosa per "gda", che intero non e' il nome di
 # nessun inchiostro.

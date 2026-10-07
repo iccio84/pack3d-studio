@@ -3483,6 +3483,108 @@ Sul parco: 29 casi identici al byte; cambia solo il caso nuovo, che adesso e'
 chiuso sopra e sotto, col logo dell'aletta dritto sul cielo e il fronte curvo
 con i biscotti davanti.
 
+## Finestre e rilievi
+
+Due cose che il PDF dice solo in parte, e che sul modello si vedono: la
+pellicola sulle finestre, che il file di solito non disegna, e il rilievo
+dell'embossing, che il file disegna su una lastra sua ma che non e' un
+inchiostro.
+
+### La pellicola delle finestre si chiede, ogni volta
+
+Un pack con la finestra di solito ha una **pellicola**: una lastra di plastica
+trasparente sottilissima, PET o OPP, incollata dall'interno e piu' grande
+della finestra. Non sempre, e il DT non lo dice. Per questo **si chiede a
+chi carica il PDF, ogni volta che l'analisi trova una finestra**: la pagina
+mostra la domanda (con la pellicola, o finestra aperta) prima di costruire,
+come per l'apertura a strappo, e la risposta arriva alla costruzione come
+opzione `pellicola` (1 o 0). Va in coda col caso, e la routine lo ricostruisce
+con la stessa scelta (`OPZIONI_CASO`). Senza opzione - chi chiama l'API e non
+lo dice - le finestre restano aperte, come sono sempre state.
+
+Le finestre che l'analisi conosce:
+
+- sul **ballotin** i buchi dei pannelli e quelli che girano lo spigolo fra un
+  pannello e il suo coperchio (`ballotin.finestre`);
+- sull'**astuccio aperto** il retro fra le due falde, la finestra del Kinder
+  Pingui T6 (`finestra_astuccio`). Un astuccio senza retro, tipo vassoio, non
+  ha una finestra: e' aperto. L'apertura a strappo non e' una finestra: e'
+  una porta che si apre, e ha la sua domanda.
+
+La pellicola sul modello:
+
+- e' **incollata al rovescio**, uno spessore di cartoncino piu' in dentro della
+  faccia piu' cinque centesimi (il suo spessore), cosi' non si confonde col
+  rovescio. Da fuori la si vede nella finestra, un poco incassata come sul
+  pack vero;
+- **va oltre il bordo**: sul ballotin il guscio convesso della finestra
+  allargato di 5 mm, tagliato dove esce dalla sua faccia; sull'astuccio tutta
+  la larghezza del retro, meno lo spessore dei fianchi, e 8 mm sotto ogni
+  falda (mai oltre i quattro quinti della falda);
+- una finestra che **gira lo spigolo** fra parete e coperchio ha la pellicola
+  piegata con lei: una parte sotto la parete, una sotto il coperchio, e fra
+  le due una striscia lungo la cordonatura;
+- nel GLB e' un **nodo suo**, `pellicola`, con un materiale suo: trasparente
+  (BLEND, 22% di copertura), a due facce, liscio (ruvidita' 0,05), bianco
+  appena azzurro. Provati in model-viewer sul ballotin: al 16% non si vedeva,
+  al 40% la finestra era lattiginosa. Niente `KHR_materials_transmission`, che
+  sarebbe il vetro vero: un viewer che non la conosce mostrerebbe un foglio
+  bianco opaco;
+- il **controllo dell'AI non la guarda**: `vista.leggi_glb` salta i materiali
+  trasparenti. Il suo rasterizzatore li dipingerebbe opachi, e il controllo
+  guarda la grafica e la forma, che con la pellicola sono quelle di prima.
+
+### Il rilievo dell'embossing
+
+Un rilievo non e' un inchiostro: e' il cartoncino spinto in fuori
+(embossing) o in dentro (debossing) da una matrice a secco, quasi sempre a
+registro con la grafica. Il file lo dice con una **tinta piatta che si
+chiama come la lavorazione** - sul ballotin Raffaello `Embossing`, su un
+livello con lo stesso nome - e la riconosce `rilievo.segno` dal nome:
+emboss, rilievo, goffratura, Pragung, gaufrage, relieve; deboss, incavo e
+Tiefpragung vanno in dentro.
+
+- **Dalla texture la lastra va via**, come una vernice
+  (`techink.RILIEVO_FRASI` fra le coperture): pdfium la dipingerebbe col
+  colore di ripiego sopra i marchi. Sul Raffaello stava gia' sul suo livello
+  tecnico, spento, e la texture e' identica.
+- **Sul modello il rilievo e' luce**: una mappa delle normali (la
+  `normalTexture` di glTF) nel telaio della texture, che piega la normale
+  lungo le spalle del rilievo come la piega la carta. La maglia resta
+  quella: mezzo millimetro su una scatola di dieci centimetri non cambia la
+  sagoma, cambia come la luce scivola sul marchio. E la mappa la leggono
+  tutti i viewer, senza estensioni.
+- **La forma viene dalla lastra**, letta da Ghostscript (`tiffsep`) sul file
+  originale, non su quello pulito: dove l'inchiostro e' pieno il cartoncino
+  sta 0,5 mm sopra il piano (sotto per un debossing), con la spalla morbida
+  di una gaussiana larga 0,2 mm. Provati accanto allo stesso modello senza
+  mappa: con 0,35 e 0,25 il marchio in rilievo quasi non si distingueva da
+  quello piatto; con 0,5 e 0,2 le lettere hanno il bordo alto in luce e
+  quello basso in ombra.
+- **La risoluzione** e' 150 dpi, sei pixel per mm, anche quando la texture
+  ne ha dodici: bastano a una spalla di mezzo millimetro, e Ghostscript sul
+  foglio del ballotin ci mette tre secondi invece di undici. La mappa ha la
+  sua misura: le UV sono le stesse, il viewer la stira da se'.
+- **Il verso** e' quello di glTF: rosso +X a destra, verde +Y in alto
+  nell'immagine. Il GLB non ha le tangenti, e i viewer le ricavano: provato
+  con una lastra di prova - un disco in rilievo e uno in incavo - in
+  model-viewer e nel viewer della pagina, che con l'origine UV in alto gira
+  il verde (`normalScale` (1, -1)), come fa GLTFLoader.
+- **Sugli astucci** la mappa e' una per faccia, fatta come la sua texture: il
+  riquadro del pannello, girato degli stessi gradi (`girate`); la normale si
+  calcola dopo il giro, sull'altezza gia' girata - girare una mappa delle
+  normali vorrebbe dire girarne anche i vettori. Provato su una copia del KC
+  T8 con la tinta `Kinder Orange` rinominata `Embossing`: le lettere "inder"
+  spariscono dalla texture e restano in rilievo bianco, al loro posto, sul
+  fronte e sul cielo.
+- **Il controllo dell'AI non lo vede**: il suo rasterizzatore non legge le
+  normali. Guarda la grafica, che e' quella di prima.
+
+Il rilievo lo fanno il ballotin e l'astuccio. Flowpack, vassoi, pouch e coppe
+non lo fanno ancora: il parco non ha un file che lo chieda, e il primo che
+arriva dice come. Il parco ha un solo file con la lastra di rilievo, il
+ballotin; sugli altri la mappa non c'e' e il GLB e' identico al byte.
+
 ## Ballotin
 
 Il ballotin e' la scatola a tronco di piramide rovesciato - piu' larga in
@@ -3490,7 +3592,7 @@ cima che sul fondo - con gli spigoli verticali fatti da **lenti** e due
 coperchi che chiudono la cima stesi. Si dichiara **Cartotecnico in un pezzo**:
 lo riconosce l'analisi prima del solutore astuccio, che lo risolverebbe, e
 male - sul ballotin Raffaello Passion Fruit una torre da 465 x 120,7 x 90 mm.
-Il codice sta in `pack3d/ballotin.py`; costruisce in 8 s.
+Il codice sta in `pack3d/ballotin.py`; costruisce in 14 s, rilievo compreso.
 
 ### La fustella si legge a facce
 
@@ -3590,7 +3692,9 @@ una scatola chiusa arriva poca luce, e un viewer senza occlusione ambientale
 dipingeva l'interno chiaro come fuori: le finestre del Raffaello sparivano
 nel bianco della grafica. Sono quattro: le due smerlate su fronte e retro - le
 praline vere dentro la coppa disegnata - e le due che girano lo spigolo fra
-pannello e coperchio.
+pannello e coperchio. Se chi carica il PDF la vuole, ognuna ha la sua
+pellicola trasparente: vedi *La pellicola delle finestre si chiede, ogni
+volta*. Nel parco il Raffaello ce l'ha.
 
 La texture e' il DT intero, pulito come quello di un pouch, e ogni faccia
 della maglia prende la grafica dal suo posto sul DT: niente ritagli per
@@ -3640,7 +3744,9 @@ in cima, che stanno in fila, si vede attraverso la scatola: e' vuota.
 
 Le facce vere, piegate su due cordonature curve, si incurvano un poco, e il
 modello le tiene piane; la gola della lente e' un arco di cerchio, che e' una
-stima della forma vera. Delle parti nascoste c'e' lo stretto necessario: T2
+stima della forma vera. I marchi e le coppe dell'embossing sono in rilievo
+(vedi *Il rilievo dell'embossing*), ma solo fuori: dentro il cartoncino
+spinto in fuori fa un incavo, e il rovescio resta piano. Delle parti nascoste c'e' lo stretto necessario: T2
 stesa sotto L1, e niente alette di colla del fondo e del retro. Il prodotto
 non c'e': dalle finestre si vede l'interno vuoto.
 

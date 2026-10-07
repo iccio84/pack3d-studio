@@ -56,7 +56,9 @@ combinazione funziona.
 1. **Carica PDF** accetta solo PDF. Se e' un astuccio il modello parte subito;
    se e' un flowpack compaiono prima le domande obbligatorie: numero di
    dentini, rigonfiamento, apertura delle pinne, e la casella per dire se il
-   film avvolge una scatola.
+   film avvolge una scatola. Se il pack ha una finestra - un ballotin, un
+   astuccio col retro aperto fra due falde - la pagina chiede se ci va la
+   pellicola trasparente, che di solito c'e' ma non sempre.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.
