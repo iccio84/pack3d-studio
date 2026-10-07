@@ -116,20 +116,30 @@ def leggi_glb(sorgente):
 
     immagini = {}
 
+    def immagine(indice_texture):
+        src = J["textures"][indice_texture]["source"]
+        if src not in immagini:
+            a, n, _p = vista_byte(J["images"][src]["bufferView"])
+            im = Image.open(io.BytesIO(d[a:a + n])).convert("RGB")
+            immagini[src] = np.asarray(im)
+        return immagini[src]
+
     def texture(materiale):
         """La texture del colore base, o un pixel del colore pieno."""
         pbr = (J.get("materials") or [{}])[materiale].get("pbrMetallicRoughness", {}) \
             if materiale is not None else {}
         bct = pbr.get("baseColorTexture")
         if bct is not None:
-            src = J["textures"][bct["index"]]["source"]
-            if src not in immagini:
-                a, n, _p = vista_byte(J["images"][src]["bufferView"])
-                im = Image.open(io.BytesIO(d[a:a + n])).convert("RGB")
-                immagini[src] = np.asarray(im)
-            return immagini[src]
+            return immagine(bct["index"])
         f = pbr.get("baseColorFactor", (1.0, 1.0, 1.0, 1.0))
         return np.array([[[int(255 * c) for c in f[:3]]]], np.uint8)
+
+    def metallo(materiale):
+        """La mappa metallo/ruvidita', se il materiale ne ha una."""
+        pbr = (J.get("materials") or [{}])[materiale].get("pbrMetallicRoughness", {}) \
+            if materiale is not None else {}
+        mrt = pbr.get("metallicRoughnessTexture")
+        return immagine(mrt["index"]) if mrt is not None else None
 
     parti = []
 
@@ -158,7 +168,8 @@ def leggi_glb(sorgente):
                 else:
                     T = np.arange(len(V) - len(V) % 3).reshape(-1, 3)
                 parti.append(dict(nome=nodo.get("name", ""), verts=V, normals=N,
-                                  uvs=UV, tris=T, tex=texture(prim.get("material"))))
+                                  uvs=UV, tris=T, tex=texture(prim.get("material")),
+                                  mr=metallo(prim.get("material"))))
         for figlio in nodo.get("children", ()):
             visita(figlio, M)
 
@@ -227,6 +238,21 @@ class _Tela:
         tx = np.clip((u * tw).astype(np.int64), 0, tw - 1)
         ty = np.clip((v * th).astype(np.int64), 0, th - 1)
         luce = w0[k] * lit[j0] + w1[k] * lit[j1] + w2[k] * lit[j2]
+        mr = P.get("mr")
+        if mr is not None:
+            # Il metallo non ha luce sua: rimanda l'ambiente, nitido se e'
+            # lucido, mediato se e' satinato. Senza, un film metallizzato
+            # usciva bianco latte, e il controllo lo confrontava col grigio
+            # dell'alluminio del DT.
+            mh, mw = mr.shape[:2]
+            mx = np.clip((u * mw).astype(np.int64), 0, mw - 1)
+            my = np.clip((v * mh).astype(np.int64), 0, mh - 1)
+            m = mr[my, mx, 2].astype(np.float32) / 255.0
+            r = mr[my, mx, 1].astype(np.float32) / 255.0
+            E = P["ambiente"]
+            amb = w0[k] * E[j0] + w1[k] * E[j1] + w2[k] * E[j2]
+            sfoca = np.clip((r - 0.12) / 0.45, 0.0, 1.0)
+            luce = luce * (1.0 - m) + (amb * (1.0 - sfoca) + RIFLESSO_MEDIO * sfoca) * m
         self.rgb[p] = np.clip(tex[ty, tx].astype(np.float32) * luce[:, None], 0, 255)
 
 
@@ -313,6 +339,24 @@ def _rasterizza(tela, P):
         tela.scrivi(y[riga] * W + x, w0, w1, w2, ti, P)
 
 
+# L'ambiente che il metallo rimanda: uno studio, chiaro in alto e scuro in
+# basso, con la luce della scena come finestra. Un film metallizzato lucido ci
+# fa bande chiare e scure lungo le grinze; satinato, un grigio piu' chiaro e
+# uniforme. Tarato perche' il metallo visto di fronte cada sul grigio con cui
+# il DT disegna l'alluminio, e la vernice opaca sopra resti piu' chiara, come
+# la disegna la grafica del Nutella Biscuits.
+AMBIENTE_BUIO, AMBIENTE_CHIARO, FINESTRA = 0.35, 1.2, 0.6
+RIFLESSO_MEDIO = 0.88
+
+
+def _ambiente(R, L):
+    """Quanta luce arriva dalla direzione `R` (riflessa, nel telaio camera)."""
+    cielo = np.clip((R[:, 1] + 0.9) / 1.8, 0.0, 1.0)
+    cielo = cielo * cielo * (3.0 - 2.0 * cielo)
+    return (AMBIENTE_BUIO + (AMBIENTE_CHIARO - AMBIENTE_BUIO) * cielo
+            + FINESTRA * np.clip(R @ L, 0.0, 1.0) ** 12)
+
+
 def rendi(parti, yaw, pitch, lato=512, ss=2):
     """Una vista del modello: PIL RGB lato x lato, il modello al centro."""
     W = H = lato * ss
@@ -348,6 +392,11 @@ def rendi(parti, yaw, pitch, lato=512, ss=2):
         P = dict(T=T, xs=cx + f * q[:, 0] / prof, ys=cy - f * q[:, 1] / prof,
                  inv=1.0 / np.where(vivi_v, prof, 1.0), UV=p["uvs"], lit=lit,
                  tex=p["tex"], vivi=vivi_v[T].all(1))
+        if p.get("mr") is not None:
+            occhio = np.array([0.0, 0.0, dist]) - q
+            occhio /= np.maximum(np.linalg.norm(occhio, axis=1, keepdims=True), 1e-12)
+            Rv = 2.0 * np.sum(Nv * occhio, axis=1, keepdims=True) * Nv - occhio
+            P.update(mr=p["mr"], ambiente=_ambiente(Rv, L))
         _rasterizza(tela, P)
     im = Image.fromarray(tela.rgb.reshape(H, W, 3).astype(np.uint8))
     return im.resize((lato, lato), Image.LANCZOS) if ss > 1 else im

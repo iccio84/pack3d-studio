@@ -26,6 +26,7 @@ mappata sulle facce giuste.
 | `pack3d/vista.py` | il modello visto da quattro lati, dal GLB e senza GPU |
 | `pack3d/incisioni.py` | l'apertura a strappo di un astuccio: i suoi tagli incisi come solchi nel modello chiuso |
 | `pack3d/apertura.py` | la stessa apertura aperta di tot gradi sulla sua cerniera, con la scatola appoggiata sul retro |
+| `pack3d/materiali.py` | il materiale del film dai DT secondari: alluminio, white plate e vernice opaca diventano metallo e ruvidita' nel GLB |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |
 | `CODA.md` | come si lavora un caso della coda, anche dalla sessione automatica |
 | `GLAM.md` | come chi ha caricato il PDF segue il suo caso da Glam Lab: stato, domande, risposte, modello corretto; il testo per Lovable |

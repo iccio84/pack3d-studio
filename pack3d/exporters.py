@@ -204,7 +204,7 @@ def write_obj_mesh(V, UV, tris, tex, outdir, basename="model", tex_quality=92):
 
 
 def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
-                   tex_quality=88, tex_max=2048, parti=None):
+                   tex_quality=88, tex_max=2048, parti=None, mr=None):
     """Una maglia sola con la sua texture, in GLB.
 
     `parti`, se c'e', e' `[(nome, primo, ultimo)]` sui triangoli: ognuna
@@ -213,6 +213,12 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
     con la plancia, che sta in piedi sul retro e non e' incollata al blocco -
     e chi apre il modello li deve poter prendere uno per uno. Senza `parti` il
     file e' quello di sempre: un nodo, una mesh.
+
+    `mr`, se c'e', e' la mappa metallo/ruvidita' di glTF, nello stesso telaio
+    della texture: ruvidita' nel verde, metallo nel blu. Viene dai DT del
+    materiale (`materiali.py`) e va in PNG, perche' il JPEG sui bordi di una
+    maschera inventa metallo dove non c'e'. Senza, il materiale e' quello di
+    sempre: plastica, ruvidita' 0,42.
     """
     buf = bytearray()
     views, accessors = [], []
@@ -259,6 +265,23 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
     bio = io.BytesIO()
     im.convert("RGB").save(bio, "JPEG", quality=tex_quality, subsampling=0)
     iv = add_view(bio.getvalue())
+    immagini = [{"bufferView": iv, "mimeType": "image/jpeg"}]
+    trame = [{"source": 0, "sampler": 0}]
+    materiale = {"name": "film", "pbrMetallicRoughness": {
+        "baseColorTexture": {"index": 0},
+        "metallicFactor": 0.0, "roughnessFactor": 0.42}}
+    if mr is not None:
+        from PIL import Image
+        m = mr if mr.size == im.size else mr.resize(im.size, Image.BILINEAR)
+        bio = io.BytesIO()
+        m.convert("RGB").save(bio, "PNG", optimize=True)
+        immagini.append({"bufferView": add_view(bio.getvalue()),
+                         "mimeType": "image/png"})
+        trame.append({"source": 1, "sampler": 0})
+        materiale = {"name": "film", "pbrMetallicRoughness": {
+            "baseColorTexture": {"index": 0},
+            "metallicRoughnessTexture": {"index": 1},
+            "metallicFactor": 1.0, "roughnessFactor": 1.0}}
 
     gltf = {
         "asset": {"version": "2.0", "generator": "pack3d"},
@@ -271,13 +294,11 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
             for k, (nome, _t0, _t1) in enumerate(pezzi)],
         "accessors": accessors, "bufferViews": views,
         "buffers": [{"byteLength": len(buf)}],
-        "images": [{"bufferView": iv, "mimeType": "image/jpeg"}],
+        "images": immagini,
         "samplers": [{"magFilter": 9729, "minFilter": 9987,
                       "wrapS": 33071, "wrapT": 33071}],
-        "textures": [{"source": 0, "sampler": 0}],
-        "materials": [{"name": "film", "pbrMetallicRoughness": {
-            "baseColorTexture": {"index": 0},
-            "metallicFactor": 0.0, "roughnessFactor": 0.42}}],
+        "textures": trame,
+        "materials": [materiale],
     }
     js = json.dumps(gltf, separators=(",", ":")).encode()
     js += b" " * ((4 - len(js) % 4) % 4)

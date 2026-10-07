@@ -2084,7 +2084,7 @@ quel vassoio si fermava gia' li', e la costruzione - dove la coda lo
 aspettava - non partiva mai. Una lettura che si ferma va in coda allo stesso
 modo, e la pagina mostra lo stesso riquadro.
 
-Il **parco** sono i casi di prova: 29 PDF, 28 casi di tutte le famiglie,
+Il **parco** sono i casi di prova: 31 PDF, 31 casi di tutte le famiglie,
 nella cartella `parco/` del repository privato dei casi - sono artwork dei
 clienti, e il codice e' pubblico. `prove/parco.py` li costruisce tutti come li
 chiede la pagina, con un server del codice da provare, e confronta due
@@ -4168,6 +4168,96 @@ parte di g0, e la falda va coricata li'. Se un file la avesse dall'altro capo,
 la falda andrebbe coricata sull'altro retro, e sul modello si vedrebbe la
 fascia neutra. Il segno da cercare e' quello: tacche della fotocellula o
 tratteggio sulla falda vista.
+
+### Il materiale del film lo dicono i DT secondari
+
+Un flowpack e' film di plastica, e la riflessione di serie - lucida, uguale su
+tutto il pack - gli va bene. Ma il film puo' essere **metallizzato**, o avere
+una **vernice opaca**, e il file lo dice: accanto al DT con la grafica mette
+altre copie del DT, una per lastra, e una legenda. Sul Nutella Biscuits T3:
+
+- l'**alluminio** e' il grigio che il DT principale mette dove la grafica non
+  copre (un PANTONE 423 C, in legenda «Aluminium»). E' scavato sotto la
+  grafica: copre il 35% del foglio, quello che resta scoperto;
+- il **white plate** e' una copia del DT 200 mm piu' sotto, campita di
+  PANTONE 317 C. Dove c'e', sotto gli inchiostri c'e' il bianco coprente e il
+  film resta plastica bianca. Sotto le foto della sleeve e del biscotto il
+  bianco non e' un tracciato ma un'**immagine** in DeviceN col canale 317 C;
+- la **vernice opaca** e' un'altra copia, 200 mm anche a destra: i raggi
+  attorno al biscotto, in PANTONE 674 C.
+
+La regola: **dove c'e' l'alluminio e non c'e' il white plate, il film e'
+metallo**. Gli inchiostri li' sono trasparenti sul metallo, quindi il pack e'
+metallizzato del loro colore - il colore stampato sul bianco per l'argento -
+e argento dove non c'e' inchiostro. Il grigio con cui il DT disegna
+l'alluminio non e' un inchiostro, e dalla texture va via. La vernice opaca fa
+opaca la plastica e satinato il metallo: sul Nutella Biscuits e' la traccia
+chiara dei raggi, che la grafica disegna in grigio chiaro sull'alluminio.
+
+Nel GLB vanno il colore base, con gli inchiostri sul metallo, e la mappa
+metallo/ruvidita' di glTF, in PNG perche' il JPEG sui bordi di una maschera
+inventa metallo: metallo dove l'alluminio e' scoperto, ruvidita' 0,16 il
+metallo lucido e 0,50 satinato, 0,30 la plastica lucida e 0,72 opaca. Glam
+la mostra con le sue luci HDR (`model-viewer`); la pagina dello Space passa al
+materiale PBR, con uno studio da riflettere, solo per i modelli che la
+hanno; le viste del controllo dell'AI simulano il riflesso, perche' il
+metallo senza ambiente usciva bianco latte, e al controllo arriva una nota
+che il metallo non e' il grigio piatto del DT.
+
+**Come si leggono** (`pack3d/materiali.py`):
+
+1. **Le copie del DT** si trovano dalle linee: rettangoli col rapporto del
+   foglio, in qualunque scala - 1:2 sul Kinder Cards T2, 0,62 sul Happy Hippo,
+   1:1 sul Nutella Biscuits - confermati solo se dentro hanno le linee lunghe
+   del DT nello stesso posto. Basta una coppia di bordi: sul B-ready il bordo
+   sinistro della copia della vernice e' interrotto dalle fasce delle pinne.
+   Specchiata solo se rovesciata combacia nettamente meglio: un DT di
+   flowpack e' quasi simmetrico, e le copie del Nutella Biscuits tornavano
+   uguali nei due versi.
+2. **Dove dipinge ogni lastra** lo dice Ghostscript, lastra per lastra,
+   anche dentro le immagini DeviceN.
+3. **Il ruolo** viene dal nome della lastra (`Aluminium`, `White Plate`,
+   `Matt Varnish` - Kinder Cards T2, Nutella B-ready T2), poi dal **titolo**
+   scritto accanto alla copia («Aluminium Support», «White Plate» sotto le
+   copie del Happy Hippo e del Kinder Country). I titoli di una pagina stanno
+   tutti dallo stesso lato: sul Kinder Cards quello di una copia e' sopra di
+   lei e sotto quella di prima, e il lato giusto e' quello dove ce ne sono di
+   piu'. Un titolo che dice altro - «Cold Seal», «Transparent Support» -
+   chiude la lastra. Quando i titoli sono **in curve**, come sul Nutella
+   Biscuits, i ruoli li legge l'AI, dalla legenda e dalla tavola degli
+   inchiostri (`controllo.ruoli_lastre`), una volta per file. Il caso li puo'
+   dichiarare (`materiali` nelle opzioni) e vince su tutto: e' cosi' che il
+   parco, che non ha l'AI, costruisce il Nutella Biscuits.
+4. **Le maschere**: ogni copia si separa da sola, ritagliata e senza le
+   altre tinte. Le linee del DT bucano la lastra, e il white plate usciva
+   rigato di metallo lungo ogni piega.
+
+**Quando non cambia niente.** Alluminio senza white plate: non si sa dove il
+film resta bianco, il modello resta plastica e lo dice. Un materiale che non
+cambia il film - meno di mezzo punto di metallo, meno di un millesimo di
+vernice - lascia il GLB com'era. Un inchiostro metallico stampato (`Silver`,
+PANTONE 877 C) non e' il supporto metallizzato, e qui non si tratta. Per ora
+solo i flowpack: la pouch e gli astucci verniciati hanno le stesse lastre, e
+verranno.
+
+Sul parco cambiano tre casi su trenta, tutti in meglio, gli altri restano al
+byte:
+
+- **Kinder Cards T2** (e la sua voce senza tipologia): le lastre si chiamano
+  `Aluminum` e `White Plate`, in copie a 1:2. Il metallo e' il 39% del film:
+  lo sfondo dietro le cialde e le saldature, che prima erano un grigio piatto
+  e ora sono argento; la banda rossa, la fascia bianca col marchio e le
+  cialde restano plastica;
+- **Nutella B-ready T2**: la `Matt Varnish` copre l'88,6% del film, tutto
+  tranne marchio, prodotto e il bollino x2, che restano lucidi.
+
+**Kinder Country** e **Happy Hippo** hanno alluminio e white plate, letti dai
+titoli delle copie, ma sulla stessa parte del film: niente metallo, il GLB e'
+quello di prima e la riga lo dice. Il **Nutella Biscuits T3** entra nel parco
+coi ruoli dichiarati, perche' il parco non ha l'AI: metallo sul 37% del film,
+vernice opaca sull'1%. Lo stesso file senza dichiarazione, e senza AI, esce
+al byte com'era, con la riga che dice quali lastre non hanno un titolo
+leggibile; con l'AI esce identico a quello dichiarato.
 
 ## Pouch
 
