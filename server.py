@@ -38,7 +38,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl,
                     folding, exporters, materiali, nero, plancia, pouch,
-                    strati, vassoio, verifica, versione)
+                    rilievo, strati, vassoio, verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -522,11 +522,13 @@ def nota_apertura(meta):
 
 
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
-                 colata_riquadro=None, carta=None, apertura=None):
+                 colata_riquadro=None, carta=None, apertura=None,
+                 pellicola=None):
     """L'astuccio. `carta` e' lo spessore del cartoncino in mm se l'utente
     l'ha dichiarato (`SPESSORI_CARTA`); senza, `folding.SPESSORE_CRT`. Con
     `apertura`, in gradi, l'apertura a strappo esce aperta: vedi
-    `apri_apertura`."""
+    `apri_apertura`. Con `pellicola` la finestra del retro di un astuccio
+    aperto - fra le due falde - ha la sua pellicola trasparente."""
     dpi, tmax = risoluzione(quality)
     # L'ordine e' quello delle regole: una pagina sola, poi le quote lette
     # sul file intero - note e miniature comprese - poi via tutto quello che
@@ -585,9 +587,27 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                            if apertura and not d.curva_mm else (False, None))
     incisa = (None if aperta or d.curva_mm else
               incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
-    exporters.write_glb(faces, out_glb, tex_max=tmax)
+    # il rilievo dell'embossing, se il DT ne ha la lastra: una mappa delle
+    # normali per faccia, ritagliata e girata come la sua texture
+    riga_rilievo = rilievo_sicuro(rilievo.sulle_facce, pdf, d.panels, faces,
+                                  esito.get("girate"))
+    # la pellicola sulla finestra del retro, se chi carica l'ha voluta: sulle
+    # facce finite, girate e curvate come escono
+    film, riga_film = None, None
+    if finestra_astuccio(d):
+        if pellicola:
+            film = pellicola_sicura(folding.pellicola_retro, faces, spessore)
+            riga_film = riga_pellicola(1, film is not None,
+                                       folding.PELLICOLA_FALDA)
+        elif pellicola is False:
+            riga_film = SENZA_PELLICOLA
+    exporters.write_glb(faces, out_glb, tex_max=tmax, pellicola=film)
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if riga_film:
+        meta.append(riga_film)
+    if riga_rilievo:
+        meta.append(riga_rilievo)
     if d.curva_mm:
         meta.append(FRONTE_CURVO % d.curva_mm)
     if riga_aperta:
@@ -1279,7 +1299,7 @@ def build_pouch(pdf, out_glb, quality="hd", lastre_extra=(),
 
 
 def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
-                   colata_riquadro=None, carta=None):
+                   colata_riquadro=None, carta=None, pellicola=None):
     """Il ballotin, la scatola a tronco di piramide: vedi `pack3d.ballotin`.
 
     La texture e' il DT intero, pulito come quello di un pouch, e ogni faccia
@@ -1287,6 +1307,11 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
     pannello, perche' le lenti stanno a cavallo di due facce. Sotto la
     texture una striscia della tinta dell'interno, per il rovescio del
     cartoncino.
+
+    Il rilievo dell'embossing, se il DT ne ha la lastra, sta in una mappa
+    delle normali sulla stessa texture (`pack3d.rilievo`). Con `pellicola`
+    le finestre hanno la loro pellicola trasparente: lo dice chi carica il
+    PDF, vedi `pellicola_scelta`.
     """
     dpi, tmax = risoluzione(quality)
     pdf, n_pagine = artwork.pagina_unica(pdf)
@@ -1328,7 +1353,24 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
     tela = ballotin.con_interno(tex)
     V, UV, T = ballotin.maglia(b, origine, scala / PT2MM, tela.size,
                                spessore=carta)
-    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax)
+    # il rilievo sulla stessa texture: il riquadro e' quello del ritaglio,
+    # dal pixel arrotondato
+    ox, oy = round(x0 * scala) / scala, round(y0 * scala) / scala
+    normale, riga = rilievo_sicuro(
+        rilievo.mappa_del_dt, pdf,
+        (ox, oy, ox + tex.width / scala, oy + tex.height / scala),
+        tela.size, tex.height, scala / PT2MM, coppia=True)
+    if riga:
+        avvisi.append(riga)
+    film = None
+    if pellicola and b.finestre:
+        film = pellicola_sicura(ballotin.pellicola, b, spessore=carta)
+        avvisi.append(riga_pellicola(len(b.finestre), film is not None,
+                                     ballotin.PELLICOLA_MARGINE))
+    elif pellicola is False and b.finestre:
+        avvisi.append(SENZA_PELLICOLA)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
+                             normale=normale, pellicola=film)
     return ballotin.dichiara(b) + avvisi
 
 
@@ -1925,7 +1967,7 @@ def dichiarazione(kind, pezzi):
 VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
-                "spessore", "apertura", "quality", "materiali")
+                "spessore", "apertura", "pellicola", "quality", "materiali")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -1948,7 +1990,78 @@ def spessore_carta(valore):
                          "cartoncino spesso")
 
 
-def analyze_pdf(pdf, kind=None, strappo=False):
+# La pellicola delle finestre. Un astuccio con la finestra di solito ha una
+# lastra di plastica trasparente sottilissima incollata dall'interno, ma non
+# sempre: la pagina lo chiede ogni volta che l'analisi trova una finestra
+# (`finestre_da_chiedere`), e la risposta arriva come opzione `pellicola`.
+# Senza, le finestre restano aperte, come sono sempre state.
+SENZA_PELLICOLA = ("finestre senza pellicola, come dichiarato: aperte, si vede "
+                   "dentro")
+
+
+def rilievo_sicuro(fa, *args, coppia=False, **kw):
+    """Il rilievo non deve mai fermare una costruzione: se leggerlo si rompe,
+    il modello esce senza, e la riga lo dice."""
+    try:
+        return fa(*args, **kw)
+    except Exception as e:                          # noqa: BLE001
+        traceback.print_exc()
+        riga = ("rilievo: la lastra c'e' ma la mappa non si e' fatta (%s), il "
+                "modello esce senza" % e)
+        return (None, riga) if coppia else riga
+
+
+def pellicola_sicura(fa, *args, **kw):
+    """La pellicola, o None se farla si rompe: le finestre restano aperte, e
+    la riga della pellicola lo dice (`riga_pellicola`)."""
+    try:
+        return fa(*args, **kw)
+    except Exception:                               # noqa: BLE001
+        traceback.print_exc()
+        return None
+
+
+def finestra_astuccio(d):
+    """Vero se l'astuccio ha la finestra sul retro: aperto, con le due falde
+    che lasciano in mezzo un'apertura (il Kinder Pingui T6). Un astuccio
+    senza retro, tipo vassoio, non ha una finestra: e' aperto."""
+    return bool(not d.chiuso and d.finestra_mm > 0
+                and all(k in d.panels for k in folding.FASCE_RETRO))
+
+
+def finestre_da_chiedere(quante, dove):
+    """La domanda della pellicola, per la pagina: va fatta ogni volta che il
+    pack ha una finestra."""
+    return dict(quante=quante, dove=dove)
+
+
+def pellicola_scelta(valore):
+    """True, False, o None se non e' dichiarata. ValueError se non e' un si'
+    o un no."""
+    if valore in (None, ""):
+        return None
+    if isinstance(valore, bool):
+        return valore
+    v = str(valore).strip().lower()
+    if v in ("1", "si", "si'", "s\u00ec", "true", "yes"):
+        return True
+    if v in ("0", "no", "false"):
+        return False
+    raise ValueError("La pellicola delle finestre si dice con si' o no")
+
+
+def riga_pellicola(quante, fatta, margine):
+    """La riga per chi guarda il modello, quando la pellicola e' chiesta."""
+    if not fatta:
+        return ("pellicola chiesta ma non messa: non ho trovato dove reggerla "
+                "sulle finestre, che restano aperte")
+    return ("pellicola trasparente sulle finestre (%d): una lastra di plastica "
+            "sottilissima incollata dall'interno, %g mm oltre il bordo - nel "
+            "GLB e' il nodo 'pellicola'; le viste del controllo non la "
+            "mostrano, le finestre vi si vedono aperte" % (quante, margine))
+
+
+def analyze_pdf(pdf, kind=None, domande=False):
     """`kind` arriva dall'utente: la tipologia si dichiara, non si indovina.
     Il riconoscimento automatico sbaglia (il solutore astuccio risolve anche
     certi flowpack) e sbagliare qui compromette tutto il resto.
@@ -1956,18 +2069,20 @@ def analyze_pdf(pdf, kind=None, strappo=False):
     Tutte le famiglie si misurano sulla prima pagina sola: se ce ne sono
     altre, il primo cartellino lo dice. Vedi `avviso_pagine`."""
     pdf, n_pagine = artwork.pagina_unica(pdf)
-    info = _analyze_pdf(pdf, kind, strappo)
+    info = _analyze_pdf(pdf, kind, domande)
     pagine = avviso_pagine(n_pagine)
     if pagine and isinstance(info.get("meta"), list):
         info["meta"].insert(0, pagine)
     return info
 
 
-def _analyze_pdf(pdf, kind=None, strappo=False):
-    """`strappo`: sull'astuccio, guardare anche se ha un'apertura a strappo,
-    per chiedere all'utente se la vuole chiusa o aperta (`strappo_astuccio`).
-    Solo dall'analisi che la pagina chiede prima di costruire: la costruzione
-    non la ripete."""
+def _analyze_pdf(pdf, kind=None, domande=False):
+    """`domande`: preparare le domande che la pagina fa prima di costruire -
+    sull'astuccio, se ha un'apertura a strappo la vuole chiusa o aperta
+    (`strappo_astuccio`); su un pack con le finestre, se le vuole con la
+    pellicola trasparente o senza (`finestre_da_chiedere`). Solo
+    dall'analisi che la pagina chiede prima di costruire: la costruzione non
+    la ripete."""
     kind = normalizza_kind(kind)
     if kind is not None and kind not in KIND_NOTI:
         # Cadere nel ramo flowpack e' peggio che fermarsi: e' lo stesso difetto
@@ -2088,7 +2203,11 @@ def _analyze_pdf(pdf, kind=None, strappo=False):
             rgb = avviso_quadricromia(pdf, regione=b.regione)
             if rgb:
                 meta.insert(0, rgb)
-            return dict(kind="ballotin", title="Ballotin", meta=meta)
+            letto = dict(kind="ballotin", title="Ballotin", meta=meta)
+            if domande and b.finestre:
+                letto["finestre"] = finestre_da_chiedere(
+                    len(b.finestre), ballotin.dove_finestre(b))
+            return letto
     if kind is None and _dice_film(pdf):
         # Il file dice di essere un film: il flowpack si prova PRIMA
         # dell'astuccio. Il solutore astuccio risolve anche certi film - sul
@@ -2118,11 +2237,15 @@ def _analyze_pdf(pdf, kind=None, strappo=False):
                     meta.insert(0, rgb)
                 letto = dict(kind="carton", title="Astuccio %s" % d.layout,
                              meta=meta)
-                s = strappo_astuccio(pdf, d) if strappo else None
+                s = strappo_astuccio(pdf, d) if domande else None
                 if s:
                     meta.append("apertura a strappo: %s - si puo' avere chiusa, "
                                 "coi tagli modellati, o aperta" % s["dove"])
                     letto["strappo"] = s
+                if domande and finestra_astuccio(d):
+                    letto["finestre"] = finestre_da_chiedere(
+                        1, "sul retro, fra le due falde: alta %.1f mm"
+                        % d.finestra_mm)
                 return letto
         except Exception as e:
             if kind == "carton":
@@ -2430,6 +2553,7 @@ class Handler(BaseHTTPRequestHandler):
                 try:
                     carta = spessore_carta(opts.get("spessore"))
                     gradi_aperta = apertura_gradi(opts.get("apertura"))
+                    con_pellicola = pellicola_scelta(opts.get("pellicola"))
                 except ValueError as e:
                     return self._send(400, str(e))
                 # (`coppa` resta per chi chiama l'API: dalla pagina la coppa
@@ -2459,7 +2583,7 @@ class Handler(BaseHTTPRequestHandler):
                     # PDF che il codice non sa leggere si ferma qui, e la
                     # costruzione non parte mai. Va in coda da qui.
                     try:
-                        letto = analyze_pdf(pdf, kind, strappo=True)
+                        letto = analyze_pdf(pdf, kind, domande=True)
                     except Exception as e:
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
                                                       blocchi)
@@ -2518,7 +2642,8 @@ class Handler(BaseHTTPRequestHandler):
                         elif info["kind"] == "ballotin":
                             def costruisci(lastre, uscita):
                                 return build_ballotin(pdf, uscita, q, lastre,
-                                                      col_riq, carta=carta)
+                                                      col_riq, carta=carta,
+                                                      pellicola=con_pellicola)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
@@ -2526,7 +2651,8 @@ class Handler(BaseHTTPRequestHandler):
                             def costruisci(lastre, uscita):
                                 return build_carton(pdf, uscita, q, lastre, col_riq,
                                                     carta=carta,
-                                                    apertura=gradi_aperta)
+                                                    apertura=gradi_aperta,
+                                                    pellicola=con_pellicola)
                         else:
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":

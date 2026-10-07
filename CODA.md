@@ -234,6 +234,14 @@ segue il caso. Il primo display col coperchio sul retro si e' fermato cosi':
 dal disegno non si capiva come stava il coperchio a display montato, e con la
 risposta la regola si e' scritta in mezz'ora.
 
+La **pellicola delle finestre** e' una di queste domande, e si fa sempre: se
+il pack ha finestre (il cartellino "finestre: N" del ballotin, "una finestra
+alta ... mm" del retro aperto) e fra le opzioni del caso non c'e'
+`pellicola`, chiedi se le finestre hanno la pellicola trasparente, con le
+risposte "Si', con la pellicola" e "No, finestra aperta". Di solito c'e', ma
+non sempre, e dal PDF non si vede: vedi REGOLE.md, *La pellicola delle
+finestre si chiede, ogni volta*.
+
 1. Prima rileggi i commenti della issue: la risposta puo' essere gia' in una
    nota.
 2. Commenta la issue con la diagnosi e la domanda, metti `da-guardare` e

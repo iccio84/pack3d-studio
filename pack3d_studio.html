@@ -237,8 +237,9 @@
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
   #go, #avanti, #strappo-go{width:100%;max-width:300px;margin:6px auto 0;display:block}
-  #spessore, #strappo-scelta{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore, #strappo-scelta, #pellicola-scelta{display:flex;gap:8px;flex-wrap:wrap}
   #spessore button[aria-pressed="true"],
+  #pellicola-scelta button[aria-pressed="true"],
   #strappo-scelta button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
     background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
   .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:10px;
@@ -342,6 +343,22 @@
     <button id="avanti" class="primary">Continua</button>
   </div>
 
+  <div id="pellicola" class="pannello">
+    <span class="tit" id="pellicola-tit">Il pack ha una finestra: ci metto la pellicola trasparente?</span>
+    <div class="griglia">
+    <div class="fld">
+      <div id="pellicola-scelta" role="group" aria-label="Pellicola delle finestre">
+        <button type="button" data-p="1" aria-pressed="false">S&igrave; &middot; con la pellicola</button>
+        <button type="button" data-p="0" aria-pressed="false">No &middot; finestra aperta</button>
+      </div>
+      <p class="note" id="pellicola-dove"></p>
+    </div>
+    <div class="fld">
+      <p class="note">Le finestre di solito hanno una lastra di plastica trasparente sottilissima, incollata dall&rsquo;interno, ma non sempre. Con la pellicola la finestra ha un velo lucido; senza resta aperta, e si vede dentro.</p>
+    </div>
+    </div>
+  </div>
+
   <div id="strappo" class="pannello">
     <span class="tit">L&rsquo;astuccio ha un&rsquo;apertura a strappo: come lo vuoi?</span>
     <div class="griglia">
@@ -402,8 +419,9 @@
 /* ------------------------------------------------------------------ *
  * Lettore GLB minimo. Legge quello che scrive pack3d: una mesh, una
  * primitiva per materiale, POSITION/NORMAL/TEXCOORD_0 e immagini JPEG
- * incorporate. Evita di dipendere da GLTFLoader, che non e' nel bundle
- * principale di three.js.
+ * o PNG incorporate, la mappa delle normali del rilievo e la pellicola
+ * trasparente delle finestre. Evita di dipendere da GLTFLoader, che non
+ * e' nel bundle principale di three.js.
  * ------------------------------------------------------------------ */
 const COMP = {5120:Int8Array,5121:Uint8Array,5122:Int16Array,5123:Uint16Array,
               5125:Uint32Array,5126:Float32Array};
@@ -479,7 +497,15 @@ function buildScene(g){
       const texIdx = pbr && pbr.baseColorTexture;
       const mrIdx = pbr && pbr.metallicRoughnessTexture;
       let mat;
-      if (mrIdx){
+      const trasparente = m && m.alphaMode === 'BLEND';
+      if (trasparente){
+        // La pellicola delle finestre: plastica trasparente e lucida, a due
+        // facce, che non scrive la profondita' - dietro si deve vedere.
+        const f = (pbr && pbr.baseColorFactor) || [1, 1, 1, 0.22];
+        mat = new THREE.MeshPhongMaterial({color: new THREE.Color(f[0], f[1], f[2]),
+          transparent: true, opacity: f[3], depthWrite: false,
+          side: THREE.DoubleSide, shininess: 160, specular: 0xffffff});
+      } else if (mrIdx){
         // Il film metallizzato dei DT del materiale (pack3d/materiali.py):
         // metallo e ruvidita' punto per punto, e un ambiente da riflettere,
         // che senza il metallo e' nero. Gli altri modelli restano col Phong
@@ -494,7 +520,16 @@ function buildScene(g){
                                           specular:0x4a4a4a, side:THREE.FrontSide});
       }
       if (texIdx) mat.map = immagine(g.json.textures[texIdx.index].source);
+      if (m && m.normalTexture && !trasparente){
+        // Il rilievo dell'embossing (pack3d/rilievo.py). Il GLB non ha le
+        // tangenti, e three.js le ricava dalle derivate lungo la v: con
+        // l'origine UV in alto il verde va girato, come fa GLTFLoader.
+        mat.normalMap = immagine(g.json.textures[m.normalTexture.index].source);
+        const k = m.normalTexture.scale ?? 1;
+        mat.normalScale = new THREE.Vector2(k, -k);
+      }
       const pezzo = new THREE.Mesh(geo, mat);
+      if (trasparente) pezzo.renderOrder = 1;
       pezzo.name = mesh.name || '';
       group.add(pezzo);
     }
@@ -662,6 +697,11 @@ const strappoScelta = document.getElementById('strappo-scelta');
 const strappoGradi = document.getElementById('strappo-gradi');
 const strappoVal = document.getElementById('strappo-val');
 let aperturaScelta = 'chiusa';
+// La pellicola delle finestre: se l'analisi trova una finestra, prima di
+// costruire si chiede se ci va la pellicola trasparente. Di solito c'e', ma
+// non sempre: lo dice chi carica il PDF, ogni volta.
+const pellicolaEl = document.getElementById('pellicola');
+const pellicolaScelta = document.getElementById('pellicola-scelta');
 const dlBtn = document.getElementById('download');
 const upBtn = document.getElementById('upload');
 const annBtn = document.getElementById('annulla');
@@ -1151,7 +1191,8 @@ async function handle(lista){
   pending = {buf: bufs[0], bufs, name: file.name, nomi: files.map(f => f.name)};
   attesiPezzi = 0; pezziEl.classList.remove('on');
   setTitolo(files.map(f => f.name).join(' + '));
-  params.classList.remove('on'); strappoEl.classList.remove('on'); setMeta([]);
+  params.classList.remove('on'); strappoEl.classList.remove('on');
+  pellicolaEl.classList.remove('on'); setMeta([]);
   packtype.classList.add('on');
   setFase('lavoro');
   setStatus(files.length > 1 ? files.length + ' PDF: insieme vanno solo per un cartotecnico in piu\' pezzi'
@@ -1267,6 +1308,10 @@ async function procedi(kind, extra){
       setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
     }
+    if (info.finestre){
+      chiediPellicola(c, opts, info);
+      return;
+    }
     if (info.strappo){
       chiediStrappo(c, opts, info);
       return;
@@ -1288,6 +1333,38 @@ function fermato(err){
   const m = testoErrore(err);
   setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
                                    : m.slice(0,200), 'err');
+}
+
+/* ----------------------- pellicola delle finestre ----------------------- */
+// L'analisi ha trovato una o piu' finestre: sul ballotin i buchi nei
+// pannelli, sull'astuccio aperto il retro fra le due falde. Ci va la
+// pellicola trasparente? La scelta costruisce subito, o passa all'apertura
+// a strappo se c'e' anche quella.
+function chiediPellicola(c, opts, info){
+  const f = info.finestre;
+  pending.pellicola = {c, opts, info};
+  document.getElementById('pellicola-tit').textContent =
+    (f.quante > 1 ? 'Il pack ha ' + f.quante + ' finestre' : 'Il pack ha una finestra')
+    + ': ci metto la pellicola trasparente?';
+  document.getElementById('pellicola-dove').textContent =
+    f.dove ? 'Dal disegno: ' + f.dove + '.' : '';
+  pellicolaScelta.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  pellicolaEl.classList.add('on');
+  setStatus('Finestre: con la pellicola trasparente o aperte?','');
+}
+
+async function pellicolaAvanti(p){
+  if (!pending || !pending.pellicola) return;
+  const s = pending.pellicola;
+  pending.pellicola = null;
+  pellicolaScelta.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(Number(b.dataset.p) === p)));
+  pellicolaEl.classList.remove('on');
+  const opts = Object.assign({}, s.opts, {pellicola: p});
+  if (s.info.strappo){ chiediStrappo(s.c, opts, s.info); return; }
+  try{
+    esitoFinale(await build(s.c.buf, pending.name, opts), s.info.title || 'Modello pronto');
+  }catch(err){ fermato(err); }
 }
 
 /* ------------------------- apertura a strappo -------------------------- */
@@ -1355,6 +1432,7 @@ function togliModello(){
         for (const mm of (Array.isArray(m) ? m : m ? [m] : [])){
           if (mm.map) mm.map.dispose();
           if (mm.metalnessMap) mm.metalnessMap.dispose();
+          if (mm.normalMap) mm.normalMap.dispose();
           mm.dispose();
         }
       });
@@ -1375,6 +1453,7 @@ function annulla(){
   packtype.classList.remove('on');
   pezziEl.classList.remove('on');
   strappoEl.classList.remove('on');
+  pellicolaEl.classList.remove('on');
   setMeta([]); setTitolo('');
   nascondiCaso();
   togliModello();
@@ -1401,6 +1480,9 @@ strappoScelta.querySelectorAll('button').forEach(b => {
 strappoGradi.oninput = mostraGradi;
 strappoGradi.onkeydown = e => { if (e.key === 'Enter') strappoAvanti(); };
 document.getElementById('strappo-go').onclick = strappoAvanti;
+pellicolaScelta.querySelectorAll('button').forEach(b => {
+  b.onclick = () => pellicolaAvanti(Number(b.dataset.p));
+});
 spessoreEl.querySelectorAll('button').forEach(b => {
   b.onclick = () => scegliSpessore(Number(b.dataset.s));
 });

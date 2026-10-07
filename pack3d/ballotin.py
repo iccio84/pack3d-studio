@@ -1218,25 +1218,11 @@ def _lungo(A, B, passo, NA=None, NB=None):
     return np.vstack(out), np.vstack(nor)
 
 
-def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
-    """(V, UV, T) del ballotin chiuso, in mm, con la texture del DT intero.
-
-    `origine_mm` e' l'angolo in alto a sinistra della texture sul DT, in mm;
-    `px_mm` quanti pixel per mm; `misura_tex` (larghezza, altezza) in pixel
-    della texture, che sotto ha le due strisce del rovescio e del taglio
-    (vedi `con_interno`). Il fronte guarda +Z, la cima +Y, il fondo sta a
-    Y = 0.
-
-    Niente feritoie. Ogni pezzo ha il suo rovescio, uno spessore piu' in
-    dentro; in cima gli strati si appoggiano uno sull'altro - alette, poi il
-    coperchio di sotto con la sua linguetta, poi quello di sopra - a uno
-    spessore l'uno dall'altro; fra una parete e il coperchio o l'aletta che ci
-    si piega sopra c'e' la piega, una striscia che sale dal bordo della parete
-    allo strato; e ogni bordo che non combacia con quello di un altro pezzo -
-    finestre, tagli dei coperchi e delle alette - prende la costa del taglio.
-    """
-    sp = folding.SPESSORE_CRT if spessore is None else spessore
-    ff = b.facce
+def _mappe(b, sp):
+    """Le mappe dal DT al ballotin chiuso, pezzo per pezzo: `{nome: mappa}`
+    piu' gli angoli del tronco ("angoli": fondo FL, FR, BR, BL e cima FL,
+    FR, BR, BL) e il centro del fondo sul DT ("centro"). Le usano la maglia e
+    la pellicola delle finestre, che devono stare una sull'altra."""
     a = b.cima_mm / 2
     c = b.fondo_mm / 2
     H = b.altezza_mm
@@ -1307,6 +1293,39 @@ def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
         return f
     M_AL = aletta(b.cerniera_aletta[0], -1.0)
     M_AR = aletta(b.cerniera_aletta[1], +1.0)
+    return {"B": M_B, "F": M_F, "K": M_K, "WL": M_WL, "WR": M_WR,
+            "L1": M_L1, "L2": M_L2, "AL": M_AL, "AR": M_AR, "centro": centro,
+            "angoli": (FL0, FR0, BR0, BL0, FL1, FR1, BR1, BL1)}
+
+
+def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
+    """(V, UV, T) del ballotin chiuso, in mm, con la texture del DT intero.
+
+    `origine_mm` e' l'angolo in alto a sinistra della texture sul DT, in mm;
+    `px_mm` quanti pixel per mm; `misura_tex` (larghezza, altezza) in pixel
+    della texture, che sotto ha le due strisce del rovescio e del taglio
+    (vedi `con_interno`). Il fronte guarda +Z, la cima +Y, il fondo sta a
+    Y = 0.
+
+    Niente feritoie. Ogni pezzo ha il suo rovescio, uno spessore piu' in
+    dentro; in cima gli strati si appoggiano uno sull'altro - alette, poi il
+    coperchio di sotto con la sua linguetta, poi quello di sopra - a uno
+    spessore l'uno dall'altro; fra una parete e il coperchio o l'aletta che ci
+    si piega sopra c'e' la piega, una striscia che sale dal bordo della parete
+    allo strato; e ogni bordo che non combacia con quello di un altro pezzo -
+    finestre, tagli dei coperchi e delle alette - prende la costa del taglio.
+    """
+    sp = folding.SPESSORE_CRT if spessore is None else spessore
+    ff = b.facce
+    m = _mappe(b, sp)
+    M_B, M_F, M_K, M_WL, M_WR = m["B"], m["F"], m["K"], m["WL"], m["WR"]
+    M_L1, M_L2, M_AL, M_AR = m["L1"], m["L2"], m["AL"], m["AR"]
+    centro = m["centro"]
+    FL0, FR0, BR0, BL0, FL1, FR1, BR1, BL1 = m["angoli"]
+    f_sx, f_dx, r_dx, r_sx = b.quadro_fondo
+    af_sx, af_dx = b.apici_fronte
+    ar_sx, ar_dx = b.apici_retro
+    (fs_giu, fs_su), (fd_giu, fd_su) = b.fianco_dietro
 
     # ------------------------------------------------------------- i pezzi
     # (anelli sul DT, mappa, normale di fuori o None per le superfici curve,
@@ -1508,6 +1527,180 @@ def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
         T.append(tri_c + n_v)
         n_v += len(Vc)
     return np.vstack(V), np.vstack(UV), np.vstack(T)
+
+
+# --------------------------------------------------------------------------- #
+# la pellicola delle finestre
+# --------------------------------------------------------------------------- #
+# Una finestra di solito ha la sua pellicola: una lastra di plastica
+# trasparente sottilissima incollata dall'interno, piu' grande della finestra.
+# Non sempre: per questo la si chiede a chi carica il PDF. Quanto va oltre il
+# bordo della finestra, in mm, e quanto sta dal rovescio del cartoncino - lo
+# spessore della pellicola, che cosi' non si confonde col rovescio.
+PELLICOLA_MARGINE = 5.0
+PELLICOLA_SCOSTO = 0.05
+
+
+def _ospiti(b, k):
+    """Le facce che reggono la finestra `k`: quella di cui e' un buco, o
+    quelle con cui ha un tratto in comune. Una finestra che gira lo spigolo
+    fra una parete e il suo coperchio ne ha due."""
+    ff = b.facce
+    W = ff[k].anello
+    pannelli = [b.fronte, b.retro, b.fianchi[0], b.fianchi[1],
+                b.coperchi[0], b.coperchi[1], b.fondo]
+    for j in pannelli:
+        for h in ff[j].buchi:
+            if (abs(abs(area(h.anello)) - abs(area(W))) < 1.0
+                    and np.hypot(*(h.anello.mean(0) - W.mean(0))) < 0.5):
+                return [j]
+    mie = {e for e, _s in ff[k].archi}
+    return [j for j in pannelli if mie & {e for e, _s in ff[j].archi}]
+
+
+def dove_finestre(b):
+    """Dove stanno le finestre, a parole, per la domanda della pellicola:
+    "sul fronte, sul retro, fra il fronte e il suo coperchio e fra il retro
+    e il suo coperchio"."""
+    nomi = {b.fronte: "fronte", b.retro: "retro", b.fianchi[0]: "fianco sinistro",
+            b.fianchi[1]: "fianco destro", b.coperchi[0]: "coperchio del fronte",
+            b.coperchi[1]: "coperchio del retro", b.fondo: "fondo"}
+    suo = {(b.fronte, b.coperchi[0]): "fra il fronte e il suo coperchio",
+           (b.retro, b.coperchi[1]): "fra il retro e il suo coperchio"}
+    sole, girano = [], []
+    for k in b.finestre:
+        osp = _ospiti(b, k)
+        if len(osp) == 1:
+            sole.append("sul " + nomi[osp[0]])
+        elif osp:
+            girano.append(suo.get(tuple(osp)) or
+                          "fra il " + " e il ".join(nomi[j] for j in osp))
+    parti = sorted(sole, key=lambda s: ("fronte" not in s, s))
+    if girano:
+        parti.append(" e ".join(sorted(girano, key=lambda s: ("fronte" not in s, s))))
+    return ", ".join(parti)
+
+
+def _gonfia(punti, margine, lati=24):
+    """Il guscio convesso di `punti` allargato di `margine` mm, con gli angoli
+    tondi: un anello antiorario."""
+    from scipy.spatial import ConvexHull
+    th = np.linspace(0.0, 2.0 * math.pi, lati, endpoint=False)
+    giro = np.stack([np.cos(th), np.sin(th)], 1) * margine
+    tutti = (np.asarray(punti, float)[:, None, :] + giro[None]).reshape(-1, 2)
+    return tutti[ConvexHull(tutti).vertices]
+
+
+def _taglia(poli, p0, n):
+    """La parte del poligono convesso `poli` dove (x - p0) . n >= 0."""
+    out = []
+    for i in range(len(poli)):
+        A, B = poli[i], poli[(i + 1) % len(poli)]
+        da, db = float((A - p0) @ n), float((B - p0) @ n)
+        if da >= 0:
+            out.append(A)
+        if (da >= 0) != (db >= 0):
+            out.append(A + da / (da - db) * (B - A))
+    return np.array(out)
+
+
+def pellicola(b, spessore=None, margine=PELLICOLA_MARGINE):
+    """(V, T) della pellicola trasparente delle finestre, in mm, nel telaio
+    della maglia; None se il ballotin non ha finestre.
+
+    Per ogni finestra la pellicola e' il suo guscio convesso allargato di
+    `margine`, incollato al rovescio della faccia che la regge e portato sul
+    pack dalla stessa mappa della faccia. Una finestra che gira lo spigolo
+    fra una parete e il suo coperchio si taglia lungo la cordonatura: una
+    parte va sotto la parete, l'altra sotto il coperchio, e fra le due la
+    pellicola si piega con il cartoncino. Quello che uscirebbe dalla faccia
+    - oltre una lente, oltre il bordo - si toglie.
+    """
+    if not b.finestre:
+        return None
+    sp = folding.SPESSORE_CRT if spessore is None else spessore
+    dietro = sp + PELLICOLA_SCOSTO
+    m = _mappe(b, sp)
+    ff = b.facce
+    mappe = {b.fronte: (m["F"], (0, 0.12, 1)), b.retro: (m["K"], (0, 0.12, -1)),
+             b.fianchi[0]: (m["WL"], (-1, 0.12, 0)),
+             b.fianchi[1]: (m["WR"], (1, 0.12, 0)),
+             b.coperchi[0]: (m["L1"], (0, 1, 0)), b.coperchi[1]: (m["L2"], (0, 1, 0)),
+             b.fondo: (m["B"], (0, -1, 0))}
+
+    normali = {}
+
+    def sul_rovescio(j, pts, tri=None):
+        """I punti portati sul pack e scostati dietro il rovescio della
+        faccia `j`, coi triangoli girati verso fuori. La normale della faccia
+        - piana: pareti e coperchi lo sono - viene dai triangoli, e i punti
+        senza triangoli (la piega) usano quella gia' trovata."""
+        mappa, fuori = mappe[j]
+        P3 = mappa(pts)
+        if tri is not None:
+            n = np.cross(P3[tri[:, 1]] - P3[tri[:, 0]],
+                         P3[tri[:, 2]] - P3[tri[:, 0]]).sum(0)
+            if float(n @ np.asarray(fuori, float)) < 0:
+                n = -n
+                tri = tri[:, ::-1]
+            normali[j] = n / np.linalg.norm(n)
+        return P3 - normali[j] * dietro, tri
+
+    V, T = [], []
+    n_v = 0
+    for k in b.finestre:
+        W = ff[k].anello
+        osp = [j for j in _ospiti(b, k) if j in mappe]
+        if not osp:
+            continue
+        poli = _gonfia(W, margine)
+        parti = [(osp[0], poli)]
+        piega = None
+        if len(osp) == 2:
+            # la cordonatura fra le due facce: i punti che i loro contorni
+            # hanno in comune, su una retta
+            j1, j2 = osp
+            d, _i = cKDTree(ff[j2].anello).query(ff[j1].anello)
+            comuni = ff[j1].anello[d < 0.05]
+            if len(comuni) < 2:
+                continue
+            p0 = comuni.mean(0)
+            asse = np.linalg.svd(comuni - p0)[2][0]
+            n = np.array([-asse[1], asse[0]])
+            if (ff[j1].anello.mean(0) - p0) @ n < 0:
+                n = -n
+            parti = [(j1, _taglia(poli, p0, n)), (j2, _taglia(poli, p0, -n))]
+            sulla = [p for p in parti[0][1] if abs(float((p - p0) @ n)) < 1e-6]
+            if len(sulla) >= 2:
+                piega = (j1, j2, np.array([sulla[0], sulla[-1]]))
+        for j, pz in parti:
+            if len(pz) < 3:
+                continue
+            pts, tri = triangola([pz], bordo=0.8, griglia=4.0)
+            if not len(tri):
+                continue
+            c = pts[tri].mean(1)
+            tri = tri[dentro(c, [ff[j].anello]) | dentro(c, [W])]
+            if not len(tri):
+                continue
+            P, tri = sul_rovescio(j, pts, tri)
+            V.append(P)
+            T.append(tri + n_v)
+            n_v += len(P)
+        if piega is not None and piega[0] in normali and piega[1] in normali:
+            j1, j2, ab = piega
+            q = _infittisci_aperta(ab, 0.8)
+            P1, _t = sul_rovescio(j1, q)
+            P2, _t = sul_rovescio(j2, q)
+            nq = len(q)
+            V.append(np.vstack([P1, P2]))
+            T.append(np.array([t for i in range(nq - 1)
+                               for t in ((i, i + 1, nq + i + 1), (i, nq + i + 1, nq + i))])
+                     + n_v)
+            n_v += 2 * nq
+    if not V:
+        return None
+    return np.vstack(V), np.vstack(T)
 
 
 def con_interno(tex):
