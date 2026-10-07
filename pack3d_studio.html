@@ -474,10 +474,25 @@ function buildScene(g){
         geo.setIndex(new THREE.BufferAttribute(readAccessor(g, prim.indices),1));
       if (prim.attributes.NORMAL === undefined) geo.computeVertexNormals();
 
-      const mat = new THREE.MeshPhongMaterial({color:0xffffff, shininess:38,
-                                               specular:0x4a4a4a, side:THREE.FrontSide});
       const m = g.json.materials && g.json.materials[prim.material];
-      const texIdx = m && m.pbrMetallicRoughness && m.pbrMetallicRoughness.baseColorTexture;
+      const pbr = m && m.pbrMetallicRoughness;
+      const texIdx = pbr && pbr.baseColorTexture;
+      const mrIdx = pbr && pbr.metallicRoughnessTexture;
+      let mat;
+      if (mrIdx){
+        // Il film metallizzato dei DT del materiale (pack3d/materiali.py):
+        // metallo e ruvidita' punto per punto, e un ambiente da riflettere,
+        // che senza il metallo e' nero. Gli altri modelli restano col Phong
+        // di sempre.
+        const mr = immagine(g.json.textures[mrIdx.index].source);
+        mat = new THREE.MeshStandardMaterial({color:0xffffff, side:THREE.FrontSide,
+          metalness: pbr.metallicFactor ?? 1, roughness: pbr.roughnessFactor ?? 1,
+          metalnessMap: mr, roughnessMap: mr, envMapIntensity: 1.0});
+        group.userData.pbr = true;
+      } else {
+        mat = new THREE.MeshPhongMaterial({color:0xffffff, shininess:38,
+                                          specular:0x4a4a4a, side:THREE.FrontSide});
+      }
       if (texIdx) mat.map = immagine(g.json.textures[texIdx.index].source);
       const pezzo = new THREE.Mesh(geo, mat);
       pezzo.name = mesh.name || '';
@@ -494,7 +509,7 @@ const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));
 stage.appendChild(renderer.domElement);
 const camera = new THREE.PerspectiveCamera(28,1,0.1,100000);
-scene.add(new THREE.AmbientLight(0xffffff,0.80));
+const ambiente = new THREE.AmbientLight(0xffffff,0.80); scene.add(ambiente);
 const key = new THREE.DirectionalLight(0xffffff,0.46); key.position.set(-0.35,0.62,0.75); scene.add(key);
 const fill = new THREE.DirectionalLight(0xffffff,0.18); fill.position.set(0.7,0.2,-0.5); scene.add(fill);
 
@@ -586,9 +601,41 @@ el.addEventListener('wheel', e => { if(!model) return; e.preventDefault();
 el.addEventListener('dblclick', () => { if(!model) return;
   yaw = YAW0; pitch = PITCH0; frame(); resize(); });
 
+/* Lo studio che il metallo riflette: una stanza grigia con tre pannelli
+ * luminosi, fatta una volta sola e solo per i modelli che ne hanno bisogno. */
+let studio = null;
+function ambienteStudio(){
+  if (studio) return studio;
+  const s = new THREE.Scene();
+  s.add(new THREE.Mesh(new THREE.BoxGeometry(10, 10, 10),
+        new THREE.MeshBasicMaterial({color: 0x7c7c84, side: THREE.BackSide})));
+  const pannello = (w, h, x, y, z, k) => {
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(w, h),
+      new THREE.MeshBasicMaterial({color: new THREE.Color(k, k, k), side: THREE.DoubleSide}));
+    p.position.set(x, y, z); p.lookAt(0, 0, 0); s.add(p);
+  };
+  pannello(7, 3, 0, 4.9, 0, 2.6);        // il soffitto
+  pannello(3, 3.5, -4.9, 1.2, 1.5, 2.0); // la finestra a sinistra
+  pannello(3, 2.5, 4.9, 0.6, -1.0, 1.1); // e quella a destra
+  pannello(5, 1.6, 0, 0.8, 4.9, 1.3);    // davanti, dietro a chi guarda
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  studio = pmrem.fromScene(s, 0.04).texture;
+  pmrem.dispose();
+  return studio;
+}
+
 function show(buf){
   if (model){ scene.remove(model); model.traverse(o=>{ if(o.geometry) o.geometry.dispose(); }); }
   model = buildScene(parseGLB(buf));
+  // Col metallo la luce diffusa la porta gia' l'ambiente riflesso: con
+  // l'ambientale di sempre sopra, il bianco della plastica bruciava.
+  if (model.userData.pbr){
+    try { scene.environment = ambienteStudio(); } catch (e) { console.warn('ambiente', e); }
+    ambiente.intensity = 0.30;
+  } else {
+    scene.environment = null;
+    ambiente.intensity = 0.80;
+  }
   scene.add(model);
   document.getElementById('empty').style.display = 'none';
   stage.classList.add('vivo');
@@ -1307,6 +1354,7 @@ function togliModello(){
         const m = o.material;
         for (const mm of (Array.isArray(m) ? m : m ? [m] : [])){
           if (mm.map) mm.map.dispose();
+          if (mm.metalnessMap) mm.metalnessMap.dispose();
           mm.dispose();
         }
       });

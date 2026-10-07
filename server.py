@@ -37,8 +37,8 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, coda, controllo, dieline as dl, folding,
-                    exporters, nero, plancia, pouch, strati, vassoio,
-                    verifica, versione)
+                    exporters, materiali, nero, plancia, pouch, strati,
+                    vassoio, verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -347,6 +347,21 @@ def nota_incisioni(meta):
             "dell'apertura a strappo, incisi nel cartone come solchi, come si "
             "vedono sulla scatola vera chiusa: non sono disegno tecnico "
             "rimasto stampato, e la grafica sotto e' intera.")
+
+
+def nota_materiali(meta):
+    """La riga "da sapere" per il controllo, se il film ha i materiali dei DT."""
+    righe = [str(m) for m in meta or () if str(m).startswith("materiali dai DT: ")
+             and " - " in str(m) and "resta plastica" not in str(m)]
+    if not righe:
+        return None
+    return ("il materiale del film viene dai DT secondari del file (%s). Dove il "
+            "film e' alluminio senza white plate il modello e' METALLO, che "
+            "rimanda l'ambiente: nelle viste e' un grigio con riflessi e bande, "
+            "non il grigio piatto con cui il DT disegna l'alluminio, e gli "
+            "inchiostri li' sono metallizzati. La vernice opaca e' resa satinata, "
+            "piu' chiara del metallo lucido intorno. Non sono difetti: la grafica "
+            "va confrontata col PDF, il materiale no." % righe[0].split(": ", 1)[1])
 
 
 # La riga che dice il fronte curvo, anche al controllo dell'AI: il cielo a D
@@ -1031,6 +1046,66 @@ def aree_da_agente(params):
     return [str(v).strip() for v in voci if str(v).strip()]
 
 
+def materiali_dichiarati(valore):
+    """`{lastra: ruolo}` dichiarato nella richiesta, o None.
+
+    I ruoli sono quelli di `materiali.RUOLI`. Serve al caso che li sa gia' -
+    il parco, che costruisce senza AI, o la routine che riprende un caso in
+    coda - e vince sulla lettura: e' quello che qualcuno ha guardato. Una voce
+    con un ruolo che non esiste si scarta, il resto vale.
+    """
+    if not isinstance(valore, dict):
+        return None
+    fuori = {str(k).strip(): v for k, v in valore.items()
+             if str(k).strip() and v in materiali.RUOLI}
+    return fuori or None
+
+
+# I ruoli delle lastre che l'AI ha letto, per file: la correzione rifa' la
+# costruzione, e la domanda non va rifatta. Pochi, come le altre memorie.
+_MATERIALI_AI = {}
+_MATERIALI_AI_MAX = 8
+
+
+def leggi_materiali(pdf, foglio, dichiarati, note):
+    """La `materiali.Lettura` del foglio, coi ruoli che l'AI legge quando ne
+    mancano. In `note` le righe da dire. Mai un'eccezione: senza lettura il
+    film resta plastica, come prima."""
+    try:
+        lettura = materiali.leggi(pdf, foglio, dichiarati=dichiarati)
+    except Exception as e:
+        traceback.print_exc()
+        note.append("materiali dai DT non letti (%s): il film resta plastica" % e)
+        return None
+    if lettura is None:
+        return None
+    irrisolte = lettura.irrisolte()
+    if irrisolte and not dichiarati and controllo.attivo():
+        chiave = artwork._impronta(pdf)
+        scelta = _MATERIALI_AI.get(chiave)
+        if scelta is None:
+            scelta = controllo.ruoli_lastre(pdf)
+            if "errore" not in scelta and chiave:
+                if len(_MATERIALI_AI) >= _MATERIALI_AI_MAX:
+                    _MATERIALI_AI.pop(next(iter(_MATERIALI_AI)))
+                _MATERIALI_AI[chiave] = scelta
+        if "errore" in scelta:
+            note.append("materiali dai DT: le lastre %s stanno in copie del DT "
+                        "senza un titolo leggibile e l'AI non ha risposto (%s): "
+                        "il film resta plastica"
+                        % (", ".join(irrisolte), scelta["errore"]))
+        else:
+            lettura.assegna(scelta["ruoli"], "ai")
+    elif irrisolte:
+        note.append("materiali dai DT: le lastre %s stanno in copie del DT senza "
+                    "un titolo leggibile, e senza AI non so cosa sono"
+                    % ", ".join(irrisolte))
+    senza = materiali.avviso_senza_bianco(lettura)
+    if senza:
+        note.append(senza)
+    return lettura
+
+
 def colata_da_agente(params):
     """Il riquadro della colata che l'agente ha indicato guardando.
 
@@ -1205,7 +1280,8 @@ def build_pouch(pdf, out_glb, quality="hd", lastre_extra=(),
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
-                   colata_riquadro=None):
+                   colata_riquadro=None, materiali_dich=None,
+                   materiali_ai=None):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -1228,14 +1304,18 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     conti = {}
     giro = None
     verso_fronte = 0
+    note_mat = []
     if case:
         # anche qui le lastre dell'agente: un caso calibrato elenca a mano
         # quello che sapeva allora, non quello che si vede oggi guardando. E
         # anche qui i box area, che si tolgono su tutti i modelli: vedi
         # `artwork.senza_coperture`.
         fp0 = _flowpack_from_case(case)
+        lettura = leggi_materiali(pdf, fpk.foglio_in_pagina(fp0),
+                                  materiali_dich, note_mat)
         clean, lastre = artwork.senza_coperture(
-            pdf, extra=lastre_extra, regione=fpk.foglio_in_pagina(fp0),
+            pdf, extra=list(lastre_extra) + materiali.da_togliere(lettura),
+            regione=fpk.foglio_in_pagina(fp0),
             conti=conti, fisse=case["drop_seps"])
         box = None
         ripiego = None
@@ -1253,6 +1333,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
         # dichiarato, perche' il motivo viaggia insieme alle quote.
         box, fp0, ripiego = analisi_flowpack(pdf)
+        # Il materiale si legge sul file intero, prima della pulizia: le
+        # copie del DT che lo dicono stanno fuori dallo steso. Se il film e'
+        # metallizzato, il grigio che il DT disegna per l'alluminio non e' un
+        # inchiostro, e va via con le altre lastre tecniche.
+        lettura = leggi_materiali(pdf, fpk.foglio_in_pagina(fp0),
+                                  materiali_dich, note_mat)
         # L'analisi e' fatta, e con lei le quote: ora, e non prima, si tolgono
         # le lastre tecniche dichiarate per nome e TUTTO quello che sta fuori
         # dallo steso - quote, copie tecniche, legenda, cartiglio, miniature.
@@ -1260,8 +1346,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # penne tecniche contate male, un nero deciso sulle scritte della
         # legenda, una colata misurata sulla pastiglia del cartiglio.
         clean, lastre = artwork.senza_coperture(
-            pdf, extra=lastre_extra, regione=fpk.foglio_in_pagina(fp0),
-            conti=conti)
+            pdf, extra=list(lastre_extra) + materiali.da_togliere(lettura),
+            regione=fpk.foglio_in_pagina(fp0), conti=conti)
     # Il nero sul file pulito, prima di rendere: vedi `nero.spia`. Sugli
     # Spaces la memoria per il fork di Ghostscript c'e'.
     deciso_nero = nero.spia(clean, 0, dpi / 72.0)
@@ -1293,6 +1379,13 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     if lastre:
         avvisi_sez.append("lastre tecniche e coperture tolte per nome: %s"
                           % ", ".join(lastre))
+    avvisi_sez.extend(note_mat)
+    # I ruoli letti dall'AI tornano a chi chiama: un caso che va in coda li
+    # porta con se', e la routine, che costruisce senza AI, rifa' lo stesso
+    # modello. Quelli dal nome o dal titolo li ritrova da sola.
+    if materiali_ai is not None and lettura is not None:
+        materiali_ai.update({n: v["ruolo"] for n, v in lettura.lastre.items()
+                             if v["fonte"] == "ai" and v["ruolo"]})
     sospetto = falda_sospetta(fp0)
     if sospetto:
         avvisi_sez.append(sospetto)
@@ -1586,11 +1679,35 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         note=avvisi_sez, nero_deciso=deciso_nero,
         colata_riquadro=colata_riquadro)["film"]
     foglio = tex
+    # Il materiale, nel telaio dello steso com'e' uscito: le copie del DT
+    # stanno sulla tavola come lui. Solo se cambia davvero qualcosa - sul
+    # Kinder Country alluminio e white plate coprono la stessa parte del
+    # film, e il metallo non resta da nessuna parte.
+    colore, mr = tex, None
+    if lettura is not None and lettura.applicabile():
+        try:
+            mas = materiali.maschere(pdf, lettura, foglio.size)
+            colore, mr, q_met, q_opa = materiali.mappe_pbr(foglio, mas)
+            if materiali.con_effetto(q_met, q_opa):
+                avvisi_sez.append(materiali.riga(lettura, q_met, q_opa))
+            else:
+                colore, mr = tex, None
+                avvisi_sez.append(materiali.riga(lettura, 0, 0)
+                                  + ": il film resta plastica")
+        except Exception as e:
+            traceback.print_exc()
+            colore, mr = tex, None
+            avvisi_sez.append("materiali dai DT non applicati (%s): il film "
+                              "resta plastica" % e)
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il
         # perimetro crescente come lo intende girth_span.
+        stessa = colore is tex
         tex = tex.transpose(Image.ROTATE_270)
+        colore = tex if stessa else colore.transpose(Image.ROTATE_270)
+        if mr is not None:
+            mr = mr.transpose(Image.ROTATE_270)
     # DOPO la mappatura: il fronte dell'AW sul fronte del modello. Il fronte
     # e' quello del DT, cioe' dell'analisi: se l'agente ha cambiato la sezione
     # e' proprio lo spostamento che si vuole vedere.
@@ -1611,7 +1728,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             "si legga orizzontale e dritto%s" % (
                 marchio, ": il pack sta in piedi, con le pinne in alto e in "
                 "basso" if marchio in (90, 270) else ""))
-    exporters.write_glb_mesh(Vm, UVm, Tm, tex, out_glb, tex_max=tmax)
+    exporters.write_glb_mesh(Vm, UVm, Tm, colore, out_glb, tex_max=tmax, mr=mr)
 
     base = fin_open / max(int(teeth), 1)
     if fp.pillow:
@@ -1754,7 +1871,7 @@ def dichiarazione(kind, pezzi):
 VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
-                "spessore", "apertura", "quality")
+                "spessore", "apertura", "quality", "materiali")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2310,6 +2427,9 @@ class Handler(BaseHTTPRequestHandler):
                         # dichiara la colata, e l'unica cosa che resta e'
                         # quello che l'agente ha guardato
                         col_riq = colata_da_agente(opts.get("params"))
+                        # i ruoli delle lastre di materiale che l'AI legge
+                        # costruendo un flowpack: vedi leggi_materiali
+                        mat_ai = {}
                         # La costruzione e' una funzione delle lastre da
                         # togliere e del file d'uscita: la correzione dell'AI
                         # la rifa' con le lastre tecniche che ha riconosciuto,
@@ -2380,13 +2500,18 @@ class Handler(BaseHTTPRequestHandler):
                             pinne = opts.get("pinne")
                             if pinne in (None, "", "auto"):
                                 pinne = pinne_da_agente(opts.get("params"))
+                            mat = materiali_dichiarati(opts.get("materiali"))
                             def costruisci(lastre, uscita):
                                 return build_flowpack(
                                     pdf, uscita, int(opts.get("teeth", 20)),
                                     str(soft), case, q,
                                     sezione_da_agente(opts.get("params")),
-                                    scatola, pinne, lastre, col_riq)
+                                    scatola, pinne, lastre, col_riq, mat, mat_ai)
                         avvisi = costruisci(aree, out)
+                        if mat_ai and not opts.get("materiali"):
+                            # col caso in coda, perche' la routine lo rifaccia
+                            # col materiale che ha visto l'utente
+                            opts["materiali"] = dict(mat_ai)
                         traccia("costruzione", t1,
                                 "%d kB" % (os.path.getsize(out) // 1024))
                         with open(out, "rb") as fh:
@@ -2422,7 +2547,8 @@ class Handler(BaseHTTPRequestHandler):
                                    # riprende lo ricostruisca uguale
                                    opzioni={k: opts[k] for k in OPZIONI_CASO
                                             if k in opts})
-                        nota = nota_apertura(meta) or nota_incisioni(meta)
+                        nota = (nota_apertura(meta) or nota_incisioni(meta)
+                                or nota_materiali(meta))
                         if nota:
                             ctx["nota"] = nota
                         verdetto = controllo.giudica(quadro, ctx)

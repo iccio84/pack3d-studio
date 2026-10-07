@@ -652,6 +652,94 @@ def _rigonfiamento(pdf_path, nome, modello, client):
             "motivo": str(dati.get("motivo", "")).strip()}
 
 
+SCHEMA_MATERIALI = {
+    "type": "object",
+    "properties": {
+        "lastre": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "inchiostro": {"type": "string"},
+                "ruolo": {"type": "string", "enum": ["alluminio", "bianco", "opaca"]},
+            },
+            "required": ["inchiostro", "ruolo"],
+            "additionalProperties": False,
+        }},
+        "motivo": {"type": "string"},
+    },
+    "required": ["lastre", "motivo"],
+    "additionalProperties": False,
+}
+
+ISTRUZIONI_MATERIALI = """\
+Sei il controllo qualita' di pack3d. Questo PDF e' l'artwork di un flowpack,
+cioe' di un film. Oltre al disegno tecnico con la grafica, il file ha copie
+del disegno tecnico campite con un inchiostro spot, e una legenda: dicono com'e'
+fatto il film. Le lastre che servono sono tre:
+
+- alluminio: il film e' metallizzato (Aluminium, Aluminium Support,
+  Metallized). Puo' essere una copia campita, o il grigio che il disegno
+  principale mette dove la grafica non copre;
+- bianco: il bianco coprente sotto gli inchiostri (White Plate, White,
+  Underprint);
+- opaca: la vernice opaca (Matt Varnish, Matte Varnish).
+
+Ricevi la pagina e una tavola con un riquadro per ogni inchiostro spot, in
+magenta dove quell'inchiostro dipinge. Leggi i titoli delle copie e la
+legenda - anche quando sono scritti in curve - e dimmi quali inchiostri sono
+queste lastre.
+
+Non mettere gli inchiostri della grafica, le linee e le quote del disegno, i
+box delle aree riservate, il cold seal, il supporto trasparente, le vernici
+lucide. Nel dubbio lascia fuori: un materiale non visto lascia il modello com'e',
+uno sbagliato lo rovina.
+
+- lastre: per ogni inchiostro scelto, il nome scritto come nella tavola e il
+  ruolo; vuoto se il file non ha queste lastre;
+- motivo: in una frase, dove l'hai letto.
+"""
+
+
+def ruoli_lastre(pdf_path, modello=None, client=None):
+    """Le lastre di materiale che Claude legge nei titoli e nella legenda.
+
+    Serve quando il file le chiama con un PANTONE qualsiasi e scrive in curve,
+    come il Nutella Biscuits T3: il codice trova le copie del DT ma non sa
+    leggerne il titolo. Torna dict(ruoli={inchiostro: ruolo}, motivo) o
+    dict(errore=...), e non lancia mai: senza risposta il modello resta di
+    plastica. Rasterizza la pagina: va chiamata dentro il posto di costruzione.
+    """
+    try:
+        return _ruoli_lastre(pdf_path, modello, client)
+    except Exception as e:                        # noqa: BLE001
+        return {"errore": "%s: %s" % (type(e).__name__, str(e)[:200])}
+
+
+def _ruoli_lastre(pdf_path, modello, client):
+    pagina = _jpeg(vista.pagina(pdf_path, 1400))
+    tav, voci = tavola_inchiostri([pdf_path], [pagina])
+    if tav is None:
+        return {"errore": "il file non ha inchiostri spot"}
+    modello = modello or modello_ai()
+    elenco = "\n".join("%d. %s - %.1f%% del foglio" % (i + 1, n, 100 * c)
+                       for i, (n, c, _p) in enumerate(voci))
+    contenuto = [{"type": "text", "text": "La pagina del PDF:"}, _immagine(pagina),
+                 {"type": "text", "text": "La tavola degli inchiostri spot:"}, _immagine(tav),
+                 {"type": "text", "text": "Gli inchiostri:\n%s\n\nQuali sono le lastre "
+                  "di alluminio, di bianco coprente e di vernice opaca?" % elenco}]
+    dati, errore = _chiama(contenuto, ISTRUZIONI_MATERIALI, SCHEMA_MATERIALI,
+                           modello, client)
+    if errore:
+        return {"errore": errore}
+    noti = {n for n, _c, _p in voci}
+    ruoli = {}
+    for voce in dati.get("lastre") or []:
+        chiave = re.sub(r"^\s*\d+\.\s*", "", str(voce.get("inchiostro", ""))).strip().lower()
+        chiave = re.sub(r"\s+-\s+[\d.,]+%.*$", "", chiave).strip()
+        if chiave in noti and voce.get("ruolo") in ("alluminio", "bianco", "opaca"):
+            ruoli[chiave] = voce["ruolo"]
+    return {"ruoli": ruoli, "motivo": str(dati.get("motivo", "")).strip()}
+
+
 def dichiarazione(scelta):
     """La frase che REGOLE.md vuole per la scelta "Scegli tu"."""
     return ("Ho analizzato il prodotto (%s) e ho impostato il rigonfiamento su %s "
