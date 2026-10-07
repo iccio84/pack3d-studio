@@ -1930,7 +1930,19 @@ Cosa vede l'utente:
 | ok | il modello, e nello stato "controllato dall'AI" |
 | dubbio | il modello, e nello stato il dubbio in giallo |
 | sbagliato | **niente modello nel visore**: il riquadro "Caso nuovo" con cosa c'e' nel PDF, cosa e' uscito, perche', e il codice del caso. "Mostra comunque il modello" lo carica, con lo stato in rosso |
-| non controllato | il modello come prima, e un cartellino che dice perche' il controllo non c'e' stato |
+| non controllato | il modello come prima, e una riga nel riquadro *Controllo AI* che dice perche' il controllo non c'e' stato |
+
+**Il modello non si copre.** Gli avvisi della costruzione - una ventina di
+righe su un astuccio - stavano sopra il modello, in basso, e ne coprivano
+la meta'. Adesso in vista restano solo le righe dell'AI: il verdetto, la
+correzione, le scelte che ha fatto (il rigonfiamento "Scegli tu", la
+scatola), il dubbio col codice del caso. Stanno nel riquadro *Controllo AI*
+sotto il visore. Tutto il resto sta nella finestra dei **Dettagli tecnici**,
+che si apre col tasto in fondo - col numero delle righe, rosso se una grida
+- e sta accanto al visore, sotto sul telefono, mai sopra: aperta, il visore
+si stringe e il modello resta tutto in vista. Aperta o chiusa, la scelta si
+ricorda nel browser. Quali righe sono dell'AI lo dice il server
+nell'header `X-Pack3d-AI`; `X-Pack3d-Meta` le ha tutte, come prima.
 
 **Il controllo non rompe mai la costruzione per colpa sua.** Senza chiave, con
 la rete giu', con una risposta che non si capisce, il modello si consegna come

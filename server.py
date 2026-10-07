@@ -2383,11 +2383,11 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
         # senza questo il browser nasconde l'header alla pagina, su altra origine
         self.send_header("Access-Control-Expose-Headers",
-                         "X-Pack3d-Meta, X-Pack3d-Controllo")
+                         "X-Pack3d-Meta, X-Pack3d-Controllo, X-Pack3d-AI")
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _send(self, code, body, ctype="application/json", filename=None,
-              meta=None, controllo=None):
+              meta=None, controllo=None, ai=None):
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
@@ -2401,6 +2401,10 @@ class Handler(BaseHTTPRequestHandler):
         if controllo:
             self.send_header("X-Pack3d-Controllo", quote(
                 json.dumps(controllo, ensure_ascii=False)))
+        if ai:
+            # quali righe di `meta` sono dell'AI: la pagina le tiene in vista
+            self.send_header("X-Pack3d-AI", quote(
+                json.dumps(ai, ensure_ascii=False)))
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -2717,6 +2721,11 @@ class Handler(BaseHTTPRequestHandler):
                         with open(out, "rb") as fh:
                             glb = fh.read()
                         meta = avvisi_ingresso + list(avvisi)
+                        # Le righe dell'AI - le sue scelte, il verdetto del
+                        # controllo, la correzione - viaggiano anche in un
+                        # header loro: la pagina le tiene in vista, e il
+                        # resto lo mette nei dettagli tecnici.
+                        righe_ai = list(avvisi_ingresso)
                         # Le immagini del controllo si fanno qui dentro: le
                         # pagine passano da pdfium, che non si chiama da due
                         # thread. La risposta di Claude invece si aspetta
@@ -2728,8 +2737,10 @@ class Handler(BaseHTTPRequestHandler):
                                 quadro = controllo.prepara(pdfs, out)
                             except Exception as e:
                                 traceback.print_exc()
-                                meta.append("controllo AI non fatto: le viste del "
-                                            "modello non sono riuscite (%s)" % e)
+                                righe_ai.append("controllo AI non fatto: le viste "
+                                                "del modello non sono riuscite "
+                                                "(%s)" % e)
+                                meta.append(righe_ai[-1])
                         traccia("totale", t0)
                     except Exception as e:
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
@@ -2770,18 +2781,22 @@ class Handler(BaseHTTPRequestHandler):
                                 blocchi, nomi, verdetto, quadro["viste"], ctx)
                         if riga:
                             meta.insert(0, riga)
+                            righe_ai.insert(0, riga)
                         meta.insert(0, controllo.avviso(verdetto))
+                        righe_ai.insert(0, meta[0])
                     elif controllo.manca_la_chiave():
                         # spento perche' manca la chiave, non perche' qualcuno
                         # l'ha spento apposta: chi gestisce lo Space lo deve sapere
-                        meta.append("controllo AI spento: manca la chiave "
-                                    "ANTHROPIC_API_KEY fra i Secrets dello Space")
+                        righe_ai.append("controllo AI spento: manca la chiave "
+                                        "ANTHROPIC_API_KEY fra i Secrets dello "
+                                        "Space")
+                        meta.append(righe_ai[-1])
                     # gli avvisi della costruzione viaggiano in un header: il
                     # corpo e' il GLB. Finivano nel nulla, e con loro ogni
                     # diagnostica. Il verdetto del controllo in un altro.
                     return self._send(200, glb, "model/gltf-binary",
                                       filename="modello.glb", meta=meta,
-                                      controllo=verdetto)
+                                      controllo=verdetto, ai=righe_ai)
             return self._send(404, "endpoint sconosciuto")
         except Exception as e:
             traceback.print_exc()
