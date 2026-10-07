@@ -95,6 +95,10 @@ Non sono difetti, perche' il servizio li toglie o li lascia di proposito:
   sul modello restano vuoti o bianchi;
 - l'interno del cartone, grigio o color carta, dove il pack e' aperto o ha una
   finestra;
+- una finestra o una presa tagliata a cavallo della piega fra un pannello e il
+  suo coperchio: a pack chiuso gira lo spigolo, e dall'alto o dal fronte si
+  vede come una fessura fra coperchio e parete da cui si vede l'interno. E'
+  un difetto solo se sul foglio, in quel punto, il cartone non e' tagliato;
 - le parti non stampate del foglio (alette di colla, linguette) che nel pack
   montato stanno dentro.
 
