@@ -36,9 +36,9 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import (artwork, coda, controllo, dieline as dl, folding,
-                    exporters, materiali, nero, plancia, pouch, strati,
-                    vassoio, verifica, versione)
+from pack3d import (artwork, ballotin, coda, controllo, dieline as dl,
+                    folding, exporters, materiali, nero, plancia, pouch,
+                    strati, vassoio, verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 from pack3d import flowpack as fpk
@@ -1278,6 +1278,60 @@ def build_pouch(pdf, out_glb, quality="hd", lastre_extra=(),
     return pouch.dichiara(pu) + avvisi
 
 
+def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
+                   colata_riquadro=None, carta=None):
+    """Il ballotin, la scatola a tronco di piramide: vedi `pack3d.ballotin`.
+
+    La texture e' il DT intero, pulito come quello di un pouch, e ogni faccia
+    della maglia prende la grafica dal suo posto sul DT: niente ritagli per
+    pannello, perche' le lenti stanno a cavallo di due facce. Sotto la
+    texture una striscia della tinta dell'interno, per il rovescio del
+    cartoncino.
+    """
+    dpi, tmax = risoluzione(quality)
+    pdf, n_pagine = artwork.pagina_unica(pdf)
+    b = ballotin.riconosci(pdf)
+    if b is None:
+        raise ValueError("ballotin: la fustella non si legge come un ballotin "
+                         "(fondo quadrato con quattro lenti agli spigoli)")
+    conti = {}
+    clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                            regione=b.regione, conti=conti)
+    deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+    avvisi = []
+    pagine = avviso_pagine(n_pagine)
+    if pagine:
+        avvisi.append(pagine)
+    fuori = artwork.avviso_fuori_dt(conti)
+    if fuori:
+        avvisi.append(fuori)
+    avvisi.extend(artwork.avvisi_gda(conti))
+    rgb = avviso_quadricromia(clean, regione=b.regione)
+    if rgb:
+        avvisi.append(rgb)
+    if lastre:
+        avvisi.append("lastre tecniche e coperture tolte per nome: %s"
+                      % ", ".join(lastre))
+    # un millimetro di margine: i punti sul bordo del DT non leggono fuori
+    m = 1.0 / PT2MM
+    x0, y0, x1, y1 = b.regione
+    x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+    lato_pt = max(x1 - x0, y1 - y0)
+    dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+    tex = folding.rasterize_panels(
+        clean, {"dt": Panel(x0, y0, x1, y1, "dt")}, dpi=dpi_tex, inset_px=0,
+        clean=True, note=avvisi, nero_deciso=deciso_nero,
+        colata_riquadro=colata_riquadro)["dt"]
+    # il ritaglio parte dal pixel arrotondato: l'origine si conta da li'
+    scala = dpi_tex / 72.0
+    origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
+    tela = ballotin.con_interno(tex)
+    V, UV, T = ballotin.maglia(b, origine, scala / PT2MM, tela.size,
+                               spessore=carta)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax)
+    return ballotin.dichiara(b) + avvisi
+
+
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None, materiali_dich=None,
@@ -2019,6 +2073,22 @@ def _analyze_pdf(pdf, kind=None, strappo=False):
         from pack3d import coppa as cp
         if cp.e_un_cono(pdf):
             return analisi_coppa([pdf], kind or "coppa")
+        # Il ballotin anche, e per la stessa ragione: il solutore astuccio
+        # lo risolve, e male - sul Raffaello Passion Fruit una torre da 465 x
+        # 120,7 x 90 mm. Su un astuccio la prova si ferma al prefiltro delle
+        # lenti: sugli astucci del parco da 0,15 a 0,7 s, quasi tutti per
+        # leggere le penne del DT.
+        try:
+            b = ballotin.riconosci(pdf)
+        except Exception:
+            traceback.print_exc()
+            b = None
+        if b is not None:
+            meta = ballotin.dichiara(b)
+            rgb = avviso_quadricromia(pdf, regione=b.regione)
+            if rgb:
+                meta.insert(0, rgb)
+            return dict(kind="ballotin", title="Ballotin", meta=meta)
     if kind is None and _dice_film(pdf):
         # Il file dice di essere un film: il flowpack si prova PRIMA
         # dell'astuccio. Il solutore astuccio risolve anche certi film - sul
@@ -2445,6 +2515,10 @@ class Handler(BaseHTTPRequestHandler):
                         elif info["kind"] == "pouch":
                             def costruisci(lastre, uscita):
                                 return build_pouch(pdf, uscita, q, lastre, col_riq)
+                        elif info["kind"] == "ballotin":
+                            def costruisci(lastre, uscita):
+                                return build_ballotin(pdf, uscita, q, lastre,
+                                                      col_riq, carta=carta)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
