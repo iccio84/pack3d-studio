@@ -3579,8 +3579,8 @@ coperchio sta **sotto** lo dice il disegno tecnico: quello con la linguetta
 verso il fronte; sopra L1 con T1, il medaglione col marchio, steso su L2: si
 legge dal fronte. Le alette dei fianchi si chiudono per prime e si vedono
 nelle fessure ai lati, perche' i coperchi si stringono verso la linguetta (L1
-da 114,4 a 97,8 mm). Tre strati stesi uno sull'altro non stanno alla stessa
-quota: 0,15, 0,6 e 1,05 mm sopra il bordo.
+da 114,4 a 97,8 mm). Gli strati si appoggiano uno sull'altro, a uno spessore
+di cartoncino l'uno dall'altro: vedi *Niente feritoie*.
 
 ### Le finestre si vedono
 
@@ -3596,9 +3596,48 @@ La texture e' il DT intero, pulito come quello di un pouch, e ogni faccia
 della maglia prende la grafica dal suo posto sul DT: niente ritagli per
 pannello, perche' le lenti stanno a cavallo di due facce.
 
+### Niente feritoie
+
+La prima versione aveva le feritoie: guardato di taglio, il modello lasciava
+passare la luce. Tre cause, e per ciascuna una regola.
+
+- **Gli strati della cima galleggiavano.** Alette, coperchio di sotto e
+  coperchio di sopra stavano a quote fisse sopra il bordo, e niente li legava
+  alle pareti: fra il bordo di una parete e il coperchio che ci si piega
+  sopra restava una fessura lunga quanto la cerniera. Adesso gli strati si
+  **appoggiano** uno sull'altro: le alette a uno spessore sopra il bordo, il
+  coperchio di sotto a due, quello di sopra a tre (la linguetta di sotto lo
+  tiene su). Su ogni cerniera c'e' la **piega**: una striscia nel piano della
+  parete, dal suo bordo allo strato, col colore della cordonatura.
+- **I bordi di taglio erano aperti.** Fra la faccia stampata e il rovescio,
+  uno spessore piu' in dentro, non c'era niente, e di taglio si vedeva il
+  fondo. Ogni bordo che non combacia per tutta la sua lunghezza con quello di
+  un altro pezzo - entro un decimo di mm - prende la **costa** del taglio,
+  nella tinta di `folding.TAGLIO`: finestre, tagli di coperchi, linguette e
+  alette, i capi delle pieghe.
+- **Sulle pieghe i rovesci non si toccavano.** Ogni rovescio si sposta lungo
+  la normale del suo pezzo, e dove due pezzi si piegano uno sull'altro fra i
+  due rovesci restava uno spessore di fessura: dentro, ma le finestre la
+  mostrano. La chiude una striscia dal rovescio di un pezzo a quello del
+  pezzo accanto.
+
+Tre aggiustamenti chiudono anche gli angoli in cima: il fianco si appende al
+suo angolo e non alla punta della lente, che sul DT sta 0,9 mm piu' su; i
+coperchi si allargano come la cima del tronco, a cui la mappa porta la cima
+di fronte e retro; il bordo della lente dalla parte del fianco si prende dal
+bordo del fianco, davanti come dietro. E nella triangolazione una cornice di
+punti attorno al poligono: senza, qhull lasciava fuori i punti allineati sui
+lati dritti del contorno, che stanno sul guscio convesso, e il lato di 61 mm
+del fondo restava un lato solo - dritto sul DT, non piu' dritto dopo la mappa,
+e il pezzo accanto non lo ritrovava.
+
+Misurato con la distanza di ogni bordo della maglia dal bordo di un altro
+pezzo: prima 4,8 m di bordi stampati lontani piu' di un centesimo di mm da
+ogni altro, dopo 1,4 mm in tutto, il piu' largo 0,07 mm. Dalle due finestre
+in cima, che stanno in fila, si vede attraverso la scatola: e' vuota.
+
 ### Cosa manca
 
-Le coste del taglio sulle finestre: lo spessore si vede solo dal rovescio.
 Le facce vere, piegate su due cordonature curve, si incurvano un poco, e il
 modello le tiene piane; la gola della lente e' un arco di cerchio, che e' una
 stima della forma vera. Delle parti nascoste c'e' lo stretto necessario: T2
