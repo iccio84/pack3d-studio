@@ -58,9 +58,37 @@
          font-weight:700;letter-spacing:-.01em;display:inline-flex;align-items:baseline;gap:.3em}
   .brand span{font-weight:300}
 
-  #stage{flex:1;position:relative;min-height:340px;margin:16px;
+  /* Il visore e, accanto, la finestra dei dettagli tecnici. Aperta, il
+     visore si stringe e il modello resta tutto in vista: i cartellini della
+     costruzione - una ventina di righe - stavano sopra il modello e ne
+     coprivano la meta' bassa. Sul telefono la finestra va sotto. */
+  /* mai piu' basso del palco (340 piu' i margini): stretto, il palco
+     strabordava sui pannelli sotto, e la tela si prendeva i loro clic */
+  #vista{flex:1;display:flex;min-height:372px}
+  #stage{flex:1;position:relative;min-height:340px;min-width:0;margin:16px;
          border-radius:var(--radius-xl);border:1px solid var(--glass-border);
          background:var(--surface);box-shadow:var(--shadow-soft);overflow:hidden}
+  #dettagli{width:min(380px,42%);margin:16px 16px 16px 0;display:none;
+            flex-direction:column;min-height:0;border-radius:var(--radius-xl);
+            border:1px solid var(--glass-border);background:var(--surface);
+            box-shadow:var(--shadow-soft);overflow:hidden}
+  #dettagli.on{display:flex}
+  #dettagli .testa{display:flex;align-items:center;justify-content:space-between;
+                   gap:10px;padding:12px 12px 10px 16px;border-bottom:1px solid var(--border)}
+  #dettagli .testa button{padding:4px 10px;font-size:15px;line-height:1;letter-spacing:0}
+  #dettagli-lista{list-style:none;margin:0;padding:12px 16px 16px;overflow-y:auto;
+                  flex:1;display:flex;flex-direction:column;gap:7px;font-size:11px;
+                  line-height:1.45;color:var(--foreground)}
+  #dettagli-lista li{padding:6px 10px;border-radius:var(--radius-sm);
+                     background:color-mix(in oklab,var(--secondary) 70%,transparent);
+                     overflow-wrap:anywhere}
+  #dettagli-lista li.grido, #ai-righe li.grido{color:var(--destructive);font-weight:600}
+  /* sul telefono la finestra va sotto il palco, e la pagina si allunga e
+     scorre: il palco non si schiaccia e non finisce sopra le domande */
+  @media (max-width:760px){
+    #vista{flex-direction:column;flex:1 0 auto;min-height:0}
+    #dettagli{width:auto;margin:0 16px 16px;max-height:45vh}
+  }
   canvas{display:block;width:100%;height:100%;cursor:default}
   #stage.vivo canvas{cursor:grab}
   #stage.vivo.presa canvas{cursor:grabbing}
@@ -89,16 +117,26 @@
   #caso .riga{max-width:560px;color:var(--foreground)}
   #caso .riga:empty{display:none}
   #caso .dove{font-weight:600;margin-top:6px}
-  /* Il dubbio del controllo va in coda come un caso respinto, ma il modello
-     si vede: l'avviso sta in alto, sopra il modello, senza prendere il
-     puntatore, fino alla costruzione dopo. */
-  #verifica{position:absolute;top:44px;left:50%;transform:translateX(-50%);
-            width:min(640px,calc(100% - 36px));display:none;z-index:2;
-            pointer-events:none;text-align:center;font-size:12px;line-height:1.45;
-            color:var(--foreground);background:var(--surface);border-radius:12px;
-            border:1px solid color-mix(in oklab,var(--warning) 55%,transparent);
-            padding:8px 12px}
+  /* Il riquadro dell'AI, sotto il visore: il verdetto del controllo, la
+     correzione, le scelte che l'AI ha fatto. E' l'unica cosa della
+     costruzione che resta in vista; il resto e' nei dettagli tecnici. Il
+     dubbio del controllo va in coda come un caso respinto, ma il modello si
+     vede: l'avviso sta qui, fino alla costruzione dopo, e non piu' sopra il
+     modello. */
+  #ai{max-width:760px;margin:0 auto 14px;border-radius:var(--radius-xl);
+      border:1px solid var(--glass-border);background:var(--surface);
+      box-shadow:var(--shadow-soft);padding:12px 16px 14px}
+  #ai[hidden]{display:none}
+  #ai > .tit{display:block;margin-bottom:8px}
+  #ai-righe{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;
+            gap:6px;font-size:12px;line-height:1.45;color:var(--foreground)}
+  #ai-righe:empty{display:none}
+  #verifica{display:none;font-size:12px;line-height:1.45;color:var(--foreground);
+            border-radius:12px;margin-bottom:8px;padding:8px 12px;
+            border:1px solid color-mix(in oklab,var(--warning) 55%,transparent)}
   #verifica.on{display:block}
+  /* col riquadro del caso acceso, il verdetto lo dice gia' lui */
+  body:has(#caso.on) #ai{display:none}
   #caso .codice{max-width:560px;font-size:11px}
   #caso button{pointer-events:auto;margin-top:10px}
   /* Col riquadro acceso il modello non si vede, e sotto non c'e' niente da
@@ -133,9 +171,6 @@
   #nota-esito:empty{display:none}
   #nota-esito.ok{color:var(--foreground);font-weight:600}
   #nota-esito.err{color:var(--destructive)}
-  /* i cartellini della costruzione parlano di un modello che non si vede: con
-     una ventina di righe coprivano il riquadro. Tornano con "Mostra comunque". */
-  #caso.on ~ #meta{display:none}
   #status.dubbio{color:var(--warning);letter-spacing:.02em;text-transform:none;
                  font-size:12px;font-weight:400}
 
@@ -181,16 +216,12 @@
   body.dragging #drop{border-color:var(--primary);
     background:color-mix(in oklab,var(--primary) 12%,transparent)}
 
-  #meta{position:absolute;left:18px;bottom:40px;right:18px;display:flex;gap:7px;
-        flex-wrap:wrap;font-size:10px;color:var(--muted-foreground);z-index:2;
-        pointer-events:none}
-  #meta span{background:var(--surface);border:1px solid var(--border);
-             border-radius:999px;padding:3px 10px}
-  /* un avviso che la costruzione GRIDA - una verifica non passata, un
-     ripiego - comincia in maiuscolo, e fra una dozzina di cartellini grigi
-     deve saltare all'occhio */
-  #meta span.grido{color:var(--destructive);font-weight:600;
-                   border-color:color-mix(in oklab,var(--destructive) 55%,transparent)}
+  /* Il tasto dei dettagli tecnici dice quanti sono. Un avviso che la
+     costruzione GRIDA - una verifica non passata, un ripiego - comincia in
+     maiuscolo, va in cima alla lista, e fa rosso anche il tasto: chiusa la
+     finestra, deve saltare all'occhio lo stesso. */
+  #dettagli-btn.grido{color:var(--destructive);
+                      border-color:color-mix(in oklab,var(--destructive) 55%,transparent)}
 
   footer{padding:0 16px 18px}
 
@@ -221,7 +252,7 @@
   .pannello > .tit{display:block;margin-bottom:12px}
   #packtype .scelte{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
 
-  #params .griglia, #pezzi .griglia, #strappo .griglia{display:grid;gap:14px;border:1px solid var(--border);
+  #params .griglia, #pezzi .griglia, #strappo .griglia, #pellicola .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   .fld{display:flex;flex-direction:column;gap:7px}
@@ -268,6 +299,7 @@
   <div class="brand">glamlab<span>PDFto3D</span></div>
 </header>
 
+<div id="vista">
 <div id="stage">
   <div id="prog"><i></i></div>
   <div id="drop"></div>
@@ -306,12 +338,24 @@
     </div>
     <button id="caso-mostra" type="button">Mostra comunque il modello</button>
   </div>
-  <div id="verifica" role="status"></div>
-  <div id="meta"></div>
   <div id="status">Nessun modello caricato</div>
+</div>
+<aside id="dettagli" aria-label="Dettagli tecnici della costruzione">
+  <div class="testa">
+    <span class="tit" id="dettagli-tit">Dettagli tecnici</span>
+    <button type="button" id="dettagli-chiudi" aria-label="Chiudi i dettagli tecnici">&times;</button>
+  </div>
+  <ul id="dettagli-lista"></ul>
+</aside>
 </div>
 
 <footer>
+  <section id="ai" hidden aria-label="Controllo AI">
+    <span class="tit">Controllo AI</span>
+    <div id="verifica" role="status"></div>
+    <ul id="ai-righe"></ul>
+  </section>
+
   <div id="packtype" class="pannello">
     <span class="tit">Che tipo di pack &egrave;</span>
     <div class="scelte">
@@ -410,6 +454,7 @@
     <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
     <button id="upload" class="primary">Carica PDF</button>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
+    <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
     <button id="annulla" style="display:none">Annulla</button>
   </div>
   <p class="hint">Trascina per ruotare, rotella o pizzico per lo zoom, doppio clic per rimettere l&rsquo;inquadratura. Il viewer scarta le facce posteriori, quindi un modello con le normali girate si vede subito.</p>
@@ -550,13 +595,22 @@ const fill = new THREE.DirectionalLight(0xffffff,0.18); fill.position.set(0.7,0.
 
 const YAW0 = -0.52, PITCH0 = 0.22;
 let model = null, radius = 100, centre = new THREE.Vector3();
-let yaw = YAW0, pitch = PITCH0, dist = 400;
+let yaw = YAW0, pitch = PITCH0, dist = 400, zoom = 1;
 
+// La distanza a cui il pack entra tutto nella tela. Di solito comanda
+// l'altezza; in una tela piu' alta che larga (il telefono in verticale, la
+// finestra dei dettagli aperta in una pagina stretta) comanda la larghezza,
+// se no il pack esce dai fianchi.
+function aMisura(){
+  const t = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * Math.min(1, camera.aspect);
+  return Math.min(radius / t * 0.95, radius * 14);
+}
 function frame(){
   const box = new THREE.Box3().setFromObject(model);
   box.getCenter(centre);
   radius = box.getSize(new THREE.Vector3()).length()/2 || 100;
-  dist = radius / Math.tan(THREE.MathUtils.degToRad(14)) * 0.95;
+  zoom = 1;
+  dist = aMisura();
   // I piani di taglio seguono la taglia del modello, che non conosciamo in
   // anticipo: un GLB puo' arrivare in metri o in millimetri e con un near
   // fisso lo zoom ravvicinato affetta il pack.
@@ -565,7 +619,10 @@ function frame(){
 }
 function resize(){
   const w = stage.clientWidth, h = stage.clientHeight;
-  renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix(); render();
+  renderer.setSize(w,h,false); camera.aspect = w/h; camera.updateProjectionMatrix();
+  // lo zoom di chi guarda resta lo stesso, misurato sull'inquadratura nuova
+  dist = Math.max(radius*1.2, Math.min(radius*14, aMisura() * zoom));
+  render();
 }
 function render(){
   camera.position.set(
@@ -576,6 +633,10 @@ function render(){
   renderer.render(scene,camera);
 }
 addEventListener('resize', resize);
+// La finestra dei dettagli stringe il palco senza che la finestra del browser
+// cambi misura: il visore lo deve sapere lo stesso, se no il modello resta
+// schiacciato nella tela vecchia.
+if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(stage);
 
 /* Orbita. Teniamo noi la mappa dei puntatori perche' con due dita sullo
    schermo il singolo pointermove non basta a distinguere la rotazione dal
@@ -591,6 +652,7 @@ function fraLeDita(){
 }
 function zooma(f){
   dist = Math.max(radius*1.2, Math.min(radius*14, dist*f));
+  zoom = dist / aMisura();
   render();
 }
 
@@ -829,12 +891,58 @@ function setTitolo(s){
   const el = document.getElementById('titolo');
   if (el) el.textContent = s ? s.replace(/\.pdf$/i,'').toUpperCase() : '';
 }
-function setMeta(items){
+/* Gli avvisi della costruzione. Quelli dell'AI - il server li dice in un
+   header suo, `ai` - restano in vista sotto il visore; tutti gli altri vanno
+   nella finestra dei dettagli tecnici, accanto al modello e mai sopra. */
+const grida = t => /^[A-Z][A-Z' ]{7,}/.test(String(t));
+function righe(lista, testi){
+  lista.replaceChildren(...testi.map(t => {
+    const li = document.createElement('li');
+    li.textContent = t;
+    if (grida(t)) li.className = 'grido';
+    return li;
+  }));
+}
+function setMeta(items, ai){
+  const dellAI = (ai || []).map(String);
+  const quali = new Set(dellAI);
   // prima le grida, poi il resto nell'ordine in cui arriva
-  const grida = t => /^[A-Z][A-Z' ]{7,}/.test(String(t));
-  const tutti = (items||[]).slice().sort((a, b) => grida(b) - grida(a));
-  document.getElementById('meta').innerHTML = tutti.map(t =>
-    '<span' + (grida(t) ? ' class="grido"' : '') + '>' + t + '</span>').join('');
+  const tecnici = (items || []).map(String).filter(t => !quali.has(t))
+    .sort((a, b) => grida(b) - grida(a));
+  righe(document.getElementById('ai-righe'), dellAI);
+  righe(dettagliLista, tecnici);
+  const n = tecnici.length;
+  dettagliBtn.hidden = !n;
+  dettagliBtn.textContent = 'Dettagli tecnici \u00b7 ' + n;
+  dettagliBtn.classList.toggle('grido', tecnici.some(grida));
+  document.getElementById('dettagli-tit').textContent = 'Dettagli tecnici \u00b7 ' + n;
+  // vuota si chiude; piena si riapre se l'ultima volta era aperta
+  apriDettagli(n > 0 && dettagliRicordati(), false);
+  aggiornaAI();
+}
+
+/** Il riquadro dell'AI si vede se ha qualcosa da dire. */
+function aggiornaAI(){
+  document.getElementById('ai').hidden =
+    !document.getElementById('ai-righe').children.length && !verificaEl.classList.contains('on');
+}
+
+/* La finestra dei dettagli: si apre e si chiude dal tasto, e la scelta si
+   ricorda per la costruzione dopo, in questo browser. Il visore si
+   ridimensiona da se' (vedi il ResizeObserver sul palco). */
+const dettagliEl = document.getElementById('dettagli');
+const dettagliLista = document.getElementById('dettagli-lista');
+const dettagliBtn = document.getElementById('dettagli-btn');
+const RICORDA_DETTAGLI = 'pack3d.dettagli';
+function apriDettagli(si, ricorda){
+  dettagliEl.classList.toggle('on', si);
+  dettagliBtn.setAttribute('aria-expanded', String(si));
+  if (ricorda){
+    try{ localStorage.setItem(RICORDA_DETTAGLI, si ? '1' : '0'); }catch(e){}
+  }
+}
+function dettagliRicordati(){
+  try{ return localStorage.getItem(RICORDA_DETTAGLI) === '1'; }catch(e){ return false; }
 }
 
 /* Il PDF viaggia come corpo binario grezzo. Con FormData l'anteprima in
@@ -935,7 +1043,9 @@ async function build(buf, name, opts){
   // gli avvisi della costruzione arrivano in un header: il corpo e' il GLB
   try{
     const m = r.headers.get('X-Pack3d-Meta');
-    if (m) setMeta(JSON.parse(decodeURIComponent(m)));
+    const a = r.headers.get('X-Pack3d-AI');
+    if (m) setMeta(JSON.parse(decodeURIComponent(m)),
+                   a ? JSON.parse(decodeURIComponent(a)) : []);
   }catch(e){}
   // il verdetto del controllo dell'AI in un altro; manca se il controllo e'
   // spento, e allora il modello si mostra come sempre
@@ -1059,11 +1169,13 @@ function mostraVerifica(v){
     + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
     + '», col nome «' + nomeInGlam() + '». ' + STIMA;
   verificaEl.classList.add('on');
+  aggiornaAI();
   avvisaGlam(v);
 }
 
 function nascondiCaso(){
   verificaEl.classList.remove('on');
+  aggiornaAI();
   if (!casoEl.classList.contains('on')) return;
   casoEl.classList.remove('on');
   mostraNota(null);
@@ -1483,6 +1595,8 @@ document.getElementById('strappo-go').onclick = strappoAvanti;
 pellicolaScelta.querySelectorAll('button').forEach(b => {
   b.onclick = () => pellicolaAvanti(Number(b.dataset.p));
 });
+dettagliBtn.onclick = () => apriDettagli(!dettagliEl.classList.contains('on'), true);
+document.getElementById('dettagli-chiudi').onclick = () => apriDettagli(false, true);
 spessoreEl.querySelectorAll('button').forEach(b => {
   b.onclick = () => scegliSpessore(Number(b.dataset.s));
 });
