@@ -73,10 +73,14 @@ QUADRO = 0.03
 # della grafica. L'ombra si cuoce nella tinta.
 INTERNO = tuple(int(c * 0.75) for c in folding.INTERNO)
 TAGLIO = folding.TAGLIO
-# mm sopra il bordo della cima: alette dei fianchi, coperchio di sotto,
-# coperchio di sopra. Il cartoncino ha uno spessore, e tre strati stesi uno
-# sull'altro non possono stare alla stessa quota.
-STRATI = (0.15, 0.6, 1.05)
+# Pixel di ciascuna delle due strisce sotto la texture del DT: la tinta del
+# rovescio e quella del taglio. Larghe, perche' una texture rimpicciolita per
+# il web le tiene ancora pulite nel mezzo.
+STRISCIA = 24
+# mm: due bordi di pezzi diversi piu' vicini di cosi', su tutta la loro
+# lunghezza, combaciano; un bordo che non ne ha un altro cosi' vicino e'
+# libero, e prende la costa del taglio.
+COMBACIA = 0.1
 
 
 # --------------------------------------------------------------------------- #
@@ -570,6 +574,9 @@ class Ballotin:
     altezza_mm: float = 0.0
     fianco_mm: float = 0.0
     coperchi_mm: tuple = (0.0, 0.0)
+    # le cordonature fra una parete e il coperchio o l'aletta che ci si
+    # piega sopra: {"fronte" | "retro" | "fianco sx" | "fianco dx": [polilinee]}
+    cerniere: dict = field(default_factory=dict)
     avvisi: tuple = ()
 
 
@@ -898,6 +905,11 @@ def _classifica(ff, archi, page_no=0):
     def profondita(L, base0, base1, n):
         return float(max((ff[L].anello - (base0 + base1) / 2) @ n))
 
+    def comuni(k1, k2):
+        """Le polilinee delle cordonature che due facce hanno in comune."""
+        mie = {e for e, _s in ff[k1].archi}
+        return [archi[e][2].copy() for e, _s in ff[k2].archi if e in mie]
+
     tutto = np.vstack([f.anello for f in ff])
     lo, hi = tutto.min(0), tutto.max(0)
     return Ballotin(
@@ -906,6 +918,9 @@ def _classifica(ff, archi, page_no=0):
         fianchi=(fianco_sx, fianco_dx), lenti_fronte=(lf_sx, lf_dx),
         lenti_retro=(lr_sx, lr_dx), coperchi=(L1, L2), linguette=(T1, T2),
         alette=(al_sx, al_dx), finestre=finestre, sotto=sotto,
+        cerniere={"fronte": comuni(F["faccia"], L1), "retro": comuni(K["faccia"], L2),
+                  "fianco sx": comuni(fianco_sx, al_sx),
+                  "fianco dx": comuni(fianco_dx, al_dx)},
         quadro_fondo=np.array([f_sx, f_dx, r_dx, r_sx]),
         apici_fronte=np.array([af_sx, af_dx]), apici_retro=np.array([ar_sx, ar_dx]),
         fianco_dietro=(fl, fr), cerniera_aletta=(cs, cd),
@@ -948,6 +963,19 @@ def _infittisci(anello, passo):
     return np.array(out)
 
 
+def _infittisci_aperta(linea, passo):
+    """Come `_infittisci`, ma su una polilinea aperta: niente lato di
+    ritorno dall'ultimo punto al primo."""
+    out = []
+    for i in range(len(linea) - 1):
+        a, b = linea[i], linea[i + 1]
+        k = max(1, int(np.ceil(np.hypot(*(b - a)) / passo)))
+        for t in np.arange(k) / k:
+            out.append(a + t * (b - a))
+    out.append(linea[-1])
+    return np.array(out)
+
+
 def _pulisci(anello, tol=1e-3):
     keep = [anello[0]]
     for p in anello[1:]:
@@ -987,6 +1015,14 @@ def triangola(anelli, bordo=0.8, griglia=4.0, giri=12):
         if len(g):
             dist, _ = cKDTree(pts).query(g)
             pts = np.vstack([pts, g[dist > griglia * 0.45]])
+    # Una cornice di punti fuori dal poligono: senza, i lati dritti del
+    # contorno stanno sul guscio convesso, qhull ne lascia fuori i punti
+    # allineati, e un lato di 61 mm restava un lato solo. Sulla mappa
+    # bilineare non e' piu' dritto, e il pezzo accanto non lo ritrova.
+    m = 10.0
+    cornice = np.array([[lo[0] - m, lo[1] - m], [hi[0] + m, lo[1] - m],
+                        [hi[0] + m, hi[1] + m], [lo[0] - m, hi[1] + m]])
+    pts = np.vstack([pts, cornice])
     for _ in range(giri):
         tri = Delaunay(pts).simplices
         presenti = set()
@@ -1006,7 +1042,10 @@ def triangola(anelli, bordo=0.8, griglia=4.0, giri=12):
         pts = np.vstack([pts, np.array(aggiunti)])
     tri = Delaunay(pts).simplices
     tri = tri[dentro(pts[tri].mean(1), anelli)]
-    return pts, tri
+    # solo i punti usati: la cornice e i punti rimasti fuori non devono
+    # finire nella maglia, che ne sbaglierebbe l'ingombro
+    usati, nuovo = np.unique(tri, return_inverse=True)
+    return pts[usati], nuovo.reshape(tri.shape)
 
 
 def _bilineare(src, dst):
@@ -1063,7 +1102,7 @@ def _catene(anello, A, B):
     return e, n, l, out
 
 
-def _lente_che_rientra(anello, A, B, m_col, m_lat, centro_dt, asse):
+def _lente_che_rientra(anello, A, B, m_col, m_lat, centro_dt, asse, lato=None):
     """La mappa di una lente piegata: rientra nel pack fra le due facce.
 
     Le due curve della lente stanno sulle due facce, ciascuna dove la mette la
@@ -1073,6 +1112,12 @@ def _lente_che_rientra(anello, A, B, m_col, m_lat, centro_dt, asse):
     lente e 10,5 di corda, entra di 4,5 mm. Ai due capi la lente non ha
     larghezza, e lo spigolo torna vivo. `asse` e' il versore dello spigolo
     del tronco: la sezione gli sta di traverso.
+
+    `lato`, se c'e', e' la curva sul DT dove il bordo della lente dalla
+    parte del fianco deve cadere: `(P0, P1, profilo t, profilo s)` lungo la
+    corda P0-P1. Sul retro e' il bordo dietro del fianco, che e' un'altra
+    curva del DT: se la lente ci arriva da sola, anche con una mappa rigida,
+    fra i due resta una fessura di qualche decimo.
     """
     e, n, l, ((t1, s1), (t2, s2)) = _catene(anello, A, B)
     # la curva della colonna e' quella dalla parte del centro della colonna
@@ -1094,7 +1139,14 @@ def _lente_che_rientra(anello, A, B, m_col, m_lat, centro_dt, asse):
         u = np.clip(np.where(np.abs(w) > 1e-9, (ss - s_l) / np.where(np.abs(w) > 1e-9, w, 1.0), 0.5), 0.0, 1.0)
         base = A + (tt * l)[:, None] * e
         PC = m_col(base + s_c[:, None] * n)
-        PL = m_lat(base + s_l[:, None] * n)
+        if lato is None:
+            PL = m_lat(base + s_l[:, None] * n)
+        else:
+            Q0, Q1, tq, sq = lato
+            eq = (Q1 - Q0) / np.hypot(*(Q1 - Q0))
+            nq = np.array([-eq[1], eq[0]])
+            PL = m_lat(Q0 + (tt * np.hypot(*(Q1 - Q0)))[:, None] * eq
+                       + np.interp(tt, tq, sq)[:, None] * nq)
         corda = PC - PL
         c = np.linalg.norm(corda, axis=1)
         ok = c > 1e-6
@@ -1117,35 +1169,53 @@ def _lente_che_rientra(anello, A, B, m_col, m_lat, centro_dt, asse):
     return f
 
 
-def _trasporta(P0, P1, Q0, Q1, prova, verso):
-    """La mappa rigida del DT che porta il segmento P0-P1 su Q0-Q1 (con la
-    lunghezza di Q), e manda il punto `prova` dalla parte `verso` di Q0-Q1;
-    se la rotazione non ce lo manda, si specchia."""
-    P0, P1, Q0, Q1 = (np.asarray(v, float) for v in (P0, P1, Q0, Q1))
-    ep, eq = P1 - P0, Q1 - Q0
-    k = np.hypot(*eq) / np.hypot(*ep)
-    ap, aq = math.atan2(ep[1], ep[0]), math.atan2(eq[1], eq[0])
+def _bordo_dietro(anello, giu, su):
+    """Il tratto del contorno del fianco fra i due angoli dietro: il bordo
+    dietro, che e' il piu' corto dei due giri."""
+    i = int(np.argmin(np.hypot(*(anello - giu).T)))
+    j = int(np.argmin(np.hypot(*(anello - su).T)))
+    n = len(anello)
+    avanti = [anello[(i + k) % n] for k in range((j - i) % n + 1)]
+    indietro = [anello[(i - k) % n] for k in range((i - j) % n + 1)]
+    lung = [float(np.sum(np.hypot(*np.diff(np.array(c), axis=0).T))) for c in (avanti, indietro)]
+    return np.array(avanti if lung[0] <= lung[1] else indietro)
 
-    def fa(specchio):
-        if specchio:
-            # specchia sulla retta P0-P1, poi ruota
-            u = ep / np.hypot(*ep)
-            S = 2.0 * np.outer(u, u) - np.eye(2)
-        else:
-            S = np.eye(2)
-        th = aq - ap
-        Rm = np.array([[math.cos(th), -math.sin(th)], [math.sin(th), math.cos(th)]])
-        Mx = k * Rm @ S
 
-        def f(p):
-            return (np.atleast_2d(p) - P0) @ Mx.T + Q0
-        return f
-    dritta = fa(False)
-    q = dritta(prova)[0] - Q0
-    nq = np.array([-eq[1], eq[0]])
-    if (q @ nq) * (np.asarray(verso) - Q0) @ nq < 0:
-        return fa(True)
-    return dritta
+def _profilo(catena, P0, P1):
+    """(t, s) di una curva lungo la corda P0-P1, coi capi a s = 0."""
+    e = (P1 - P0) / np.hypot(*(P1 - P0))
+    n = np.array([-e[1], e[0]])
+    rel = catena - P0
+    t = rel @ e / np.hypot(*(P1 - P0))
+    s = rel @ n
+    o = np.argsort(t, kind="stable")
+    t, s = t[o], s[o]
+    return np.concatenate([[0.0], t, [1.0]]), np.concatenate([[0.0], s, [0.0]])
+
+
+def _bordi(tri):
+    """Gli spigoli usati da un triangolo solo, nel verso del triangolo."""
+    e = np.concatenate([tri[:, [0, 1]], tri[:, [1, 2]], tri[:, [2, 0]]])
+    chiave = np.sort(e, axis=1)
+    _u, inv, conta = np.unique(chiave, axis=0, return_inverse=True, return_counts=True)
+    return e[conta[inv.ravel()] == 1]
+
+
+def _lungo(A, B, passo, NA=None, NB=None):
+    """Punti lungo gli spigoli A-B, al massimo `passo` mm l'uno dall'altro;
+    con NA, NB anche le normali interpolate negli stessi punti."""
+    L = np.linalg.norm(B - A, axis=1)
+    k = np.maximum(1, np.ceil(L / passo).astype(int))
+    out, nor = [], []
+    for kk in np.unique(k):
+        sel = k == kk
+        for t in np.linspace(0.0, 1.0, kk + 1):
+            out.append(A[sel] * (1 - t) + B[sel] * t)
+            if NA is not None:
+                nor.append(NA[sel] * (1 - t) + NB[sel] * t)
+    if NA is None:
+        return np.vstack(out)
+    return np.vstack(out), np.vstack(nor)
 
 
 def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
@@ -1153,8 +1223,17 @@ def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
 
     `origine_mm` e' l'angolo in alto a sinistra della texture sul DT, in mm;
     `px_mm` quanti pixel per mm; `misura_tex` (larghezza, altezza) in pixel
-    della texture, che sotto ha una striscia della tinta dell'interno (vedi
-    `con_interno`). Il fronte guarda +Z, la cima +Y, il fondo sta a Y = 0.
+    della texture, che sotto ha le due strisce del rovescio e del taglio
+    (vedi `con_interno`). Il fronte guarda +Z, la cima +Y, il fondo sta a
+    Y = 0.
+
+    Niente feritoie. Ogni pezzo ha il suo rovescio, uno spessore piu' in
+    dentro; in cima gli strati si appoggiano uno sull'altro - alette, poi il
+    coperchio di sotto con la sua linguetta, poi quello di sopra - a uno
+    spessore l'uno dall'altro; fra una parete e il coperchio o l'aletta che ci
+    si piega sopra c'e' la piega, una striscia che sale dal bordo della parete
+    allo strato; e ogni bordo che non combacia con quello di un altro pezzo -
+    finestre, tagli dei coperchi e delle alette - prende la costa del taglio.
     """
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     ff = b.facce
@@ -1171,33 +1250,49 @@ def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
     M_B = _bilineare([f_sx, f_dx, r_dx, r_sx], [FL0, FR0, BR0, BL0])
     M_F = _bilineare([f_sx, f_dx, af_dx, af_sx], [FL0, FR0, FR1, FL1])
     M_K = _bilineare([r_sx, r_dx, ar_dx, ar_sx], [BL0, BR0, BR1, BL1])
-    M_WL = _bilineare([f_sx, fs_giu, fs_su, af_sx], [FL0, BL0, BL1, FL1])
-    M_WR = _bilineare([f_dx, fd_giu, fd_su, af_dx], [FR0, BR0, BR1, FR1])
+    # il fianco ha il suo angolo davanti in cima, che e' la cima della sua
+    # cerniera: la punta della lente dalla parte del fronte sta 0,9 mm piu'
+    # in su, e col fianco appeso li' il suo bordo in cima scendeva sotto il
+    # bordo del fronte
+    M_WL = _bilineare([f_sx, fs_giu, fs_su, b.cerniera_aletta[0][0]], [FL0, BL0, BL1, FL1])
+    M_WR = _bilineare([f_dx, fd_giu, fd_su, b.cerniera_aletta[1][0]], [FR0, BR0, BR1, FR1])
     destra = b.destra
-
-    h_alette, h_sotto, h_sopra = STRATI
     centro = (f_sx + f_dx + r_dx + r_sx) / 4
     cima_f = ((af_sx + af_dx) / 2 - centro) @ b.su
     cima_r = ((ar_sx + ar_dx) / 2 - centro) @ (-b.su)
+    # i coperchi si allargano come la cima di fronte e retro, che la mappa
+    # porta sulla cima del tronco: senza, agli angoli restava un decimo
+    sx_f = a / (float(np.hypot(*(af_dx - af_sx))) / 2)
+    sx_r = a / (float(np.hypot(*(ar_dx - ar_sx))) / 2)
+    mezzo_f = ((af_sx + af_dx) / 2 - centro) @ destra
+    mezzo_r = ((ar_sx + ar_dx) / 2 - centro) @ destra
 
+    # gli strati della cima: le alette appoggiano sul bordo delle pareti, il
+    # coperchio di sotto sulle alette, quello di sopra sul coperchio di sotto
+    # e sulla sua linguetta
+    h_alette, h_sotto, h_sopra = sp, 2 * sp, 3 * sp
+    h_l1, h_l2 = (h_sopra, h_sotto) if b.sotto == "retro" else (h_sotto, h_sopra)
+
+    # Quello che del coperchio sta dall'altra parte della cerniera - sul
+    # Raffaello gli angoli di L1, che partono dall'angolo del fianco 0,9 mm
+    # sotto la cordonatura - resta sulla cerniera: se no sporge davanti al
+    # fronte e apre una fessura all'angolo.
     def coperchio_fronte(h):
         def f(p):
             p = np.atleast_2d(p) - centro
-            x = p @ destra
-            t = p @ b.su - cima_f
+            t = np.maximum(p @ b.su - cima_f, 0.0)
+            x = (p @ destra - mezzo_f) * sx_f
             return np.stack([x, np.full(len(p), H + h), a - t], 1)
         return f
 
     def coperchio_retro(h):
         def f(p):
             p = np.atleast_2d(p) - centro
-            x = p @ destra
-            t = p @ (-b.su) - cima_r
+            t = np.maximum(p @ (-b.su) - cima_r, 0.0)
+            x = (p @ destra - mezzo_r) * sx_r
             return np.stack([x, np.full(len(p), H + h), -a + t], 1)
         return f
-
-    h1, h2 = (h_sotto, h_sopra) if b.sotto == "retro" else (h_sopra, h_sotto)
-    M_L1, M_L2 = coperchio_fronte(h2), coperchio_retro(h1)
+    M_L1, M_L2 = coperchio_fronte(h_l1), coperchio_retro(h_l2)
 
     def aletta(cern, verso_x):
         davanti, dietro = cern
@@ -1213,17 +1308,18 @@ def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
     M_AL = aletta(b.cerniera_aletta[0], -1.0)
     M_AR = aletta(b.cerniera_aletta[1], +1.0)
 
-    pezzi = []   # (anelli, mappa, normale fuori)
-    finestre = set(b.finestre)
+    # ------------------------------------------------------------- i pezzi
+    # (anelli sul DT, mappa, normale di fuori o None per le superfici curve,
+    # passo del bordo, passo della griglia)
+    pezzi = []
 
     def buchi(k):
         return [h.anello for h in ff[k].buchi if h.tratteggio == 0]
 
     def pezzo(k, mappa, fuori, con_buchi=True):
-        if k is None:
-            return
-        pezzi.append(([ff[k].anello] + (buchi(k) if con_buchi else []), mappa,
-                      np.array(fuori, float)))
+        if k is not None:
+            pezzi.append(([ff[k].anello] + (buchi(k) if con_buchi else []), mappa,
+                          np.array(fuori, float), 0.8, 4.0))
 
     pezzo(b.fondo, M_B, (0, -1, 0))
     pezzo(b.fronte, M_F, (0, 0.12, 1))
@@ -1236,79 +1332,190 @@ def maglia(b, origine_mm, px_mm, misura_tex, spessore=None):
     pezzo(b.linguette[1], M_L2, (0, 1, 0), False)
     pezzo(b.alette[0], M_AL, (0, 1, 0), False)
     pezzo(b.alette[1], M_AR, (0, 1, 0), False)
-    # Le lenti rientrano nel pack: ogni lente e' un pezzo suo, con le due
-    # curve dove le mettono le facce accanto. Sul retro la curva dalla parte
-    # dell'aletta sta dove sta il bordo dietro del fianco, che e' la stessa
-    # curva: si porta sul DT del fianco e si mappa col fianco.
-    an_fs, an_fd = ff[b.fianchi[0]].anello, ff[b.fianchi[1]].anello
-    centro_fs, centro_fd = ff[b.fianchi[0]].centro, ff[b.fianchi[1]].centro
-    T_sx = _trasporta(r_sx, ar_sx, fs_giu, fs_su, r_sx + (r_sx - centro), centro_fs)
-    T_dx = _trasporta(r_dx, ar_dx, fd_giu, fd_su, r_dx + (r_dx - centro), centro_fd)
 
-    def via(m, T):
-        return lambda p: m(T(p))
-    lenti = []
-    for k_lente, A, B, m_col, m_lat, asse in (
-            (b.lenti_fronte[0], f_sx, af_sx, M_F, M_WL, FL1 - FL0),
-            (b.lenti_fronte[1], f_dx, af_dx, M_F, M_WR, FR1 - FR0),
-            (b.lenti_retro[0], r_sx, ar_sx, M_K, via(M_WL, T_sx), BL1 - BL0),
-            (b.lenti_retro[1], r_dx, ar_dx, M_K, via(M_WR, T_dx), BR1 - BR0)):
+    # Le lenti rientrano nel pack: ogni lente e' un pezzo suo, con le due
+    # curve dove le mettono le facce accanto. Sul retro il bordo della lente
+    # dalla parte dell'aletta cade sul bordo dietro del fianco, che e' la
+    # stessa curva del pack ma un'altra curva del DT.
+    # Anche davanti il bordo della lente dalla parte del fianco si prende dal
+    # bordo del fianco, fino al SUO angolo in cima: la punta della lente sta
+    # sul fronte, 0,9 mm piu' su, e mappata col fianco usciva dall'angolo.
+    lati = {}
+    for k_f, giu, su, chiave in ((b.fianchi[0], fs_giu, fs_su, "dietro sx"),
+                                 (b.fianchi[1], fd_giu, fd_su, "dietro dx"),
+                                 (b.fianchi[0], f_sx, b.cerniera_aletta[0][0], "davanti sx"),
+                                 (b.fianchi[1], f_dx, b.cerniera_aletta[1][0], "davanti dx")):
+        bordo = _bordo_dietro(ff[k_f].anello, giu, su)
+        tq, sq = _profilo(bordo, giu, su)
+        lati[chiave] = (giu, su, tq, sq)
+    for k_lente, A, B, m_col, m_lat, asse, lato in (
+            (b.lenti_fronte[0], f_sx, af_sx, M_F, M_WL, FL1 - FL0, lati["davanti sx"]),
+            (b.lenti_fronte[1], f_dx, af_dx, M_F, M_WR, FR1 - FR0, lati["davanti dx"]),
+            (b.lenti_retro[0], r_sx, ar_sx, M_K, M_WL, BL1 - BL0, lati["dietro sx"]),
+            (b.lenti_retro[1], r_dx, ar_dx, M_K, M_WR, BR1 - BR0, lati["dietro dx"])):
         an = ff[k_lente].anello
-        lenti.append((an, _lente_che_rientra(an, A, B, m_col, m_lat, centro, asse)))
+        pezzi.append(([an], _lente_che_rientra(an, A, B, m_col, m_lat, centro, asse, lato),
+                      None, 0.5, 1.2))
 
     Wt, Ht = misura_tex
-    uv_interno = np.array([0.5, (Ht - STRISCIA / 2) / Ht])
-    V, UV, T = [], [], []
-    n_v = 0
-    def aggiungi(pts, tri, P3, fuori, normali_vertice=False):
-        nonlocal n_v
-        uv = (pts - np.asarray(origine_mm)) * px_mm / np.array([Wt, Ht])
+    uv_interno = np.array([0.5, (Ht - 1.5 * STRISCIA) / Ht])
+    uv_taglio = np.array([0.5, (Ht - 0.5 * STRISCIA) / Ht])
+
+    def uv_di(pts):
+        return (pts - np.asarray(origine_mm)) * px_mm / np.array([Wt, Ht])
+
+    fatti = []    # (P esterno, N, triangoli verso fuori, UV)
+
+    def orienta(P3, tri, fuori):
         nn = np.cross(P3[tri[:, 1]] - P3[tri[:, 0]], P3[tri[:, 2]] - P3[tri[:, 0]])
+        if fuori is None:
+            # superficie curva: fuori e' dall'asse del pack verso di lei
+            m = P3.mean(0)
+            fuori = np.array([m[0], 0.0, m[2]])
         if float(np.sum(nn @ fuori)) < 0:
             tri = tri[:, ::-1]
             nn = -nn
-        if normali_vertice:
-            # una superficie curva: il rovescio si sposta lungo la normale
-            # di ogni vertice, non lungo una sola
-            nv = np.zeros_like(P3)
+        return tri, nn
+
+    for anelli, mappa, fuori, bordo, griglia in pezzi:
+        pts, tri = triangola(anelli, bordo=bordo, griglia=griglia)
+        if not len(tri):
+            continue
+        P3 = mappa(pts)
+        tri, nn = orienta(P3, tri, fuori)
+        if fuori is None:
+            N = np.zeros_like(P3)
             for j in range(3):
-                np.add.at(nv, tri[:, j], nn)
-            nv /= np.maximum(np.linalg.norm(nv, axis=1, keepdims=True), 1e-12)
+                np.add.at(N, tri[:, j], nn)
+            N /= np.maximum(np.linalg.norm(N, axis=1, keepdims=True), 1e-12)
         else:
             nm = nn.sum(0)
-            nv = np.tile(nm / np.linalg.norm(nm), (len(P3), 1))
-        V.append(P3)
-        UV.append(uv)
-        T.append(tri + n_v)
-        n_v += len(P3)
-        # il rovescio: cartoncino, uno spessore piu' in dentro
-        V.append(P3 - nv * sp)
-        UV.append(np.tile(uv_interno, (len(P3), 1)))
-        T.append(tri[:, ::-1] + n_v)
-        n_v += len(P3)
+            N = np.tile(nm / np.linalg.norm(nm), (len(P3), 1))
+        fatti.append((P3, N, tri, uv_di(pts)))
 
-    for anelli, mappa, fuori in pezzi:
-        pts, tri = triangola(anelli)
-        if len(tri):
-            aggiungi(pts, tri, mappa(pts), fuori)
-    for an, mappa in lenti:
-        pts, tri = triangola([an], bordo=0.5, griglia=1.2)
-        if len(tri):
-            P3 = mappa(pts)
-            # fuori: dall'asse del pack verso la lente
-            m = P3.mean(0)
-            aggiungi(pts, tri, P3, np.array([m[0], 0.0, m[2]]), True)
+    # Le pieghe: dal bordo della parete allo strato del coperchio o
+    # dell'aletta, lungo la cordonatura, nel piano della parete. Il colore e'
+    # quello della cordonatura.
+    for chiave, m_giu, m_su, fuori in (
+            ("fronte", M_F, M_L1, (0, 0, 1)), ("retro", M_K, M_L2, (0, 0, -1)),
+            ("fianco sx", M_WL, M_AL, (-1, 0, 0)), ("fianco dx", M_WR, M_AR, (1, 0, 0))):
+        for linea in b.cerniere.get(chiave, []):
+            q = _infittisci_aperta(linea, 0.8)
+            if len(q) < 2:
+                continue
+            giu, su_ = m_giu(q), m_su(q)
+            n = len(q)
+            P3 = np.vstack([giu, su_])
+            tri = np.array([t for i in range(n - 1)
+                            for t in ((i, i + 1, n + i + 1), (i, n + i + 1, n + i))])
+            tri, nn = orienta(P3, tri, np.array(fuori, float))
+            nm = nn.sum(0)
+            N = np.tile(nm / np.linalg.norm(nm), (len(P3), 1))
+            fatti.append((P3, N, tri, uv_di(np.vstack([q, q]))))
+
+    # I bordi liberi: quelli che non hanno, per tutta la loro lunghezza, il
+    # bordo di un altro pezzo a meno di COMBACIA mm
+    campioni, di, normali = [], [], []
+    bordi_di = []
+    for k, (P3, N, tri, _uv) in enumerate(fatti):
+        bb = _bordi(tri)
+        bordi_di.append(bb)
+        c, nc = _lungo(P3[bb[:, 0]], P3[bb[:, 1]], COMBACIA / 2,
+                       N[bb[:, 0]], N[bb[:, 1]])
+        campioni.append(c)
+        normali.append(nc)
+        di.append(np.full(len(c), k))
+    campioni = np.vstack(campioni)
+    normali = np.vstack(normali)
+    di = np.concatenate(di)
+    albero = cKDTree(campioni)
+
+    def accanto(q, k):
+        """Per ogni punto: la normale del bordo di un altro pezzo piu' vicino
+        entro COMBACIA, e l'indice di quel pezzo (-1 se non c'e')."""
+        dist, idx = albero.query(q, k=24, distance_upper_bound=COMBACIA)
+        idx = np.minimum(idx, len(di) - 1)
+        altro = (dist < np.inf) & (di[idx] != k)
+        primo = np.argmax(altro, axis=1)
+        ha = altro[np.arange(len(q)), primo]
+        scelto = idx[np.arange(len(q)), primo]
+        return normali[scelto], np.where(ha, di[scelto], -1)
+
+    V, UV, T = [], [], []
+    n_v = 0
+    for k, (P3, N, tri, uv) in enumerate(fatti):
+        dentro_ = P3 - N * sp
+        V += [P3, dentro_]
+        UV += [uv, np.tile(uv_interno, (len(P3), 1))]
+        T += [tri + n_v, tri[:, ::-1] + n_v + len(P3)]
+        n_v += 2 * len(P3)
+        bb = bordi_di[k]
+        if not len(bb):
+            continue
+        liberi = np.zeros(len(bb), bool)
+        for t in (0.1, 0.5, 0.9):
+            q = P3[bb[:, 0]] * (1 - t) + P3[bb[:, 1]] * t
+            _n, chi = accanto(q, k)
+            liberi |= chi < 0
+        # Sulle pieghe i rovesci dei due pezzi, ciascuno uno spessore piu' in
+        # dentro lungo la sua normale, non si toccano: dalla finestra si
+        # vedeva la fessura fra fondo e pareti. La chiude una striscia dal
+        # rovescio di questo pezzo a quello del pezzo accanto, messa una
+        # volta sola, dal pezzo con l'indice piu' basso.
+        uniti = bb[~liberi]
+        if len(uniti):
+            i, j = uniti[:, 0], uniti[:, 1]
+            Ni, ci = accanto(P3[i] * 0.98 + P3[j] * 0.02, k)
+            Nj, cj = accanto(P3[j] * 0.98 + P3[i] * 0.02, k)
+            tieni = ((ci > k) | (cj > k)) & (
+                (np.linalg.norm(N[i] - Ni, axis=1) > 0.02)
+                | (np.linalg.norm(N[j] - Nj, axis=1) > 0.02))
+            i, j, Ni, Nj = i[tieni], j[tieni], Ni[tieni], Nj[tieni]
+            if len(i):
+                m = len(i)
+                Vf = np.vstack([P3[i] - N[i] * sp, P3[j] - N[j] * sp,
+                                P3[j] - Nj * sp, P3[i] - Ni * sp])
+                tc = np.arange(m)
+                tri_f = np.vstack([np.stack([tc, tc + m, tc + 2 * m], 1),
+                                   np.stack([tc, tc + 2 * m, tc + 3 * m], 1)])
+                nn = np.cross(Vf[tri_f[:, 1]] - Vf[tri_f[:, 0]], Vf[tri_f[:, 2]] - Vf[tri_f[:, 0]])
+                verso = -(np.vstack([N[i] + Ni, N[i] + Ni]))
+                giro = np.sum(nn * verso, axis=1) < 0
+                tri_f[giro] = tri_f[giro][:, ::-1]
+                V.append(Vf)
+                UV.append(np.tile(uv_interno, (len(Vf), 1)))
+                T.append(tri_f + n_v)
+                n_v += len(Vf)
+        bb = bb[liberi]
+        if not len(bb):
+            continue
+        # la costa: dal bordo di fuori a quello del rovescio, rivolta fuori
+        # dal pezzo
+        i, j = bb[:, 0], bb[:, 1]
+        Pi, Pj, Qi, Qj = P3[i], P3[j], dentro_[i], dentro_[j]
+        m = len(bb)
+        Vc = np.vstack([Pi, Pj, Qj, Qi])
+        tc = np.arange(m)
+        tri_c = np.vstack([np.stack([tc, tc + m, tc + 2 * m], 1),
+                           np.stack([tc, tc + 2 * m, tc + 3 * m], 1)])
+        nn = np.cross(Vc[tri_c[:, 1]] - Vc[tri_c[:, 0]], Vc[tri_c[:, 2]] - Vc[tri_c[:, 0]])
+        fuori_c = np.cross(Pj - Pi, N[i])
+        fuori_c = np.vstack([fuori_c, fuori_c])
+        giro = np.sum(nn * fuori_c, axis=1) < 0
+        tri_c[giro] = tri_c[giro][:, ::-1]
+        V.append(Vc)
+        UV.append(np.tile(uv_taglio, (len(Vc), 1)))
+        T.append(tri_c + n_v)
+        n_v += len(Vc)
     return np.vstack(V), np.vstack(UV), np.vstack(T)
 
 
-# pixel della striscia della tinta dell'interno, sotto la texture del DT
-STRISCIA = 24
-
-
 def con_interno(tex):
-    """La texture del DT con sotto la striscia della tinta dell'interno: il
-    rovescio prende il colore da li', e il GLB resta a un materiale solo."""
+    """La texture del DT con sotto due strisce: la tinta del rovescio e
+    quella del taglio. Il GLB resta a un materiale solo."""
     from PIL import Image
-    tela = Image.new("RGB", (tex.width, tex.height + STRISCIA), INTERNO)
+    tela = Image.new("RGB", (tex.width, tex.height + 2 * STRISCIA), INTERNO)
     tela.paste(tex.convert("RGB"), (0, 0))
+    tela.paste(Image.new("RGB", (tex.width, STRISCIA), TAGLIO),
+               (0, tex.height + STRISCIA))
     return tela
