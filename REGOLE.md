@@ -3913,21 +3913,23 @@ chi aveva il pack l'ha corretta: il soffietto deve cominciare a piegarsi dove
 si piega il fronte, rientrare e poi salire fino alla chiusura. Fronte, retro e
 soffietto si piegano quindi tutti alla stessa altezza, la piega dei fianchi.
 
-Quanto rientra lo dice il DT. Dagli angoli della piega partono due **tagli a
-45 gradi** che arrivano sulle gambe della V: sul primo caso finiscono 10,2 mm
-dentro dal bordo del fianco e 10,1 mm sopra la piega (`punta._ripiano`, che
-segue la catena di tratti dritti da ogni angolo). Fra la piega e la fine dei
-tagli il soffietto e' un **ripiano** che va dentro in piano, profondo quanto
-i tagli salgono (10,1 mm). Dalla fine dei tagli il triangolo fra le gambe
-della V **sale** fino alla punta, sulla cresta. Le pareti della tasca sono gli
-spicchi fra la V e i bordi del fianco, staccati dal ripiano proprio dai tagli:
-sotto, dal bordo del fianco alla gamba; sopra si appoggiano contro il rovescio
-delle falde. Senza tagli agli angoli il ripiano non c'e', e il triangolo sale
-dalla piega.
-
-La salita, a pezzi rigidi, sarebbe di qualche millimetro piu' corta della
-gamba sul foglio: il cartoncino vero si flette, e il modello tiene le facce
-piane.
+**Un piano solo, come il fianco di un cartone del latte.** La quarta
+versione, fatta dalla routine, leggeva i due **tagli a 45 gradi** che dagli
+angoli della piega arrivano sulle gambe della V (10,2 mm dentro dal bordo,
+10,1 mm sopra la piega) come il bordo di un **ripiano** piatto: il fianco
+andava dentro in orizzontale per 10 mm e solo li' il triangolo saliva. Di
+tre quarti si vedeva uno scalino, con una tasca scura, e chi ha il pack l'ha
+detto con la foto: il soffietto non e' cosi'. Sulla fustella, fra la piega e
+la fine dei tagli, non c'e' nessuna cordonatura: un ripiano non ha dove
+piegarsi. Il pezzo centrale del fianco - fra la piega, i tagli e le gambe
+della V - gira tutto intero sulla piega e si inclina dentro fino alla punta
+sotto la cresta: largo come il fianco alla piega, a punta in cima, in un
+piano solo, inclinato di `asin(chiude / falda)` (18 gradi sul primo caso:
+la punta va dentro di 20,9 mm salendo di 64,3). Le ali, fra le gambe della V
+e i bordi del fianco, si piegano contro il rovescio delle falde. I tagli
+servono solo a staccare le ali dal pezzo centrale vicino agli angoli, dove
+altrimenti il cartoncino si accavallerebbe. Di tre quarti il fianco continua
+sopra la piega e si stringe salendo, come nella foto.
 
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
