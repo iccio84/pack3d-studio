@@ -3946,6 +3946,26 @@ centrale era troppo largo e le ali erano solo una striscia. Una prova con le
 ali girate verso l'interno, rovescio in vista, non torna con la foto: in cima
 al soffietto si vede stampa, non cartone.
 
+**Fronte e retro curvano, non fanno spigolo.** Sul DT il fronte e il retro
+non hanno nessuna cordonatura all'altezza della piega dei fianchi: tutte le
+versioni fino alla sesta li piegavano a spigolo, e dalla quarta lo spigolo
+tagliava il marchio del fronte a meta'. Chi ha il pack l'ha detto: "ammorbidisci la piega del
+fronte, come se curvasse senza lasciare il segno". Fino alla piega li tengono
+dritti i fianchi; sopra, il cartoncino curva per `CURVA` della falda (0,35:
+23,7 mm sul primo caso) e da li' va dritto fino alla cresta, inclinato quanto
+serve per chiudere `chiude` (22 gradi invece di 18). `Punta.profilo` da' la
+curva a pezzi lunghi quanto il foglio, cosi' la grafica non si stira; la scatola
+esce alta 165,8 mm invece di 166,2. Le ali del soffietto seguono la stessa
+curva, contro il rovescio delle falde. Le cordonature vere - gli angoli, la
+piega dei fianchi, le gambe della V, la cresta - restano spigoli.
+
+**Il cartoncino ha spessore.** Oltre al rovescio, ogni bordo che non combacia
+con quello di un altro pezzo prende la **costa** del taglio, come
+nell'astuccio e nel ballotin: i bordi delle falde e delle ali lungo il
+soffietto, la cresta, l'aletta, i tagli a 45 gradi. Quanto e' spessa la dice
+lo spessore dichiarato nella pagina (1-3); chi ha il pack ha chiesto il
+cartone spesso, e nel parco il B-ready e' col livello 3, 0,7 mm.
+
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
 faccia: e' stata la prima domanda fatta in Glam, e chi aveva il pack in mano
@@ -3962,10 +3982,9 @@ stampato capovolto esce dritto da se'.
 
 ### Cosa manca
 
-Il soffietto e' fatto di facce piane: il cartoncino vero si incurva, e la
-parete della tasca si piega dal bordo del fianco alla punta lungo una linea
-che il DT non disegna. Non sono modellate le alette di colla del retro e del
-fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
+Il pezzo centrale del soffietto e' piano, e le ali sono a strisce: il
+cartoncino vero si incurva un poco anche li'. Non sono modellate le alette di
+colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
 ## Flowpack
 
