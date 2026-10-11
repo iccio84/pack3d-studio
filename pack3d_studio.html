@@ -154,6 +154,14 @@
     background:var(--surface);color:var(--muted-foreground);cursor:pointer}
   .risposta .foto-nome{font-size:11px;color:var(--muted-foreground);flex:1;min-width:0;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Eliminare un caso: solo dove Glam Lab lo permette (un admin tutti, il
+     design i suoi), con la conferma nella riga */
+  .elimina{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:2px}
+  .elimina button{margin-top:0;padding:6px 11px;font-size:10px}
+  .elimina button.via{color:var(--destructive);
+    border-color:color-mix(in oklab,var(--destructive) 45%,transparent)}
+  .elimina button.via:hover:not(:disabled){border-color:var(--destructive)}
+  .elimina .dom{flex-basis:100%;font-size:12px}
   .esito{font-size:12px;color:var(--muted-foreground)}
   .esito:empty{display:none}
   .esito.ok{color:var(--foreground);font-weight:600}
@@ -1459,7 +1467,8 @@ addEventListener('pagehide', () => scartaInAttesa(true));
 /* --------------------- casi in correzione e notifiche --------------------- */
 // I casi che questo browser ha mandato, finche' non sono risolti, e le ultime
 // dieci notifiche. Stanno nel browser: con l'accesso guest condiviso l'account
-// dell'app non dice chi ha caricato un PDF, il browser si'. Lo stato lo dice
+// dell'app non dice chi ha caricato un PDF, il browser si'. Dentro Glam Lab ci
+// sono anche quelli che il ruolo vede (vedi "eliminare un caso"). Lo stato lo dice
 // lo Space (/api/casi), che lo legge dal registro dei casi: la routine ci
 // scrive a che punto e' e, se le manca qualcosa, la domanda.
 const RICORDA_CASI = 'pack3d.casi', RICORDA_NOTIFICHE = 'pack3d.notifiche';
@@ -1498,7 +1507,7 @@ function apriFinestra(el, btn, si, ricorda){
   aggiornaLato();
   if (ricorda){ const f = leggi(RICORDA_FINESTRE, {}) || {}; f[el.id] = si; scrivi(RICORDA_FINESTRE, f); }
   if (si && el === notificheEl) segnaLette();
-  if (si && el === casiEl) aggiornaCasi();
+  if (si && el === casiEl){ aGlam({type: 'pack3d:ruolo?'}); aggiornaCasi(); }
 }
 
 function quandoBreve(iso){
@@ -1589,6 +1598,7 @@ function disegnaCaso(c){
   if (c.stato === 'domanda' && c.domanda) li.append(moduloRisposta(c));
   if (c.stato === 'da-approvare') li.append(moduloApprova(c));
   if (c.stato === 'approvato') li.append(tastoGuarda(c));
+  if (puoEliminare(c)) li.append(tastoElimina(c));
   return li;
 }
 
@@ -1861,10 +1871,14 @@ async function aggiornaCasi(){
   if (!backendUp || casiInVolo || !casi.length) return;
   casiInVolo = true;
   try{
-    const r = await fetch(url('/api/casi?codici=' + casi.map(c => c.codice).join(',')),
-                          {cache: 'no-store'});
-    if (!r.ok) return;
-    const stati = (await r.json()).casi || [];
+    // lo Space ne dice al massimo venti per volta: un admin ne vede di piu'
+    const stati = [];
+    for (let k = 0; k < casi.length; k += 20){
+      const r = await fetch(url('/api/casi?codici=' + casi.slice(k, k + 20).map(c => c.codice)
+                                .join(',')), {cache: 'no-store'});
+      if (!r.ok) return;
+      stati.push(...((await r.json()).casi || []));
+    }
     let cambiato = false;
     const restano = [];
     for (const c of casi){
@@ -1873,13 +1887,16 @@ async function aggiornaCasi(){
       if (s.nome && /^Caso [0-9a-f]{10}$/.test(c.nome)){ c.nome = s.nome; cambiato = true; }
       if (s.stato === 'assente' || s.stato === 'in-attesa'){
         if (Date.now() - new Date(c.inviato).getTime() < GRAZIA_MS){ restano.push(c); continue; }
+        allineaGlam(c);
         cambiato = true;
         continue;
       }
-      if (s.stato === 'risolto' || s.stato === 'chiuso'){
-        notifica('«' + c.nome + '»: ' + (s.stato === 'risolto'
+      if (s.stato === 'risolto' || s.stato === 'chiuso' || s.stato === 'eliminato'){
+        if (!c.quieto) notifica('«' + c.nome + '»: ' + (s.stato === 'risolto'
           ? 'risolto! Trovi il modello corretto in Glam Lab, cartella «' + GLAM_CARTELLA + '».'
+          : s.stato === 'eliminato' ? 'il caso è stato eliminato.'
           : 'il caso è chiuso.') + (s.messaggio ? ' ' + s.messaggio : ''), c.codice);
+        if (s.stato !== 'risolto') allineaGlam(c); else tolti.add(c.codice);
         cambiato = true;
         continue;
       }
@@ -1889,9 +1906,11 @@ async function aggiornaCasi(){
         Object.assign(c, {stato: s.stato, messaggio: s.messaggio || '', domanda: s.domanda,
                           opzioni: s.opzioni, chiave});
         // il primo giro dopo l'invio non e' una novita', una domanda o un
-        // modello da approvare si'
-        if ((prima || TOCCA_A_TE(s.stato)) && NOVITA[s.stato])
+        // modello da approvare si'; un caso che arriva da Glam (un admin li
+        // vede tutti) si mostra, ma non si notifica quello che era gia' successo
+        if (!c.quieto && (prima || TOCCA_A_TE(s.stato)) && NOVITA[s.stato])
           notifica('«' + c.nome + '»: ' + NOVITA[s.stato](c), c.codice);
+        delete c.quieto;
         cambiato = true;
       }
       restano.push(c);
@@ -1909,6 +1928,147 @@ if (CODICE_CASO.test(casoDaLink) && !casi.some(c => c.codice === casoDaLink)){
   casi.unshift({codice: casoDaLink, nome: 'Caso ' + casoDaLink,
                 inviato: new Date().toISOString(), stato: 'in-coda', messaggio: ''});
   salvaCasi();
+}
+
+/* ------------------- eliminare un caso, da Glam Lab ------------------- */
+// Chi puo' eliminare quale caso lo decide Glam Lab, che ospita la pagina e sa
+// chi e' collegato: un admin tutti i casi in sospeso, l'account design quelli
+// caricati da lui, il guest nessuno. Glam lo dice alla pagina (pack3d:ruolo),
+// coi casi che quel ruolo vede: cosi' un admin li ritrova tutti nella finestra,
+// anche quelli mandati da un altro browser. Elimina passa da Glam
+// (pack3d:elimina), che rifa' il controllo sul suo server e chiede allo Space,
+// col suo token, di togliere il caso dalla coda (/api/elimina). Da sola la
+// pagina non elimina niente, e fuori da Glam il tasto non c'e'.
+let glamRuolo = null;             // 'admin', 'design' o 'guest', quando Glam lo dice
+let glamPropri = new Set();       // i casi caricati dall'account design
+const glamAttese = new Map();     // codice -> chi aspetta la risposta di Glam
+// i casi appena usciti dalla lista: Glam puo' ancora elencarli, finche' non
+// ha finito di toglierli, e non devono tornare
+const tolti = new Set();
+const RUOLI = ['admin', 'design', 'guest'];
+
+function aGlam(msg){
+  try{
+    if (window.parent === window) return false;
+    window.parent.postMessage(msg, location.origin);
+    return true;
+  }catch(e){ return false; }
+}
+
+function puoEliminare(c){
+  return glamRuolo === 'admin' || (glamRuolo === 'design' && glamPropri.has(c.codice));
+}
+
+addEventListener('message', e => {
+  // solo da Glam: la finestra che ospita la pagina, dal suo stesso dominio
+  if (e.source !== window.parent || window.parent === window || e.origin !== location.origin) return;
+  const d = e.data || {};
+  if (d.type === 'pack3d:ruolo') ruoloDaGlam(d);
+  else if (d.type === 'pack3d:eliminato' && CODICE_CASO.test(d.codice || '')){
+    const fatto = glamAttese.get(d.codice);
+    if (fatto){ glamAttese.delete(d.codice); fatto(d); }
+  }
+});
+
+function ruoloDaGlam(d){
+  glamRuolo = RUOLI.includes(d.ruolo) ? d.ruolo : 'guest';
+  const elenco = (Array.isArray(d.casi) ? d.casi : [])
+    .filter(x => x && CODICE_CASO.test(x.codice || '')).slice(0, 100);
+  glamPropri = new Set(glamRuolo === 'design' ? elenco.map(x => x.codice) : []);
+  let nuovi = false;
+  if (glamRuolo !== 'guest') for (const x of elenco){
+    if (tolti.has(x.codice)) continue;
+    let c = casi.find(k => k.codice === x.codice);
+    if (!c){
+      const creato = new Date(x.creato || '');
+      c = {codice: x.codice, nome: String(x.nome || '').slice(0, 120) || ('Caso ' + x.codice),
+           inviato: isNaN(creato) ? new Date().toISOString() : creato.toISOString(),
+           stato: 'in-coda', messaggio: '', quieto: true};
+      casi.push(c);
+      nuovi = true;
+    }
+    c.daGlam = true;
+  }
+  if (nuovi) salvaCasi();
+  disegnaCasi();
+  if (nuovi) aggiornaCasi();
+}
+
+/** Chiede a Glam di eliminare un caso; la risposta arriva con
+ *  pack3d:eliminato: {ok} o {ok: false, errore}. */
+function eliminaDaGlam(codice){
+  return new Promise(fatto => {
+    const prima = glamAttese.get(codice);
+    if (prima) prima({ok: false, errore: 'richiesta sostituita'});
+    if (!aGlam({type: 'pack3d:elimina', codice}))
+      return fatto({ok: false, errore: 'Glam Lab non risponde'});
+    glamAttese.set(codice, fatto);
+    setTimeout(() => {
+      if (glamAttese.get(codice) !== fatto) return;
+      glamAttese.delete(codice);
+      fatto({ok: false, errore: 'Glam Lab non ha risposto: riprova'});
+    }, 60000);
+  });
+}
+
+/** Un caso che Glam teneva fra quelli in sospeso, ma che nella coda non c'e'
+ *  piu' (eliminato o chiuso fuori dall'app): lo toglie anche Glam. Senza,
+ *  tornerebbe nella finestra a ogni apertura. Lo Space risponde che il caso
+ *  non c'e', e Glam cancella il suo. */
+function allineaGlam(c){
+  tolti.add(c.codice);
+  if (c.daGlam && puoEliminare(c)) eliminaDaGlam(c.codice);
+}
+
+/** "Elimina il caso", con la conferma nella riga: esce dalla coda per tutti,
+ *  e la routine non lo lavora piu'. */
+function tastoElimina(c){
+  const box = document.createElement('div');
+  box.className = 'elimina';
+  const bt = document.createElement('button');
+  bt.type = 'button';
+  bt.textContent = 'Elimina il caso';
+  const dom = document.createElement('span');
+  dom.className = 'dom';
+  dom.textContent = 'Eliminarlo? Esce dalla coda per tutti e la routine non ci lavora pi\u00f9.';
+  const si = document.createElement('button');
+  si.type = 'button';
+  si.className = 'via';
+  si.textContent = 'S\u00ec, elimina';
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.textContent = 'No';
+  const es = document.createElement('div');
+  es.className = 'esito';
+  es.setAttribute('role', 'status');
+  function chiedi(si_){
+    bt.hidden = si_;
+    dom.hidden = si.hidden = no.hidden = !si_;
+    es.textContent = '';
+    es.className = 'esito';
+  }
+  bt.onclick = () => { chiedi(true); si.focus(); };
+  no.onclick = () => { chiedi(false); bt.focus(); };
+  si.onclick = async () => {
+    si.disabled = no.disabled = true;
+    es.textContent = 'Elimino\u2026';
+    const r = await eliminaDaGlam(c.codice);
+    if (r && r.ok){
+      tolti.add(c.codice);
+      casi = casi.filter(k => k.codice !== c.codice);
+      salvaCasi();
+      disegnaCasi();
+      notifica('\u00ab' + c.nome + '\u00bb: caso eliminato.', c.codice);
+      return;
+    }
+    si.disabled = no.disabled = false;
+    chiedi(false);
+    es.textContent = 'Non eliminato: ' + String((r && r.errore) || 'errore').slice(0, 200);
+    es.className = 'esito err';
+  };
+  chiedi(false);
+  box.append(bt, dom, si, no, es);
+  return box;
 }
 
 /* --------------- la nota di chi ha caricato il PDF ------------------ */
@@ -2333,6 +2493,8 @@ document.getElementById('notifiche-chiudi').onclick = () =>
   apriFinestra(notificheEl, notificheBtn, false, true);
 disegnaCasi();
 disegnaNotifiche();
+// chi e' collegato a Glam, e quali casi vede: decide chi puo' eliminarli
+aGlam({type: 'pack3d:ruolo?'});
 // le finestre come le aveva lasciate chi guarda; dal link dell'email, i casi
 {
   const f = leggi(RICORDA_FINESTRE, {}) || {};

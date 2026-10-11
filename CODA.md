@@ -125,6 +125,12 @@ unire due correzioni una sopra l'altra senza saperlo.
   ce l'ha da piu' di **sei ore** (guarda quando e' stata messa negli eventi
   della issue): allora la sessione che l'aveva preso e' morta, e lo riprendi
   scrivendolo nel commento.
+- Una issue chiusa con l'etichetta `eliminato` l'ha tolta dalla coda chi
+  poteva farlo, dall'app (GLAM.md, sezione 7): non si riapre e non si lavora.
+  Mentre hai il lucchetto `in-lavorazione` l'app non la puo' eliminare; se pero'
+  la trovi chiusa quando torni a scriverle (il lucchetto aveva piu' di sei
+  ore), fermati: niente PR da unire per lei, niente stato a Glam, e scrivilo
+  nel riassunto.
 - Prima di toccare il caso, mettigli l'etichetta `in-lavorazione` e un
   commento col link a questa sessione, e dillo a chi l'ha caricato:
 

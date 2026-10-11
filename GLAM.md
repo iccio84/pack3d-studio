@@ -11,7 +11,9 @@ in Glam. Cioè:
 - a che punto è il caso;
 - le **domande** della routine, quando dal PDF non si capisce come è fatto o
   come si monta il pack, e la possibilità di rispondere, anche con una foto;
-- il modello corretto, nel **suo** account.
+- il modello corretto, nel **suo** account;
+- un caso che non serve più, da eliminare: lo può fare un admin, o l'account
+  design per i suoi (sezione 7).
 
 Qui c'è il contratto fra Glam e lo Space, e in fondo il testo da dare a
 Lovable per la parte di Glam. Le altre parti stanno nello Space (pagina e
@@ -158,6 +160,74 @@ apre il modello.
 Con l'accesso guest condiviso le notifiche sono dell'account guest: le vede
 chiunque entri come guest. Chi vuole le sue entra col suo account.
 
+## 7. Eliminare un caso
+
+Un caso in sospeso - in coda, in lavorazione, con una domanda, da approvare,
+non risolto - si elimina dalla finestra «Casi» della pagina dello Space,
+dentro Glam. Chi può farlo lo decide Glam, che sa chi è collegato, con la
+regola dei ruoli che l'app usa già:
+
+| ruolo | nella finestra dei casi | può eliminare |
+|---|---|---|
+| admin | tutti i casi in sospeso, di tutti | tutti |
+| design | i casi caricati da lui | solo i suoi |
+| guest | i casi mandati da quel browser | niente: il tasto non c'è |
+
+Fuori da Glam (la pagina dello Space aperta da sola) il tasto non c'è.
+
+Il giro passa fra la pagina e Glam, finestre della stessa origine (Glam serve
+la pagina dal suo dominio), e poi dal server di Glam allo Space:
+
+1. La pagina chiede il ruolo alla finestra che la ospita,
+   `{type: "pack3d:ruolo?"}`, all'avvio e quando si apre la finestra dei casi.
+2. Glam risponde all'iframe
+   `{type: "pack3d:ruolo", ruolo: "admin" | "design" | "guest", casi: [{codice, nome, creato}]}`.
+   `casi` sono i casi in sospeso (stato diverso da `risolto`) che quel ruolo
+   vede, al massimo 100: per l'admin quelli di tutti gli utenti, per il
+   design i suoi, per il guest nessuno. La pagina li mette nella finestra,
+   anche se sono stati mandati da un altro browser, e mostra **Elimina il
+   caso** dove il ruolo lo permette.
+3. Elimina chiede conferma nella riga; poi la pagina manda
+   `{type: "pack3d:elimina", codice}`. Glam non chiede di nuovo.
+4. Il **server** di Glam rifà il controllo dall'utente collegato, mai da
+   quello che dice il messaggio: admin sì; design solo se il caso è suo (una
+   riga di `pack3d_cases` con quel codice e il suo `user_id`); guest no. Poi
+   chiama lo Space:
+
+```
+POST https://iccio-maurizio.hf.space/api/elimina
+Authorization: Bearer <PACK3D_RISPOSTE_TOKEN>
+Content-Type: application/json
+
+{ "codice": "b312f1e238", "ruolo": "admin" }
+```
+
+5. Con `200`, o `404` (nella coda il caso non c'è più), Glam cancella il caso
+   - tutte le righe di `pack3d_cases` con quel codice, di tutti gli utenti, e
+   le loro notifiche - e risponde all'iframe
+   `{type: "pack3d:eliminato", codice, ok: true}`. Con un'altra risposta non
+   cancella niente e manda `{…, ok: false, errore: <il testo dello Space>}`,
+   che la pagina mostra nella riga.
+
+| risposta dello Space | |
+|---|---|
+| `200 {"ok": true, "issue": 3}` | eliminato: la issue è chiusa (`issue` è null per un caso che aspettava ancora Invia) |
+| `401` | il token non è quello dello Space |
+| `404` | nella coda il caso non c'è più: già chiuso, risolto o eliminato |
+| `409` | la routine ci sta lavorando adesso: riprovare quando ha finito |
+| `502` / `503` | il repository dei casi non risponde, o la coda non è configurata |
+
+Lo Space chiude la issue come "not planned", con l'etichetta `eliminato` e un
+commento che dice chi l'ha eliminato (un admin o l'account design, non il
+nome), e la routine non la lavora più. I file restano nel registro: lo stesso
+PDF, ricaricato, apre un caso nuovo. Chi aveva il caso nella finestra di un
+altro browser lo vede uscire, con la notifica «il caso è stato eliminato».
+
+Un caso che Glam elenca ancora ma che nella coda non c'è più - chiuso o
+eliminato fuori dall'app, per esempio da chi gestisce il servizio - la pagina
+lo toglie e manda lo stesso `pack3d:elimina`: lo Space risponde `404`, e Glam
+cancella il suo. Così in Glam non restano casi fantasma.
+
 ## Il testo per Lovable
 
 Da incollare in Lovable così com'è. Dei due segreti, `PACK3D_IMPORT_TOKEN`
@@ -239,4 +309,29 @@ I casi in correzione hanno un nuovo stato, 'da-approvare': il modello corretto �
 3. Premendo questa notifica apri la sezione "Costruisci modello 3D da PDF" (dove la pagina dello Space ha la finestra dei casi). Non serve nessun modulo in Glam: l'approvazione passa dalla pagina dello Space.
 
 4. Tutto il resto resta com'è: il modello arriva con /api/import-model dopo l'approvazione e mette il caso a 'risolto', come oggi.
+```
+
+### Il testo per Lovable: eliminare i casi
+
+Da incollare dopo i testi qui sopra. Non servono segreti nuovi:
+`PACK3D_RISPOSTE_TOKEN` c'è già.
+
+```text
+Aggiungi l'eliminazione dei casi in correzione. I casi li mostra la pagina dello Space nell'iframe di "Costruisci modello 3D da PDF", nella sua finestra "Casi", e il tasto Elimina sta lì; Glam decide chi può eliminare cosa e chiama lo Space dal server. Il contratto completo è in GLAM.md, sezione 7, del repository iccio84/pack3d-studio.
+
+1. Ruoli: usa la regola che l'app usa già. design = l'utente collegato con l'email dell'account design; admin = qualunque altro utente collegato; guest = nessun utente collegato (l'accesso guest con la password). L'admin può eliminare tutti i casi, il design solo quelli caricati da lui (quelli con una riga in pack3d_cases col suo user_id), il guest nessuno.
+
+2. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già i messaggi "pack3d:caso" dall'iframe, con lo stesso controllo (e.origin === window.location.origin, e e.source uguale alla contentWindow dell'iframe), ascolta anche:
+   - { type: "pack3d:ruolo?" }: rispondi all'iframe con postMessage({ type: "pack3d:ruolo", ruolo, casi }, window.location.origin). ruolo è "admin", "design" o "guest". casi sono i casi in sospeso che quel ruolo vede, al massimo 100, dal più recente, come { codice, nome, creato } (creato = created_at). Per l'admin: tutti i casi di pack3d_cases, di tutti gli utenti, con stato diverso da 'risolto', uno per codice (serve una funzione del server: la RLS mostra a ognuno solo i suoi). Per il design: i suoi casi con stato diverso da 'risolto'. Per il guest: [].
+   - { type: "pack3d:elimina", codice } (codice di 10 cifre esadecimali): chiama una nuova funzione del server deletePack3dCase({ codice }) e rispondi all'iframe con postMessage({ type: "pack3d:eliminato", codice, ok, errore }, window.location.origin). Non chiedere conferma: l'ha già chiesta la pagina.
+
+3. deletePack3dCase, funzione del server con l'utente autenticato:
+   - Ricava il ruolo dall'utente collegato, sul server, mai da quello che dice il browser. Guest (nessun utente collegato): rifiuta con "Il guest non può eliminare i casi". Design senza una riga in pack3d_cases con quel codice e il suo user_id: rifiuta con "Puoi eliminare solo i casi caricati da te".
+   - Chiama lo Space: POST all'indirizzo dello Space che usi già per l'iframe + "/api/elimina", con Authorization: Bearer PACK3D_RISPOSTE_TOKEN (il secret che c'è già per /api/risposta) e corpo JSON { codice, ruolo }.
+   - Se lo Space risponde 200, o 404 (nella coda il caso non c'è più), cancella tutte le righe di pack3d_cases con quel codice, di tutti gli utenti, e le notifiche di pack3d_notifications con quel codice, e torna { ok: true }.
+   - Se risponde altro, non cancellare niente e torna { ok: false, errore: il testo della risposta dello Space } (409 vuol dire che la routine ci sta lavorando adesso: riprovare quando ha finito).
+
+4. Dopo un'eliminazione riuscita aggiorna il badge sul tasto "Costruisci modello 3D da PDF" e la busta delle notifiche (invalida le query dei casi e delle notifiche).
+
+5. Tutto il resto resta com'è: endpoint, token, tabelle, notifiche e modulo di risposta.
 ```
