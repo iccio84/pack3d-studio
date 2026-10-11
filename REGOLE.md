@@ -3919,17 +3919,32 @@ angoli della piega arrivano sulle gambe della V (10,2 mm dentro dal bordo,
 10,1 mm sopra la piega) come il bordo di un **ripiano** piatto: il fianco
 andava dentro in orizzontale per 10 mm e solo li' il triangolo saliva. Di
 tre quarti si vedeva uno scalino, con una tasca scura, e chi ha il pack l'ha
-detto con la foto: il soffietto non e' cosi'. Sulla fustella, fra la piega e
+detto con due foto: il soffietto non e' cosi'. Sulla fustella, fra la piega e
 la fine dei tagli, non c'e' nessuna cordonatura: un ripiano non ha dove
-piegarsi. Il pezzo centrale del fianco - fra la piega, i tagli e le gambe
-della V - gira tutto intero sulla piega e si inclina dentro fino alla punta
-sotto la cresta: largo come il fianco alla piega, a punta in cima, in un
-piano solo, inclinato di `asin(chiude / falda)` (18 gradi sul primo caso:
-la punta va dentro di 20,9 mm salendo di 64,3). Le ali, fra le gambe della V
-e i bordi del fianco, si piegano contro il rovescio delle falde. I tagli
-servono solo a staccare le ali dal pezzo centrale vicino agli angoli, dove
-altrimenti il cartoncino si accavallerebbe. Di tre quarti il fianco continua
-sopra la piega e si stringe salendo, come nella foto.
+piegarsi. E sopra la piega i bordi del fianco sono **tagli**, non
+cordonature: il fianco li' e' staccato dal fronte e dal retro e resta
+attaccato solo alla piega.
+
+Quindi il soffietto sono tre pezzi. Il **pezzo centrale** - fra la piega, i
+tagli e le gambe della V - gira intero sulla piega e si inclina dentro fino
+alla punta sotto la cresta, in un piano solo, inclinato di
+`asin(chiude / falda)` (18 gradi sul primo caso: la punta va dentro di
+20,9 mm salendo di 64,3). E' largo quanto il fianco alla piega, si stringe
+lungo i tagli e poi lungo le gambe della V: le gambe partono dalla **fine dei
+tagli**, non dagli angoli (`punta._tagli` segue la catena di tratti dritti da
+ogni angolo). Le due **ali**, fuori dalle gambe, girano sulle gambe e
+riempiono lo spazio fino al bordo delle falde, contro il loro rovescio, con la
+**stampa verso il soffietto**: guardando la scatola dall'alto, nella foto, fra
+la gamba della V e il bordo della falda di dietro si vede la stampa dell'ala,
+in ombra, fino alla cresta. Un'ala rigida con il bordo libero sul bordo
+della falda e l'altro lato sulla gamba della V ha le misure del foglio a uno
+o due mm: il cartoncino si incurva appena, e il modello fa l'ala a strisce.
+
+La quinta versione aveva il pezzo centrale a triangolo dagli angoli alla
+punta e le ali dagli angoli: di tre quarti andava, ma dall'alto il pezzo
+centrale era troppo largo e le ali erano solo una striscia. Una prova con le
+ali girate verso l'interno, rovescio in vista, non torna con la foto: in cima
+al soffietto si vede stampa, non cartone.
 
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
