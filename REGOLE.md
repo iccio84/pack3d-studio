@@ -3913,21 +3913,56 @@ chi aveva il pack l'ha corretta: il soffietto deve cominciare a piegarsi dove
 si piega il fronte, rientrare e poi salire fino alla chiusura. Fronte, retro e
 soffietto si piegano quindi tutti alla stessa altezza, la piega dei fianchi.
 
-Quanto rientra lo dice il DT. Dagli angoli della piega partono due **tagli a
-45 gradi** che arrivano sulle gambe della V: sul primo caso finiscono 10,2 mm
-dentro dal bordo del fianco e 10,1 mm sopra la piega (`punta._ripiano`, che
-segue la catena di tratti dritti da ogni angolo). Fra la piega e la fine dei
-tagli il soffietto e' un **ripiano** che va dentro in piano, profondo quanto
-i tagli salgono (10,1 mm). Dalla fine dei tagli il triangolo fra le gambe
-della V **sale** fino alla punta, sulla cresta. Le pareti della tasca sono gli
-spicchi fra la V e i bordi del fianco, staccati dal ripiano proprio dai tagli:
-sotto, dal bordo del fianco alla gamba; sopra si appoggiano contro il rovescio
-delle falde. Senza tagli agli angoli il ripiano non c'e', e il triangolo sale
-dalla piega.
+**Un piano solo, come il fianco di un cartone del latte.** La quarta
+versione, fatta dalla routine, leggeva i due **tagli a 45 gradi** che dagli
+angoli della piega arrivano sulle gambe della V (10,2 mm dentro dal bordo,
+10,1 mm sopra la piega) come il bordo di un **ripiano** piatto: il fianco
+andava dentro in orizzontale per 10 mm e solo li' il triangolo saliva. Di
+tre quarti si vedeva uno scalino, con una tasca scura, e chi ha il pack l'ha
+detto con due foto: il soffietto non e' cosi'. Sulla fustella, fra la piega e
+la fine dei tagli, non c'e' nessuna cordonatura: un ripiano non ha dove
+piegarsi. E sopra la piega i bordi del fianco sono **tagli**, non
+cordonature: il fianco li' e' staccato dal fronte e dal retro e resta
+attaccato solo alla piega.
 
-La salita, a pezzi rigidi, sarebbe di qualche millimetro piu' corta della
-gamba sul foglio: il cartoncino vero si flette, e il modello tiene le facce
-piane.
+Quindi il soffietto sono tre pezzi. Il **pezzo centrale** - fra la piega, i
+tagli e le gambe della V - gira intero sulla piega e si inclina dentro fino
+alla punta sotto la cresta, in un piano solo, inclinato di
+`asin(chiude / falda)` (18 gradi sul primo caso: la punta va dentro di
+20,9 mm salendo di 64,3). E' largo quanto il fianco alla piega, si stringe
+lungo i tagli e poi lungo le gambe della V: le gambe partono dalla **fine dei
+tagli**, non dagli angoli (`punta._tagli` segue la catena di tratti dritti da
+ogni angolo). Le due **ali**, fuori dalle gambe, girano sulle gambe e
+riempiono lo spazio fino al bordo delle falde, contro il loro rovescio, con la
+**stampa verso il soffietto**: guardando la scatola dall'alto, nella foto, fra
+la gamba della V e il bordo della falda di dietro si vede la stampa dell'ala,
+in ombra, fino alla cresta. Un'ala rigida con il bordo libero sul bordo
+della falda e l'altro lato sulla gamba della V ha le misure del foglio a uno
+o due mm: il cartoncino si incurva appena, e il modello fa l'ala a strisce.
+
+La quinta versione aveva il pezzo centrale a triangolo dagli angoli alla
+punta e le ali dagli angoli: di tre quarti andava, ma dall'alto il pezzo
+centrale era troppo largo e le ali erano solo una striscia. Una prova con le
+ali girate verso l'interno, rovescio in vista, non torna con la foto: in cima
+al soffietto si vede stampa, non cartone.
+
+**La piega del fronte e' smussata.** Sul DT il fronte non ha cordonatura
+all'altezza della piega dei fianchi, e li' passa il marchio: lo spigolo lo
+tagliava a meta' con un segno netto. Chi ha il pack ha chiesto di ammorbidire
+solo quella piega, "come se curvasse senza lasciare il segno". E' un arco di
+`SMUSSO` (20 mm di raggio) tangente al fronte dritto e alla falda, che
+restano dove sono: la forma non cambia, lo spigolo rientra di 0,25 mm. Sul
+foglio l'arco prende i 3,2 mm prima e dopo la piega. Il retro e tutte le
+cordonature vere - gli angoli, la piega dei fianchi, le gambe della V, la
+cresta - restano spigoli. Una prova con fronte e retro curvi per un terzo
+della falda cambiava la pendenza e l'altezza: non era quello che serviva.
+
+**Il cartoncino ha spessore.** Oltre al rovescio, ogni bordo che non combacia
+con quello di un altro pezzo prende la **costa** del taglio, come
+nell'astuccio e nel ballotin: i bordi delle falde e delle ali lungo il
+soffietto, la cresta, l'aletta, i tagli a 45 gradi. Quanto e' spessa la dice
+lo spessore dichiarato nella pagina (1-3); chi ha il pack ha chiesto il
+cartone spesso, e nel parco il B-ready e' col livello 3, 0,7 mm.
 
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
@@ -3945,10 +3980,10 @@ stampato capovolto esce dritto da se'.
 
 ### Cosa manca
 
-Il soffietto e' fatto di facce piane: il cartoncino vero si incurva, e la
-parete della tasca si piega dal bordo del fianco alla punta lungo una linea
-che il DT non disegna. Non sono modellate le alette di colla del retro e del
-fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
+Il pezzo centrale del soffietto e' piano, e le ali sono a strisce: il
+cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
+ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
+colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
 ## Flowpack
 
