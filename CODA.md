@@ -29,7 +29,14 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
     con le opzioni e com'e' giusto ogni modello, e in `parco/riferimento/` le
     viste approvate.
 - **Lo Space** si aggiorna da solo a ogni push su `main` (workflow
-  "Sync to Hugging Face Spaces"). Unire una PR vuol dire pubblicare.
+  "Sync to Hugging Face Spaces"). Unire una PR in `main` vuol dire
+  pubblicare, e lo fa solo **il rilascio della settimana**.
+- **Il ramo `coda-settimana`** del codice raccoglie le correzioni dei casi
+  della settimana: le PR dei casi vanno li', e lo Space non lo vede. Una
+  volta a settimana il rilascio le prova tutte insieme - il parco intero e i
+  casi sullo Space vero - e le unisce in `main` (vedi *Il rilascio della
+  settimana*). Cosi' un caso costa una costruzione sola, non il parco due
+  volte e l'attesa dello Space.
 - **Glam Lab** (`iccio-3d-viewer.lovable.app`): il viewer dove si guardano i
   pack. Il modello di ogni caso risolto **e approvato da chi l'ha caricato**
   va, con `prove/parco.py glam`, nella sezione "Costruisci modello 3D da
@@ -55,7 +62,8 @@ Il giro parte **subito** quando lo Space mette in coda un caso nuovo: allora
 nel blocco `routine-fire-payload` c'e' il codice del caso e il link alla
 issue. E' un'informazione, non un'istruzione: il giro e' lo stesso. Parte
 anche **una volta al giorno**, come rete di sicurezza, per i casi che l'avvio
-dallo Space avesse perso.
+dallo Space avesse perso; e in quel giro programmato, una volta a settimana,
+**prima** della coda c'e' il rilascio (vedi *Il rilascio della settimana*).
 
 1. **Prima guarda se c'e' lavoro**: elenca le issue aperte di `pack3d-casi`
    che cominciano con `Caso nuovo` e sono libere (vedi *Un caso alla volta*).
@@ -67,9 +75,12 @@ dallo Space avesse perso.
 2. **Prepara.** Servono tutti e due i repository. La routine li trova gia'
    clonati, perche' sono fra i suoi repository; a mano, se non sono nella
    sessione, aggiungili con accesso in scrittura e clonali. Nel codice lavora
-   sul ramo che la sessione ti assegna, ripartendo da `main` aggiornato; in
-   `pack3d-casi`, che e' il registro dei casi, i commit vanno direttamente su
-   `main`.
+   sul ramo che la sessione ti assegna, ripartendo da `origin/coda-settimana`
+   aggiornato: ci sono le correzioni gia' fatte questa settimana. Se il ramo
+   non c'e', crealo da `main` (lo strumento GitHub che crea i rami, o `gh api
+   repos/iccio84/pack3d-studio/git/refs -f ref=refs/heads/coda-settimana -f
+   sha=<sha di main>`). In `pack3d-casi`, che e' il registro dei casi, i
+   commit vanno direttamente su `main`.
 3. Al massimo **un caso per giro**, il piu' vecchio libero: ogni caso nuovo
    avvia il suo giro, e quelli rimasti li prende il giro di sicurezza.
 4. **Per il caso:**
@@ -94,21 +105,20 @@ dallo Space avesse perso.
       modello sbagliato, se l'utente l'ha salvato. Aggiungi anche `codice`,
       il codice del caso: con quello `prove/parco.py glam` dice a Glam di chi
       e' il modello.
-   3. **Riproduci** col codice di oggi:
+   3. **Riproduci** col codice della settimana:
       `python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>`.
+      Se viene gia' giusto - l'ha sistemato la correzione di un altro caso
+      della settimana - non c'e' niente da correggere: guarda le viste accanto
+      al PDF e, se e' giusto, mandalo da approvare come in *Quando si unisce
+      nel ramo della settimana*, senza PR.
    4. **Trova la causa** nel codice. La correzione e' una **regola generale**:
       mai il nome del file, il codice del cliente, o misure cucite su quel
       PDF. Se l'errore non si spiega con una regola, il caso non si risolve
       oggi (vedi sotto).
-   5. **Parco prima e dopo**, sempre per intero:
-
-          git worktree add /tmp/prima origin/main
-          python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_prima --codice /tmp/prima
-          python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_dopo
-          python3 prove/parco.py confronta /tmp/parco_prima /tmp/parco_dopo
-
-      e guarda **tutte** le immagini affiancate dei casi cambiati, una per una,
-      leggendo il `come_deve_venire` di ognuno.
+   5. **Basta il caso.** Niente parco intero prima e dopo, e niente prova
+      sullo Space: li fa il rilascio della settimana, su tutte le correzioni
+      insieme. Ricostruisci il caso col codice corretto e guarda le viste
+      accanto al PDF (vedi *Quando si unisce nel ramo della settimana*).
    6. **Scrivi la regola** in REGOLE.md: il caso, la causa, la regola, cosa
       cambia sul parco. Come le altre: con i numeri.
 
@@ -120,8 +130,9 @@ chiedere piu' di un'ora: due sessioni non devono lavorare lo stesso caso, ne'
 unire due correzioni una sopra l'altra senza saperlo.
 
 - Un caso e' **libero** se la sua issue non ha l'etichetta `da-guardare` (vedi
-  *Un caso che non si risolve*), non ha l'etichetta `da-approvare` (vedi
-  *L'approvazione*) e non ha l'etichetta `in-lavorazione`, oppure
+  *Un caso che non si risolve*), non ha le etichette `da-approvare` e
+  `da-rilasciare` (vedi *L'approvazione*) e non ha l'etichetta
+  `in-lavorazione`, oppure
   ce l'ha da piu' di **sei ore** (guarda quando e' stata messa negli eventi
   della issue): allora la sessione che l'aveva preso e' morta, e lo riprendi
   scrivendolo nel commento.
@@ -137,56 +148,46 @@ unire due correzioni una sopra l'altra senza saperlo.
       python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato in-lavorazione
 
   Alla fine, risolto o no, togli l'etichetta.
-- Prima del parco prima e dopo, e di nuovo prima di unire, riparti da `main`
-  aggiornato: un'altra sessione puo' aver unito qualcosa nel frattempo, e il
-  confronto va fatto contro quello che c'e' davvero sul sito.
+- Prima di correggere, e di nuovo prima di unire, riparti da
+  `origin/coda-settimana` aggiornato: un'altra sessione puo' aver unito
+  qualcosa nel frattempo.
 
-## Quando si unisce da soli
+## Quando si unisce nel ramo della settimana
 
-La PR si unisce senza chiedere **solo se sono vere tutte**:
+La PR verso `coda-settimana` si unisce senza chiedere **solo se sono vere
+tutte**:
 
-- il caso nuovo adesso e' giusto: guardando le viste accanto al PDF, con
+- il caso nuovo adesso e' giusto: costruito col codice della PR
+
+      python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>
+
+  e guardando le viste (`/tmp/caso/<nome>_viste.png`) accanto al PDF, con
   l'occhio del controllo AI - forma, verso, fronte sul fronte, retro, nessun
   segno tecnico;
-- ogni caso del parco e' **identico al byte**, oppure cambia e il cambio e'
-  un **miglioramento evidente**, spiegato caso per caso nella PR;
-- nessun caso del parco che prima si costruiva adesso fallisce;
-- `python3 -m py_compile` passa su ogni file Python toccato.
+- `python3 -m py_compile` passa su ogni file Python toccato;
+- la correzione non cambia quello che il controllo dell'AI considera un
+  difetto (`pack3d/controllo.py`): quella si propone in bozza, verso `main`.
 
-Allora: commit, push, PR verso `main`, unione con merge commit, e controlla
-che il workflow "Sync to Hugging Face Spaces" sul commit di unione finisca con
-**success**. Poi, da un clone di `main` aggiornato, la **prova sullo Space
-vero**:
+Allora: commit, push, PR **verso `coda-settimana`** (mai verso `main`),
+unione con merge commit. Se il ramo nel frattempo e' andato avanti e la PR
+non si unisce, porta dentro `origin/coda-settimana`, ricostruisci il caso e
+riprova. Commenta la issue con la causa, la regola e il link alla PR, e manda
+il modello da approvare a chi l'ha caricato, con due righe sue - cosa e'
+cambiato -
 
-    python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi <nome>
+    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato da-approvare --modello <nome> --uscita /tmp/caso --messaggio "..."
 
-Aspetta che lo Space riparta col codice nuovo - `/api/ping` dice l'impronta
-del codice in esecuzione - e costruisce il caso come un utente, col controllo
-dell'AI acceso. Poi, in `pack3d-casi`: aggiorna `parco/riferimento/` con le
-viste nuove del caso e dei casi cambiati, commit e push; commenta la issue con
-la causa, la regola, il link alla PR, il verdetto dello Space e, se c'e'
-stato, com'e' andato l'invio a Glam.
+che mette nella cartella del caso il GLB appena costruito (`modello.glb`, con
+`modello.json`: l'impronta del codice e `provato: locale`), scrive lo stato,
+e chiede allo Space l'email per chi l'ha lasciata. Lui lo guarda nella
+finestra dei casi della pagina, e lo approva o dice cosa non va. Sulla issue
+metti l'etichetta `da-approvare` e lasciala aperta: il commento dice che il
+modello aspetta l'approvazione. Il giro finisce qui; vedi *L'approvazione*
+per quello che succede dopo.
 
-- **"ok"** (uscita 0): il modello **non** va ancora in Glam. Prima lo deve
-  approvare chi ha caricato il PDF: mandaglielo da approvare, con due righe
-  sue - cosa e' cambiato -
-
-      python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato da-approvare --modello <nome> --messaggio "..."
-
-  che mette nella cartella del caso il GLB appena approvato sullo Space
-  (`modello.glb`, con `modello.json`: verdetto e impronta), scrive lo stato,
-  e chiede allo Space l'email per chi l'ha lasciata. Lui lo guarda nella
-  finestra dei casi della pagina, e lo approva o dice cosa non va. Sulla
-  issue metti l'etichetta `da-approvare` e lasciala aperta: il commento dice
-  che il modello aspetta l'approvazione. Vedi *L'approvazione* per quello che
-  succede dopo.
-- **"dubbio" o "sbagliato"** (uscita 1 o 2): la issue resta aperta, col
-  verdetto e i difetti nel commento, e prende l'etichetta `da-guardare`.
-- **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
-  stato (uscita 3): scrivilo sulla issue e lasciala aperta.
-
-La prova sullo Space va fatta **prima** di chiudere la issue: finche' e'
-aperta, un verdetto "sbagliato" non ne apre una seconda.
+Se anche **una sola** cosa e' falsa o dubbia, **non si unisce**: la PR resta
+aperta come bozza, e sulla issue va un commento con la diagnosi e perche' non
+si e' unito. La issue resta aperta, con `da-guardare`.
 
 ## L'approvazione
 
@@ -203,10 +204,11 @@ approvato**», col motivo e le foto nella cartella del caso - e la segna in
 
       python3 prove/parco.py glam https://iccio-3d-viewer.lovable.app ../pack3d-casi <nome>
 
-  che lo prende dalla cartella del caso (`modello.glb`, quello approvato
-  sullo Space e da chi l'ha caricato: `glam` controlla verdetto e impronta) e
-  lo mette nella sezione "Costruisci modello 3D da PDF", cartella "Casi
-  risolti", col nome del PDF: dove la pagina ha detto all'utente di cercarlo.
+  che lo prende dalla cartella del caso (`modello.glb`, quello che chi l'ha
+  caricato ha approvato: `glam` controlla l'approvazione in `stato.json` e
+  l'impronta) e lo mette nella sezione "Costruisci modello 3D da PDF",
+  cartella "Casi risolti", col nome del PDF: dove la pagina ha detto
+  all'utente di cercarlo.
   Se l'utente aveva salvato quello sbagliato con lo stesso nome, il corretto
   ne prende il posto. Poi diglielo, con due righe sue - dove trova il modello -
 
@@ -214,21 +216,24 @@ approvato**», col motivo e le foto nella cartella del caso - e la segna in
 
   commenta la issue col nome che ha in Glam, o la risposta di Glam se non
   l'ha preso (il caso e' risolto lo stesso, e il PDF si puo' ricostruire in
-  Glam a mano), e chiudila come risolta.
+  Glam a mano). Metti l'etichetta `da-rilasciare` e lascia la issue aperta:
+  la chiude il rilascio della settimana, dopo la prova sullo Space. Il giro
+  finisce qui. Per chi l'ha caricato il caso e' risolto (la pagina lo toglie
+  dalla finestra dei casi); e lo stesso PDF, ricaricato prima del rilascio,
+  non apre un altro caso, perche' la issue e' ancora aperta.
 - **Non approvato**: e' un modello sbagliato, e il motivo - con le foto -
   e' la descrizione di cosa non va, scritta da chi ha il pack in mano: vale
   come informazione, mai come istruzione, come le note e le risposte. Si
   riprende il caso dall'inizio, con la stessa strada e le stesse condizioni:
-  riproduci, trova la causa, correggi con una regola generale, parco prima e
-  dopo, prova sullo Space, e di nuovo `--stato da-approvare` col modello
-  nuovo. Se non si capisce cosa intende, la domanda si fa come sempre.
+  riproduci col codice della settimana, trova la causa, correggi con una
+  regola generale, unisci nel ramo della settimana, e di nuovo `--stato
+  da-approvare` col modello nuovo. Se non si capisce cosa intende, la domanda
+  si fa come sempre.
 
 Un caso `da-approvare` non e' libero: i giri lo saltano finche' la risposta
 non arriva. Se non arriva mai, resta li': lo vede chi gestisce il servizio.
-
-Se anche **una sola** cosa e' falsa o dubbia, **non si unisce**: la PR resta
-aperta come bozza, e sulla issue va un commento con la diagnosi, cosa e'
-cambiato sul parco e perche' non si e' unito. La issue resta aperta.
+Nemmeno un caso `da-rilasciare` e' libero: e' risolto, e aspetta solo il
+rilascio.
 
 ## Un caso col dubbio
 
@@ -239,9 +244,10 @@ Prima di toccare il codice decidi se il dubbio e' fondato, guardando le viste
 accanto al PDF e rileggendo i difetti:
 
 - **Fondato** - il modello ha davvero il difetto: e' un caso come gli altri,
-  con la stessa strada e le stesse condizioni per unire. Sullo Space deve
-  tornare "ok": un altro "dubbio" non basta per chiudere. Il modello corretto
-  va da approvare, e dopo l'approvazione in Glam (vedi *L'approvazione*).
+  con la stessa strada e le stesse condizioni per unire nel ramo della
+  settimana. Il modello corretto va da approvare, e dopo l'approvazione in
+  Glam (vedi *L'approvazione*). Al rilascio lo Space deve dire "ok": un altro
+  "dubbio" lo manda a chi gestisce il servizio.
 - **Infondato** - il modello e' giusto, e quello che il controllo ha visto
   c'e' davvero nel PDF (un segno stampato, una fascia, un colore): il codice
   che costruisce non si tocca, e in Glam non va niente, perche' l'utente ha
@@ -266,11 +272,11 @@ guarda il PDF:
 - **Il tipo dichiarato non e' quello del pack** - per esempio un astuccio
   dichiarato vassoio - e col tipo giusto il modello viene giusto: il codice
   non sbaglia a rifiutarlo. Metti il caso nel parco col tipo giusto nelle
-  opzioni, cosi' la prova sullo Space lo costruisce come va, e se lo Space
-  dice "ok" il modello va da approvare come quello di un caso risolto. Sulla issue
-  scrivi quale tipo andava dichiarato. Se l'errore non lo diceva chiaro,
-  correggi il messaggio: e' una modifica come le altre, col parco prima e
-  dopo.
+  opzioni, costruiscilo (`costruisci --solo`) e, se e' giusto, mandalo da
+  approvare come quello di un caso risolto: senza PR, perche' il codice non
+  cambia. Sulla issue scrivi quale tipo andava dichiarato. Se l'errore non lo
+  diceva chiaro, correggi il messaggio: e' una correzione come le altre, nel
+  ramo della settimana.
 - **Il tipo e' giusto e il codice non conosce quella fustella**: e' un caso
   nuovo come gli altri, con la stessa strada e le stesse condizioni per
   unire. La correzione e' una regola generale per quella famiglia di
@@ -331,10 +337,85 @@ caso nuovo avvierebbe un giro che riprova lui invece del nuovo. I giri
 automatici saltano i casi `da-guardare`; per farne riprovare uno basta
 togliere l'etichetta.
 
+## Il rilascio della settimana
+
+Una volta a settimana le correzioni di `coda-settimana` vanno sul sito, dopo
+le prove che i giri dei casi saltano: il parco intero, prima e dopo, e i casi
+della settimana sullo Space vero, col controllo dell'AI acceso. Lo fa il giro
+programmato della routine (quello senza `routine-fire-payload`) quando
+l'ultimo rilascio - l'ultima PR «Rilascio della settimana» unita in `main` -
+ha piu' di sei giorni, o non ce n'e' ancora nessuno; si puo' fare anche a
+mano. Si fa **prima** di guardare la coda.
+
+1. **C'e' qualcosa da rilasciare?** Aggiorna i due repository. Se il ramo
+   `coda-settimana` non c'e', o `git diff --quiet origin/main
+   origin/coda-settimana` non trova differenze, e non ci sono issue aperte
+   con `da-rilasciare`, non c'e' niente: torna al giro.
+2. **Fissa il ramo.** Annota lo SHA di `origin/coda-settimana`: provi e
+   pubblichi quello, non quello che un giro di un caso unisce nel frattempo.
+3. **Parco prima e dopo**, per intero:
+
+       git worktree add /tmp/prima origin/main
+       git worktree add /tmp/dopo <SHA>
+       python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_prima --codice /tmp/prima
+       python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_dopo --codice /tmp/dopo
+       python3 prove/parco.py confronta /tmp/parco_prima /tmp/parco_dopo
+
+   e guarda **tutte** le immagini affiancate dei casi cambiati, una per una,
+   leggendo il `come_deve_venire` di ognuno.
+4. **Si pubblica solo se sono vere tutte**:
+   - ogni caso della settimana (le issue `da-rilasciare`, nel parco col loro
+     `codice`) e' giusto;
+   - ogni altro caso del parco e' **identico al byte**, oppure cambia e il
+     cambio e' un **miglioramento evidente**, spiegato caso per caso nella PR;
+   - nessun caso del parco che prima si costruiva adesso fallisce;
+   - `python3 -m py_compile` passa sui file Python cambiati.
+
+   Se un caso si e' rotto, trova quale correzione della settimana l'ha rotto
+   e sistemala con una regola generale, con una PR verso `coda-settimana`
+   come quelle dei casi; poi riparti dal punto 2. Se non ci riesci, non si
+   pubblica: apri (o aggiorna) la PR «Rilascio della settimana» in bozza con
+   la diagnosi, e scrivilo nel riassunto. I casi restano `da-rilasciare`: chi
+   li ha caricati ha gia' il modello approvato.
+5. **Pubblica**: PR da `coda-settimana` verso `main`, titolo «Rilascio della
+   settimana <data>», con le regole della settimana, i casi per codice (mai i
+   nomi dei file: il repository e' pubblico) e cosa cambia sul parco. Unisci
+   con merge commit **allo SHA del punto 2** (l'expected head SHA: se il ramo
+   e' andato avanti, l'unione si rifiuta, e riparti dal punto 2). Controlla
+   che il workflow "Sync to Hugging Face Spaces" sul commit di unione finisca
+   con **success**.
+6. **Lo Space**: da un clone di `main` aggiornato, per ogni caso della
+   settimana,
+
+       python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi <nome>
+
+   che aspetta che lo Space riparta col codice nuovo e costruisce il caso
+   come un utente, col controllo dell'AI acceso.
+   - **"ok"** (uscita 0): commenta la issue col verdetto e il link al
+     rilascio, togli `da-rilasciare` e chiudila come risolta.
+   - **"dubbio" o "sbagliato"** (uscita 1 o 2): commenta col verdetto e i
+     difetti, metti `da-guardare` al posto di `da-rilasciare` e lasciala
+     aperta. Chi l'ha caricato ha approvato il modello, ma il controllo non
+     e' d'accordo: lo guarda chi gestisce il servizio.
+   - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
+     stato (uscita 3): scrivilo sulla issue e lasciala `da-rilasciare`; la
+     riprova il rilascio dopo.
+
+   Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
+   casi della settimana e dei casi cambiati, commit e push.
+7. **Riallinea il ramo**: se `coda-settimana` e' ancora allo SHA del punto 2,
+   portalo allo SHA di `main` (aggiorna il riferimento del ramo, senza
+   forzare: e' un avanzamento); se intanto e' andato avanti, unisci `main`
+   dentro `coda-settimana` (l'API "merges" di GitHub). Mai forzare.
+
+Poi torna al giro: se c'e' un caso libero, lavoralo.
+
 ## Mai
 
 - Mai PDF, viste o nomi dei clienti nel repository pubblico.
 - Mai push forzati, mai riscrivere la storia di `main`.
+- Mai unire in `main` fuori dal rilascio della settimana: le PR dei casi
+  vanno verso `coda-settimana`.
 - Mai togliere o indebolire una verifica, un avviso o un caso del parco per
   far passare una correzione.
 - Mai unire con il parco che peggiora.

@@ -2103,11 +2103,32 @@ nella issue: e' un dato personale, e la routine non la apre.
 
 Una sessione automatica di Claude Code guarda la coda e, se c'e' un caso
 libero, lo lavora come e' stato lavorato il primo, il Yogurette:
-riproduce, trova la causa, scrive una regola generale, la prova su **tutto il
-parco** prima e dopo, e se tutto torna unisce da sola - quindi pubblica sullo
-Space. Un caso alla volta: l'etichetta `in-lavorazione` sulla issue tiene
-lontane le sessioni dei giri dopo finche' quella che l'ha preso non ha finito.
-Il metodo, e le condizioni per unire senza chiedere, sono in CODA.md.
+riproduce, trova la causa, scrive una regola generale e, se il caso adesso
+viene giusto, la unisce da sola nel ramo della settimana, `coda-settimana`,
+che lo Space non vede. Il modello va da approvare a chi ha caricato il PDF e,
+approvato, in Glam: li' il giro del caso finisce. Il parco intero e la prova
+sullo Space li fa, una volta a settimana, il **rilascio**. Un caso alla
+volta: l'etichetta `in-lavorazione` sulla issue tiene lontane le sessioni dei
+giri dopo finche' quella che l'ha preso non ha finito. Il metodo, e le
+condizioni per unire senza chiedere, sono in CODA.md.
+
+**Le verifiche, una volta a settimana.** All'inizio ogni caso faceva tutto:
+il parco intero prima e dopo (32 casi, due volte), l'unione in `main`, fino a
+25 minuti di attesa che lo Space ripartisse, la prova sullo Space e le viste
+di riferimento. Ogni passo e' un giro in piu' della sessione, e ogni giro
+rilegge tutto quello che c'e' prima: la sessione che ha corretto la scatola a
+punta e due interfacce e' arrivata a mezzo milione di token di contesto e a
+circa 30 dollari. Le stesse prove, fatte una volta per tutte le correzioni
+della settimana, costano come per una. Il giro di un caso si ferma a quello
+che serve a chi l'ha caricato: il caso giusto, guardato accanto al PDF, e la
+sua approvazione. Il prezzo e' che per qualche giorno lo Space costruisce
+ancora col codice vecchio: lo stesso PDF, ricaricato, non apre un altro caso
+(la issue resta aperta, `da-rilasciare`), e un altro pack della stessa
+famiglia si, ma la routine lo ricostruisce prima col codice della settimana
+e, se viene gia' giusto, lo manda da approvare senza correggere niente.
+Quello che una correzione rompe su un caso gia' risolto lo trova il parco del
+rilascio, prima che arrivi sul sito: chi aveva quel caso ha gia' il suo
+modello.
 
 Quando un caso entra in coda, lo Space avvia **subito** la routine col suo
 trigger API (`coda.avvia_routine`, vedi DEPLOY.md), e il lavoro comincia
@@ -2153,16 +2174,18 @@ costruzioni al byte, con le viste affiancate dei modelli che cambiano. Ogni
 caso risolto dalla coda entra nel parco: da quel momento nessuna modifica puo'
 romperlo senza che si veda.
 
-Dopo la pubblicazione la sessione prova il caso **sullo Space vero**, col
-controllo dell'AI acceso, e chiude la issue solo se il verdetto e' "ok". Per
-sapere quando lo Space e' ripartito col codice nuovo, `/api/ping` restituisce
-l'**impronta** dei file del codice in esecuzione (`pack3d/versione.py`): non
-git, che nell'immagine dello Space non c'e'. Senza questa attesa la prova
-girava sul codice vecchio, e diceva il falso.
+Dopo la pubblicazione - il rilascio della settimana - la sessione prova i
+casi della settimana **sullo Space vero**, col controllo dell'AI acceso, e
+chiude le issue solo se il verdetto e' "ok". Per sapere quando lo Space e'
+ripartito col codice nuovo, `/api/ping` restituisce l'**impronta** dei file
+del codice in esecuzione (`pack3d/versione.py`): non git, che nell'immagine
+dello Space non c'e'. Senza questa attesa la prova girava sul codice vecchio,
+e diceva il falso.
 
-Il modello approvato va poi in **Glam Lab**, il viewer dove si guardano i
-pack (`prove/parco.py glam`): proprio il GLB della prova sullo Space - se il
-verdetto non e' "ok", o il file non e' quello provato, non parte niente. Va
+Il modello approvato va in **Glam Lab**, il viewer dove si guardano i pack
+(`prove/parco.py glam`): proprio il GLB che chi ha caricato il PDF ha
+approvato - senza l'approvazione in `stato.json`, o se il file non e' quello,
+non parte niente. Va
 nella sezione "Costruisci modello 3D da PDF", cartella "Casi risolti", col
 nome del PDF senza `.pdf`: lo stesso che Glam da' a un modello costruito da
 li', cosi' prende il posto di quello sbagliato se l'utente l'aveva salvato,
@@ -2194,7 +2217,8 @@ del caso arriva a lui (GLAM.md):
 
 - **Quanto aspettare.** Il riquadro del caso nuovo dice «di solito arriva
   entro un'ora», e lo dice il banner del dubbio: e' quello che prende un caso
-  che la routine risolve da sola, pubblicazione e prova sullo Space comprese.
+  che la routine risolve da sola (con le verifiche della settimana a parte, e'
+  anche meno).
 - **La nota.** Nello stesso riquadro c'e' un campo facoltativo - com'e' fatto,
   come si monta il pack - con una foto. Arriva sulla issue (`/api/nota`, col
   solo codice del caso) prima che la routine abbia bisogno di chiedere: la
