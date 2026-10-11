@@ -677,6 +677,14 @@ def esito_modello(cod, approvato, testo=None, foto=None):
     _scrivi_json(percorso, dati, sha, "Caso %s: %s" % (cod, voce["stato"]))
     _togli_etichette(issue, "da-approvare", "da-guardare")
     _dimentica("issue:%d" % n, "aperte", "stato:" + percorso)
+    if approvato and glam_configurato():
+        # lo Space lo manda in Glam da solo, senza un giro della routine: se
+        # non ci riesce, la rilancia lui
+        threading.Thread(target=_in_glam, args=(cod, issue, cartella, nome),
+                         daemon=True).start()
+        print("coda: caso %s approvato (issue %d), lo mando in Glam" % (cod, n),
+              file=sys.stderr)
+        return {"ok": True, "issue": n, "rilanciata": False, "glam": True}
     rilanciata = bool(avvia_routine(
         cod, issue.get("html_url", ""),
         ("Il caso %s: chi l'ha caricato ha APPROVATO il modello corretto, "
@@ -689,6 +697,93 @@ def esito_modello(cod, approvato, testo=None, foto=None):
 
 
 MODELLO_MAX = 60 * 1024 * 1024
+
+
+# ---------------------------------------------------------------------------
+# Il modello approvato in Glam, dallo Space.
+#
+# Dopo l'approvazione non c'e' piu' niente da capire: il modello va in Glam,
+# il caso e' risolto, la issue resta aperta `da-rilasciare` per il rilascio
+# della settimana (CODA.md). Era un giro intero della routine - avvio,
+# istruzioni, repository - per tre chiamate. Con il token d'import di Glam fra
+# i Secrets dello Space lo fa lo Space, nel momento dell'approvazione:
+#
+#     PACK3D_IMPORT_TOKEN   lo stesso valore del secret di Glam (Secrets)
+#     PACK3D_GLAM_URL       di serie https://iccio-3d-viewer.lovable.app
+#
+# Senza, o se Glam non lo prende, la routine riparte come prima
+# (`prove/parco.py approvato`).
+
+GLAM_URL = os.environ.get("PACK3D_GLAM_URL", "https://iccio-3d-viewer.lovable.app").rstrip("/")
+GLAM_CARTELLA = "Casi risolti"
+# come encodeURIComponent, che e' quello che Glam decodifica
+_URI = "-_.!~*'()"
+
+
+def glam_configurato():
+    return bool(os.environ.get("PACK3D_IMPORT_TOKEN", "").strip())
+
+
+def _in_glam(cod, issue, cartella, nome):
+    """Nel suo thread: il modello approvato in Glam, il caso risolto, la issue
+    `da-rilasciare`. Se Glam non lo prende, rilancia la routine."""
+    from urllib.parse import quote
+    n = issue["number"]
+    try:
+        glb = modello(cod)
+        info, _sha = _leggi_json(cartella + "/modello.json")
+        if glb is None or not isinstance(info, dict) or \
+                hashlib.md5(glb).hexdigest() != info.get("md5"):
+            raise ValueError("modello.glb non e' quello da approvare")
+        nome = (nome or "Pack")[:120]
+        req = urllib.request.Request(
+            GLAM_URL + "/api/import-model", data=glb, method="POST",
+            # Glam sta dietro Cloudflare, che respinge l'intestazione di serie
+            # di urllib (errore 1010)
+            headers={"Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
+                     "Content-Type": "model/gltf-binary",
+                     "X-Model-Name": quote(nome, safe=_URI),
+                     "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
+                     "X-Pack3d-Codice": cod,
+                     "User-Agent": "pack3d-studio"})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            r.read()
+    except (OSError, ValueError, KeyError) as e:
+        print("coda: caso %s non mandato in Glam dallo Space (%s): rilancio la routine"
+              % (cod, e), file=sys.stderr)
+        avvia_routine(cod, issue.get("html_url", ""),
+                      "Il caso %s: chi l'ha caricato ha APPROVATO il modello corretto, e "
+                      "lo Space non e' riuscito a mandarlo in Glam: %s")
+        return
+    try:
+        ora = datetime.datetime.now(datetime.timezone.utc)
+        percorso = cartella + "/stato.json"
+        dati, sha = _leggi_json(percorso)
+        dati = dati if isinstance(dati, dict) else {}
+        storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
+        dati["storia"] = (storia + [{
+            "stato": "risolto", "nome": nome,
+            "messaggio": "Il modello corretto e' in Glam Lab, nella sezione «Costruisci "
+                         "modello 3D da PDF», cartella «%s», col nome «%s»."
+                         % (GLAM_CARTELLA, nome),
+            "quando": ora.strftime("%Y-%m-%dT%H:%M:%SZ")}])[-30:]
+        _scrivi_json(percorso, dati, sha, "Caso %s: risolto" % cod)
+        _richiesta("POST", "/repos/%s/issues/%d/comments" % (_repo(), n), {"body": "\n".join([
+            "**In Glam**: «%s», cartella «%s». L'ha mandato lo Space, all'approvazione."
+            % (nome, GLAM_CARTELLA), "",
+            "Resta aperta con `da-rilasciare`: la chiude il rilascio della settimana."])},
+            timeout=30)
+        _richiesta("POST", "/repos/%s/issues/%d/labels" % (_repo(), n),
+                   {"labels": ["da-rilasciare"]}, timeout=30)
+        _dimentica("issue:%d" % n, "aperte", "stato:" + percorso)
+        print("coda: caso %s in Glam come %r, da rilasciare" % (cod, nome), file=sys.stderr)
+    except (OSError, ValueError) as e:
+        # il modello e' in Glam: manca solo il registro, e lo finisce la routine
+        print("coda: caso %s in Glam, ma registro o issue non aggiornati (%s)" % (cod, e),
+              file=sys.stderr)
+        avvia_routine(cod, issue.get("html_url", ""),
+                      "Il caso %s: il modello approvato e' gia' in Glam (l'ha mandato lo "
+                      "Space), ma stato e etichette non sono aggiornati: %s")
 
 
 def modello(cod):

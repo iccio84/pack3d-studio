@@ -30,9 +30,9 @@ mappata sulle facce giuste.
 | `pack3d/materiali.py` | il materiale del film dai DT secondari: alluminio, white plate e vernice opaca diventano metallo e ruvidita' nel GLB |
 | `pack3d/rilievo.py` | l'embossing (o il debossing) dalla sua lastra: una mappa delle normali che mette in rilievo marchi e disegni sul modello |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |
-| `CODA.md` | come si lavora un caso della coda, anche dalla sessione automatica |
 | `GLAM.md` | come chi ha caricato il PDF segue il suo caso da Glam Lab: stato, domande, risposte, modello corretto; il testo per Lovable |
-| `prove/parco.py` | il parco: tutti i casi di prova ricostruiti come dal sito, prima e dopo una modifica (il rilascio della settimana); il caso da approvare, la prova sullo Space, l'invio a Glam Lab e lo stato dei casi per chi li ha caricati |
+| `prove/parco.py` | il parco: tutti i casi di prova ricostruiti come dal sito, prima e dopo una modifica (il rilascio della settimana); il giro di un caso in tre comandi (`prepara`, `consegna`, `approvato`), la prova sullo Space, l'invio a Glam Lab e lo stato dei casi per chi li ha caricati |
+| `CODA.md`, `RILASCIO.md`, `MAPPA.md` | come si lavora un caso della coda, il rilascio della settimana, dove sta cosa nel codice |
 | `REGOLE.md` | le regole del progetto, usate come system prompt |
 | `pack3d_studio.html` | l'interfaccia: viewer 3D, caricamento PDF, parametri |
 | `PASSI.md` | l'agente: chiave API, strumenti, ciclo di tool use |

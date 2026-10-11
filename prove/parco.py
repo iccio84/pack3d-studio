@@ -10,6 +10,9 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
                                 [--domanda TESTO --opzione TESTO ...]
+    python3 prove/parco.py prepara CASI CODICE [--riprendi]
+    python3 prove/parco.py consegna CASI CODICE --messaggio TESTO --commento TESTO
+    python3 prove/parco.py approvato CASI CODICE
     python3 prove/parco.py versione [--codice DIR]
 
 `costruisci` avvia un server col codice di DIR (di serie quello di questo
@@ -57,12 +60,13 @@ dallo Space, sulla issue del caso (`coda.aggiungi`).
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
 
-Il giro di un caso costruisce solo quel caso, col codice della settimana:
+Il giro di un caso (CODA.md) usa `prepara`, `consegna` e `approvato`, qui
+sotto, e costruisce solo quel caso, col codice della settimana:
 
     python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>
 
 Il parco intero, prima e dopo, lo fa il rilascio della settimana (vedi
-CODA.md), da un clone del ramo `coda-settimana`:
+RILASCIO.md), da un clone del ramo `coda-settimana`:
 
     git -C . worktree add /tmp/prima origin/main
     python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_prima --codice /tmp/prima
@@ -417,6 +421,15 @@ def _approvato(cartella):
     return "approvato" in stati[ultimo + 1:]
 
 
+def _ultimo_stato(cartella):
+    try:
+        with open(os.path.join(cartella, "stato.json"), encoding="utf-8") as fh:
+            storia = json.load(fh).get("storia") or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    return (storia[-1] if storia and isinstance(storia[-1], dict) else {}).get("stato")
+
+
 def glam(args):
     """Il modello approvato, nel viewer Glam Lab: da chi ha caricato il caso
     della coda, o dallo Space (`spazio`) per un caso del parco senza codice."""
@@ -589,22 +602,33 @@ def _registra_stato(casi, cartella, codice, corpo, altri=()):
     with open(percorso, "w", encoding="utf-8") as fh:
         json.dump(dati, fh, ensure_ascii=False, indent=1)
     rel = [os.path.relpath(p, casi) for p in [percorso] + list(altri)]
-    # l'autore dei commit del registro: lo stesso dell'ultimo
+    if _commit_registro(casi, rel, "Caso %s: stato %s" % (codice, corpo["stato"])):
+        print("stato del caso registrato in %s" % ", ".join(rel))
+        return True
+    return False
+
+
+def _commit_registro(casi, rel, messaggio):
+    """Commit dei file `rel` (relativi a `casi`) e push su main del registro,
+    con l'autore dell'ultimo commit. True se e' su main (anche se non c'era
+    niente da registrare). Mai un errore: se non va, lo dice e basta."""
     autore = _git(casi, "log", "-1", "--format=%an%n%ae").stdout.split("\n")
     chi = ["-c", "user.name=" + autore[0], "-c", "user.email=" + autore[1]] \
         if len(autore) >= 2 and autore[0] and autore[1] else []
     _git(casi, "add", *rel)
-    fatto = _git(casi, *chi, "commit", "-m", "Caso %s: stato %s" % (codice, corpo["stato"]),
-                 "--", *rel)
-    if fatto.returncode != 0 and "nothing to commit" not in fatto.stdout + fatto.stderr:
-        print("stato.json non registrato: %s" % (fatto.stderr or fatto.stdout).strip()[:300])
-        return False
+    # niente di nuovo da registrare: si spinge lo stesso, se un push di prima
+    # non era andato
+    if _git(casi, "diff", "--cached", "--quiet", "--", *rel).returncode != 0:
+        fatto = _git(casi, *chi, "commit", "-q", "-m", messaggio, "--", *rel)
+        if fatto.returncode != 0:
+            print("non registrato nel registro: %s"
+                  % (fatto.stderr or fatto.stdout).strip()[:300])
+            return False
     for _ in range(3):
-        if _git(casi, "push", "origin", "HEAD:main").returncode == 0:
-            print("stato del caso registrato in %s" % ", ".join(rel))
+        if _git(casi, "push", "-q", "origin", "HEAD:main").returncode == 0:
             return True
-        _git(casi, "pull", "--rebase", "--autostash", "origin", "main")
-    print("stato.json scritto ma non spinto su main: fallo tu (git push origin HEAD:main)")
+        _git(casi, "pull", "-q", "--rebase", "--autostash", "origin", "main")
+    print("scritto ma non spinto su main del registro: fallo tu (git push origin HEAD:main)")
     return False
 
 
@@ -716,6 +740,410 @@ def _errore_glam(e):
         print("Glam non ha preso lo stato del caso (HTTP %d): %s" % (e.code, testo))
 
 
+# ---------------------------------------------------------------------------
+# Il giro di un caso in tre comandi.
+#
+# Ogni passo della sessione che lavora un caso rilegge tutto quello che c'e'
+# prima: venti passi meccanici - etichette, commenti, stato a Glam, il caso
+# nel parco, la costruzione, le viste, la consegna - costavano quanto la
+# correzione. Qui diventano tre comandi che stampano poche righe:
+#
+#   prepara    prende il caso (lucchetto e stato), lo mette nel parco, lo
+#              costruisce col codice di adesso e fa UN foglio da guardare:
+#              la pagina del PDF, il modello di adesso e quello respinto;
+#   consegna   dopo la correzione: il modello da approvare a chi ha caricato
+#              il PDF, il commento e le etichette;
+#   approvato  dopo l'approvazione, se lo Space non l'ha gia' fatto da solo:
+#              il modello in Glam, lo stato risolto, l'etichetta
+#              da-rilasciare.
+#
+# Le chiamate a GitHub passano da `gh api`, quello della sessione.
+
+REPO_CASI = "iccio84/pack3d-casi"
+FERMI = ("da-guardare", "da-approvare", "da-rilasciare")
+SEGNAPOSTO = "DA SCRIVERE"
+# le voci di chi ha caricato il PDF, sulla issue (pack3d/coda.py)
+VOCI = ("**Nota di chi ha caricato", "**Risposta dell'utente", "**Modello NON approvato",
+        "**Modello approvato")
+
+
+def _gh(metodo, percorso, corpo=None, tollera=()):
+    """Una chiamata all'API di GitHub con `gh api`. SystemExit se non va,
+    tranne per i codici in `tollera` (None)."""
+    argomenti = ["gh", "api", "-X", metodo, percorso]
+    if corpo is not None:
+        argomenti += ["--input", "-"]
+    try:
+        r = subprocess.run(argomenti, capture_output=True, text=True, timeout=120,
+                           input=json.dumps(corpo) if corpo is not None else None)
+    except FileNotFoundError:
+        raise SystemExit("manca `gh`: etichette e commenti mettili con gli strumenti "
+                         "GitHub della sessione")
+    if r.returncode != 0:
+        testo = (r.stderr or r.stdout).strip()
+        if any(str(c) in testo for c in tollera):
+            return None
+        raise SystemExit("GitHub, %s %s: %s" % (metodo, percorso, testo[:300]))
+    return json.loads(r.stdout) if r.stdout.strip() else None
+
+
+def _issue(repo, cod):
+    for i in _gh("GET", "repos/%s/issues?state=open&per_page=100" % repo) or []:
+        if not i.get("pull_request") and str(i.get("title", "")).startswith(
+                "Caso nuovo %s:" % cod):
+            return i
+    return None
+
+
+def _etichette(issue):
+    return [e.get("name") for e in issue.get("labels") or [] if isinstance(e, dict)]
+
+
+def _metti(repo, n, *nomi):
+    _gh("POST", "repos/%s/issues/%d/labels" % (repo, n), {"labels": list(nomi)})
+
+
+def _togli(repo, n, *nomi):
+    for nome in nomi:
+        _gh("DELETE", "repos/%s/issues/%d/labels/%s" % (repo, n, quote(nome)),
+            tollera=(404, "Label does not exist"))
+
+
+def _commenta(repo, n, testo):
+    _gh("POST", "repos/%s/issues/%d/comments" % (repo, n), {"body": testo})
+
+
+def _sessione():
+    s = os.environ.get("CLAUDE_CODE_REMOTE_SESSION_ID", "").strip()
+    return "https://claude.ai/code/" + s.replace("cse_", "session_", 1) if s else ""
+
+
+def _aggiorna_registro(casi):
+    _git(casi, "pull", "-q", "--rebase", "--autostash", "origin", "main")
+
+
+def _manifesto(casi):
+    with open(os.path.join(casi, "parco", "parco.json"), encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _voce_del_caso(casi, cod):
+    """La voce del parco del caso della coda, o SystemExit."""
+    for c in _manifesto(casi)["casi"]:
+        if c.get("codice") == cod:
+            return c
+    raise SystemExit("il caso %s non e' nel parco: prima `prepara`" % cod)
+
+
+def _nel_parco(casi, cartella, cod, verdetto):
+    """(voce del parco del caso, nuova). Se non c'e' la crea: i PDF del caso
+    in parco/pdf/, le opzioni scelte dall'utente (o quelle di serie), il nome
+    che la pagina ha annunciato, il codice. `come_deve_venire` resta da
+    scrivere: lo scrive chi guarda il PDF."""
+    import re
+    import shutil
+    from pack3d import coda
+    manifesto = _manifesto(casi)
+    for c in manifesto["casi"]:
+        if c.get("codice") == cod:
+            return c, False
+    contesto = verdetto.get("contesto") or {}
+    file = [coda._nome_file(str(n)) for n in contesto.get("nomi") or []]
+    file = [f for f in file if os.path.exists(os.path.join(cartella, f))] or sorted(
+        f for f in os.listdir(cartella) if f.lower().endswith(".pdf"))
+    if not file:
+        raise SystemExit("nella cartella del caso non ci sono PDF")
+    for f in file:
+        dove = os.path.join(casi, "parco", "pdf", f)
+        with open(os.path.join(cartella, f), "rb") as fh:
+            dati = fh.read()
+        if os.path.exists(dove):
+            with open(dove, "rb") as fh:
+                if fh.read() != dati:
+                    raise SystemExit("in parco/pdf c'e' gia' un %s diverso: rinomina "
+                                     "a mano il PDF del caso" % f)
+        else:
+            shutil.copyfile(os.path.join(cartella, f), dove)
+    opzioni = dict(contesto.get("opzioni") or {})
+    if opzioni.get("kind") == "flowpack":
+        opzioni.setdefault("teeth", 20)
+        opzioni.setdefault("soft", 5)
+    elif opzioni.get("kind") == "carton":
+        opzioni.setdefault("pezzi", len(file))
+        opzioni.setdefault("spessore", 2)
+    annunciato = nome_del_caso(verdetto)
+    base = re.sub(r"[^a-z0-9]+", "_", annunciato.lower()).strip("_")[:40] or "caso"
+    presi = {c["nome"] for c in manifesto["casi"]}
+    nome, k = base, 2
+    while nome in presi:
+        nome, k = "%s_%d" % (base, k), k + 1
+    voce = {"nome": nome, "file": file, "opzioni": opzioni, "codice": cod,
+            "come_deve_venire": SEGNAPOSTO + ": com'e' giusto il modello, guardando il PDF"}
+    if annunciato != os.path.splitext(file[0])[0][:120]:
+        voce["glam"] = annunciato
+    manifesto["casi"].append(voce)
+    with open(os.path.join(casi, "parco", "parco.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifesto, fh, ensure_ascii=False, indent=1)
+        fh.write("\n")
+    return voce, True
+
+
+def _foglio(casi, cartella, voce, uscita):
+    """Un'immagine sola da guardare: la pagina del PDF, il modello costruito
+    adesso e, sotto, quello respinto. Piccola: ogni immagine guardata resta
+    nella sessione fino alla fine."""
+    from PIL import Image, ImageDraw
+    from pack3d import vista
+    pezzi = []
+    try:
+        pezzi.append(("il PDF", vista.pagina(
+            os.path.join(casi, "parco", "pdf", voce["file"][0]), lato=900)))
+    except Exception as e:                      # noqa: BLE001
+        print("pagina del PDF non resa: %s" % e)
+    for titolo, f in (("il modello di adesso", os.path.join(uscita, voce["nome"] + "_viste.png")),
+                      ("il modello respinto", os.path.join(cartella, "viste_modello.jpg"))):
+        if os.path.exists(f):
+            pezzi.append((titolo, Image.open(f).convert("RGB")))
+    if not pezzi:
+        return None
+    alto = 560
+    righe, riga = [], []
+    for titolo, im in pezzi:
+        im = im.resize((max(1, round(im.width * alto / im.height)), alto))
+        riga.append((titolo, im))
+        if len(riga) == 2:
+            righe.append(riga)
+            riga = []
+    if riga:
+        righe.append(riga)
+    largo = max(sum(im.width for _t, im in r) + 10 * (len(r) - 1) for r in righe)
+    tela = Image.new("RGB", (largo, len(righe) * (alto + 22)), "white")
+    disegno = ImageDraw.Draw(tela)
+    y = 0
+    for r in righe:
+        x = 0
+        for titolo, im in r:
+            disegno.text((x + 4, y + 4), titolo, fill="black")
+            tela.paste(im, (x, y + 22))
+            x += im.width + 10
+        y += alto + 22
+    if tela.width > 1600:
+        tela = tela.resize((1600, round(tela.height * 1600 / tela.width)))
+    dove = os.path.join(uscita, "foglio.jpg")
+    tela.save(dove, quality=85)
+    return dove
+
+
+def _voci(repo, n, cartella, uscita):
+    """Le note e le risposte di chi ha caricato il PDF, dai commenti della
+    issue: tutte in USCITA/voci.md, le ultime a video, accorciate."""
+    commenti = _gh("GET", "repos/%s/issues/%d/comments?per_page=100" % (repo, n)) or []
+    voci = [c.get("body") or "" for c in commenti if str(c.get("body") or "").startswith(VOCI)]
+    with open(os.path.join(uscita, "voci.md"), "w", encoding="utf-8") as fh:
+        fh.write("\n\n---\n\n".join(voci))
+    foto = sorted(f for f in os.listdir(cartella)
+                  if f.split("_")[0] in ("nota", "risposta", "rifiuto", "approvazione"))
+    return voci, foto
+
+
+def prepara(args):
+    """Prende un caso libero e lo prepara: vedi sopra."""
+    from contextlib import redirect_stdout
+    import io
+    cod = args.codice
+    _aggiorna_registro(args.casi)
+    cartella, verdetto = _caso_in_coda(args.casi, cod)
+    if _approvato(cartella) and _ultimo_stato(cartella) == "approvato":
+        # approvato, e lo Space non l'ha mandato in Glam: non c'e' niente da
+        # correggere, solo da consegnare
+        print("il caso %s e' stato approvato: lo mando in Glam" % cod)
+        return approvato(argparse.Namespace(casi=args.casi, codice=cod, repo=args.repo,
+                                            glam=args.glam, spazio=args.spazio,
+                                            messaggio=None, categoria="Casi risolti"))
+    issue = _issue(args.repo, cod)
+    if issue is None:
+        raise SystemExit("nessuna issue aperta per il caso %s" % cod)
+    n = issue["number"]
+    etichette = _etichette(issue)
+    fermi = [e for e in etichette if e in FERMI]
+    if fermi:
+        raise SystemExit("il caso %s non e' libero: ha %s (CODA.md)" % (cod, ", ".join(fermi)))
+    if "in-lavorazione" in etichette and not args.riprendi:
+        raise SystemExit("il caso %s ha gia' il lucchetto in-lavorazione: se e' di una "
+                         "sessione morta (piu' di sei ore, negli eventi della issue) "
+                         "usa --riprendi" % cod)
+    _metti(args.repo, n, "in-lavorazione")
+    sessione = _sessione()
+    _commenta(args.repo, n, "%s%s." % ("Ripreso: il lucchetto era di una sessione ferma da "
+                                       "piu' di sei ore. In lavorazione" if args.riprendi
+                                       else "In lavorazione",
+                                       " in questa sessione: " + sessione if sessione else ""))
+    uscita = args.uscita or "/tmp/caso_" + cod
+    os.makedirs(uscita, exist_ok=True)
+    rumore = io.StringIO()
+    with redirect_stdout(rumore):
+        try:
+            caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
+                                    stato="in-lavorazione", messaggio=None, domanda=None,
+                                    opzione=None, modello=None, uscita=uscita,
+                                    spazio=args.spazio))
+            a_glam = "si'"
+        except SystemExit:
+            a_glam = "no: " + (rumore.getvalue().strip().splitlines() or ["?"])[-1][:200]
+    voce, nuova = _nel_parco(args.casi, cartella, cod, verdetto)
+    if nuova:
+        _commit_registro(args.casi, ["parco/parco.json"] + ["parco/pdf/" + f for f in voce["file"]],
+                         "Caso %s: nel parco come %s" % (cod, voce["nome"]))
+    with redirect_stdout(rumore):
+        costruisci(argparse.Namespace(casi=args.casi, uscita=uscita, codice=None,
+                                      solo=[voce["nome"]]))
+    with open(os.path.join(uscita, voce["nome"] + ".json"), encoding="utf-8") as fh:
+        esito = json.load(fh)
+    foglio = _foglio(args.casi, cartella, voce, uscita)
+    voci, foto = _voci(args.repo, n, cartella, uscita)
+    contesto = verdetto.get("contesto") or {}
+    print("caso %s, issue #%d: in lavorazione (stato a Glam: %s)" % (cod, n, a_glam))
+    print("esito della coda: %s - %s" % (verdetto.get("esito"),
+                                          str(verdetto.get("motivo") or "")[:300]))
+    for d in (verdetto.get("difetti") or [])[:6]:
+        print("  - %s" % str(d)[:200])
+    for a in (contesto.get("avvisi") or [])[:2]:
+        print("  avviso: %s" % str(a)[:300])
+    print("nel parco come %s%s, opzioni %s" % (voce["nome"], " (nuovo)" if nuova else "",
+                                               json.dumps(voce.get("opzioni"))))
+    if esito.get("stato") == 200:
+        print("costruito adesso: ok in %s s, ingombro %s mm" % (esito.get("secondi"),
+                                                               esito.get("ingombro_mm")))
+    else:
+        print("costruito adesso: %s - %s" % (esito.get("stato"),
+                                             str((esito.get("avvisi") or [""])[0])[:300]))
+    print("avvisi della costruzione: %d, in %s" % (len(esito.get("avvisi") or []),
+                                                   os.path.join(uscita, voce["nome"] + ".json")))
+    print("foglio da guardare: %s" % foglio)
+    print("voci di chi l'ha caricato: %d, in %s%s" % (
+        len(voci), os.path.join(uscita, "voci.md"),
+        "; foto: " + ", ".join(foto) if foto else ""))
+    for v in voci[-3:]:
+        print("  > " + " ".join(v.split())[:600])
+    if nuova:
+        print("da fare: scrivi `come_deve_venire` della voce %s in parco/parco.json" % voce["nome"])
+
+
+def consegna(args):
+    """Il modello corretto a chi ha caricato il caso, da approvare."""
+    from contextlib import redirect_stdout
+    import io
+    from pack3d import versione
+    cod = args.codice
+    _aggiorna_registro(args.casi)
+    cartella, _verdetto = _caso_in_coda(args.casi, cod)
+    voce = _voce_del_caso(args.casi, cod)
+    if not voce.get("come_deve_venire") or voce["come_deve_venire"].startswith(SEGNAPOSTO):
+        raise SystemExit("scrivi prima `come_deve_venire` della voce %s in parco/parco.json"
+                         % voce["nome"])
+    issue = _issue(args.repo, cod)
+    if issue is None:
+        raise SystemExit("nessuna issue aperta per il caso %s" % cod)
+    uscita = args.uscita or "/tmp/caso_" + cod
+    f = os.path.join(uscita, voce["nome"] + ".json")
+    esito = {}
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            esito = json.load(fh)
+    rumore = io.StringIO()
+    if esito.get("versione") != versione.impronta(QUI) or esito.get("stato") != 200:
+        # il modello va costruito col codice che si consegna
+        with redirect_stdout(rumore):
+            costruisci(argparse.Namespace(casi=args.casi, uscita=uscita, codice=None,
+                                          solo=[voce["nome"]]))
+        with open(f, encoding="utf-8") as fh:
+            esito = json.load(fh)
+    if esito.get("stato") != 200:
+        raise SystemExit("il caso non si costruisce col codice di adesso (%s): %s"
+                         % (esito.get("stato"), str((esito.get("avvisi") or [""])[0])[:300]))
+    _commit_registro(args.casi, ["parco/parco.json"], "Caso %s: com'e' giusto" % cod)
+    with redirect_stdout(rumore):
+        try:
+            caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
+                                    stato="da-approvare", messaggio=args.messaggio,
+                                    domanda=None, opzione=None, modello=voce["nome"],
+                                    uscita=uscita, spazio=args.spazio))
+        except SystemExit:
+            pass
+    # registrato? lo stato e il modello sono nel registro prima di Glam
+    try:
+        with open(os.path.join(cartella, "stato.json"), encoding="utf-8") as fh:
+            ultimo = (json.load(fh).get("storia") or [{}])[-1]
+        with open(os.path.join(cartella, "modello.json"), encoding="utf-8") as fh:
+            registrato = json.load(fh).get("md5") == esito.get("md5")
+    except (OSError, ValueError):
+        ultimo, registrato = {}, False
+    if ultimo.get("stato") != "da-approvare" or not registrato:
+        print(rumore.getvalue()[-1500:])
+        raise SystemExit("il modello da approvare non e' stato registrato: vedi sopra")
+    n = issue["number"]
+    _commenta(args.repo, n, args.commento.strip() + "\n\nIl modello corretto (`%s`, "
+              "costruito col codice della settimana) aspetta l'approvazione di chi ha "
+              "caricato il PDF." % esito.get("md5"))
+    _metti(args.repo, n, "da-approvare")
+    _togli(args.repo, n, "in-lavorazione")
+    glam_ok = "in Glam: caso" in rumore.getvalue()
+    print("caso %s consegnato da approvare (issue #%d)%s" % (
+        cod, n, "" if glam_ok else "; Glam non ha preso lo stato: scrivilo nel riassunto"))
+
+
+def approvato(args):
+    """Dopo l'approvazione: il modello in Glam, lo stato risolto, la issue
+    da-rilasciare. Lo fa lo Space da solo, se ha il token di Glam; questo e'
+    per quando non l'ha fatto."""
+    from contextlib import redirect_stdout
+    import io
+    cod = args.codice
+    _aggiorna_registro(args.casi)
+    cartella, _verdetto = _caso_in_coda(args.casi, cod)
+    if not _approvato(cartella):
+        raise SystemExit("chi ha caricato il caso %s non ha ancora approvato il modello" % cod)
+    voce = _voce_del_caso(args.casi, cod)
+    issue = _issue(args.repo, cod)
+    if issue is None:
+        raise SystemExit("nessuna issue aperta per il caso %s" % cod)
+    n = issue["number"]
+    if "da-rilasciare" in _etichette(issue):
+        print("il caso %s e' gia' in Glam e da rilasciare (issue #%d): niente da fare" % (cod, n))
+        return
+    rumore = io.StringIO()
+    with redirect_stdout(rumore):
+        try:
+            glam(argparse.Namespace(url=args.glam, casi=args.casi, nome=voce["nome"],
+                                    uscita=os.path.join(cartella, "-"),
+                                    categoria=args.categoria))
+            in_glam = True
+        except SystemExit:
+            in_glam = False
+    detto = rumore.getvalue().strip()
+    nome = nome_glam(voce)
+    messaggio = args.messaggio or ("Il modello corretto e' in Glam Lab, nella sezione "
+                                   "«Costruisci modello 3D da PDF», cartella «%s», col "
+                                   "nome «%s»." % (args.categoria, nome))
+    with redirect_stdout(io.StringIO()):
+        try:
+            caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
+                                    stato="risolto", messaggio=messaggio, domanda=None,
+                                    opzione=None, modello=None, uscita="/tmp",
+                                    spazio=args.spazio))
+        except SystemExit:
+            pass
+    _commenta(args.repo, n, ("**In Glam**: «%s», cartella «%s» (%s)." % (
+        nome, args.categoria, detto.splitlines()[-1][:300] if detto else "")
+        if in_glam else "**Glam non ha preso il modello** (%s): il caso e' risolto lo "
+        "stesso, e il PDF si puo' ricostruire in Glam a mano." % detto[-300:])
+        + "\n\nResta aperta con `da-rilasciare`: la chiude il rilascio della settimana.")
+    _metti(args.repo, n, "da-rilasciare")
+    _togli(args.repo, n, "in-lavorazione", "da-approvare")
+    print("caso %s: %s, da rilasciare (issue #%d)" % (
+        cod, "in Glam" if in_glam else "Glam non l'ha preso", n))
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cosa", required=True)
@@ -772,6 +1200,32 @@ def main():
     q.add_argument("--spazio", default=SPAZIO,
                    help="lo Space che manda l'email della domanda (di serie %s)" % SPAZIO)
     q.set_defaults(fai=caso)
+    for nome, fai, aiuto in (("prepara", prepara, "prende un caso libero, lo mette nel "
+                              "parco, lo costruisce e fa il foglio da guardare"),
+                             ("consegna", consegna, "dopo la correzione: il modello a chi "
+                              "l'ha caricato, da approvare"),
+                             ("approvato", approvato, "dopo l'approvazione: in Glam, risolto, "
+                              "da rilasciare")):
+        x = sub.add_parser(nome, help=aiuto)
+        x.add_argument("casi", help="clone del repository privato dei casi")
+        x.add_argument("codice", help="il codice del caso, 10 cifre esadecimali")
+        x.add_argument("--uscita", help="dove costruire (di serie /tmp/caso_<codice>)")
+        x.add_argument("--repo", default=REPO_CASI, help="il registro dei casi su GitHub")
+        x.add_argument("--glam", default=GLAM, help="l'indirizzo di Glam Lab")
+        x.add_argument("--spazio", default=SPAZIO, help="lo Space, per gli avvisi")
+        if nome == "prepara":
+            x.add_argument("--riprendi", action="store_true",
+                           help="il lucchetto e' di una sessione morta: riprendilo")
+        if nome == "consegna":
+            x.add_argument("--messaggio", required=True,
+                           help="due righe per chi l'ha caricato: cosa e' cambiato")
+            x.add_argument("--commento", required=True,
+                           help="per la issue: la causa, la regola, il link alla PR")
+        if nome == "approvato":
+            x.add_argument("--messaggio", help="due righe per chi l'ha caricato")
+            x.add_argument("--categoria", default="Casi risolti",
+                           help="la cartella del modello in Glam")
+        x.set_defaults(fai=fai)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")
     v.add_argument("--codice", help="cartella del codice (di serie questo)")

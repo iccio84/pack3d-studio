@@ -84,7 +84,10 @@ che dice dove approvarlo.
 
 ## 3. Il modello corretto: a chi ha caricato il caso
 
-Arriva **solo dopo l'approvazione** di chi ha caricato il PDF.
+Arriva **solo dopo l'approvazione** di chi ha caricato il PDF. Lo manda lo
+Space stesso, nel momento dell'approvazione, con lo stesso token
+(`PACK3D_IMPORT_TOKEN` fra i suoi Secrets, vedi DEPLOY.md); se non lo ha, o
+Glam non risponde, lo manda la routine.
 
 `POST /api/import-model` come oggi, più un'intestazione facoltativa
 `X-Pack3d-Codice: b312f1e238`. Se il caso ha utenti, il modello va a
