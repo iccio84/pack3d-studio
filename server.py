@@ -2503,10 +2503,13 @@ class Handler(BaseHTTPRequestHandler):
             # con l'impronta del codice: dopo una pubblicazione dice se lo
             # Space e' gia' ripartito con quello nuovo (prove/parco.py spazio)
             # e se le email delle domande partono: senza, la pagina non chiede
-            # l'email a chi manda un caso
+            # l'email a chi manda un caso. `glam` dice se lo Space ha il token
+            # d'import di Glam, per mandare da solo i modelli approvati (mai
+            # il token: solo se c'e')
             from pack3d import avvisi
             return self._send(200, json.dumps({"ok": True, "versione": VERSIONE,
-                                               "email": avvisi.configurato()}))
+                                               "email": avvisi.configurato(),
+                                               "glam": coda.glam_configurato()}))
         if self.path.startswith("/api/casi"):
             return self._stati()
         if self.path.startswith("/api/modello"):

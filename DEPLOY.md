@@ -63,7 +63,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_ROUTINE_URL` | Variables | l'indirizzo `/fire` della routine | un caso appena entrato in coda **avvia subito** la routine che la lavora, vedi sotto |
 | `PACK3D_ROUTINE_TOKEN` | Secrets | il token della routine | quello generato nel trigger API della routine; serve solo ad avviarla |
 | `PACK3D_IMPORT_TOKEN` | Secrets | lo stesso valore del secret `PACK3D_IMPORT_TOKEN` di Glam | quando chi ha caricato un caso **approva** il modello corretto, lo Space lo manda in Glam da solo, senza far ripartire la routine: un giro in meno per ogni caso. Senza, lo fa la routine |
-| `PACK3D_GLAM_URL` | Variables | di serie `https://iccio-3d-viewer.lovable.app` | dove lo Space manda il modello approvato |
+| `PACK3D_GLAM_URL` | Variables | di serie `https://iccio-3d-viewer.lovable.app` | dove lo Space manda il modello approvato. `/api/ping` dice `"glam": true` quando lo Space ha il token |
 | `PACK3D_RISPOSTE_TOKEN` | Secrets | una stringa casuale lunga | la stessa nei segreti di Glam Lab: con questa Glam manda allo Space le **risposte** degli utenti alle domande della routine, e i casi da **eliminare**, vedi sotto |
 | `RESEND_API_KEY` | Secrets | la chiave di Resend | le **email** a chi ha mandato un caso, quando la routine gli fa una domanda, vedi sotto |
 | `PACK3D_EMAIL_DA` | Variables | `ICCIO PDFto3D <casi@tuodominio.it>` | il mittente di quelle email, su un dominio verificato in Resend |
