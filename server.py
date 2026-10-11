@@ -2502,7 +2502,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/ping"):
             # con l'impronta del codice: dopo una pubblicazione dice se lo
             # Space e' gia' ripartito con quello nuovo (prove/parco.py spazio)
-            return self._send(200, json.dumps({"ok": True, "versione": VERSIONE}))
+            # e se le email delle domande partono: senza, la pagina non chiede
+            # l'email a chi manda un caso
+            from pack3d import avvisi
+            return self._send(200, json.dumps({"ok": True, "versione": VERSIONE,
+                                               "email": avvisi.configurato()}))
         if self.path.startswith("/api/casi"):
             return self._stati()
         path = os.path.join(HERE, "pack3d_studio.html")

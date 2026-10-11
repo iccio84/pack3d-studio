@@ -91,8 +91,8 @@ Per attivarle:
    **Variables**: `PACK3D_EMAIL_DA`, il mittente sul dominio verificato, per
    esempio `ICCIO PDFto3D <casi@tuodominio.it>`.
 
-Senza le due, le email restano nei casi e non parte niente; il log dello
-Space lo dice.
+Senza le due la pagina non chiede l'email a chi manda un caso (lo Space lo
+dice in `/api/ping`, `"email": false`) e non parte niente.
 
 ### Il controllo dell'AI e la coda dei casi nuovi
 

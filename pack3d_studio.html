@@ -985,6 +985,9 @@ async function cercaBackend(){
     document.querySelector('#empty div').textContent = INVITO;
     setStatus(API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale','');
     aggiornaCasi();
+    // il campo email c'e' solo se lo Space le email le manda davvero
+    fetch(url('/api/ping'), {cache: 'no-store'}).then(r => r.json())
+      .then(j => { emailAttiva = !!j.email; }).catch(() => {});
   } else {
     setStatus(OFFLINE,'err');
     document.querySelector('#empty div').textContent =
@@ -1332,6 +1335,9 @@ const invioSi = document.getElementById('invio-si');
 const invioNo = document.getElementById('invio-no');
 const invioEsito = document.getElementById('invio-esito');
 let casoInAttesa = null;
+// Lo Space manda le email delle domande (Resend configurato): solo allora il
+// modulo chiede l'email. Senza, chiederla sarebbe una promessa vuota.
+let emailAttiva = false;
 
 function esitoInvio(testo, cls){
   invioEsito.textContent = testo;
@@ -1348,7 +1354,9 @@ function mostraInvio(v){
       ? 'Lo mandiamo a chi lo controlla e, se serve, corregge il codice?'
       : 'Lo mandiamo a chi corregge il codice? Quando il modello giusto è pronto, arriva in Glam Lab.';
     invioSi.disabled = invioNo.disabled = invioEmail.disabled = false;
-    if (!invioEmail.value) invioEmail.value = leggi(RICORDA_EMAIL, '') || '';
+    invioEmail.hidden = invioEl.querySelector('label[for=invio-email]').hidden = !emailAttiva;
+    if (!emailAttiva) invioEmail.value = '';
+    else if (!invioEmail.value) invioEmail.value = leggi(RICORDA_EMAIL, '') || '';
     esitoInvio('');
     if (casoEl.classList.contains('on'))
       casoEl.insertBefore(invioEl, document.getElementById('nota'));
