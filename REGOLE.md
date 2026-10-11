@@ -2050,6 +2050,39 @@ costruirlo.
   `contesto.opzioni` di `verdetto.json`: chi lo riprende lo ricostruisce
   uguale. Il controllo dell'AI non le legge.
 
+**Il caso lo manda chi l'ha caricato.** Un modello respinto non e' sempre un
+caso da correggere: si puo' aver sbagliato file, o tipo di pack. Il caso resta
+in attesa nello Space (`coda.metti`, in memoria) e la pagina chiede: **Invia
+il caso**, con un'email facoltativa per le domande, o **Non inviare**. Annulla,
+un altro PDF, o la pagina chiusa senza scegliere lo cancellano (la pagina lo
+dice allo Space con `sendBeacon` all'uscita); dopo `PACK3D_CASO_ATTESA`
+secondi (mezz'ora) senza scelta si cancella da solo. Su GitHub non arriva
+niente e la routine non parte finche' non lo manda: prima ogni modello
+respinto apriva una issue, anche le prove sullo Space.
+
+**I casi e le notifiche nella pagina.** Accanto al visore, con i Dettagli
+tecnici, ci sono due finestre che si aprono e si chiudono dai tasti in fondo:
+
+- **Casi in correzione**: quelli mandati da questo browser, con lo stato; un
+  caso risolto o chiuso esce dalla lista. Con l'accesso guest condiviso
+  dell'app l'account non dice chi ha caricato un PDF: per questo la lista sta
+  nel browser. La pagina chiede lo stato allo Space ogni minuto (`GET
+  /api/casi?codici=...`, solo per codice), e lo Space lo legge dal registro
+  dei casi: la issue (aperta, chiusa, `da-guardare`) e `stato.json`, che
+  scrive `prove/parco.py caso`. Una **domanda** della routine si legge e si
+  risponde li', con una scelta, parole proprie e una foto: arriva sulla issue
+  come la risposta da Glam, toglie `da-guardare` e rilancia la routine.
+- **Notifiche**: le ultime dieci, una per ogni cambio di stato (inviato, in
+  lavorazione, una domanda, risposta inviata, non risolto, risolto).
+
+**L'email delle domande.** Con una domanda, `prove/parco.py caso` chiede allo
+Space di avvisare (`POST /api/avviso`, senza token: manda solo la domanda che
+c'e' nel registro, a chi ha lasciato l'email per quel caso, una volta per
+domanda). Le email partono da Resend (`pack3d/avvisi.py`, DEPLOY.md) col link
+alla pagina, `?caso=<codice>`, che apre la finestra dei casi su quel caso.
+L'email sta in `contatti/<codice>.json`, fuori dalla cartella del caso e mai
+nella issue: e' un dato personale, e la routine non la apre.
+
 ### Chi lavora la coda, e il parco che la protegge
 
 Una sessione automatica di Claude Code guarda la coda e, se c'e' un caso

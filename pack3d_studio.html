@@ -3,24 +3,27 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>glamlab PDFto3D</title>
+<title>ICCIO PDFto3D</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Montserrat:wght@300;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <style>
   /* ------------------------------------------------------------------ *
-   * Sistema di stile del viewer glamlab, preso da src/styles.css del suo
-   * sorgente e copiato alla lettera, oklch compreso: sono gli stessi
-   * numeri, non una approssimazione fatta a occhio su uno screenshot.
+   * Sistema di stile di ICCIOviewer3D, letto dai fogli di stile del sito
+   * pubblicato (le variabili di :root), oklch compreso: sono gli stessi
+   * numeri, non una approssimazione fatta a occhio su uno screenshot. Il
+   * primario e' passato dal verde lime al blu ardesia, e il marchio usa
+   * Montserrat.
    * ------------------------------------------------------------------ */
   :root{
     --radius:1rem;
     --font-display:"Poppins",ui-sans-serif,system-ui,sans-serif;
+    --font-brand:"Montserrat",ui-sans-serif,system-ui,sans-serif;
     --background:oklch(0.985 0 0);
     --surface:oklch(1 0 0);
     --foreground:oklch(0.36 0.012 265);
-    --primary:oklch(0.82 0.17 121);
+    --primary:oklch(0.483646 0.042839 241.505);
     --primary-foreground:oklch(1 0 0);
     --secondary:oklch(0.965 0.002 265);
     --muted:oklch(0.965 0.002 265);
@@ -30,6 +33,7 @@
     --border:oklch(0.36 0.012 265 / 12%);
     --glass-border:oklch(0.36 0.012 265 / 9%);
     --shadow-soft:0 18px 40px -28px oklch(0.36 0.012 265 / 45%);
+    --shadow-inset:inset 0 1px 0 oklch(1 0 0 / 80%);
     --radius-sm:calc(var(--radius) - 4px);
     --radius-xl:calc(var(--radius) + 4px);
   }
@@ -52,43 +56,117 @@
   /* Dentro il viewer questa pagina sta in un iframe, e la finestra che la
      ospita ha gia' la sua testata con "COSTRUISCI MODELLO DA PDF". La
      nostra la teniamo solo quando la pagina e' aperta da sola. */
-  header{background:var(--primary);padding:13px 20px;display:flex;align-items:center}
+  /* il marchio come quello dell'app: ICCIO e 3D pieni nel primario, il
+     resto sottile nel colore del testo, su fondo chiaro */
+  header{padding:18px 20px 4px;display:flex;align-items:center}
   body.incorniciata header{display:none}
-  .brand{margin:0 auto;color:var(--primary-foreground);font-size:21px;line-height:1;
-         font-weight:700;letter-spacing:-.01em;display:inline-flex;align-items:baseline;gap:.3em}
-  .brand span{font-weight:300}
+  .brand{margin:0 auto;font-family:var(--font-brand);font-size:26px;line-height:1;
+         letter-spacing:-.02em;display:inline-flex;align-items:baseline;gap:.28em}
+  .brand b{font-weight:700;color:var(--primary)}
+  .brand span{font-weight:300;color:var(--foreground)}
 
-  /* Il visore e, accanto, la finestra dei dettagli tecnici. Aperta, il
-     visore si stringe e il modello resta tutto in vista: i cartellini della
-     costruzione - una ventina di righe - stavano sopra il modello e ne
-     coprivano la meta' bassa. Sul telefono la finestra va sotto. */
+  /* Il visore e, accanto, la colonna delle finestre: i dettagli tecnici,
+     i casi in correzione e le notifiche. Ognuna si apre e si chiude per
+     conto suo; con almeno una aperta il visore si stringe e il modello resta
+     tutto in vista: i cartellini della costruzione - una ventina di righe -
+     stavano sopra il modello e ne coprivano la meta' bassa. Sul telefono la
+     colonna va sotto. */
   /* mai piu' basso del palco (340 piu' i margini): stretto, il palco
      strabordava sui pannelli sotto, e la tela si prendeva i loro clic */
   #vista{flex:1;display:flex;min-height:372px}
   #stage{flex:1;position:relative;min-height:340px;min-width:0;margin:16px;
          border-radius:var(--radius-xl);border:1px solid var(--glass-border);
          background:var(--surface);box-shadow:var(--shadow-soft);overflow:hidden}
-  #dettagli{width:min(380px,42%);margin:16px 16px 16px 0;display:none;
-            flex-direction:column;min-height:0;border-radius:var(--radius-xl);
-            border:1px solid var(--glass-border);background:var(--surface);
-            box-shadow:var(--shadow-soft);overflow:hidden}
-  #dettagli.on{display:flex}
-  #dettagli .testa{display:flex;align-items:center;justify-content:space-between;
+  #lato{width:min(380px,42%);margin:16px 16px 16px 0;display:none;
+        flex-direction:column;gap:12px;min-height:0}
+  #lato.on{display:flex}
+  /* ognuna alta quanto il suo contenuto; se la colonna non basta si
+     stringono insieme, e ognuna scorre per conto suo */
+  .finestra{display:none;flex-direction:column;min-height:0;flex:0 1 auto;
+            border-radius:var(--radius-xl);border:1px solid var(--glass-border);
+            background:var(--surface);box-shadow:var(--shadow-soft);overflow:hidden}
+  .finestra.on{display:flex}
+  .finestra .testa{display:flex;align-items:center;justify-content:space-between;
                    gap:10px;padding:12px 12px 10px 16px;border-bottom:1px solid var(--border)}
-  #dettagli .testa button{padding:4px 10px;font-size:15px;line-height:1;letter-spacing:0}
-  #dettagli-lista{list-style:none;margin:0;padding:12px 16px 16px;overflow-y:auto;
-                  flex:1;display:flex;flex-direction:column;gap:7px;font-size:11px;
-                  line-height:1.45;color:var(--foreground)}
-  #dettagli-lista li{padding:6px 10px;border-radius:var(--radius-sm);
+  .finestra .testa button{padding:4px 10px;font-size:15px;line-height:1;letter-spacing:0}
+  .finestra .lista{list-style:none;margin:0;padding:12px 16px 16px;overflow-y:auto;
+                   flex:1;display:flex;flex-direction:column;gap:7px;font-size:11px;
+                   line-height:1.45;color:var(--foreground)}
+  .finestra .lista > li{padding:6px 10px;border-radius:var(--radius-sm);
                      background:color-mix(in oklab,var(--secondary) 70%,transparent);
                      overflow-wrap:anywhere}
+  .finestra .lista:empty{display:none}
+  .finestra .vuoto{margin:0;padding:16px;font-size:12px;color:var(--muted-foreground)}
+  .finestra .vuoto[hidden]{display:none}
   #dettagli-lista li.grido, #ai-righe li.grido{color:var(--destructive);font-weight:600}
-  /* sul telefono la finestra va sotto il palco, e la pagina si allunga e
+  /* sul telefono la colonna va sotto il palco, e la pagina si allunga e
      scorre: il palco non si schiaccia e non finisce sopra le domande */
   @media (max-width:760px){
     #vista{flex-direction:column;flex:1 0 auto;min-height:0}
-    #dettagli{width:auto;margin:0 16px 16px;max-height:45vh}
+    #lato{width:auto;margin:0 16px 16px}
+    .finestra{flex:0 1 auto;max-height:45vh}
   }
+
+  /* I casi in correzione: quelli mandati da questo browser, finche' non sono
+     risolti. Una domanda della routine si legge e si risponde qui. */
+  #casi-lista > li{padding:10px 12px;font-size:12px;display:flex;flex-direction:column;gap:5px}
+  #casi-lista > li.domanda{background:color-mix(in oklab,var(--warning) 12%,var(--surface));
+                           border:1px solid color-mix(in oklab,var(--warning) 45%,transparent)}
+  .caso-testa{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+  .caso-testa b{font-weight:600;overflow-wrap:anywhere}
+  .chip{flex:none;font-size:9.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+        padding:2px 8px;border-radius:999px;color:var(--primary);
+        background:color-mix(in oklab,var(--primary) 12%,transparent)}
+  .chip.domanda{color:var(--surface);background:var(--warning)}
+  .chip.non-risolto{color:var(--destructive);background:color-mix(in oklab,var(--destructive) 10%,transparent)}
+  .caso-msg:empty{display:none}
+  .caso-quando{font-size:10.5px;color:var(--muted-foreground)}
+  .risposta{display:flex;flex-direction:column;gap:8px;margin-top:4px}
+  .risposta .q{font-weight:600;font-size:13px}
+  .risposta .opzioni{display:flex;flex-wrap:wrap;gap:6px}
+  .risposta .opzioni button{padding:7px 12px;text-transform:none;letter-spacing:0;font-size:12px;
+                            font-weight:500;color:var(--foreground)}
+  .risposta .opzioni button[aria-pressed="true"]{border-color:var(--primary);
+    background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
+  .risposta textarea, #invio input{font:inherit;font-size:13px;line-height:1.45;
+    padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);
+    background:var(--surface);color:var(--foreground);width:100%}
+  .risposta textarea{resize:vertical;min-height:58px}
+  .risposta textarea:focus, #invio input:focus{outline:none;
+    border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
+  .risposta .azioni, #invio .azioni{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .risposta .azioni button, #invio .azioni button{margin-top:0}
+  .risposta label.bottone{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+    padding:9px 14px;border-radius:var(--radius);border:1px solid var(--border);
+    background:var(--surface);color:var(--muted-foreground);cursor:pointer}
+  .risposta .foto-nome{font-size:11px;color:var(--muted-foreground);flex:1;min-width:0;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .esito{font-size:12px;color:var(--muted-foreground)}
+  .esito:empty{display:none}
+  .esito.ok{color:var(--foreground);font-weight:600}
+  .esito.err{color:var(--destructive)}
+
+  /* Le notifiche: le ultime dieci, le nuove col pallino */
+  #notifiche-lista > li{display:flex;flex-direction:column;gap:2px;font-size:12px;padding:8px 12px}
+  #notifiche-lista > li.nuova{background:color-mix(in oklab,var(--primary) 10%,var(--surface))}
+  #notifiche-lista > li.nuova .n-quando::before{content:"";display:inline-block;width:7px;height:7px;
+    border-radius:50%;background:var(--primary);margin-right:6px;vertical-align:1px}
+  .n-quando{font-size:10.5px;color:var(--muted-foreground)}
+  /* i tasti delle finestre col numero: una domanda o una notifica nuova li
+     colora, cosi' si vedono anche a finestre chiuse */
+  #casi-btn.attesa, #notifiche-btn.nuove{border-color:var(--primary);color:var(--primary)}
+  #casi-btn.domanda{border-color:var(--warning);color:var(--warning)}
+
+  /* Il caso nuovo aspetta chi l'ha caricato: lo manda, con l'email per le
+     domande se vuole, o lo cancella */
+  #invio{width:min(560px,100%);display:flex;flex-direction:column;gap:8px;margin-top:10px;
+         text-align:left;color:var(--foreground);padding:12px 14px;border-radius:var(--radius);
+         border:1px solid color-mix(in oklab,var(--primary) 30%,transparent);
+         background:color-mix(in oklab,var(--primary) 5%,var(--surface));pointer-events:auto}
+  #invio[hidden]{display:none}
+  #invio .invio-testo{margin:0;font-size:13px;font-weight:600}
+  #invio label{font-size:12px;color:var(--muted-foreground)}
+  #ai #invio{width:auto;margin:8px 0 0}
   canvas{display:block;width:100%;height:100%;cursor:default}
   #stage.vivo canvas{cursor:grab}
   #stage.vivo.presa canvas{cursor:grabbing}
@@ -232,11 +310,13 @@
          cursor:pointer;border:1px solid var(--border);background:var(--background);
          color:var(--muted-foreground);transition:background .15s,border-color .15s,color .15s}
   button:hover:not(:disabled){border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
-  button.primary{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
-                 background:color-mix(in oklab,var(--primary) 10%,transparent);
-                 color:var(--primary);letter-spacing:.14em}
+  /* il tasto principale e' pieno, come ADMIN nella home dell'app; gli altri
+     bianchi col bordo, come GUEST */
+  button{background:var(--surface);box-shadow:var(--shadow-inset)}
+  button.primary{border-color:var(--primary);background:var(--primary);
+                 color:var(--primary-foreground);letter-spacing:.14em;box-shadow:none}
   button.primary:hover:not(:disabled){
-    background:color-mix(in oklab,var(--primary) 20%,transparent)}
+    background:color-mix(in oklab,var(--primary) 88%,black)}
   button:disabled{opacity:.4;cursor:not-allowed}
   :focus-visible{outline:2px solid var(--primary);outline-offset:2px}
 
@@ -296,7 +376,7 @@
 </head>
 <body>
 <header>
-  <div class="brand">glamlab<span>PDFto3D</span></div>
+  <div class="brand"><b>ICCIO</b><span>PDFto<b>3D</b></span></div>
 </header>
 
 <div id="vista">
@@ -323,6 +403,18 @@
     <div class="riga dove" id="caso-dove"></div>
     <div class="riga" id="caso-quando"></div>
     <div class="codice" id="caso-codice"></div>
+    <div id="invio" hidden>
+      <p class="invio-testo" id="invio-testo">Lo mandiamo a chi corregge il codice?</p>
+      <label for="invio-email">La tua email, se vuoi saperlo quando ti facciamo una domanda
+        sul pack (facoltativa)</label>
+      <input id="invio-email" type="email" autocomplete="email" maxlength="254"
+             placeholder="nome@azienda.it">
+      <div class="azioni">
+        <button id="invio-si" type="button" class="primary">Invia il caso</button>
+        <button id="invio-no" type="button">Non inviare</button>
+      </div>
+      <div id="invio-esito" class="esito" role="status"></div>
+    </div>
     <div id="nota" hidden>
       <label for="nota-testo">Vuoi dirci com'&egrave; fatto o come si monta il pack?
         Aiuta chi lo corregge. Facoltativo.</label>
@@ -340,12 +432,31 @@
   </div>
   <div id="status">Nessun modello caricato</div>
 </div>
-<aside id="dettagli" aria-label="Dettagli tecnici della costruzione">
-  <div class="testa">
-    <span class="tit" id="dettagli-tit">Dettagli tecnici</span>
-    <button type="button" id="dettagli-chiudi" aria-label="Chiudi i dettagli tecnici">&times;</button>
-  </div>
-  <ul id="dettagli-lista"></ul>
+<aside id="lato">
+  <section id="dettagli" class="finestra" aria-label="Dettagli tecnici della costruzione">
+    <div class="testa">
+      <span class="tit" id="dettagli-tit">Dettagli tecnici</span>
+      <button type="button" id="dettagli-chiudi" aria-label="Chiudi i dettagli tecnici">&times;</button>
+    </div>
+    <ul id="dettagli-lista" class="lista"></ul>
+  </section>
+  <section id="casi" class="finestra" aria-label="Casi in correzione">
+    <div class="testa">
+      <span class="tit" id="casi-tit">Casi in correzione</span>
+      <button type="button" id="casi-chiudi" aria-label="Chiudi i casi">&times;</button>
+    </div>
+    <ul id="casi-lista" class="lista"></ul>
+    <p id="casi-vuoto" class="vuoto">Nessun caso in correzione. Quando mandi un caso
+      nuovo lo segui qui, finch&eacute; non &egrave; risolto.</p>
+  </section>
+  <section id="notifiche" class="finestra" aria-label="Notifiche">
+    <div class="testa">
+      <span class="tit" id="notifiche-tit">Notifiche</span>
+      <button type="button" id="notifiche-chiudi" aria-label="Chiudi le notifiche">&times;</button>
+    </div>
+    <ul id="notifiche-lista" class="lista"></ul>
+    <p id="notifiche-vuoto" class="vuoto">Nessuna notifica.</p>
+  </section>
 </aside>
 </div>
 
@@ -455,6 +566,8 @@
     <button id="upload" class="primary">Carica PDF</button>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
+    <button id="casi-btn" type="button" aria-expanded="false" aria-controls="casi">Casi</button>
+    <button id="notifiche-btn" type="button" aria-expanded="false" aria-controls="notifiche">Notifiche</button>
     <button id="annulla" style="display:none">Annulla</button>
   </div>
   <p class="hint">Trascina per ruotare, rotella o pizzico per lo zoom, doppio clic per rimettere l&rsquo;inquadratura. Il viewer scarta le facce posteriori, quindi un modello con le normali girate si vede subito.</p>
@@ -871,6 +984,7 @@ async function cercaBackend(){
   if (backendUp){
     document.querySelector('#empty div').textContent = INVITO;
     setStatus(API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale','');
+    aggiornaCasi();
   } else {
     setStatus(OFFLINE,'err');
     document.querySelector('#empty div').textContent =
@@ -923,8 +1037,10 @@ function setMeta(items, ai){
 
 /** Il riquadro dell'AI si vede se ha qualcosa da dire. */
 function aggiornaAI(){
+  const invio = document.getElementById('invio');
   document.getElementById('ai').hidden =
-    !document.getElementById('ai-righe').children.length && !verificaEl.classList.contains('on');
+    !document.getElementById('ai-righe').children.length && !verificaEl.classList.contains('on')
+    && !(invio.parentNode.id === 'ai' && !invio.hidden);
 }
 
 /* La finestra dei dettagli: si apre e si chiude dal tasto, e la scelta si
@@ -937,9 +1053,15 @@ const RICORDA_DETTAGLI = 'pack3d.dettagli';
 function apriDettagli(si, ricorda){
   dettagliEl.classList.toggle('on', si);
   dettagliBtn.setAttribute('aria-expanded', String(si));
+  aggiornaLato();
   if (ricorda){
     try{ localStorage.setItem(RICORDA_DETTAGLI, si ? '1' : '0'); }catch(e){}
   }
+}
+/** La colonna accanto al visore c'e' se almeno una finestra e' aperta. */
+function aggiornaLato(){
+  const lato = document.getElementById('lato');
+  lato.classList.toggle('on', !!lato.querySelector('.finestra.on'));
 }
 function dettagliRicordati(){
   try{ return localStorage.getItem(RICORDA_DETTAGLI) === '1'; }catch(e){ return false; }
@@ -1065,7 +1187,8 @@ async function build(buf, name, opts){
   glbBlob = blob;
   show(await glbBlob.arrayBuffer());
   setFase('pronto');
-  if (verdetto && verdetto.esito === 'dubbio' && verdetto.in_coda) mostraVerifica(verdetto);
+  if (verdetto && verdetto.esito === 'dubbio' && (verdetto.in_coda || verdetto.in_attesa))
+    mostraVerifica(verdetto);
   return verdetto;
 }
 
@@ -1148,14 +1271,19 @@ function mostraCaso(v, blob){
       + '\u00bb, col nome \u00ab' + nomeInGlam() + '\u00bb.'
     : '';
   document.getElementById('caso-quando').textContent = v.in_coda
-    ? STIMA + (GLAM_CASI ? ' Se ci serve un\u2019informazione su com\u2019\u00e8 fatto o come si'
-        + ' monta il pack, te la chiediamo qui in Glam Lab, fra i tuoi casi in correzione.' : '')
+    ? STIMA + ' Se ci serve un\u2019informazione su com\u2019\u00e8 fatto o come si monta il'
+      + ' pack, te la chiediamo nella finestra dei casi'
+      + (GLAM_CASI ? ' e in Glam Lab, fra i tuoi casi in correzione.' : '.')
     : '';
+  // un caso che aspetta Invia o Annulla non e' ancora di nessuno: il codice
+  // si dice, ma non si promette niente
   document.getElementById('caso-codice').textContent = 'Codice del caso: ' + (v.codice || '-')
     + (v.in_coda ? ' \u2014 \u00e8 in coda per la correzione.'
-                 : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
+       : v.in_attesa ? ''
+       : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
   mostraNota(v);
   casoEl.classList.add('on');
+  mostraInvio(v);
   avvisaGlam(v);
 }
 
@@ -1164,16 +1292,25 @@ function mostraCaso(v, blob){
 const verificaEl = document.getElementById('verifica');
 
 function mostraVerifica(v){
-  verificaEl.textContent = 'Il controllo AI ha un dubbio, e il caso è andato in verifica (codice '
-    + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
-    + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
-    + '», col nome «' + nomeInGlam() + '». ' + STIMA;
+  verificaEl.textContent = v.in_coda
+    ? 'Il controllo AI ha un dubbio, e il caso è andato in verifica (codice '
+      + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
+      + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
+      + '», col nome «' + nomeInGlam() + '». ' + STIMA
+    : 'Il controllo AI ha un dubbio su questo modello (codice ' + (v.codice || '-')
+      + '). Il modello lo puoi usare lo stesso.';
   verificaEl.classList.add('on');
+  mostraInvio(v);
   aggiornaAI();
   avvisaGlam(v);
 }
 
-function nascondiCaso(){
+/** Toglie il riquadro del caso e l'avviso dell'AI. Un caso che aspettava
+ *  Invia o Annulla si cancella: chi carica un altro PDF, o torna all'inizio,
+ *  non l'ha mandato. `tieni` lo lascia in attesa: "Mostra comunque il
+ *  modello" toglie solo il riquadro, e il modulo passa sotto il visore. */
+function nascondiCaso(tieni){
+  if (!tieni) scartaInAttesa();
   verificaEl.classList.remove('on');
   aggiornaAI();
   if (!casoEl.classList.contains('on')) return;
@@ -1182,6 +1319,405 @@ function nascondiCaso(){
   respinto = null;
   // il riquadro stava al posto del modello: se un modello non c'e', torna l'invito
   if (!model) document.getElementById('empty').style.display = '';
+}
+
+/* ------------------- il caso nuovo: Invia o Annulla ------------------- */
+// Un caso nuovo non parte da solo: lo Space lo tiene in attesa finche' chi ha
+// caricato il PDF non lo manda (con l'email, se vuole, per le domande della
+// routine) o lo cancella. Annulla, un altro PDF o la pagina chiusa senza
+// scegliere lo cancellano, e allo Space resta niente.
+const invioEl = document.getElementById('invio');
+const invioEmail = document.getElementById('invio-email');
+const invioSi = document.getElementById('invio-si');
+const invioNo = document.getElementById('invio-no');
+const invioEsito = document.getElementById('invio-esito');
+let casoInAttesa = null;
+
+function esitoInvio(testo, cls){
+  invioEsito.textContent = testo;
+  invioEsito.className = 'esito' + (cls ? ' ' + cls : '');
+}
+
+/** Il modulo sta nel riquadro del caso quando il riquadro e' acceso, se no
+ *  sotto il visore, nel riquadro dell'AI: mai sopra il modello. */
+function mostraInvio(v){
+  casoInAttesa = v && v.in_attesa && v.codice ? v : null;
+  invioEl.hidden = !casoInAttesa;
+  if (casoInAttesa){
+    document.getElementById('invio-testo').textContent = v.esito === 'dubbio'
+      ? 'Lo mandiamo a chi lo controlla e, se serve, corregge il codice?'
+      : 'Lo mandiamo a chi corregge il codice? Quando il modello giusto è pronto, arriva in Glam Lab.';
+    invioSi.disabled = invioNo.disabled = invioEmail.disabled = false;
+    if (!invioEmail.value) invioEmail.value = leggi(RICORDA_EMAIL, '') || '';
+    esitoInvio('');
+    if (casoEl.classList.contains('on'))
+      casoEl.insertBefore(invioEl, document.getElementById('nota'));
+    else
+      document.getElementById('ai').insertBefore(invioEl, document.getElementById('ai-righe'));
+  }
+  aggiornaAI();
+}
+
+/** Cancella il caso in attesa. `uscita`: la pagina si sta chiudendo, e solo
+ *  sendBeacon arriva di sicuro (in testo semplice: niente preflight). */
+function scartaInAttesa(uscita){
+  const v = casoInAttesa;
+  casoInAttesa = null;
+  invioEl.hidden = true;
+  if (!v) return;
+  v.in_attesa = false;
+  const corpo = JSON.stringify({codice: v.codice, azione: 'annulla'});
+  try{
+    if (uscita && navigator.sendBeacon &&
+        navigator.sendBeacon(url('/api/caso'), new Blob([corpo], {type: 'text/plain'}))) return;
+  }catch(e){}
+  fetch(url('/api/caso'), {method: 'POST', headers: {'Content-Type': 'application/json'},
+                           body: corpo, keepalive: true}).catch(() => {});
+}
+
+invioSi.addEventListener('click', async () => {
+  const v = casoInAttesa;
+  if (!v) return;
+  const email = invioEmail.value.trim();
+  if (email && !invioEmail.checkValidity()){
+    esitoInvio('L’email non sembra giusta: correggila o lasciala vuota.', 'err');
+    return;
+  }
+  invioSi.disabled = invioNo.disabled = invioEmail.disabled = true;
+  esitoInvio('Invio del caso…');
+  try{
+    const r = await fetch(url('/api/caso'), {method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({codice: v.codice, azione: 'invia', email})});
+    if (!r.ok){
+      let t = (await r.text()).slice(0, 200).trim();
+      if (t.charAt(0) === '<') t = '';
+      throw new Error(t || ('HTTP ' + r.status));
+    }
+    if (email) scrivi(RICORDA_EMAIL, email);
+    v.in_attesa = false; v.in_coda = true;
+    casoInAttesa = null;
+    invioEl.hidden = true;
+    aggiungiCaso(v, nomeInGlam());
+    notifica('«' + nomeInGlam() + '»: caso inviato. Lo segui nella finestra dei casi'
+             + (email ? ', e ti scriviamo se ci serve un’informazione.' : '.'), v.codice);
+    // adesso il riquadro dice dove arrivera' il modello e lascia scrivere la nota
+    if (casoEl.classList.contains('on')) mostraCaso(v, respinto);
+    else if (v.esito === 'dubbio') mostraVerifica(v);
+    else {
+      verificaEl.textContent = 'Caso inviato (codice ' + v.codice + '): quando sarà corretto,'
+        + ' troverai il modello giusto in Glam Lab, cartella «' + GLAM_CARTELLA + '». ' + STIMA;
+      verificaEl.classList.add('on');
+      aggiornaAI();
+      avvisaGlam(v);
+    }
+  }catch(err){
+    invioSi.disabled = invioNo.disabled = invioEmail.disabled = false;
+    esitoInvio('Caso non inviato: ' + testoErrore(err), 'err');
+  }
+});
+
+invioNo.addEventListener('click', () => {
+  const v = casoInAttesa;
+  scartaInAttesa();
+  if (!v) return;
+  if (casoEl.classList.contains('on'))
+    document.getElementById('caso-codice').textContent =
+      'Caso cancellato: non lo mandiamo a nessuno. (Codice ' + v.codice + ')';
+  else {
+    verificaEl.textContent = 'Caso non inviato: il modello resta com’è, e nessuno lo riguarda.';
+    verificaEl.classList.add('on');
+  }
+  aggiornaAI();
+});
+
+addEventListener('pagehide', () => scartaInAttesa(true));
+
+/* --------------------- casi in correzione e notifiche --------------------- */
+// I casi che questo browser ha mandato, finche' non sono risolti, e le ultime
+// dieci notifiche. Stanno nel browser: con l'accesso guest condiviso l'account
+// dell'app non dice chi ha caricato un PDF, il browser si'. Lo stato lo dice
+// lo Space (/api/casi), che lo legge dal registro dei casi: la routine ci
+// scrive a che punto e' e, se le manca qualcosa, la domanda.
+const RICORDA_CASI = 'pack3d.casi', RICORDA_NOTIFICHE = 'pack3d.notifiche';
+const RICORDA_EMAIL = 'pack3d.email', RICORDA_FINESTRE = 'pack3d.finestre';
+const NOTIFICHE_MAX = 10;
+// un caso appena mandato arriva su GitHub dopo qualche secondo: fino ad
+// allora lo Space non lo trova, e non va tolto dalla lista
+const GRAZIA_MS = 10 * 60 * 1000;
+const CODICE_CASO = /^[0-9a-f]{10}$/;
+
+function leggi(k, d){
+  try{ const v = JSON.parse(localStorage.getItem(k) || 'null'); return v == null ? d : v; }
+  catch(e){ return d; }
+}
+function scrivi(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+let casi = (leggi(RICORDA_CASI, []) || []).filter(c => c && CODICE_CASO.test(c.codice));
+let notifiche = (leggi(RICORDA_NOTIFICHE, []) || []).filter(n => n && n.testo).slice(0, NOTIFICHE_MAX);
+
+const casiEl = document.getElementById('casi');
+const casiLista = document.getElementById('casi-lista');
+const casiBtn = document.getElementById('casi-btn');
+const notificheEl = document.getElementById('notifiche');
+const notificheLista = document.getElementById('notifiche-lista');
+const notificheBtn = document.getElementById('notifiche-btn');
+
+const ETICHETTA = {'in-coda': 'In coda', 'in-lavorazione': 'In lavorazione',
+                   'domanda': 'Serve una tua risposta', 'non-risolto': 'Non risolto per ora'};
+
+function apriFinestra(el, btn, si, ricorda){
+  el.classList.toggle('on', si);
+  btn.setAttribute('aria-expanded', String(si));
+  aggiornaLato();
+  if (ricorda){ const f = leggi(RICORDA_FINESTRE, {}) || {}; f[el.id] = si; scrivi(RICORDA_FINESTRE, f); }
+  if (si && el === notificheEl) segnaLette();
+  if (si && el === casiEl) aggiornaCasi();
+}
+
+function quandoBreve(iso){
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  const ora = d.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'});
+  return d.toDateString() === new Date().toDateString() ? 'oggi alle ' + ora
+    : d.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'}) + ' alle ' + ora;
+}
+
+function notifica(testo, codice){
+  notifiche.unshift({quando: new Date().toISOString(), testo, codice: codice || '', nuova: true});
+  notifiche = notifiche.slice(0, NOTIFICHE_MAX);
+  scrivi(RICORDA_NOTIFICHE, notifiche);
+  if (notificheEl.classList.contains('on')) segnaLette(); else disegnaNotifiche();
+}
+
+/** Finestra aperta, notifiche lette: il pallino resta finche' non si
+ *  ridisegna, cosi' chi apre vede cosa e' arrivato. */
+function segnaLette(){
+  disegnaNotifiche();
+  if (!notifiche.some(n => n.nuova)) return;
+  notifiche.forEach(n => { n.nuova = false; });
+  scrivi(RICORDA_NOTIFICHE, notifiche);
+  contaNotifiche();
+}
+
+function contaNotifiche(){
+  const nuove = notifiche.filter(n => n.nuova).length;
+  notificheBtn.textContent = 'Notifiche' + (nuove ? ' · ' + nuove : '');
+  notificheBtn.classList.toggle('nuove', nuove > 0);
+}
+
+function disegnaNotifiche(){
+  notificheLista.replaceChildren(...notifiche.map(n => {
+    const li = document.createElement('li');
+    if (n.nuova) li.className = 'nuova';
+    const q = document.createElement('span');
+    q.className = 'n-quando';
+    q.textContent = quandoBreve(n.quando);
+    const t = document.createElement('span');
+    t.textContent = n.testo;
+    li.append(q, t);
+    return li;
+  }));
+  document.getElementById('notifiche-vuoto').hidden = notifiche.length > 0;
+  contaNotifiche();
+}
+
+function salvaCasi(){ scrivi(RICORDA_CASI, casi); }
+
+function aggiungiCaso(v, nome){
+  if (!casi.some(c => c.codice === v.codice))
+    casi.unshift({codice: v.codice, nome: nome || ('Caso ' + v.codice),
+                  inviato: new Date().toISOString(), stato: 'in-coda', messaggio: ''});
+  salvaCasi();
+  disegnaCasi();
+}
+
+function disegnaCasi(){
+  casiLista.replaceChildren(...casi.map(disegnaCaso));
+  document.getElementById('casi-vuoto').hidden = casi.length > 0;
+  const domande = casi.filter(c => c.stato === 'domanda').length;
+  casiBtn.textContent = 'Casi' + (casi.length ? ' · ' + casi.length : '');
+  casiBtn.classList.toggle('domanda', domande > 0);
+  casiBtn.title = domande === 1 ? 'Un caso aspetta una tua risposta'
+    : domande ? domande + ' casi aspettano una tua risposta' : '';
+}
+
+function disegnaCaso(c){
+  const li = document.createElement('li');
+  if (c.stato === 'domanda') li.className = 'domanda';
+  const testa = document.createElement('div');
+  testa.className = 'caso-testa';
+  const b = document.createElement('b');
+  b.textContent = c.nome;
+  const chip = document.createElement('span');
+  chip.className = 'chip ' + c.stato;
+  chip.textContent = ETICHETTA[c.stato] || 'In coda';
+  testa.append(b, chip);
+  const msg = document.createElement('div');
+  msg.className = 'caso-msg';
+  msg.textContent = c.messaggio || '';
+  const q = document.createElement('div');
+  q.className = 'caso-quando';
+  q.textContent = 'Inviato ' + quandoBreve(c.inviato) + ' · codice ' + c.codice;
+  li.append(testa, msg, q);
+  if (c.stato === 'domanda' && c.domanda) li.append(moduloRisposta(c));
+  return li;
+}
+
+/** La risposta a una domanda della routine: una scelta, parole sue, una foto.
+ *  Va sulla issue del caso come la nota (/api/nota) e rilancia la routine. */
+function moduloRisposta(c){
+  const box = document.createElement('div');
+  box.className = 'risposta';
+  const q = document.createElement('div');
+  q.className = 'q';
+  q.textContent = c.domanda;
+  box.append(q);
+  let scelta = '';
+  if (c.opzioni && c.opzioni.length){
+    const op = document.createElement('div');
+    op.className = 'opzioni';
+    for (const o of c.opzioni){
+      const bt = document.createElement('button');
+      bt.type = 'button';
+      bt.textContent = o;
+      bt.setAttribute('aria-pressed', 'false');
+      bt.onclick = () => {
+        scelta = scelta === o ? '' : o;
+        op.querySelectorAll('button').forEach(x =>
+          x.setAttribute('aria-pressed', String(x.textContent === scelta)));
+      };
+      op.append(bt);
+    }
+    box.append(op);
+  }
+  const ta = document.createElement('textarea');
+  ta.maxLength = 2000;
+  ta.rows = 2;
+  ta.placeholder = 'Oppure scrivi a parole tue';
+  ta.setAttribute('aria-label', 'Risposta a parole tue');
+  const az = document.createElement('div');
+  az.className = 'azioni';
+  const fi = document.createElement('input');
+  fi.type = 'file';
+  fi.accept = 'image/*';
+  fi.id = 'foto-' + c.codice;
+  fi.hidden = true;
+  const lab = document.createElement('label');
+  lab.className = 'bottone';
+  lab.htmlFor = fi.id;
+  lab.textContent = 'Aggiungi una foto';
+  const fn = document.createElement('span');
+  fn.className = 'foto-nome';
+  fi.onchange = () => { fn.textContent = fi.files[0] ? fi.files[0].name : ''; };
+  const invia = document.createElement('button');
+  invia.type = 'button';
+  invia.className = 'primary';
+  invia.textContent = 'Invia la risposta';
+  az.append(lab, fi, fn, invia);
+  const es = document.createElement('div');
+  es.className = 'esito';
+  es.setAttribute('role', 'status');
+  invia.onclick = async () => {
+    const testo = ta.value.trim(), file = fi.files[0];
+    if (!scelta && !testo && !file){
+      es.textContent = 'Scegli una risposta, scrivi qualcosa o aggiungi una foto.';
+      es.className = 'esito err';
+      return;
+    }
+    invia.disabled = true;
+    es.textContent = 'Invio della risposta…';
+    es.className = 'esito';
+    try{
+      const foto = file ? await fotoRidotta(file) : null;
+      const r = await fetch(url('/api/nota'), {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({codice: c.codice, risposta: true, scelta, nota: testo, foto})});
+      if (!r.ok){
+        let t = (await r.text()).slice(0, 200).trim();
+        if (t.charAt(0) === '<') t = '';
+        throw new Error(t || ('HTTP ' + r.status));
+      }
+      c.stato = 'in-coda';
+      c.messaggio = 'Risposta inviata: il caso è ripartito.';
+      delete c.domanda;
+      delete c.opzioni;
+      c.chiave = 'risposta';
+      salvaCasi();
+      disegnaCasi();
+      notifica('«' + c.nome + '»: risposta inviata, il caso è ripartito.', c.codice);
+    }catch(err){
+      invia.disabled = false;
+      es.textContent = 'Risposta non inviata: ' + testoErrore(err);
+      es.className = 'esito err';
+    }
+  };
+  box.append(ta, az, es);
+  return box;
+}
+
+const NOVITA = {
+  'in-lavorazione': c => 'la correzione è iniziata.',
+  'domanda': c => 'c’è una domanda per te: rispondi dalla finestra dei casi.',
+  'non-risolto': c => 'per ora non si risolve.' + (c.messaggio ? ' ' + c.messaggio : ''),
+  'in-coda': c => c.messaggio || 'è di nuovo in coda.'};
+
+let casiInVolo = false;
+
+/** Chiede allo Space a che punto sono i casi; un caso risolto o chiuso esce
+ *  dalla lista con una notifica, ogni cambio di stato ne lascia una. Si
+ *  ridisegna solo se qualcosa e' cambiato: una risposta a meta' non si perde. */
+async function aggiornaCasi(){
+  if (!backendUp || casiInVolo || !casi.length) return;
+  casiInVolo = true;
+  try{
+    const r = await fetch(url('/api/casi?codici=' + casi.map(c => c.codice).join(',')),
+                          {cache: 'no-store'});
+    if (!r.ok) return;
+    const stati = (await r.json()).casi || [];
+    let cambiato = false;
+    const restano = [];
+    for (const c of casi){
+      const s = stati.find(x => x.codice === c.codice);
+      if (!s){ restano.push(c); continue; }
+      if (s.nome && /^Caso [0-9a-f]{10}$/.test(c.nome)){ c.nome = s.nome; cambiato = true; }
+      if (s.stato === 'assente' || s.stato === 'in-attesa'){
+        if (Date.now() - new Date(c.inviato).getTime() < GRAZIA_MS){ restano.push(c); continue; }
+        cambiato = true;
+        continue;
+      }
+      if (s.stato === 'risolto' || s.stato === 'chiuso'){
+        notifica('«' + c.nome + '»: ' + (s.stato === 'risolto'
+          ? 'risolto! Trovi il modello corretto in Glam Lab, cartella «' + GLAM_CARTELLA + '».'
+          : 'il caso è chiuso.') + (s.messaggio ? ' ' + s.messaggio : ''), c.codice);
+        cambiato = true;
+        continue;
+      }
+      const chiave = [s.stato, s.quando || '', s.domanda || ''].join('|');
+      if (chiave !== c.chiave){
+        const prima = c.chiave;
+        Object.assign(c, {stato: s.stato, messaggio: s.messaggio || '', domanda: s.domanda,
+                          opzioni: s.opzioni, chiave});
+        // il primo giro dopo l'invio non e' una novita', una domanda si'
+        if ((prima || s.stato === 'domanda') && NOVITA[s.stato])
+          notifica('«' + c.nome + '»: ' + NOVITA[s.stato](c), c.codice);
+        cambiato = true;
+      }
+      restano.push(c);
+    }
+    casi = restano;
+    if (cambiato){ salvaCasi(); disegnaCasi(); }
+  }catch(e){ /* riprova al giro dopo */ }
+  finally{ casiInVolo = false; }
+}
+
+// Il link dell'email della domanda porta qui con ?caso=: il caso entra nella
+// lista (se non c'era) e la finestra dei casi si apre sulla domanda.
+const casoDaLink = (new URLSearchParams(location.search).get('caso') || '').trim().toLowerCase();
+if (CODICE_CASO.test(casoDaLink) && !casi.some(c => c.codice === casoDaLink)){
+  casi.unshift({codice: casoDaLink, nome: 'Caso ' + casoDaLink,
+                inviato: new Date().toISOString(), stato: 'in-coda', messaggio: ''});
+  salvaCasi();
 }
 
 /* --------------- la nota di chi ha caricato il PDF ------------------ */
@@ -1270,7 +1806,8 @@ notaInvia.addEventListener('click', async () => {
 document.getElementById('caso-mostra').onclick = async () => {
   if (!respinto) return;
   const blob = respinto;
-  nascondiCaso();
+  nascondiCaso(true);
+  if (casoInAttesa) mostraInvio(casoInAttesa);
   glbBlob = blob;
   show(await blob.arrayBuffer());
   setFase('pronto');
@@ -1597,6 +2134,24 @@ pellicolaScelta.querySelectorAll('button').forEach(b => {
 });
 dettagliBtn.onclick = () => apriDettagli(!dettagliEl.classList.contains('on'), true);
 document.getElementById('dettagli-chiudi').onclick = () => apriDettagli(false, true);
+casiBtn.onclick = () => apriFinestra(casiEl, casiBtn, !casiEl.classList.contains('on'), true);
+document.getElementById('casi-chiudi').onclick = () => apriFinestra(casiEl, casiBtn, false, true);
+notificheBtn.onclick = () =>
+  apriFinestra(notificheEl, notificheBtn, !notificheEl.classList.contains('on'), true);
+document.getElementById('notifiche-chiudi').onclick = () =>
+  apriFinestra(notificheEl, notificheBtn, false, true);
+disegnaCasi();
+disegnaNotifiche();
+// le finestre come le aveva lasciate chi guarda; dal link dell'email, i casi
+{
+  const f = leggi(RICORDA_FINESTRE, {}) || {};
+  if (f.casi || CODICE_CASO.test(casoDaLink)) apriFinestra(casiEl, casiBtn, true, false);
+  if (f.notifiche) apriFinestra(notificheEl, notificheBtn, true, false);
+}
+// lo stato dei casi ogni minuto, e subito quando la pagina torna in vista
+setInterval(() => { if (document.visibilityState === 'visible') aggiornaCasi(); }, 60000);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') aggiornaCasi(); });
 spessoreEl.querySelectorAll('button').forEach(b => {
   b.onclick = () => scegliSpessore(Number(b.dataset.s));
 });

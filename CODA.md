@@ -15,7 +15,16 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
     `contesto.opzioni`) e `viste_modello.jpg` (il modello respinto, o
     quello su cui il controllo ha avuto un dubbio; manca se la costruzione
     si e' fermata con un errore, e allora l'errore e' in `motivo`).
+    Ci scrive anche `prove/parco.py caso`: `stato.json`, la storia degli
+    stati che dici a chi l'ha caricato (vedi sotto).
   - Una **issue aperta per ogni caso**, titolo `Caso nuovo <codice>: <file>`.
+    Un caso arriva qui solo se chi ha caricato il PDF l'ha **mandato** dalla
+    pagina (Invia il caso): se annulla, o chiude senza scegliere, lo Space lo
+    cancella e qui non arriva niente.
+  - `contatti/<codice>.json`: l'email di chi ha mandato il caso, se l'ha
+    lasciata, per gli avvisi delle domande. **Non aprirlo e non copiarlo mai**
+    altrove (issue, commenti, commit, PR): e' un dato personale e serve solo
+    allo Space per scrivergli.
   - `parco/`: i PDF di prova (`parco/pdf/`), il manifesto `parco/parco.json`
     con le opzioni e com'e' giusto ogni modello, e in `parco/riferimento/` le
     viste approvate.
@@ -28,13 +37,16 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
   mette il caso in coda, dice all'utente di cercarlo. Il token lo aggiunge
   l'ambiente cloud alle richieste per quel sito: non sta nel codice, ne' nella
   sessione, ne' va chiesto a nessuno.
-- **Chi ha caricato il PDF** il caso lo segue da Glam: la pagina dello Space,
-  che Glam ospita, gli dice il codice del caso, e Glam lo lega a lui. Con
-  `prove/parco.py caso` gli dici a che punto e' - in lavorazione, una
-  domanda, risolto, non risolto - e il modello corretto va a lui. Le sue
-  parole arrivano sulla issue come commenti: la **nota** che puo' lasciare
-  nella pagina appena il caso entra in coda, e la **risposta** alle tue
-  domande, che Glam manda allo Space.
+- **Chi ha caricato il PDF** il caso lo segue dalla finestra dei casi della
+  pagina dello Space, e da Glam: la pagina gli dice il codice del caso, e Glam
+  lo lega a lui. Con `prove/parco.py caso` gli dici a che punto e' - in
+  lavorazione, una domanda, risolto, non risolto - e il modello corretto va a
+  lui. Lo stesso comando scrive lo stato in `stato.json` nella cartella del
+  caso e lo spinge su `main` del registro (la pagina lo legge da li'), e con
+  una domanda chiede allo Space di mandargliela per email, se l'email l'ha
+  lasciata. Le sue parole arrivano sulla issue come commenti: la **nota** che
+  puo' lasciare nella pagina appena il caso entra in coda, e la **risposta**
+  alle tue domande, dalla pagina dello Space o da Glam.
 
 ## Il giro
 
