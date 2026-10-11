@@ -391,6 +391,9 @@ def scarta(cod):
 CODICE_RE = re.compile(r"^[0-9a-f]{10}$")
 TESTO_MAX = 4000
 FOTO_MAX = 6 * 1024 * 1024
+# Quante foto per voce: la pagina le rimpicciolisce a 1600 px (qualche
+# centinaio di kB l'una), e chi risponde puo' mostrare il pack da piu' lati.
+FOTO_N = 6
 # Quante voci per caso, e quante in un'ora per tutto lo Space: il punto
 # d'ingresso delle note e' pubblico come la pagina.
 VOCI_PER_CASO = 8
@@ -459,6 +462,17 @@ def foto_da_testo(testo):
     return dati
 
 
+def fotos_da_testo(valore):
+    """Le foto di una voce: un data URL, o una lista di data URL (al massimo
+    FOTO_N). Torna la lista dei byte, anche vuota."""
+    if not valore:
+        return []
+    elenco = valore if isinstance(valore, list) else [valore]
+    if len(elenco) > FOTO_N:
+        raise ValueError("al massimo %d foto" % FOTO_N)
+    return [f for f in (foto_da_testo(v) for v in elenco) if f]
+
+
 def trova(cod):
     """(issue aperta del caso, cartella dei suoi file), o (None, None)."""
     repo = os.environ["PACK3D_CODA_REPO"].strip().strip("/")
@@ -480,14 +494,68 @@ def _citato(testo):
     return "\n".join("> " + r if r.strip() else ">" for r in righe)
 
 
+def _foto_valide(foto):
+    """La lista delle foto di una voce, controllate: (lista, estensioni)."""
+    if foto is None:
+        foto = []
+    elif isinstance(foto, (bytes, bytearray)):
+        foto = [bytes(foto)]
+    if len(foto) > FOTO_N:
+        raise ValueError("al massimo %d foto" % FOTO_N)
+    for f in foto:
+        if len(f) > FOTO_MAX:
+            raise ValueError("una foto e' troppo grande (al massimo %d MB)"
+                             % (FOTO_MAX // (1024 * 1024)))
+    return foto, [tipo_foto(f) for f in foto]
+
+
+def _salva_foto(cod, cartella, via, foto, estensioni):
+    """Le foto di una voce nella cartella del caso: le righe del commento che
+    le linkano."""
+    if not foto:
+        return []
+    if not cartella:
+        return ["(Le foto sono arrivate, ma la cartella del caso non si trova "
+                "nella issue: non sono state salvate.)", ""]
+    ora = datetime.datetime.now(datetime.timezone.utc)
+    # i millisecondi: due voci nello stesso secondo darebbero lo stesso
+    # nome, e GitHub rifiuta di creare un file che c'e' gia'
+    radice = "%s_%s%03d" % (via, ora.strftime("%Y%m%d-%H%M%S-"), ora.microsecond // 1000)
+    righe = []
+    for k, (f, ext) in enumerate(zip(foto, estensioni)):
+        nome = "%s%s.%s" % (radice, "" if len(foto) == 1 else "-%d" % (k + 1), ext)
+        _richiesta("PUT", "/repos/%s/contents/%s/%s" % (_repo(), cartella, nome),
+                   {"message": "Caso %s: foto della %s" % (cod, via),
+                    "content": base64.b64encode(f).decode("ascii")}, timeout=120)
+        righe.append("Foto: [`%s`](../blob/HEAD/%s/%s)" % (nome, cartella, nome))
+    return righe + [""]
+
+
+def _togli_etichette(issue, *nomi):
+    """Toglie le etichette dalla issue, se ci sono: torna quelle che c'erano."""
+    n = issue["number"]
+    etichette = [e.get("name") for e in issue.get("labels") or [] if isinstance(e, dict)]
+    for nome in nomi:
+        if nome not in etichette:
+            continue
+        try:
+            _richiesta("DELETE", "/repos/%s/issues/%d/labels/%s" % (_repo(), n, nome),
+                       timeout=30)
+        except urllib.error.HTTPError as e:
+            if e.code != 404:
+                raise
+    return etichette
+
+
 def aggiungi(cod, testo, foto=None, via="nota", scelta=None, fonte=None):
     """Mette sulla issue del caso la nota della pagina o la risposta da Glam.
 
     `via` e' "nota" o "risposta"; `fonte` dice da dove arriva una risposta
-    (di serie Glam Lab; la pagina dello Space risponde anche lei). Torna {"ok": True, "issue": numero,
-    "rilanciata": bool}. Assente se il caso non e' in coda o e' chiuso,
-    Troppe se le voci sono troppe, RuntimeError se la coda non c'e',
-    OSError o ValueError se GitHub non risponde o il contenuto non va.
+    (di serie Glam Lab; la pagina dello Space risponde anche lei). `foto` e'
+    una foto (byte) o una lista, al massimo FOTO_N. Torna {"ok": True,
+    "issue": numero, "rilanciata": bool}. Assente se il caso non e' in coda o
+    e' chiuso, Troppe se le voci sono troppe, RuntimeError se la coda non
+    c'e', OSError o ValueError se GitHub non risponde o il contenuto non va.
 
     Una risposta rilancia sempre la routine: e' arrivata perche' la routine
     aveva chiesto. Una nota solo se il caso era fermo su `da-guardare`;
@@ -500,10 +568,7 @@ def aggiungi(cod, testo, foto=None, via="nota", scelta=None, fonte=None):
         raise RuntimeError("la coda dei casi non e' configurata")
     testo = _pulito(testo, TESTO_MAX)
     scelta = _pulito(scelta, 300)
-    if foto is not None and len(foto) > FOTO_MAX:
-        raise ValueError("la foto e' troppo grande (al massimo %d MB)"
-                         % (FOTO_MAX // (1024 * 1024)))
-    ext = tipo_foto(foto) if foto else None
+    foto, estensioni = _foto_valide(foto)
     if not (testo or scelta or foto):
         raise ValueError("niente da aggiungere: scrivi qualcosa o allega una foto")
     evento = _IN_VOLO.get(cod)
@@ -513,7 +578,7 @@ def aggiungi(cod, testo, foto=None, via="nota", scelta=None, fonte=None):
     issue, cartella = trova(cod)
     if issue is None:
         raise Assente("il caso %s non e' in coda, o e' gia' chiuso" % cod)
-    repo = os.environ["PACK3D_CODA_REPO"].strip().strip("/")
+    repo = _repo()
     n = issue["number"]
     ora = datetime.datetime.now(datetime.timezone.utc)
     if via == "risposta":
@@ -525,30 +590,11 @@ def aggiungi(cod, testo, foto=None, via="nota", scelta=None, fonte=None):
         righe += ["**Ha scelto:**", "", _citato(scelta), ""]
     if testo:
         righe += [_citato(testo), ""]
-    if foto:
-        # i millisecondi: due voci nello stesso secondo darebbero lo stesso
-        # nome, e GitHub rifiuta di creare un file che c'e' gia'
-        nome = "%s_%s%03d.%s" % (via, ora.strftime("%Y%m%d-%H%M%S-"),
-                                 ora.microsecond // 1000, ext)
-        if cartella:
-            _richiesta("PUT", "/repos/%s/contents/%s/%s" % (repo, cartella, nome),
-                       {"message": "Caso %s: foto della %s" % (cod, via),
-                        "content": base64.b64encode(foto).decode("ascii")}, timeout=120)
-            righe += ["Foto: [`%s`](../blob/HEAD/%s/%s)" % (nome, cartella, nome), ""]
-        else:
-            righe += ["(La foto e' arrivata, ma la cartella del caso non si trova "
-                      "nella issue: non e' stata salvata.)", ""]
+    righe += _salva_foto(cod, cartella, via, foto, estensioni)
     righe += ["_Arrivata alle %s UTC._" % ora.strftime("%H:%M")]
     _richiesta("POST", "/repos/%s/issues/%d/comments" % (repo, n),
                {"body": "\n".join(righe)}, timeout=30)
-    etichette = [e.get("name") for e in issue.get("labels") or [] if isinstance(e, dict)]
-    if "da-guardare" in etichette:
-        try:
-            _richiesta("DELETE", "/repos/%s/issues/%d/labels/da-guardare" % (repo, n),
-                       timeout=30)
-        except urllib.error.HTTPError as e:
-            if e.code != 404:
-                raise
+    etichette = _togli_etichette(issue, "da-guardare")
     _dimentica("issue:%d" % n, "aperte")
     rilanciata = False
     if via == "risposta" or "da-guardare" in etichette:
@@ -559,6 +605,135 @@ def aggiungi(cod, testo, foto=None, via="nota", scelta=None, fonte=None):
     print("coda: %s sul caso %s (issue %d)%s" % (via, cod, n,
           ", routine rilanciata" if rilanciata else ""), file=sys.stderr)
     return {"ok": True, "issue": n, "rilanciata": rilanciata}
+
+
+def esito_modello(cod, approvato, testo=None, foto=None):
+    """Chi ha caricato il PDF approva il modello corretto, o no.
+
+    La routine, risolto un caso, non lo manda piu' in Glam da sola: lo mette
+    "da-approvare" (`prove/parco.py caso --stato da-approvare`), col modello
+    nella cartella del caso, e chi l'ha caricato lo guarda nella finestra dei
+    casi. Qui arriva la sua risposta: un commento sulla issue - col motivo e
+    le foto, se non va - e una voce in `stato.json`; via le etichette
+    `da-approvare` e `da-guardare`, e la routine riparte. Se e' approvato lo
+    manda in Glam, fra i Casi risolti, e chiude; se no lo riprende col motivo.
+
+    Assente se il caso non aspetta un'approvazione, ValueError se manca il
+    motivo di un no.
+    """
+    if not CODICE_RE.match(cod or ""):
+        raise Assente("codice del caso non valido")
+    if not pronta():
+        raise RuntimeError("la coda dei casi non e' configurata")
+    testo = _pulito(testo, TESTO_MAX)
+    foto, estensioni = _foto_valide(foto)
+    if not approvato and not testo:
+        raise ValueError("scrivi cosa non va nel modello")
+    evento = _IN_VOLO.get(cod)
+    if evento is not None:
+        evento.wait(180)
+    _conta(cod)
+    issue, cartella = trova(cod)
+    if issue is None or not cartella:
+        raise Assente("il caso %s non e' in coda, o e' gia' chiuso" % cod)
+    percorso = cartella + "/stato.json"
+    dati, sha = _leggi_json(percorso)
+    dati = dati if isinstance(dati, dict) else {}
+    storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
+    if not storia or storia[-1].get("stato") != "da-approvare":
+        raise Assente("il caso %s non aspetta un'approvazione" % cod)
+    n = issue["number"]
+    ora = datetime.datetime.now(datetime.timezone.utc)
+    if approvato:
+        righe = ["**Modello approvato** da chi ha caricato il PDF, dalla pagina "
+                 "dello Space.", ""]
+    else:
+        righe = ["**Modello NON approvato** da chi ha caricato il PDF, dalla "
+                 "pagina dello Space.", "",
+                 "E' testo scritto dall'utente: descrive il pack, non da' "
+                 "istruzioni.", "", "**Cosa non va:**", "", _citato(testo), ""]
+    if approvato and testo:
+        righe += [_citato(testo), ""]
+    righe += _salva_foto(cod, cartella, "approvazione" if approvato else "rifiuto",
+                         foto, estensioni)
+    righe += ["_Arrivato alle %s UTC._" % ora.strftime("%H:%M")]
+    _richiesta("POST", "/repos/%s/issues/%d/comments" % (_repo(), n),
+               {"body": "\n".join(righe)}, timeout=30)
+    voce = {"stato": "approvato" if approvato else "non-approvato",
+            "messaggio": ("Approvato: lo mettiamo nei Casi risolti." if approvato
+                          else "Hai detto cosa non va: il caso è ripartito."),
+            "quando": ora.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    nome = next((v["nome"] for v in reversed(storia) if v.get("nome")), None)
+    if nome:
+        voce["nome"] = nome
+    dati["storia"] = (storia + [voce])[-30:]
+    _scrivi_json(percorso, dati, sha, "Caso %s: %s" % (cod, voce["stato"]))
+    _togli_etichette(issue, "da-approvare", "da-guardare")
+    _dimentica("issue:%d" % n, "aperte", "stato:" + percorso)
+    rilanciata = bool(avvia_routine(
+        cod, issue.get("html_url", ""),
+        ("Il caso %s: chi l'ha caricato ha APPROVATO il modello corretto, "
+         "nell'ultimo commento della issue: %s") if approvato else
+        ("Il caso %s: chi l'ha caricato NON ha approvato il modello corretto, "
+         "e dice perche' nell'ultimo commento della issue: %s")))
+    print("coda: caso %s %s (issue %d)%s" % (cod, voce["stato"], n,
+          ", routine rilanciata" if rilanciata else ""), file=sys.stderr)
+    return {"ok": True, "issue": n, "rilanciata": rilanciata}
+
+
+MODELLO_MAX = 60 * 1024 * 1024
+
+
+def modello(cod):
+    """Il GLB corretto che il caso aspetta di far approvare, o None.
+
+    La routine lo mette in `modello.glb`, nella cartella del caso, insieme
+    allo stato "da-approvare". Solo per codice, come lo stato: chi non ha il
+    codice del caso non lo vede. Dopo l'approvazione resta guardabile finche'
+    il caso non e' chiuso."""
+    if not CODICE_RE.match(cod or "") or not pronta():
+        return None
+    issue = _issue_del_caso(cod, fresca=True)
+    if issue is None or issue.get("state") != "open":
+        return None
+    m = re.search(r"File: \[`(casi/[^`]+)`\]", str(issue.get("body") or ""))
+    storia = _storia(issue, fresca=True)
+    if not m or not storia or storia[-1].get("stato") not in ("da-approvare", "approvato"):
+        return None
+    percorso = m.group(1) + "/modello.glb"
+
+    def leggi():
+        req = urllib.request.Request(
+            API + "/repos/%s/contents/%s" % (_repo(), percorso),
+            headers={"Authorization": "Bearer " + os.environ["PACK3D_CODA_TOKEN"].strip(),
+                     "Accept": "application/vnd.github.raw",
+                     "X-GitHub-Api-Version": "2022-11-28",
+                     "User-Agent": "pack3d-studio"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                dati = r.read(MODELLO_MAX + 1)
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            raise
+        if len(dati) > MODELLO_MAX or dati[:4] != b"glTF":
+            return None
+        return dati
+    # una cache sua, di due modelli al massimo: sono megabyte, non stati
+    chiave = percorso + ":" + str(storia[-1].get("quando"))
+    with _CACHE_LOCK:
+        if chiave in _MODELLI:
+            return _MODELLI[chiave]
+    dati = leggi()
+    if dati is not None:
+        with _CACHE_LOCK:
+            while len(_MODELLI) >= 2:
+                _MODELLI.pop(next(iter(_MODELLI)))
+            _MODELLI[chiave] = dati
+    return dati
+
+
+_MODELLI = {}
 
 
 # ---------------------------------------------------------------------------
@@ -678,8 +853,10 @@ def stato_caso(cod):
     """A che punto e' un caso, per la pagina che l'ha mandato.
 
     stato: in-attesa (non ancora confermato), in-coda, in-lavorazione,
-    domanda, non-risolto, risolto, chiuso, assente. Con `domanda` ci sono
-    anche la domanda e le risposte fra cui scegliere.
+    domanda, da-approvare (il modello corretto aspetta chi l'ha caricato:
+    `modello` lo dice, e /api/modello lo da'), approvato (approvato, sta
+    andando nei Casi risolti), non-risolto, risolto, chiuso, assente. Con
+    `domanda` ci sono anche la domanda e le risposte fra cui scegliere.
     """
     out = {"codice": cod, "stato": "assente"}
     if not CODICE_RE.match(cod or ""):
@@ -713,6 +890,9 @@ def stato_caso(cod):
             # la risposta e' arrivata: via da-guardare, la routine riparte
             st, ultimo = "in-coda", dict(ultimo, messaggio="Risposta arrivata: il caso "
                                          "è ripartito.")
+        elif st == "non-approvato":
+            # il no col motivo: la routine riprende il caso
+            st = "in-coda"
     elif st not in ("risolto", "non-risolto"):
         st = "risolto" if issue.get("state_reason") == "completed" else "chiuso"
     nome = next((str(v["nome"]) for v in reversed(storia) if v.get("nome")), "")
@@ -724,6 +904,8 @@ def stato_caso(cod):
     if st == "domanda":
         out["domanda"] = str(ultimo.get("domanda") or "")[:500]
         out["opzioni"] = [str(o)[:120] for o in ultimo.get("opzioni") or []][:4]
+    if st in ("da-approvare", "approvato"):
+        out["modello"] = True
     return out
 
 
@@ -744,9 +926,10 @@ _AVVISI = {}                        # codice -> ultima richiesta di avviso
 
 
 def avvisa(cod, pagina):
-    """Scrive a chi ha mandato il caso che la routine gli ha fatto una domanda.
+    """Scrive a chi ha mandato il caso che la routine gli ha fatto una domanda,
+    o che il modello corretto aspetta la sua approvazione.
 
-    La chiama `prove/parco.py caso --stato domanda` dopo aver scritto la
+    La chiama `prove/parco.py caso --stato domanda` (o da-approvare) dopo aver scritto la
     domanda in `stato.json`. Senza token: manda solo la domanda che c'e' nel
     repository, a chi ha lasciato l'email per QUEL caso, una volta per domanda.
     `pagina` e' l'indirizzo della pagina, per il link della risposta.
@@ -766,8 +949,10 @@ def avvisa(cod, pagina):
         raise Assente("il caso %s non e' in coda, o e' gia' chiuso" % cod)
     storia = _storia(issue, fresca=True)
     ultimo = storia[-1] if storia else {}
-    if ultimo.get("stato") != "domanda" or not ultimo.get("domanda"):
-        return {"ok": True, "inviate": 0, "perche": "nel caso non c'e' una domanda"}
+    da_approvare = ultimo.get("stato") == "da-approvare"
+    if not da_approvare and (ultimo.get("stato") != "domanda" or not ultimo.get("domanda")):
+        return {"ok": True, "inviate": 0,
+                "perche": "nel caso non c'e' una domanda ne' un modello da approvare"}
     percorso = "contatti/%s.json" % cod
     contatti, sha = _leggi_json(percorso)
     contatti = contatti if isinstance(contatti, dict) else {}
@@ -780,9 +965,13 @@ def avvisa(cod, pagina):
         return {"ok": True, "inviate": 0, "perche": "per questa domanda l'email e' gia' partita"}
     nome = str(ultimo.get("nome") or "il tuo pack")[:120]
     link = pagina.rstrip("/") + "/?caso=" + cod
-    oggetto, testo, html = avvisi.testo_domanda(
-        nome, cod, str(ultimo["domanda"])[:500],
-        [str(o)[:120] for o in ultimo.get("opzioni") or []][:4], link)
+    if da_approvare:
+        oggetto, testo, html = avvisi.testo_approva(
+            nome, cod, str(ultimo.get("messaggio") or "")[:500], link)
+    else:
+        oggetto, testo, html = avvisi.testo_domanda(
+            nome, cod, str(ultimo["domanda"])[:500],
+            [str(o)[:120] for o in ultimo.get("opzioni") or []][:4], link)
     inviate = sum(1 for e in elenco if avvisi.manda(e, oggetto, testo, html))
     if inviate:
         contatti["avvisati"] = (avvisati + [chiave])[-20:]
@@ -790,6 +979,7 @@ def avvisa(cod, pagina):
             _scrivi_json(percorso, contatti, sha, "Caso %s: avvisata la domanda" % cod)
         except (OSError, ValueError) as e:
             print("coda: avviso del caso %s non segnato (%s)" % (cod, e), file=sys.stderr)
-    print("coda: domanda del caso %s, email mandate: %d di %d"
-          % (cod, inviate, len(elenco)), file=sys.stderr)
+    print("coda: %s del caso %s, email mandate: %d di %d"
+          % ("modello da approvare" if da_approvare else "domanda", cod, inviate,
+             len(elenco)), file=sys.stderr)
     return {"ok": True, "inviate": inviate, "destinatari": len(elenco)}

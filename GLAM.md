@@ -62,7 +62,7 @@ l'ambiente cloud) e un corpo JSON:
 |---|---|
 | `codice` | obbligatorio, 10 cifre esadecimali |
 | `nome` | il nome del modello, al massimo 120 caratteri |
-| `stato` | `in-lavorazione`, `domanda`, `risolto` o `non-risolto` |
+| `stato` | `in-lavorazione`, `domanda`, `da-approvare`, `risolto` o `non-risolto` |
 | `messaggio` | facoltativo, al massimo 500 caratteri: due righe per l'utente |
 | `domanda` | solo con `domanda`, al massimo 500 caratteri |
 | `opzioni` | solo con `domanda`, da 0 a 4, al massimo 120 caratteri l'una |
@@ -73,7 +73,16 @@ nessuno (il PDF è stato caricato fuori da Glam), il caso va all'account di
 almeno chi gestisce il servizio. Risponde `200 {"ok": true, "utenti": N}`, o
 `400` con il motivo se il corpo non va.
 
+`da-approvare`: il modello corretto è pronto, e chi ha caricato il PDF lo deve
+approvare prima che vada nei Casi risolti. Si approva (o si dice cosa non va,
+con le foto) dalla finestra dei casi della pagina dello Space, non da Glam:
+Glam ne fa solo una notifica. Finché Glam non conosce lo stato e risponde
+`400`, `prove/parco.py caso` glielo manda come `in-lavorazione`, col messaggio
+che dice dove approvarlo.
+
 ## 3. Il modello corretto: a chi ha caricato il caso
+
+Arriva **solo dopo l'approvazione** di chi ha caricato il PDF.
 
 `POST /api/import-model` come oggi, più un'intestazione facoltativa
 `X-Pack3d-Codice: b312f1e238`. Se il caso ha utenti, il modello va a
@@ -211,4 +220,23 @@ Nella sezione "Costruisci modello 3D da PDF" togli l'elenco "I tuoi casi in corr
 Resta tutto il resto: la tabella pack3d_cases, l'ascolto dei messaggi "pack3d:caso" dall'iframe, gli endpoint /api/pack3d-case e /api/import-model, il parametro casi=1 nell'indirizzo dell'iframe, il badge sul tasto "Costruisci modello 3D da PDF", il toast all'apertura, la busta delle notifiche e il modulo di risposta che si apre premendo una notifica di tipo domanda.
 
 Le notifiche che prima aprivano l'elenco "I tuoi casi in correzione" (tutte tranne 'risolto' e 'domanda') ora aprono la sezione "Costruisci modello 3D da PDF". Il seen_at dei casi si aggiorna quando l'utente apre quella sezione, invece che quando apriva l'elenco.
+```
+
+### Il testo per Lovable: il modello da approvare
+
+Da incollare dopo i testi qui sopra. Un caso risolto non va più dritto nei
+Casi risolti: prima lo approva chi l'ha caricato, dalla finestra dei casi
+della pagina dello Space. Glam deve solo conoscere il nuovo stato e
+avvisarlo.
+
+```text
+I casi in correzione hanno un nuovo stato, 'da-approvare': il modello corretto è pronto e chi ha caricato il PDF lo deve approvare. Si approva dalla finestra "Casi" della pagina dello Space, dentro l'iframe di "Costruisci modello 3D da PDF", non da Glam.
+
+1. /api/pack3d-case accetta anche stato = 'da-approvare' (con messaggio facoltativo, come gli altri), e lo salva nel caso come gli altri stati. Aggiorna anche il vincolo o la validazione di pack3d_cases.stato e di pack3d_notifications.tipo per accettarlo.
+
+2. Quando un caso passa a 'da-approvare', crea per ciascun utente del caso la notifica: titolo "Il modello corretto è da approvare", testo = il messaggio se c'è, altrimenti "Guardalo e approvalo nella finestra Casi di Costruisci modello 3D da PDF". Nel badge del tasto "Costruisci modello 3D da PDF" conta anche i casi in stato 'da-approvare', come quelli in stato 'domanda', e la notifica resta evidenziata finché il caso è in quello stato.
+
+3. Premendo questa notifica apri la sezione "Costruisci modello 3D da PDF" (dove la pagina dello Space ha la finestra dei casi). Non serve nessun modulo in Glam: l'approvazione passa dalla pagina dello Space.
+
+4. Tutto il resto resta com'è: il modello arriva con /api/import-model dopo l'approvazione e mette il caso a 'risolto', come oggi.
 ```

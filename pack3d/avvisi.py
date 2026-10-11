@@ -71,6 +71,31 @@ def testo_domanda(nome, cod, domanda, opzioni, link):
     return oggetto, testo, "\n".join(corpo)
 
 
+def testo_approva(nome, cod, messaggio, link):
+    """(oggetto, testo, html) dell'email col modello corretto da approvare."""
+    oggetto = "Il modello corretto del tuo pack «%s» è pronto" % nome
+    righe = ["Ciao,", "",
+             "abbiamo corretto il modello 3D del tuo pack «%s»." % nome]
+    if messaggio:
+        righe += ["", messaggio]
+    righe += ["", "Guardalo e dicci se va bene: se lo approvi finisce nei Casi "
+              "risolti, se no scrivici cosa non va, anche con delle foto: %s" % link,
+              "", "Codice del caso: %s" % cod, "",
+              "Se non hai caricato tu questo PDF, ignora questa email."]
+    testo = "\n".join(righe)
+    e = html.escape
+    corpo = ["<p>Ciao,</p>",
+             "<p>abbiamo corretto il modello 3D del tuo pack <b>%s</b>.</p>" % e(nome)]
+    if messaggio:
+        corpo.append("<p>%s</p>" % e(messaggio))
+    corpo += ["<p><a href=\"%s\">Guarda il modello e approvalo</a>: se va bene "
+              "finisce nei Casi risolti, se no scrivici cosa non va, anche con "
+              "delle foto.</p>" % e(link, quote=True),
+              "<p style=\"color:#777\">Codice del caso: %s<br>Se non hai caricato tu "
+              "questo PDF, ignora questa email.</p>" % e(cod)]
+    return oggetto, testo, "\n".join(corpo)
+
+
 def manda(a, oggetto, testo, corpo_html):
     """Manda un'email. True se Resend l'ha presa; mai un'eccezione."""
     if not configurato():
