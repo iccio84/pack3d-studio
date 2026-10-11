@@ -1241,6 +1241,7 @@ def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None):
                opzioni={k: opts[k] for k in OPZIONI_CASO if k in opts})
     verdetto["codice"], verdetto["in_coda"] = coda.metti(blocchi, nomi, verdetto,
                                                          None, ctx)
+    verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
     return errore, verdetto
 
 
@@ -2502,9 +2503,100 @@ class Handler(BaseHTTPRequestHandler):
             # con l'impronta del codice: dopo una pubblicazione dice se lo
             # Space e' gia' ripartito con quello nuovo (prove/parco.py spazio)
             return self._send(200, json.dumps({"ok": True, "versione": VERSIONE}))
+        if self.path.startswith("/api/casi"):
+            return self._stati()
         path = os.path.join(HERE, "pack3d_studio.html")
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")
+
+    # I casi della pagina: lo stato di quelli che ha mandato lei, per la
+    # finestra dei casi e le notifiche (`coda.stati`). Solo per codice: chi
+    # non ha il codice di un caso non lo vede.
+    def _stati(self):
+        from urllib.parse import parse_qs, urlparse
+        q = parse_qs(urlparse(self.path).query)
+        codici = [c for v in q.get("codici", []) for c in v.split(",") if c.strip()]
+        try:
+            casi = coda.stati(codici)
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except (OSError, ValueError) as e:
+            print("stato dei casi non letto: %s" % e, file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps({"casi": casi}, ensure_ascii=False))
+
+    def _json_corpo(self, massimo=64 * 1024):
+        """Il corpo JSON di una richiesta piccola, o (codice, errore)."""
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        if n <= 0:
+            return None, (400, "Corpo vuoto")
+        if n > massimo:
+            return None, (413, "Troppo grande")
+        try:
+            corpo = json.loads(self.rfile.read(n).decode("utf-8"))
+        except (ValueError, UnicodeDecodeError):
+            return None, (400, "JSON non valido")
+        if not isinstance(corpo, dict):
+            return None, (400, "serve un oggetto JSON")
+        return corpo, None
+
+    # Un caso nuovo aspetta chi l'ha caricato (`coda.metti`): "invia" lo manda
+    # alla routine, con l'email facoltativa per le domande; "annulla" lo
+    # cancella, e senza scelta scade da solo.
+    def _caso(self):
+        from pack3d import avvisi
+        corpo, errore = self._json_corpo()
+        if errore:
+            return self._send(*errore)
+        cod = str(corpo.get("codice") or "").strip().lower()
+        if not coda.CODICE_RE.match(cod):
+            return self._send(404, "codice del caso non valido")
+        azione = corpo.get("azione")
+        if azione == "annulla":
+            return self._send(200, json.dumps({"ok": True,
+                                               "cancellato": coda.scarta(cod)}))
+        if azione != "invia":
+            return self._send(400, "azione sconosciuta: invia o annulla")
+        email = None
+        if str(corpo.get("email") or "").strip():
+            email = avvisi.email_valida(corpo.get("email"))
+            if not email:
+                return self._send(400, "L'email non sembra un indirizzo valido")
+        try:
+            coda.conferma(cod, email)
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        return self._send(200, json.dumps({"ok": True, "in_coda": True,
+                                           "email": bool(email)}))
+
+    # La routine ha fatto una domanda (`prove/parco.py caso --stato domanda`):
+    # lo Space la manda per email a chi l'ha chiesto (`coda.avvisa`).
+    def _avviso(self):
+        corpo, errore = self._json_corpo()
+        if errore:
+            return self._send(*errore)
+        cod = str(corpo.get("codice") or "").strip().lower()
+        pagina = (os.environ.get("PACK3D_PAGINA_URL", "").strip()
+                  or ("https://" + os.environ["SPACE_HOST"].strip()
+                      if os.environ.get("SPACE_HOST", "").strip()
+                      else "https://" + (self.headers.get("Host") or "localhost")))
+        try:
+            esito = coda.avvisa(cod, pagina)
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        except coda.Troppe as e:
+            return self._send(429, str(e))
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except (OSError, ValueError) as e:
+            print("avviso del caso %s non mandato: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps(esito, ensure_ascii=False))
 
     # La voce di chi ha caricato il PDF, dopo che il caso e' entrato in coda
     # (`coda.aggiungi`): una nota dalla pagina, o la risposta a una domanda
@@ -2542,11 +2634,16 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, UnicodeDecodeError) as e:
             return self._send(400, str(e) or "JSON non valido")
         cod = str(corpo.get("codice") or "").strip().lower()
+        # La pagina risponde anche lei alle domande della routine, dalla
+        # finestra dei casi: come una nota (col solo codice), ma con la scelta,
+        # e rilancia la routine come una risposta da Glam.
+        dalla_pagina = not risposta and corpo.get("risposta") is True
         try:
             esito = coda.aggiungi(
                 cod, corpo.get("risposta" if risposta else "nota"), foto,
-                via="risposta" if risposta else "nota",
-                scelta=corpo.get("scelta") if risposta else None)
+                via="risposta" if risposta or dalla_pagina else "nota",
+                scelta=corpo.get("scelta") if risposta or dalla_pagina else None,
+                fonte="pagina dello Space" if dalla_pagina else None)
         except coda.Assente as e:
             return self._send(404, str(e))
         except coda.Troppe as e:
@@ -2564,6 +2661,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith("/api/nota") or self.path.startswith("/api/risposta"):
             return self._voce()
+        if self.path.startswith("/api/caso"):
+            return self._caso()
+        if self.path.startswith("/api/avviso"):
+            return self._avviso()
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:
@@ -2850,6 +2951,7 @@ class Handler(BaseHTTPRequestHandler):
                         if verdetto["esito"] in ("sbagliato", "dubbio"):
                             verdetto["codice"], verdetto["in_coda"] = coda.metti(
                                 blocchi, nomi, verdetto, quadro["viste"], ctx)
+                            verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
                         if riga:
                             meta.insert(0, riga)
                             righe_ai.insert(0, riga)

@@ -20,8 +20,11 @@ Lovable per la parte di Glam. Le altre parti stanno nello Space (pagina e
 ## 1. Il caso entra in coda: dalla pagina a Glam
 
 La pagina dello Space vive in un iframe servito dal dominio di Glam (il proxy
-`/api/public/pack3d`). Quando un caso entra in coda manda alla finestra che la
-ospita, solo se è della stessa origine, questo messaggio:
+`/api/public/pack3d`). Un caso nuovo entra in coda solo quando chi ha caricato
+il PDF preme **Invia il caso** (con l'email per le domande, se vuole): Annulla,
+o la pagina chiusa senza scegliere, lo cancellano. Quando entra, la pagina
+manda alla finestra che la ospita, solo se è della stessa origine, questo
+messaggio:
 
 ```js
 { type: "pack3d:caso",
