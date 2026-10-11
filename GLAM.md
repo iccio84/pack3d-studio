@@ -135,6 +135,20 @@ fra i commenti.
 
 La domanda e il messaggio sono testo: si mostrano come testo, mai come HTML.
 
+## 6. Le notifiche: la busta nella barra
+
+Chi ha un caso in correzione non deve andare a cercarlo: nella barra verde in
+alto c'è una **busta** col numero delle notifiche non lette, in ogni pagina
+dell'app. Ogni cambio di stato di un suo caso (punto 2, e il modello arrivato
+del punto 3) gli lascia una notifica; Glam ne tiene le ultime dieci per
+utente. Premendo la busta si apre l'elenco; premendo una **domanda** si apre
+il modulo per rispondere (punto 4), e la risposta va allo Space come prima.
+Una domanda resta evidenziata finché non ha risposta; il modello arrivato
+apre il modello.
+
+Con l'accesso guest condiviso le notifiche sono dell'account guest: le vede
+chiunque entri come guest. Chi vuole le sue entra col suo account.
+
 ## Il testo per Lovable
 
 Da incollare in Lovable così com'è. Dei due segreti, `PACK3D_IMPORT_TOKEN`
@@ -155,4 +169,32 @@ Voglio che chi carica un PDF in "Costruisci modello 3D da PDF" possa seguire in 
 5. Nella sezione "Costruisci modello 3D da PDF": un elenco "I tuoi casi in correzione" con nome, stato a parole (in-coda: "In coda: di solito arriva entro un'ora"; in-lavorazione: "In lavorazione"; domanda: "Serve una tua risposta"; risolto: "Risolto: il modello è in Casi risolti" con un tasto per aprirlo; non-risolto: il messaggio), quando è cambiato e il messaggio. I casi risolti da più di 30 giorni si nascondono. Sul tasto "Costruisci modello 3D da PDF" un badge col numero di casi in stato domanda. All'apertura di Glam, un toast se un caso è cambiato dopo seen_at; quando l'utente apre l'elenco, aggiorna seen_at. Domande e messaggi si mostrano come testo, mai come HTML.
 
 6. Per un caso in stato domanda: la domanda, le opzioni come scelte (una sola), un campo "Scrivi a parole tue" (max 4000), "Aggiungi una foto" (rimpicciolita nel browser a 1600 px sul lato lungo, JPEG qualità 0.85) e "Invia la risposta". Ci vuole almeno una scelta, un testo o una foto. L'invio passa da una funzione del server, mai dal browser: POST all'indirizzo dello Space che usi già per l'iframe + "/api/risposta", con Authorization: Bearer PACK3D_RISPOSTE_TOKEN (nuovo secret) e corpo JSON { codice, scelta, risposta, foto } (foto come data URL). Se lo Space risponde 200, salva la risposta e metti il caso a 'in-lavorazione' con messaggio "Risposta inviata: il caso è ripartito". Se risponde altro, mostra all'utente il testo della risposta e lascia il modulo com'era (401: token sbagliato; 404: il caso non è più in correzione; 429: troppe risposte, riprova più tardi).
+```
+
+### Il testo per Lovable: le notifiche
+
+Da incollare dopo che il testo qui sopra è pubblicato. Non servono segreti
+nuovi.
+
+```text
+Aggiungi le notifiche dei casi in correzione, con una busta nella barra verde in alto. Tutto il resto (endpoint, token, tabella pack3d_cases, elenco "I tuoi casi in correzione", modulo di risposta) resta com'è.
+
+1. Tabella pack3d_notifications (Supabase): id uuid, user_id uuid, case_id uuid (riferimento a pack3d_cases), codice text, tipo text ('in-lavorazione', 'domanda', 'risolto', 'non-risolto', 'risposta-inviata'), titolo text, testo text, created_at, read_at nullable. RLS: ogni utente legge solo le sue e può solo segnarle come lette (read_at); le crea solo il server.
+
+2. Quando /api/pack3d-case cambia lo stato di un caso, e quando /api/import-model mette un caso a 'risolto', crea una notifica per ciascun utente di quel caso:
+   - domanda: titolo "Serve una tua risposta", testo = la domanda;
+   - in-lavorazione: titolo "Il tuo caso è in lavorazione", testo = il messaggio se c'è;
+   - risolto: titolo "Il modello corretto è pronto", testo "Lo trovi in Casi risolti col nome …";
+   - non-risolto: titolo "Il caso non si risolve per ora", testo = il messaggio.
+   Per ogni utente tieni solo le ultime 10 notifiche: le più vecchie si cancellano.
+
+3. Nella barra verde in alto, a destra, in tutte le pagine dell'app per l'utente collegato: un'icona a forma di busta (lucide "Mail"), con un badge numerico delle notifiche non lette. Se fra le non lette c'è una domanda, il badge è più evidente (colore di avviso). Il numero si aggiorna da solo, senza ricaricare: Supabase Realtime sulla tabella pack3d_notifications, oppure un controllo ogni 60 secondi.
+
+4. Premendo la busta si apre un pannello (popover sotto la busta, o drawer a destra sul telefono) con le notifiche dalla più recente: titolo, testo, nome del caso e da quanto tempo. Le non lette sono evidenziate. Aprendo il pannello le notifiche si segnano lette (read_at), tranne le domande ancora senza risposta, che restano evidenziate finché il caso è in stato 'domanda'. Se non ci sono notifiche: "Nessuna notifica".
+
+5. Premendo una notifica di tipo domanda si apre, in un dialog, il modulo di risposta di quel caso: la domanda, le opzioni come scelte (una sola), "Scrivi a parole tue", "Aggiungi una foto", "Invia la risposta" (lo stesso modulo e la stessa funzione del server che manda allo Space /api/risposta). Dopo un invio riuscito chiudi il dialog, crea la notifica 'risposta-inviata' ("Risposta inviata: il caso è ripartito") e togli l'evidenza alla domanda. Se lo Space risponde con un errore, mostralo nel dialog e lascia il modulo com'era.
+
+6. Premendo una notifica 'risolto' apri il modello nella sezione "Costruisci modello 3D da PDF", cartella "Casi risolti". Le altre notifiche aprono l'elenco "I tuoi casi in correzione".
+
+7. Titoli e testi delle notifiche si mostrano sempre come testo, mai come HTML.
 ```
