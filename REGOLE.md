@@ -2075,6 +2075,22 @@ tecnici, ci sono due finestre che si aprono e si chiudono dai tasti in fondo:
 - **Notifiche**: le ultime dieci, una per ogni cambio di stato (inviato, in
   lavorazione, una domanda, risposta inviata, non risolto, risolto).
 
+**Eliminare un caso.** Un caso in sospeso si elimina dalla finestra dei casi,
+ma solo dentro Glam Lab, e solo da chi puo': un admin tutti, l'account design
+quelli caricati da lui, il guest nessuno (il tasto non c'e'). Chi e' collegato
+lo sa Glam, non la pagina ne' lo Space: la pagina chiede il ruolo a Glam
+(`pack3d:ruolo?`), e un admin ritrova nella finestra tutti i casi in sospeso,
+anche quelli mandati da un altro browser. Elimina passa da Glam, che rifa' il
+controllo sul suo server e chiama lo Space col suo token (`/api/elimina`,
+GLAM.md, sezione 7). Lo Space chiude la issue come "not planned" con
+l'etichetta `eliminato`, e la routine non la lavora piu'; i file restano nel
+registro, e lo stesso PDF ricaricato apre un caso nuovo. Un caso su cui la
+routine sta lavorando (`in-lavorazione` da meno di sei ore) non si elimina:
+chiuderlo a meta' lascerebbe una correzione senza caso. Ricaricato lo stesso
+giorno, il PDF finisce nella stessa cartella del caso di prima: della sua
+storia (`stato.json`) conta solo quello scritto dopo l'apertura della issue
+nuova.
+
 **L'email delle domande.** Con una domanda, `prove/parco.py caso` chiede allo
 Space di avvisare (`POST /api/avviso`, senza token: manda solo la domanda che
 c'e' nel registro, a chi ha lasciato l'email per quel caso, una volta per

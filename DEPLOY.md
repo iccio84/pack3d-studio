@@ -62,7 +62,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_CODA_TOKEN` | Secrets | un token GitHub | scrittura su contenuti e issue di quel repository, e di nient'altro |
 | `PACK3D_ROUTINE_URL` | Variables | l'indirizzo `/fire` della routine | un caso appena entrato in coda **avvia subito** la routine che la lavora, vedi sotto |
 | `PACK3D_ROUTINE_TOKEN` | Secrets | il token della routine | quello generato nel trigger API della routine; serve solo ad avviarla |
-| `PACK3D_RISPOSTE_TOKEN` | Secrets | una stringa casuale lunga | la stessa nei segreti di Glam Lab: con questa Glam manda allo Space le **risposte** degli utenti alle domande della routine, vedi sotto |
+| `PACK3D_RISPOSTE_TOKEN` | Secrets | una stringa casuale lunga | la stessa nei segreti di Glam Lab: con questa Glam manda allo Space le **risposte** degli utenti alle domande della routine, e i casi da **eliminare**, vedi sotto |
 | `RESEND_API_KEY` | Secrets | la chiave di Resend | le **email** a chi ha mandato un caso, quando la routine gli fa una domanda, vedi sotto |
 | `PACK3D_EMAIL_DA` | Variables | `ICCIO PDFto3D <casi@tuodominio.it>` | il mittente di quelle email, su un dominio verificato in Resend |
 | `PACK3D_CASO_ATTESA` | Variables | secondi, di serie `1800` | quanto un caso nuovo aspetta Invia o Annulla prima di cancellarsi da solo |
@@ -207,6 +207,10 @@ Lovable sono in **GLAM.md**; qui il collegamento.
   (Lovable), Cloud -> Secrets, `PACK3D_RISPOSTE_TOKEN`. Come per l'import,
   non si rilegge: se non va, se ne genera una nuova e si rimette in tutti e
   due.
+- Con lo stesso token Glam chiede allo Space di **eliminare** un caso, `POST
+  /api/elimina`, dopo aver controllato chi e' collegato: un admin tutti, l'account
+  design i suoi, il guest nessuno (GLAM.md, sezione 7). Lo Space chiude la
+  issue con l'etichetta `eliminato`.
 - La **nota** che l'utente puo' lasciare nella pagina, appena il caso entra
   in coda, va allo Space (`POST /api/nota`) senza token: porta solo il
   codice del caso, che conosce chi l'ha caricato, e lo Space la accetta

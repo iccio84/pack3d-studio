@@ -2628,17 +2628,11 @@ class Handler(BaseHTTPRequestHandler):
     def _voce(self):
         risposta = self.path.startswith("/api/risposta")
         if risposta:
-            # Solo Glam: il token sta nei suoi segreti e in quelli dello Space,
-            # e da nessun'altra parte. La nota invece arriva dalla pagina, che
-            # e' pubblica, e porta solo il codice del caso.
-            atteso = os.environ.get("PACK3D_RISPOSTE_TOKEN", "").strip()
-            if not atteso:
-                return self._send(503, "Le risposte da Glam Lab non sono "
-                                       "configurate (PACK3D_RISPOSTE_TOKEN)")
-            dato = (self.headers.get("Authorization") or "").strip()
-            if not hmac.compare_digest(dato.encode("utf-8"),
-                                       ("Bearer " + atteso).encode("utf-8")):
-                return self._send(401, "Token non valido")
+            # Solo Glam. La nota invece arriva dalla pagina, che e' pubblica,
+            # e porta solo il codice del caso.
+            errore = self._da_glam()
+            if errore:
+                return self._send(*errore)
         try:
             n = int(self.headers.get("Content-Length", 0))
         except ValueError:
@@ -2669,6 +2663,44 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(400, str(e))
         except OSError as e:
             print("voce sul caso %s non arrivata: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps(esito))
+
+    def _da_glam(self):
+        """None se la richiesta porta il token di Glam Lab, se no (codice,
+        errore). Il token sta nei segreti di Glam e in quelli dello Space, e
+        da nessun'altra parte."""
+        atteso = os.environ.get("PACK3D_RISPOSTE_TOKEN", "").strip()
+        if not atteso:
+            return 503, "Le chiamate da Glam Lab non sono configurate (PACK3D_RISPOSTE_TOKEN)"
+        dato = (self.headers.get("Authorization") or "").strip()
+        if not hmac.compare_digest(dato.encode("utf-8"),
+                                   ("Bearer " + atteso).encode("utf-8")):
+            return 401, "Token non valido"
+        return None
+
+    # Un caso eliminato dall'app (`coda.elimina`). Solo da Glam, col token:
+    # chi puo' eliminare quale caso lo decide Glam, che sa chi e' collegato -
+    # un admin tutti, l'account design i suoi, il guest nessuno.
+    def _elimina(self):
+        errore = self._da_glam()
+        if errore:
+            return self._send(*errore)
+        corpo, errore = self._json_corpo()
+        if errore:
+            return self._send(*errore)
+        cod = str(corpo.get("codice") or "").strip().lower()
+        try:
+            esito = coda.elimina(cod, corpo.get("ruolo"))
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        except coda.Occupato as e:
+            return self._send(409, str(e))
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except (OSError, ValueError) as e:
+            print("caso %s non eliminato: %s" % (cod, e), file=sys.stderr)
             return self._send(502, "Il repository dei casi non risponde: riprova "
                                    "fra poco")
         return self._send(200, json.dumps(esito))
@@ -2724,6 +2756,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._voce()
         if self.path.startswith("/api/approva"):
             return self._approva()
+        if self.path.startswith("/api/elimina"):
+            return self._elimina()
         if self.path.startswith("/api/caso"):
             return self._caso()
         if self.path.startswith("/api/avviso"):

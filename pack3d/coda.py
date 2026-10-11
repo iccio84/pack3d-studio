@@ -214,6 +214,9 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     except (OSError, ValueError) as e:
         print("coda: issue del caso %s non aperta (%s)" % (cod, e), file=sys.stderr)
         return
+    # lo stesso PDF, ricaricato dopo che il suo caso e' stato chiuso o
+    # eliminato: con gli elenchi di prima la pagina vedrebbe quello vecchio
+    _dimentica("aperte", "chiuse")
     _salva_email(cod, email)
     avvia_routine(cod, issue.get("html_url", "") if isinstance(issue, dict) else "")
 
@@ -411,6 +414,10 @@ class Troppe(Exception):
 
 class Assente(Exception):
     """Il caso non e' in coda: codice sbagliato, o issue gia' chiusa."""
+
+
+class Occupato(Exception):
+    """La routine sta lavorando il caso adesso: non glielo si toglie da sotto."""
 
 
 def _conta(cod):
@@ -639,7 +646,7 @@ def esito_modello(cod, approvato, testo=None, foto=None):
     percorso = cartella + "/stato.json"
     dati, sha = _leggi_json(percorso)
     dati = dati if isinstance(dati, dict) else {}
-    storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
+    storia = _di_questa_issue(issue, dati.get("storia"))
     if not storia or storia[-1].get("stato") != "da-approvare":
         raise Assente("il caso %s non aspetta un'approvazione" % cod)
     n = issue["number"]
@@ -734,6 +741,100 @@ def modello(cod):
 
 
 _MODELLI = {}
+
+
+# ---------------------------------------------------------------------------
+# Eliminare un caso, dall'app.
+#
+# Chi puo' eliminare quale caso lo decide Glam Lab, che sa chi e' collegato:
+# un admin tutti, l'account design solo quelli caricati da lui, il guest
+# nessuno (GLAM.md). Lo Space elimina solo su richiesta di Glam, col suo token
+# (/api/elimina). La issue si chiude come "not planned", con l'etichetta
+# `eliminato` e un commento: la routine non la lavora piu', e la pagina toglie
+# il caso dalla finestra dei casi. I file restano nel registro, e lo stesso
+# PDF, ricaricato, apre un caso nuovo.
+
+# Un lucchetto `in-lavorazione` piu' vecchio di cosi' e' di una sessione morta
+# (CODA.md, "Un caso alla volta"): il caso si puo' eliminare.
+LUCCHETTO_ORE = 6
+CHI_ELIMINA = {"admin": "da un admin", "design": "dall'account design"}
+
+
+def _ore_da(iso):
+    """Ore passate da una data di GitHub (2026-10-11T10:00:00Z), o None."""
+    try:
+        t = datetime.datetime.strptime(str(iso), "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+    adesso = datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+    return (adesso - t).total_seconds() / 3600
+
+
+def _messa_il(n, etichetta):
+    """Quando e' stata messa l'ultima volta un'etichetta sulla issue, o None."""
+    eventi = _richiesta("GET", "/repos/%s/issues/%d/events?per_page=100" % (_repo(), n),
+                        timeout=30)
+    quando = None
+    for ev in eventi if isinstance(eventi, list) else []:
+        if (isinstance(ev, dict) and ev.get("event") == "labeled"
+                and (ev.get("label") or {}).get("name") == etichetta):
+            quando = ev.get("created_at") or quando
+    return quando
+
+
+def elimina(cod, ruolo=None):
+    """Toglie un caso dalla coda. Torna {"ok": True, "issue": numero o None}.
+
+    Un caso che aspetta ancora Invia o Annulla si cancella e basta. Assente se
+    il caso non e' in coda (mai mandato, o gia' chiuso); Occupato se la
+    routine ci sta lavorando adesso (`in-lavorazione` da meno di
+    LUCCHETTO_ORE): chiuderlo a meta' lascerebbe una correzione senza caso.
+    """
+    if not CODICE_RE.match(cod or ""):
+        raise Assente("codice del caso non valido")
+    # lo stesso PDF puo' aspettare Invia in una pagina mentre il suo caso e'
+    # gia' in coda: si cancellano tutti e due
+    tolto = scarta(cod)
+    if not pronta():
+        if tolto:
+            return {"ok": True, "issue": None}
+        raise RuntimeError("la coda dei casi non e' configurata")
+    evento = _IN_VOLO.get(cod)
+    if evento is not None:
+        evento.wait(180)
+    issue = _issue_del_caso(cod, fresca=True)
+    if issue is not None:
+        # l'elenco serve a trovarla: aperta o chiusa, e con quali etichette,
+        # lo dice la issue stessa
+        issue = _richiesta("GET", "/repos/%s/issues/%d" % (_repo(), issue["number"]),
+                           timeout=30)
+    if issue is None or issue.get("state") != "open":
+        if tolto:
+            return {"ok": True, "issue": None}
+        raise Assente("il caso %s non e' in coda, o e' gia' chiuso" % cod)
+    n = issue["number"]
+    etichette = [e.get("name") for e in issue.get("labels") or [] if isinstance(e, dict)]
+    if "in-lavorazione" in etichette:
+        ore = _ore_da(_messa_il(n, "in-lavorazione") or issue.get("updated_at"))
+        if ore is None or ore < LUCCHETTO_ORE:
+            raise Occupato("La routine sta lavorando questo caso adesso: riprova "
+                           "quando ha finito")
+    ora = datetime.datetime.now(datetime.timezone.utc)
+    _richiesta("POST", "/repos/%s/issues/%d/comments" % (_repo(), n), {"body": "\n".join([
+        "**Caso eliminato** %s, dall'app." % CHI_ELIMINA.get(ruolo, "da chi gestisce l'app"),
+        "",
+        "Esce dalla coda e la routine non lo lavora piu'. I file restano nel "
+        "registro; lo stesso PDF, ricaricato, apre un caso nuovo.",
+        "",
+        "_Eliminato alle %s UTC._" % ora.strftime("%H:%M")])}, timeout=30)
+    _richiesta("POST", "/repos/%s/issues/%d/labels" % (_repo(), n),
+               {"labels": ["eliminato"]}, timeout=30)
+    _richiesta("PATCH", "/repos/%s/issues/%d" % (_repo(), n),
+               {"state": "closed", "state_reason": "not_planned"}, timeout=30)
+    _dimentica("issue:%d" % n, "aperte", "chiuse")
+    print("coda: caso %s eliminato dall'app%s (issue %d)"
+          % (cod, " (%s)" % ruolo if ruolo in CHI_ELIMINA else "", n), file=sys.stderr)
+    return {"ok": True, "issue": n}
 
 
 # ---------------------------------------------------------------------------
@@ -846,7 +947,16 @@ def _storia(issue, fresca=False):
         _dimentica("stato:" + percorso)
     dati = _in_cache("stato:" + percorso, 20, lambda: _leggi_json(percorso)[0])
     storia = dati.get("storia") if isinstance(dati, dict) else None
-    return [s for s in storia or [] if isinstance(s, dict)]
+    return _di_questa_issue(issue, storia)
+
+
+def _di_questa_issue(issue, storia):
+    """Le voci della storia scritte dopo l'apertura della issue. Un PDF
+    eliminato e ricaricato lo stesso giorno finisce nella stessa cartella,
+    con la storia del caso di prima: quella non e' del caso nuovo."""
+    aperta = str(issue.get("created_at") or "")
+    return [s for s in storia or [] if isinstance(s, dict)
+            and not (aperta and s.get("quando") and str(s["quando"]) < aperta)]
 
 
 def stato_caso(cod):
@@ -855,7 +965,8 @@ def stato_caso(cod):
     stato: in-attesa (non ancora confermato), in-coda, in-lavorazione,
     domanda, da-approvare (il modello corretto aspetta chi l'ha caricato:
     `modello` lo dice, e /api/modello lo da'), approvato (approvato, sta
-    andando nei Casi risolti), non-risolto, risolto, chiuso, assente. Con
+    andando nei Casi risolti), non-risolto, risolto, chiuso, eliminato
+    (tolto dalla coda dall'app: `elimina`), assente. Con
     `domanda` ci sono anche la domanda e le risposte fra cui scegliere.
     """
     out = {"codice": cod, "stato": "assente"}
@@ -893,6 +1004,8 @@ def stato_caso(cod):
         elif st == "non-approvato":
             # il no col motivo: la routine riprende il caso
             st = "in-coda"
+    elif "eliminato" in etichette:
+        st = "eliminato"
     elif st not in ("risolto", "non-risolto"):
         st = "risolto" if issue.get("state_reason") == "completed" else "chiuso"
     nome = next((str(v["nome"]) for v in reversed(storia) if v.get("nome")), "")
