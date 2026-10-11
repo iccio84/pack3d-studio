@@ -39,10 +39,10 @@ PT2MM = dl.PT2MM
 CRESTA_MAX = 6.0
 ALETTA_MIN = 8.0
 FIANCO_MIN = 10.0
-# fronte e retro curvano sopra la piega dei fianchi, senza spigolo: quanta
-# falda prende la curva, e in quanti pezzi la si fa
-CURVA = 0.35
-PASSI_CURVA = 8
+# la piega del fronte, sotto il marchio, non ha cordonatura sul DT: il
+# cartoncino la fa smussata, un arco di questo raggio in mm, in pochi pezzi
+SMUSSO = 20.0
+PASSI_SMUSSO = 6
 # mm: due bordi di pezzi diversi piu' vicini di cosi' combaciano; un bordo che
 # non ne ha uno cosi' vicino e' un taglio, e prende la costa
 COMBACIA = 0.1
@@ -97,34 +97,9 @@ class Punta:
         return (self.D - self.cresta) / 2.0
 
     @property
-    def profilo(self):
-        """La falda vista di fianco, dalla piega alla cima: righe (foglio,
-        salita, rientro) in mm. Sul DT fronte e retro non hanno cordonatura
-        alla piega dei fianchi: il cartoncino non fa spigolo, curva. Resta
-        dritto fino alla piega, dove lo tengono i fianchi; poi curva per
-        `CURVA` della falda e da li' va dritto fino a chiudere `chiude`."""
-        s, c = self.falda, self.chiude
-        La = CURVA * s
-        lo, hi = 1e-9, np.pi / 2.0      # l'angolo in cima: chiude esattamente
-        for _ in range(60):
-            phi = (lo + hi) / 2.0
-            R = La / phi
-            if R * (1.0 - np.cos(phi)) + (s - La) * np.sin(phi) > c:
-                hi = phi
-            else:
-                lo = phi
-        phi = (lo + hi) / 2.0
-        R = La / phi
-        righe = [(R * a, R * np.sin(a), R * (1.0 - np.cos(a)))
-                 for a in np.linspace(0.0, phi, PASSI_CURVA + 1)]
-        y, z = righe[-1][1], righe[-1][2]
-        righe.append((s, y + (s - La) * np.cos(phi), z + (s - La) * np.sin(phi)))
-        return np.array(righe)
-
-    @property
     def salita(self):
-        """Quanto sale la falda, curva compresa, per chiudere `chiude`."""
-        return float(self.profilo[-1, 1])
+        """Quanto sale la falda: chiude mezza profondita' meno la cresta."""
+        return float(np.sqrt(max(self.falda ** 2 - self.chiude ** 2, 0.0)))
 
     @property
     def altezza(self):
@@ -322,8 +297,9 @@ def riconosci(pdf, page_no=0):
 def dichiara(p):
     """Le righe che la pagina mostra prima di costruire."""
     return ["scatola a punta: %.1f x %.1f x %.1f mm" % p.dims_mm,
-            "dritta per %.1f mm, poi fronte e retro curvano, senza spigolo, e "
-            "si chiudono in cima con falde da %.1f mm" % (p.dritto, p.falda),
+            "dritta per %.1f mm, poi fronte e retro si chiudono in cima con "
+            "falde da %.1f mm; la piega del fronte, sotto il marchio, e' "
+            "smussata" % (p.dritto, p.falda),
             "fianchi a soffietto: sopra la piega rientrano inclinati fino alla "
             "punta sotto la cresta, come il fianco di un cartone del latte",
             "aletta da %.1f mm piegata giu' e incollata sul retro" % p.aletta,
@@ -343,11 +319,6 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     W, D, t = p.W, p.D, p.cresta
     h1, s, c, v = p.dritto, p.falda, p.chiude, p.salita
     H = h1 + v
-    L = float(np.hypot(c, v))      # la corda della falda, dalla piega alla cima
-    pr = p.profilo
-    # la parte dritta in cima alla falda: quanto e' lunga e come pende
-    dritta = float(s - pr[-2, 0])
-    cphi, sphi = (pr[-1, 1:] - pr[-2, 1:]) / np.hypot(*(pr[-1, 1:] - pr[-2, 1:]))
     Wt, Ht = misura_tex
     uv_interno = np.array([0.5, (Ht - 1.5 * STRISCIA) / Ht])
     uv_taglio = np.array([0.5, (Ht - 0.5 * STRISCIA) / Ht])
@@ -389,38 +360,44 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             T.extend([(b + i, b + k, b + j) for i, j, k in tri])
 
     hw = W / 2.0
-    # fronte, dritto e falda
-    quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, h1, D / 2), (-hw, h1, D / 2)],
+    # fronte, dritto e falda. Sul DT la piega del fronte non ha cordonatura,
+    # e passa sotto il marchio: e' smussata, un arco di raggio SMUSSO tangente
+    # al dritto e alla falda, che restano dove sono. Sul foglio l'arco prende
+    # i `ls` mm prima e dopo la piega.
+    th = np.arcsin(c / s)                       # quanto pende la falda
+    ls = SMUSSO * np.tan(th / 2.0)
+    su_f = np.sign(p.yF0 - p.yG)                # verso la cima, sul foglio
+    quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, h1 - ls, D / 2), (-hw, h1 - ls, D / 2)],
          [(x_corpo(-hw), p.yF1), (x_corpo(hw), p.yF1),
-          (x_corpo(hw), p.yG), (x_corpo(-hw), p.yG)], (0, 0, 1))
-    # la falda: curva sopra la piega senza spigolo, poi dritta fino alla cima
-    for (d0, y0, z0), (d1, y1, z1) in zip(pr[:-1], pr[1:]):
-        f0 = p.yG + (p.yF0 - p.yG) * d0 / s
-        f1 = p.yG + (p.yF0 - p.yG) * d1 / s
-        quad([(-hw, h1 + y0, D / 2 - z0), (hw, h1 + y0, D / 2 - z0),
-              (hw, h1 + y1, D / 2 - z1), (-hw, h1 + y1, D / 2 - z1)],
-             [(x_corpo(-hw), f0), (x_corpo(hw), f0),
-              (x_corpo(hw), f1), (x_corpo(-hw), f1)], (0, z1 - z0, y1 - y0))
+          (x_corpo(hw), p.yG - su_f * ls), (x_corpo(-hw), p.yG - su_f * ls)], (0, 0, 1))
+    arco = []
+    for a in np.linspace(0.0, th, PASSI_SMUSSO + 1):
+        arco.append((h1 - ls + SMUSSO * np.sin(a), D / 2 - SMUSSO * (1.0 - np.cos(a)),
+                     p.yG + su_f * ls * (2.0 * a / th - 1.0)))
+    for (y0, z0, f0), (y1, z1, f1) in zip(arco[:-1], arco[1:]):
+        quad([(-hw, y0, z0), (hw, y0, z0), (hw, y1, z1), (-hw, y1, z1)],
+             [(x_corpo(-hw), f0), (x_corpo(hw), f0), (x_corpo(hw), f1), (x_corpo(-hw), f1)],
+             (0, z0 - z1, y1 - y0))
+    y0, z0, f0 = arco[-1]
+    quad([(-hw, y0, z0), (hw, y0, z0), (hw, H, t / 2), (-hw, H, t / 2)],
+         [(x_corpo(-hw), f0), (x_corpo(hw), f0),
+          (x_corpo(hw), p.yF0), (x_corpo(-hw), p.yF0)], (0, c, v))
     # retro, dritto e falda: la piega sul fondo non specchia le x
     quad([(-hw, 0, -D / 2), (hw, 0, -D / 2), (hw, h1, -D / 2), (-hw, h1, -D / 2)],
          [(x_corpo(-hw), p.yB0), (x_corpo(hw), p.yB0),
           (x_corpo(hw), yBG), (x_corpo(-hw), yBG)], (0, 0, -1))
-    for (d0, y0, z0), (d1, y1, z1) in zip(pr[:-1], pr[1:]):
-        f0 = yBG + (p.yB1 - yBG) * d0 / s
-        f1 = yBG + (p.yB1 - yBG) * d1 / s
-        quad([(-hw, h1 + y0, -(D / 2 - z0)), (hw, h1 + y0, -(D / 2 - z0)),
-              (hw, h1 + y1, -(D / 2 - z1)), (-hw, h1 + y1, -(D / 2 - z1))],
-             [(x_corpo(-hw), f0), (x_corpo(hw), f0),
-              (x_corpo(hw), f1), (x_corpo(-hw), f1)], (0, z1 - z0, -(y1 - y0)))
+    quad([(-hw, h1, -D / 2), (hw, h1, -D / 2), (hw, H, -t / 2), (-hw, H, -t / 2)],
+         [(x_corpo(-hw), yBG), (x_corpo(hw), yBG),
+          (x_corpo(hw), p.yB1), (x_corpo(-hw), p.yB1)], (0, c, -v))
     # fondo: piatto, con la fascia del soffietto portata alla profondita'
     quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, 0, -D / 2), (-hw, 0, -D / 2)],
          [(x_corpo(-hw), p.yF1), (x_corpo(hw), p.yF1),
           (x_corpo(hw), p.yB0), (x_corpo(-hw), p.yB0)], (0, -1, 0))
     # l'aletta sul retro, uno spessore fuori: dalla cresta in giu' lungo la falda
-    giu = np.array([0.0, -cphi, -sphi])          # in giu' lungo il retro, in cima
-    nb = np.array([0.0, sphi, -cphi])            # normale uscente del retro
+    giu = np.array([0.0, -v, -c]) / s            # verso il basso lungo il retro
+    nb = np.array([0.0, c, -v]) / s              # normale uscente del retro
     a0 = np.array([0.0, H, -t / 2]) + nb * sp
-    a1 = a0 + giu * min(p.aletta, dritta)
+    a1 = a0 + giu * min(p.aletta, s)
     quad([(-hw, a0[1], a0[2]), (hw, a0[1], a0[2]), (hw, a1[1], a1[2]), (-hw, a1[1], a1[2])],
          [(x_corpo(-hw), p.yR), (x_corpo(hw), p.yR),
           (x_corpo(hw), p.yP), (x_corpo(-hw), p.yP)], nb, interno=False)
@@ -445,17 +422,17 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     # REGOLE.md, *La scatola a punta*.
     su = np.sign(p.yF0 - p.yG)                   # verso la cima, sul foglio
     tx, ty = p.taglio_x, p.taglio_y
-    nf = np.array([0.0, c, v]) / L               # normale della corda del fronte
+    nf = np.array([0.0, c, v]) / s               # normale uscente del fronte
     for destro, X, verso in ((False, -hw, -1.0), (True, hw, 1.0)):
         quad([(X, 0, D / 2), (X, 0, -D / 2), (X, h1, -D / 2), (X, h1, D / 2)],
              [(x_fianco(D / 2, destro), p.yF1), (x_fianco(-D / 2, destro), p.yF1),
               (x_fianco(-D / 2, destro), p.yG), (x_fianco(D / 2, destro), p.yG)],
              (verso, 0, 0))
-        su3 = np.array([-verso * c, v, 0.0]) / L     # in su lungo il pezzo centrale
-        n_c = np.array([verso * v, c, 0.0]) / L      # e la sua normale, fuori
+        su3 = np.array([-verso * c, v, 0.0]) / s     # in su lungo il pezzo centrale
+        n_c = np.array([verso * v, c, 0.0]) / s      # e la sua normale, fuori
 
         def punto(z, eta):
-            return np.array([X, h1, z]) + eta * (L / s) * su3
+            return np.array([X, h1, z]) + eta * su3
 
         def foglio(z, eta):
             return np.array([x_fianco(z, destro), p.yG + su * eta])
@@ -470,30 +447,18 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         quad([CE[1], CE[-1], A],
              [foglio(D / 2 - tx, ty), foglio(-(D / 2 - tx), ty), foglio(0.0, s)], n_c)
         for k, n_falda in ((1, nf), (-1, nf * [1, 1, -1])):
-            # l'ala: il bordo libero lungo il bordo della falda, curva
-            # compresa, uno spessore e mezzo dentro; l'altro lato e' la gamba
-            # della V
+            # l'ala: il bordo libero lungo il bordo della falda, uno spessore e
+            # mezzo dentro; l'altro lato e' la gamba della V
+            g = 1.5 * sp * n_falda
+            fuori0, fuori1 = np.array([X, h1, k * D / 2]) - g, np.array([X, H, k * t / 2]) - g
+            f_fuori0, f_fuori1 = foglio(k * D / 2, 0), foglio(k * D / 2, s)
             f_ce, f_a = foglio(k * (D / 2 - tx), ty), foglio(0.0, s)
-
-            def bordo(d):
-                return np.array([X, h1 + np.interp(d, pr[:, 0], pr[:, 1]),
-                                 k * (D / 2 - np.interp(d, pr[:, 0], pr[:, 2]))])
-
-            def fuori(d):
-                e = 0.05
-                tg = bordo(min(d + e, s)) - bordo(max(d - e, 0.0))
-                n = np.cross(tg, [k * 1.0, 0.0, 0.0])
-                n = n / np.linalg.norm(n)
-                if float(n @ n_falda) < 0:
-                    n = -n
-                return bordo(d) - 1.5 * sp * n
-
-            dd = np.unique(np.concatenate([pr[:, 0], np.linspace(pr[-2, 0], s, 5)]))
-            for d0, d1 in zip(dd[:-1], dd[1:]):
-                quad([fuori(d0), fuori(d1), _lerp(CE[k], A, d1 / s), _lerp(CE[k], A, d0 / s)],
-                     [foglio(k * D / 2, d0), foglio(k * D / 2, d1),
-                      _lerp(f_ce, f_a, d1 / s), _lerp(f_ce, f_a, d0 / s)],
-                     -n_falda, interno=False)
+            passi = np.linspace(0.0, 1.0, 7)
+            for a, b in zip(passi[:-1], passi[1:]):
+                quad([_lerp(fuori0, fuori1, a), _lerp(fuori0, fuori1, b),
+                      _lerp(CE[k], A, b), _lerp(CE[k], A, a)],
+                     [_lerp(f_fuori0, f_fuori1, a), _lerp(f_fuori0, f_fuori1, b),
+                      _lerp(f_ce, f_a, b), _lerp(f_ce, f_a, a)], -n_falda, interno=False)
     # le coste: ogni bordo che non combacia con quello di un altro pezzo e'
     # un taglio, e mostra lo spessore del cartoncino - le falde e le ali
     # lungo il soffietto, la cresta, l'aletta, i tagli a 45 gradi. Un bordo

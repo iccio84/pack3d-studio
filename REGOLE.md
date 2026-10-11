@@ -3946,18 +3946,16 @@ centrale era troppo largo e le ali erano solo una striscia. Una prova con le
 ali girate verso l'interno, rovescio in vista, non torna con la foto: in cima
 al soffietto si vede stampa, non cartone.
 
-**Fronte e retro curvano, non fanno spigolo.** Sul DT il fronte e il retro
-non hanno nessuna cordonatura all'altezza della piega dei fianchi: tutte le
-versioni fino alla sesta li piegavano a spigolo, e dalla quarta lo spigolo
-tagliava il marchio del fronte a meta'. Chi ha il pack l'ha detto: "ammorbidisci la piega del
-fronte, come se curvasse senza lasciare il segno". Fino alla piega li tengono
-dritti i fianchi; sopra, il cartoncino curva per `CURVA` della falda (0,35:
-23,7 mm sul primo caso) e da li' va dritto fino alla cresta, inclinato quanto
-serve per chiudere `chiude` (22 gradi invece di 18). `Punta.profilo` da' la
-curva a pezzi lunghi quanto il foglio, cosi' la grafica non si stira; la scatola
-esce alta 165,8 mm invece di 166,2. Le ali del soffietto seguono la stessa
-curva, contro il rovescio delle falde. Le cordonature vere - gli angoli, la
-piega dei fianchi, le gambe della V, la cresta - restano spigoli.
+**La piega del fronte e' smussata.** Sul DT il fronte non ha cordonatura
+all'altezza della piega dei fianchi, e li' passa il marchio: lo spigolo lo
+tagliava a meta' con un segno netto. Chi ha il pack ha chiesto di ammorbidire
+solo quella piega, "come se curvasse senza lasciare il segno". E' un arco di
+`SMUSSO` (20 mm di raggio) tangente al fronte dritto e alla falda, che
+restano dove sono: la forma non cambia, lo spigolo rientra di 0,25 mm. Sul
+foglio l'arco prende i 3,2 mm prima e dopo la piega. Il retro e tutte le
+cordonature vere - gli angoli, la piega dei fianchi, le gambe della V, la
+cresta - restano spigoli. Una prova con fronte e retro curvi per un terzo
+della falda cambiava la pendenza e l'altezza: non era quello che serviva.
 
 **Il cartoncino ha spessore.** Oltre al rovescio, ogni bordo che non combacia
 con quello di un altro pezzo prende la **costa** del taglio, come
@@ -3983,7 +3981,8 @@ stampato capovolto esce dritto da se'.
 ### Cosa manca
 
 Il pezzo centrale del soffietto e' piano, e le ali sono a strisce: il
-cartoncino vero si incurva un poco anche li'. Non sono modellate le alette di
+cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
+ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
 colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
 ## Flowpack
