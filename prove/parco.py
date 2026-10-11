@@ -393,6 +393,12 @@ def glam(args):
     """Il modello che lo Space ha appena approvato, nel viewer Glam Lab."""
     caso = _casi(args.casi, [args.nome])[0]
     base = os.path.join(args.uscita, args.nome + "_spazio")
+    if not os.path.exists(base + ".json") and caso.get("codice"):
+        # un caso approvato da chi l'ha caricato: il modello sta nel registro,
+        # dove l'ha messo `caso --stato da-approvare` (forse un'altra sessione)
+        cartella, _v = _caso_in_coda(args.casi, caso["codice"])
+        if os.path.exists(os.path.join(cartella, "modello.json")):
+            base = os.path.join(cartella, "modello")
     try:
         with open(base + ".json", encoding="utf-8") as fh:
             esito = json.load(fh)
@@ -442,8 +448,14 @@ def glam(args):
 
 
 # Gli stati di un caso della coda, come li mostra Glam a chi l'ha caricato.
-# "in-coda" non c'e': lo dice la pagina, quando il caso entra.
-STATI = ("in-lavorazione", "domanda", "risolto", "non-risolto")
+# "in-coda" non c'e': lo dice la pagina, quando il caso entra. "da-approvare":
+# il modello corretto aspetta che chi l'ha caricato lo approvi, dalla finestra
+# dei casi della pagina; "approvato" e "non-approvato" li scrive lo Space.
+STATI = ("in-lavorazione", "domanda", "da-approvare", "risolto", "non-risolto")
+
+# Glam, finche' non conosce "da-approvare" (GLAM.md), lo riceve cosi'
+DA_APPROVARE_IN_GLAM = ("in-lavorazione", "Il modello corretto è pronto: guardalo "
+                        "e approvalo nella finestra dei casi della pagina.")
 
 
 def _caso_in_coda(casi, cod):
@@ -475,7 +487,34 @@ def _git(casi, *a):
     return subprocess.run(["git", "-C", casi] + list(a), capture_output=True, text=True)
 
 
-def _registra_stato(casi, cartella, codice, corpo):
+def _modello_da_approvare(args, cartella):
+    """Copia nella cartella del caso il modello che lo Space ha appena
+    approvato (`spazio`): `modello.glb` e `modello.json`, col verdetto e
+    l'impronta. Lo legge da li' la pagina, per farlo approvare, e `glam`,
+    quando arriva l'approvazione. Torna i percorsi da registrare."""
+    base = os.path.join(args.uscita, args.modello + "_spazio")
+    try:
+        with open(base + ".json", encoding="utf-8") as fh:
+            esito = json.load(fh)
+        with open(base + ".glb", "rb") as fh:
+            glb = fh.read()
+    except (OSError, ValueError):
+        raise SystemExit("manca la prova sullo Space di %s in %s: prima `spazio`"
+                         % (args.modello, args.uscita))
+    if (esito.get("controllo") or {}).get("esito") != "ok":
+        raise SystemExit("lo Space non ha approvato %s: da approvare va solo un "
+                         "modello che lo Space dice ok" % args.modello)
+    if hashlib.md5(glb).hexdigest() != esito.get("md5"):
+        raise SystemExit("%s.glb non e' il modello provato sullo Space" % base)
+    with open(os.path.join(cartella, "modello.glb"), "wb") as fh:
+        fh.write(glb)
+    with open(os.path.join(cartella, "modello.json"), "w", encoding="utf-8") as fh:
+        json.dump({k: esito.get(k) for k in ("nome", "versione", "md5", "controllo")},
+                  fh, ensure_ascii=False, indent=1)
+    return [os.path.join(cartella, "modello.glb"), os.path.join(cartella, "modello.json")]
+
+
+def _registra_stato(casi, cartella, codice, corpo, altri=()):
     """Lo stato del caso in `stato.json`, nella sua cartella, per la pagina
     dello Space: la finestra dei casi e le notifiche di chi l'ha mandato lo
     leggono da li'. Commit e push su main del repository dei casi, come ogni
@@ -495,20 +534,20 @@ def _registra_stato(casi, cartella, codice, corpo):
     dati["storia"] = (storia + [voce])[-30:]
     with open(percorso, "w", encoding="utf-8") as fh:
         json.dump(dati, fh, ensure_ascii=False, indent=1)
-    rel = os.path.relpath(percorso, casi)
+    rel = [os.path.relpath(p, casi) for p in [percorso] + list(altri)]
     # l'autore dei commit del registro: lo stesso dell'ultimo
     autore = _git(casi, "log", "-1", "--format=%an%n%ae").stdout.split("\n")
     chi = ["-c", "user.name=" + autore[0], "-c", "user.email=" + autore[1]] \
         if len(autore) >= 2 and autore[0] and autore[1] else []
-    _git(casi, "add", rel)
+    _git(casi, "add", *rel)
     fatto = _git(casi, *chi, "commit", "-m", "Caso %s: stato %s" % (codice, corpo["stato"]),
-                 "--", rel)
+                 "--", *rel)
     if fatto.returncode != 0 and "nothing to commit" not in fatto.stdout + fatto.stderr:
         print("stato.json non registrato: %s" % (fatto.stderr or fatto.stdout).strip()[:300])
         return False
     for _ in range(3):
         if _git(casi, "push", "origin", "HEAD:main").returncode == 0:
-            print("stato del caso registrato in %s" % rel)
+            print("stato del caso registrato in %s" % ", ".join(rel))
             return True
         _git(casi, "pull", "--rebase", "--autostash", "origin", "main")
     print("stato.json scritto ma non spinto su main: fallo tu (git push origin HEAD:main)")
@@ -525,16 +564,16 @@ def _avvisa(spazio, codice):
         with urllib.request.urlopen(req, timeout=60) as r:
             esito = json.loads(r.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as e:
-        print("email della domanda non mandata (HTTP %d): %s"
+        print("email a chi ha mandato il caso non partita (HTTP %d): %s"
               % (e.code, e.read().decode("utf-8", "replace")[:200]))
         return
     except (urllib.error.URLError, OSError, ValueError) as e:
-        print("lo Space non risponde per l'email della domanda: %s" % e)
+        print("lo Space non risponde per l'email a chi ha mandato il caso: %s" % e)
         return
     if esito.get("inviate"):
-        print("email della domanda mandata a chi l'ha chiesta (%d)" % esito["inviate"])
+        print("email mandata a chi ha mandato il caso (%d)" % esito["inviate"])
     else:
-        print("email della domanda: nessuna (%s)" % esito.get("perche", "-"))
+        print("email a chi ha mandato il caso: nessuna (%s)" % esito.get("perche", "-"))
 
 
 def caso(args):
@@ -555,38 +594,72 @@ def caso(args):
         corpo["opzioni"] = opzioni
     elif args.domanda or args.opzione:
         raise SystemExit("--domanda e --opzione vanno con --stato domanda")
+    altri = []
+    if args.stato == "da-approvare":
+        if not args.modello:
+            raise SystemExit("con --stato da-approvare ci vuole --modello: il caso "
+                             "del parco provato con `spazio`")
+        altri = _modello_da_approvare(args, cartella)
+    elif args.modello:
+        raise SystemExit("--modello va con --stato da-approvare")
     # Prima la pagina dello Space, che non dipende da Glam: lo stato e la
-    # domanda li legge dal registro dei casi, e con una domanda lo Space
-    # scrive a chi ha lasciato l'email.
-    if _registra_stato(args.casi, cartella, args.codice, corpo) and args.stato == "domanda":
+    # domanda li legge dal registro dei casi, e con una domanda o un modello
+    # da approvare lo Space scrive a chi ha lasciato l'email.
+    if (_registra_stato(args.casi, cartella, args.codice, corpo, altri)
+            and args.stato in ("domanda", "da-approvare")):
         _avvisa(args.spazio, args.codice)
-    req = urllib.request.Request(
-        args.url.rstrip("/") + "/api/pack3d-case", method="POST",
-        data=json.dumps(corpo, ensure_ascii=False).encode("utf-8"),
-        headers={"Content-Type": "application/json", "User-Agent": "pack3d-studio"})
     try:
-        with urllib.request.urlopen(req, timeout=60) as r:
-            risposta = json.loads(r.read().decode("utf-8") or "{}")
+        risposta = _stato_a_glam(args.url, corpo)
     except urllib.error.HTTPError as e:
-        testo = e.read().decode("utf-8", "replace")[:300]
-        if e.code == 401:
-            print("Glam rifiuta il token (401): la credenziale dell'ambiente "
-                  "cloud per questo sito manca, o non e' uguale al secret "
-                  "PACK3D_IMPORT_TOKEN di Glam")
-        elif _glam_assente(e.code, testo):
-            pass
-        elif e.code == 404:
-            print("Glam non conosce ancora i casi della coda (404 su "
-                  "/api/pack3d-case): vedi DEPLOY.md, Glam Lab")
-        else:
-            print("Glam non ha preso lo stato del caso (HTTP %d): %s" % (e.code, testo))
-        raise SystemExit(1)
+        if e.code == 400 and corpo["stato"] == "da-approvare":
+            # Glam non conosce ancora lo stato: lo riceve come in lavorazione,
+            # col messaggio che dice dove approvarlo
+            stato, msg = DA_APPROVARE_IN_GLAM
+            corpo = dict(corpo, stato=stato, messaggio=msg)
+            try:
+                risposta = _stato_a_glam(args.url, corpo)
+                print("Glam non conosce ancora \"da-approvare\": l'ha ricevuto "
+                      "come \"%s\" (vedi GLAM.md)" % stato)
+                e = None
+            except urllib.error.HTTPError as e2:
+                e = e2
+            except (urllib.error.URLError, OSError, ValueError) as e2:
+                _glam_irraggiungibile(e2)
+                raise SystemExit(1)
+        if e is not None:
+            _errore_glam(e)
+            raise SystemExit(1)
     except (urllib.error.URLError, OSError, ValueError) as e:
         _glam_irraggiungibile(e)
         raise SystemExit(1)
     print("in Glam: caso %s \"%s\" -> %s%s" % (
-        args.codice, corpo["nome"], args.stato,
+        args.codice, corpo["nome"], corpo["stato"],
         " (utenti: %s)" % risposta["utenti"] if "utenti" in risposta else ""))
+
+
+def _stato_a_glam(glam, corpo):
+    req = urllib.request.Request(
+        glam.rstrip("/") + "/api/pack3d-case", method="POST",
+        data=json.dumps(corpo, ensure_ascii=False).encode("utf-8"),
+        headers={"Content-Type": "application/json", "User-Agent": "pack3d-studio"})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode("utf-8") or "{}")
+
+
+def _errore_glam(e):
+    """Dice perche' Glam non ha preso lo stato del caso."""
+    testo = e.read().decode("utf-8", "replace")[:300]
+    if e.code == 401:
+        print("Glam rifiuta il token (401): la credenziale dell'ambiente "
+              "cloud per questo sito manca, o non e' uguale al secret "
+              "PACK3D_IMPORT_TOKEN di Glam")
+    elif _glam_assente(e.code, testo):
+        pass
+    elif e.code == 404:
+        print("Glam non conosce ancora i casi della coda (404 su "
+              "/api/pack3d-case): vedi DEPLOY.md, Glam Lab")
+    else:
+        print("Glam non ha preso lo stato del caso (HTTP %d): %s" % (e.code, testo))
 
 
 def main():
@@ -636,6 +709,11 @@ def main():
     q.add_argument("--domanda", help="con --stato domanda: la domanda all'utente")
     q.add_argument("--opzione", action="append",
                    help="una risposta fra cui scegliere (ripetibile, al massimo 4)")
+    q.add_argument("--modello", help="con --stato da-approvare: il caso del "
+                                     "parco provato con `spazio`, il cui modello "
+                                     "va a chi l'ha caricato da approvare")
+    q.add_argument("--uscita", default="/tmp/parco_spazio",
+                   help="la cartella dove `spazio` ha salvato GLB e verdetto")
     q.add_argument("--spazio", default=SPAZIO,
                    help="lo Space che manda l'email della domanda (di serie %s)" % SPAZIO)
     q.set_defaults(fai=caso)

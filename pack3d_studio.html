@@ -119,6 +119,19 @@
         background:color-mix(in oklab,var(--primary) 12%,transparent)}
   .chip.domanda{color:var(--surface);background:var(--warning)}
   .chip.non-risolto{color:var(--destructive);background:color-mix(in oklab,var(--destructive) 10%,transparent)}
+  .chip.da-approvare{color:var(--surface);background:var(--primary)}
+  #casi-lista > li.da-approvare{background:color-mix(in oklab,var(--primary) 9%,var(--surface));
+                                border:1px solid color-mix(in oklab,var(--primary) 40%,transparent)}
+  /* le foto scelte, prima di mandarle: anteprime con la crocetta per toglierle */
+  .anteprime{display:flex;flex-wrap:wrap;gap:6px}
+  .anteprime:empty{display:none}
+  .anteprima{position:relative;width:64px;height:64px;border-radius:var(--radius-sm);
+             overflow:hidden;border:1px solid var(--border);background:var(--secondary)}
+  .anteprima img{width:100%;height:100%;object-fit:cover;display:block}
+  .anteprima button{position:absolute;top:2px;right:2px;width:20px;height:20px;padding:0;
+                    margin:0;border-radius:50%;font-size:13px;line-height:18px;letter-spacing:0;
+                    text-align:center;background:color-mix(in oklab,var(--foreground) 70%,transparent);
+                    color:var(--surface);border:none;cursor:pointer}
   .caso-msg:empty{display:none}
   .caso-quando{font-size:10.5px;color:var(--muted-foreground)}
   .risposta{display:flex;flex-direction:column;gap:8px;margin-top:4px}
@@ -1474,7 +1487,10 @@ const notificheLista = document.getElementById('notifiche-lista');
 const notificheBtn = document.getElementById('notifiche-btn');
 
 const ETICHETTA = {'in-coda': 'In coda', 'in-lavorazione': 'In lavorazione',
-                   'domanda': 'Serve una tua risposta', 'non-risolto': 'Non risolto per ora'};
+                   'domanda': 'Serve una tua risposta', 'non-risolto': 'Non risolto per ora',
+                   'da-approvare': 'Da approvare', 'approvato': 'Approvato'};
+// gli stati che aspettano chi ha mandato il caso
+const TOCCA_A_TE = s => s === 'domanda' || s === 'da-approvare';
 
 function apriFinestra(el, btn, si, ricorda){
   el.classList.toggle('on', si);
@@ -1545,7 +1561,7 @@ function aggiungiCaso(v, nome){
 function disegnaCasi(){
   casiLista.replaceChildren(...casi.map(disegnaCaso));
   document.getElementById('casi-vuoto').hidden = casi.length > 0;
-  const domande = casi.filter(c => c.stato === 'domanda').length;
+  const domande = casi.filter(c => TOCCA_A_TE(c.stato)).length;
   casiBtn.textContent = 'Casi' + (casi.length ? ' · ' + casi.length : '');
   casiBtn.classList.toggle('domanda', domande > 0);
   casiBtn.title = domande === 1 ? 'Un caso aspetta una tua risposta'
@@ -1554,7 +1570,7 @@ function disegnaCasi(){
 
 function disegnaCaso(c){
   const li = document.createElement('li');
-  if (c.stato === 'domanda') li.className = 'domanda';
+  if (c.stato === 'domanda' || c.stato === 'da-approvare') li.className = c.stato;
   const testa = document.createElement('div');
   testa.className = 'caso-testa';
   const b = document.createElement('b');
@@ -1571,7 +1587,184 @@ function disegnaCaso(c){
   q.textContent = 'Inviato ' + quandoBreve(c.inviato) + ' · codice ' + c.codice;
   li.append(testa, msg, q);
   if (c.stato === 'domanda' && c.domanda) li.append(moduloRisposta(c));
+  if (c.stato === 'da-approvare') li.append(moduloApprova(c));
+  if (c.stato === 'approvato') li.append(tastoGuarda(c));
   return li;
+}
+
+const FOTO_MAX_N = 6;
+
+/** Le foto di una risposta: si aggiungono una o piu' alla volta, ognuna con
+ *  la sua anteprima e la crocetta per toglierla, fino a FOTO_MAX_N. `foto()`
+ *  le da' rimpicciolite, come data URL. */
+function selettoreFoto(id, etichetta){
+  const scelte = [];                        // {file, url}
+  const fi = document.createElement('input');
+  fi.type = 'file';
+  fi.accept = 'image/*';
+  fi.multiple = true;
+  fi.id = id;
+  fi.hidden = true;
+  const lab = document.createElement('label');
+  lab.className = 'bottone';
+  lab.htmlFor = fi.id;
+  lab.textContent = etichetta || 'Aggiungi foto';
+  const griglia = document.createElement('div');
+  griglia.className = 'anteprime';
+  function ridisegna(){
+    griglia.replaceChildren(...scelte.map((f, k) => {
+      const d = document.createElement('div');
+      d.className = 'anteprima';
+      const im = document.createElement('img');
+      im.src = f.url;
+      im.alt = f.file.name;
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.textContent = '\u00d7';
+      x.title = 'Togli questa foto';
+      x.setAttribute('aria-label', 'Togli la foto ' + f.file.name);
+      x.onclick = () => { URL.revokeObjectURL(f.url); scelte.splice(k, 1); ridisegna(); };
+      d.append(im, x);
+      return d;
+    }));
+    lab.hidden = scelte.length >= FOTO_MAX_N;
+  }
+  fi.onchange = () => {
+    for (const f of Array.from(fi.files || [])){
+      if (scelte.length >= FOTO_MAX_N) break;
+      if (!/^image\//.test(f.type)) continue;
+      scelte.push({file: f, url: URL.createObjectURL(f)});
+    }
+    fi.value = '';
+    ridisegna();
+  };
+  return {
+    tasto: [lab, fi], griglia,
+    quante: () => scelte.length,
+    foto: () => Promise.all(scelte.map(f => fotoRidotta(f.file))),
+    svuota: () => { scelte.forEach(f => URL.revokeObjectURL(f.url)); scelte.length = 0; ridisegna(); },
+  };
+}
+
+/** Il corpo di una risposta d'errore dello Space, in parole. */
+async function erroreDa(r){
+  let t = (await r.text()).slice(0, 200).trim();
+  if (t.charAt(0) === '<') t = '';
+  return new Error(t || ('HTTP ' + r.status));
+}
+
+/** "Guarda il modello": il modello corretto del caso nel visore. */
+function tastoGuarda(c){
+  const bt = document.createElement('button');
+  bt.type = 'button';
+  bt.textContent = 'Guarda il modello';
+  bt.onclick = async () => {
+    bt.disabled = true;
+    try{
+      const r = await fetch(url('/api/modello?codice=' + c.codice), {cache: 'no-store'});
+      if (!r.ok) throw await erroreDa(r);
+      const blob = await r.blob();
+      nascondiCaso(true);
+      glbBlob = blob;
+      glbName = c.nome.replace(/\.glb$/i, '') + '.glb';
+      show(await blob.arrayBuffer());
+      setFase('pronto');
+      setTitolo(c.nome);
+      setMeta([]);
+      setStatus('Il modello corretto di \u00ab' + c.nome + '\u00bb: approvalo, o dicci cosa non va, dalla finestra dei casi', '');
+    }catch(err){
+      setStatus('Il modello non si carica: ' + testoErrore(err), 'err');
+    }finally{
+      bt.disabled = false;
+    }
+  };
+  return bt;
+}
+
+/** Il modello corretto aspetta chi ha mandato il caso: lo guarda, e lo
+ *  approva - finisce nei Casi risolti - o dice cosa non va, con le foto. */
+function moduloApprova(c){
+  const box = document.createElement('div');
+  box.className = 'risposta';
+  const q = document.createElement('div');
+  q.className = 'q';
+  q.textContent = 'Il modello corretto \u00e8 pronto: \u00e8 giusto?';
+  const az = document.createElement('div');
+  az.className = 'azioni';
+  const si = document.createElement('button');
+  si.type = 'button';
+  si.className = 'primary';
+  si.textContent = 'Approva';
+  const no = document.createElement('button');
+  no.type = 'button';
+  no.textContent = 'Non approvo';
+  az.append(tastoGuarda(c), si, no);
+  // il no: cosa non va, con le foto
+  const motivo = document.createElement('div');
+  motivo.className = 'risposta';
+  motivo.hidden = true;
+  const ta = document.createElement('textarea');
+  ta.maxLength = 2000;
+  ta.rows = 3;
+  ta.placeholder = 'Cosa non va nel modello? Per esempio: il fianco deve rientrare di pi\u00f9';
+  ta.setAttribute('aria-label', 'Cosa non va nel modello');
+  const sf = selettoreFoto('rifiuto-' + c.codice, 'Aggiungi foto');
+  const az2 = document.createElement('div');
+  az2.className = 'azioni';
+  const invia = document.createElement('button');
+  invia.type = 'button';
+  invia.className = 'primary';
+  invia.textContent = 'Invia';
+  az2.append(...sf.tasto, invia);
+  motivo.append(ta, sf.griglia, az2);
+  const es = document.createElement('div');
+  es.className = 'esito';
+  es.setAttribute('role', 'status');
+  no.onclick = () => {
+    motivo.hidden = !motivo.hidden;
+    no.setAttribute('aria-expanded', String(!motivo.hidden));
+    if (!motivo.hidden) ta.focus();
+  };
+
+  async function manda(approvato){
+    const testo = ta.value.trim();
+    if (!approvato && !testo){
+      es.textContent = 'Scrivi cosa non va nel modello.';
+      es.className = 'esito err';
+      return;
+    }
+    si.disabled = no.disabled = invia.disabled = true;
+    es.textContent = approvato ? 'Invio dell\u2019approvazione\u2026' : 'Invio\u2026';
+    es.className = 'esito';
+    try{
+      const foto = approvato ? [] : await sf.foto();
+      const r = await fetch(url('/api/approva'), {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({codice: c.codice, approvato, motivo: testo, foto})});
+      if (!r.ok) throw await erroreDa(r);
+      sf.svuota();
+      if (approvato){
+        c.stato = 'approvato';
+        c.messaggio = 'Approvato: lo mettiamo nei Casi risolti.';
+        notifica('\u00ab' + c.nome + '\u00bb: approvato, lo mettiamo nei Casi risolti di Glam Lab.', c.codice);
+      }else{
+        c.stato = 'in-coda';
+        c.messaggio = 'Hai detto cosa non va: il caso \u00e8 ripartito.';
+        notifica('\u00ab' + c.nome + '\u00bb: ricevuto cosa non va, il caso \u00e8 ripartito.', c.codice);
+      }
+      c.chiave = c.stato;
+      salvaCasi();
+      disegnaCasi();
+    }catch(err){
+      si.disabled = no.disabled = invia.disabled = false;
+      es.textContent = 'Non inviato: ' + testoErrore(err);
+      es.className = 'esito err';
+    }
+  }
+  si.onclick = () => manda(true);
+  invia.onclick = () => manda(false);
+  box.append(q, az, motivo, es);
+  return box;
 }
 
 /** La risposta a una domanda della routine: una scelta, parole sue, una foto.
@@ -1608,29 +1801,18 @@ function moduloRisposta(c){
   ta.setAttribute('aria-label', 'Risposta a parole tue');
   const az = document.createElement('div');
   az.className = 'azioni';
-  const fi = document.createElement('input');
-  fi.type = 'file';
-  fi.accept = 'image/*';
-  fi.id = 'foto-' + c.codice;
-  fi.hidden = true;
-  const lab = document.createElement('label');
-  lab.className = 'bottone';
-  lab.htmlFor = fi.id;
-  lab.textContent = 'Aggiungi una foto';
-  const fn = document.createElement('span');
-  fn.className = 'foto-nome';
-  fi.onchange = () => { fn.textContent = fi.files[0] ? fi.files[0].name : ''; };
+  const sf = selettoreFoto('foto-' + c.codice, 'Aggiungi foto');
   const invia = document.createElement('button');
   invia.type = 'button';
   invia.className = 'primary';
   invia.textContent = 'Invia la risposta';
-  az.append(lab, fi, fn, invia);
+  az.append(...sf.tasto, invia);
   const es = document.createElement('div');
   es.className = 'esito';
   es.setAttribute('role', 'status');
   invia.onclick = async () => {
-    const testo = ta.value.trim(), file = fi.files[0];
-    if (!scelta && !testo && !file){
+    const testo = ta.value.trim();
+    if (!scelta && !testo && !sf.quante()){
       es.textContent = 'Scegli una risposta, scrivi qualcosa o aggiungi una foto.';
       es.className = 'esito err';
       return;
@@ -1639,15 +1821,12 @@ function moduloRisposta(c){
     es.textContent = 'Invio della risposta…';
     es.className = 'esito';
     try{
-      const foto = file ? await fotoRidotta(file) : null;
+      const foto = await sf.foto();
       const r = await fetch(url('/api/nota'), {method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({codice: c.codice, risposta: true, scelta, nota: testo, foto})});
-      if (!r.ok){
-        let t = (await r.text()).slice(0, 200).trim();
-        if (t.charAt(0) === '<') t = '';
-        throw new Error(t || ('HTTP ' + r.status));
-      }
+      if (!r.ok) throw await erroreDa(r);
+      sf.svuota();
       c.stato = 'in-coda';
       c.messaggio = 'Risposta inviata: il caso è ripartito.';
       delete c.domanda;
@@ -1662,13 +1841,14 @@ function moduloRisposta(c){
       es.className = 'esito err';
     }
   };
-  box.append(ta, az, es);
+  box.append(ta, sf.griglia, az, es);
   return box;
 }
 
 const NOVITA = {
   'in-lavorazione': c => 'la correzione è iniziata.',
   'domanda': c => 'c’è una domanda per te: rispondi dalla finestra dei casi.',
+  'da-approvare': c => 'il modello corretto è pronto: guardalo e approvalo dalla finestra dei casi.',
   'non-risolto': c => 'per ora non si risolve.' + (c.messaggio ? ' ' + c.messaggio : ''),
   'in-coda': c => c.messaggio || 'è di nuovo in coda.'};
 
@@ -1708,8 +1888,9 @@ async function aggiornaCasi(){
         const prima = c.chiave;
         Object.assign(c, {stato: s.stato, messaggio: s.messaggio || '', domanda: s.domanda,
                           opzioni: s.opzioni, chiave});
-        // il primo giro dopo l'invio non e' una novita', una domanda si'
-        if ((prima || s.stato === 'domanda') && NOVITA[s.stato])
+        // il primo giro dopo l'invio non e' una novita', una domanda o un
+        // modello da approvare si'
+        if ((prima || TOCCA_A_TE(s.stato)) && NOVITA[s.stato])
           notifica('«' + c.nome + '»: ' + NOVITA[s.stato](c), c.codice);
         cambiato = true;
       }

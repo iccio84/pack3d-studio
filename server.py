@@ -2509,6 +2509,8 @@ class Handler(BaseHTTPRequestHandler):
                                                "email": avvisi.configurato()}))
         if self.path.startswith("/api/casi"):
             return self._stati()
+        if self.path.startswith("/api/modello"):
+            return self._modello()
         path = os.path.join(HERE, "pack3d_studio.html")
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")
@@ -2529,6 +2531,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(502, "Il repository dei casi non risponde: riprova "
                                    "fra poco")
         return self._send(200, json.dumps({"casi": casi}, ensure_ascii=False))
+
+    # Il modello corretto che un caso aspetta di far approvare (`coda.modello`):
+    # la finestra dei casi lo carica nel visore. Solo per codice.
+    def _modello(self):
+        from urllib.parse import parse_qs, urlparse
+        cod = (parse_qs(urlparse(self.path).query).get("codice") or [""])[0].strip().lower()
+        try:
+            glb = coda.modello(cod)
+        except (OSError, ValueError) as e:
+            print("modello del caso %s non letto: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        if glb is None:
+            return self._send(404, "Nessun modello da approvare per questo caso")
+        return self._send(200, glb, "model/gltf-binary")
 
     def _json_corpo(self, massimo=64 * 1024):
         """Il corpo JSON di una richiesta piccola, o (codice, errore)."""
@@ -2605,7 +2622,8 @@ class Handler(BaseHTTPRequestHandler):
     # La voce di chi ha caricato il PDF, dopo che il caso e' entrato in coda
     # (`coda.aggiungi`): una nota dalla pagina, o la risposta a una domanda
     # della routine, da Glam Lab. Corpi JSON, non PDF; la foto e' un data URL.
-    VOCE_MAX = 9 * 1024 * 1024
+    # fino a coda.FOTO_N foto per voce, in base64
+    VOCE_MAX = 40 * 1024 * 1024
 
     def _voce(self):
         risposta = self.path.startswith("/api/risposta")
@@ -2627,16 +2645,9 @@ class Handler(BaseHTTPRequestHandler):
             n = 0
         if n <= 0:
             return self._send(400, "Corpo vuoto")
-        if n > self.VOCE_MAX:
-            return self._send(413, "Troppo grande: la foto al massimo %d MB"
-                              % (coda.FOTO_MAX // (1024 * 1024)))
-        try:
-            corpo = json.loads(self.rfile.read(n).decode("utf-8"))
-            if not isinstance(corpo, dict):
-                raise ValueError("serve un oggetto JSON")
-            foto = coda.foto_da_testo(corpo.get("foto"))
-        except (ValueError, UnicodeDecodeError) as e:
-            return self._send(400, str(e) or "JSON non valido")
+        corpo, foto, errore = self._corpo_con_foto(n)
+        if errore:
+            return self._send(*errore)
         cod = str(corpo.get("codice") or "").strip().lower()
         # La pagina risponde anche lei alle domande della routine, dalla
         # finestra dei casi: come una nota (col solo codice), ma con la scelta,
@@ -2662,9 +2673,57 @@ class Handler(BaseHTTPRequestHandler):
                                    "fra poco")
         return self._send(200, json.dumps(esito))
 
+    def _corpo_con_foto(self, n):
+        """(corpo JSON, foto in byte, None) o (None, None, (codice, errore)).
+        `foto` nel corpo e' un data URL o una lista, al massimo coda.FOTO_N."""
+        if n <= 0:
+            return None, None, (400, "Corpo vuoto")
+        if n > self.VOCE_MAX:
+            return None, None, (413, "Troppo grande: al massimo %d foto da %d MB"
+                                % (coda.FOTO_N, coda.FOTO_MAX // (1024 * 1024)))
+        try:
+            corpo = json.loads(self.rfile.read(n).decode("utf-8"))
+            if not isinstance(corpo, dict):
+                raise ValueError("serve un oggetto JSON")
+            foto = coda.fotos_da_testo(corpo.get("foto"))
+        except (ValueError, UnicodeDecodeError) as e:
+            return None, None, (400, str(e) or "JSON non valido")
+        return corpo, foto, None
+
+    # Il modello corretto, approvato o no da chi ha caricato il PDF, dalla
+    # finestra dei casi (`coda.esito_modello`). Se no, col motivo e le foto.
+    def _approva(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        corpo, foto, errore = self._corpo_con_foto(n)
+        if errore:
+            return self._send(*errore)
+        cod = str(corpo.get("codice") or "").strip().lower()
+        if not isinstance(corpo.get("approvato"), bool):
+            return self._send(400, "approvato: true o false")
+        try:
+            esito = coda.esito_modello(cod, corpo["approvato"], corpo.get("motivo"), foto)
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        except coda.Troppe as e:
+            return self._send(429, str(e))
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except ValueError as e:
+            return self._send(400, str(e))
+        except OSError as e:
+            print("approvazione del caso %s non arrivata: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps(esito))
+
     def do_POST(self):
         if self.path.startswith("/api/nota") or self.path.startswith("/api/risposta"):
             return self._voce()
+        if self.path.startswith("/api/approva"):
+            return self._approva()
         if self.path.startswith("/api/caso"):
             return self._caso()
         if self.path.startswith("/api/avviso"):
