@@ -3762,6 +3762,79 @@ spinto in fuori fa un incavo, e il rovescio resta piano. Delle parti nascoste c'
 stesa sotto L1, e niente alette di colla del fondo e del retro. Il prodotto
 non c'e': dalle finestre si vede l'interno vuoto.
 
+## La scatola a punta
+
+Una scatola in un pezzo che in cima non ha cielo: fronte e retro salgono
+dritti, poi si inclinano uno verso l'altro e si toccano, come il tetto di una
+casetta. I fianchi rientrano a soffietto fra le due falde, e un'aletta oltre
+la cima scende sul retro e ci si incolla. Si dichiara **Cartotecnico in un
+pezzo**; il codice sta in `pack3d/punta.py`.
+
+Il primo caso e' arrivato dalla coda (852ecafec7) come costruzione ferma: il
+solutore astuccio la rifiutava, e faceva bene. Lungo la colonna del corpo le
+fasce erano 32 | 3,4 | 169,6 | 5,0 | 23,3 | 28,2 | 140 | 26 | 3 mm: niente
+cielo, e il retro spezzato in tre dall'area di colla dell'aletta. Non e'
+ne' un astuccio chiuso ne' uno aperto.
+
+### La firma in fustella
+
+Si prova **solo dopo** che l'astuccio ha rifiutato la fustella, e solo se il
+pack e' dichiarato cartotecnico: gli astucci non pagano la prova e non ne
+possono essere scambiati. Deve tornare tutto:
+
+- **il fronte** e' la fascia piu' alta con un fianco per parte, larghi uguali
+  (entro 1,5 mm o l'8%) e di almeno 10 mm;
+- **la piega del soffietto**: una cordonatura orizzontale, una sola, che
+  attraversa tutti e due i fianchi (60% della larghezza) e non il corpo
+  (meno del 30%), nella fascia del fronte lontano dai capi. Sul primo caso e'
+  tratteggiata a 102 mm dal piede, e i tratti corti non entrano nella
+  griglia `d.ys`: si legge dalle cordonature stesse. **La cima e' il capo del
+  fronte piu' vicino alla piega**: cosi' la scatola si legge anche col foglio
+  capovolto;
+- **oltre la cima** al massimo due fasce: la cresta (fino a 6 mm, una doppia
+  cordonatura: 3,4 sul primo caso) e l'aletta (almeno 8 mm), poi il foglio
+  finisce;
+- **oltre il piede** il fondo e poi il retro, alto come il fronte (entro
+  3 mm o il 3%) fino alla fine del foglio: le cordonature dell'area di colla
+  dentro il retro non contano. Il fondo e' lungo fra 0,8 e 1,5 volte la
+  profondita';
+- **la falda** - la parte del fronte sopra la piega - deve poter chiudere mezza
+  profondita' meno la cresta, e l'aletta starci sopra;
+- **il soffietto**: sopra la piega, su ognuno dei due fianchi, almeno tanti
+  mm di cordonature oblique quanto e' lunga la falda. Sul primo caso 95 mm per
+  fianco contro 67,6 di falda: le due gambe della V. E' questo che distingue
+  una scatola a punta da una scatola con una piega qualunque sui fianchi.
+
+### Il solido
+
+Dritta per l'altezza dal piede alla piega (102 mm); sopra, le falde
+(67,6 mm) chiudono `(D - cresta) / 2` di profondita' ciascuna e salgono di
+`sqrt(falda^2 - ((D - cresta)/2)^2)`, 63,1 mm sul primo caso: 131,5 x 166,2 x
+45,3 mm. In cima la cresta fa da colmo; l'aletta scende sul retro, uno
+spessore fuori, per la sua lunghezza. I fianchi sono dritti fino alla piega e
+sopra, visti da fuori, un trapezio dalla base alla cresta, con la grafica
+presa dal fianco fra gli angoli della piega e il centro della cima.
+
+**L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
+dritta in su, come la cresta di un cartone del latte, o piegata su una
+faccia: e' stata la prima domanda fatta in Glam, e chi aveva il pack in mano
+ha risposto "piegata giu', appoggiata sul retro", con la foto. Lo conferma la
+fustella, con l'area di colla in cima al retro lunga quanto l'aletta.
+
+**Il fondo e' piatto.** La sua fascia e' un soffietto - 56,5 mm stesi per
+45,3 di profondita', con una cordonatura in mezzo - e montato si appiattisce;
+sul modello la sua grafica e' portata alla profondita' della scatola.
+
+La texture e' il DT intero, come per il ballotin (`ballotin.con_interno`):
+ogni pezzo della maglia prende la grafica dal suo posto sul foglio, e il retro
+stampato capovolto esce dritto da se'.
+
+### Cosa manca
+
+Il soffietto dei fianchi e' un trapezio piano: le pieghe a V che rientrano
+non sono modellate, e nemmeno le alette di colla del retro e del fondo, che
+stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due
