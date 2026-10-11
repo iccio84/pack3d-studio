@@ -121,15 +121,15 @@ fra i commenti.
 
 - Sul tasto "Costruisci modello 3D da PDF", un **numero** quando un suo caso
   aspetta una risposta.
-- Nella sezione, l'elenco **I tuoi casi in correzione**: per ognuno il nome,
-  lo stato a parole sue, quando è cambiato, e il messaggio:
-  - `in-coda`: «In coda: di solito arriva entro un'ora»;
-  - `in-lavorazione`: «In lavorazione»;
-  - `domanda`: la domanda, le risposte fra cui scegliere, un campo per
-    scrivere a parole sue, «Aggiungi una foto», «Invia la risposta»;
-  - `risolto`: «Risolto: il modello è in Casi risolti col nome …», e il tasto
-    per aprirlo;
-  - `non-risolto`: il messaggio, che dice chi lo riprende.
+- **L'elenco dei casi sta in un posto solo: la finestra «Casi» della pagina
+  dello Space**, dentro la sezione. Per ognuno il nome, lo stato a parole
+  sue, quando è cambiato, il messaggio e, se c'è una domanda, il modulo per
+  rispondere. Glam **non** disegna un suo elenco «I tuoi casi in correzione»
+  sotto il visore: c'era, e i casi comparivano due volte. Vedi *Il testo per
+  Lovable: un elenco solo*.
+- Glam tiene la tabella dei casi (serve alle notifiche, al numero sul tasto
+  e al modello corretto che arriva all'utente giusto) e le **notifiche** della
+  busta (punto 6), con il modulo di risposta che si apre da una domanda.
 - Un avviso, all'apertura di Glam, se un suo caso è cambiato dall'ultima
   volta che l'ha guardato: una domanda nuova, o il modello arrivato.
 
@@ -194,7 +194,21 @@ Aggiungi le notifiche dei casi in correzione, con una busta nella barra verde in
 
 5. Premendo una notifica di tipo domanda si apre, in un dialog, il modulo di risposta di quel caso: la domanda, le opzioni come scelte (una sola), "Scrivi a parole tue", "Aggiungi una foto", "Invia la risposta" (lo stesso modulo e la stessa funzione del server che manda allo Space /api/risposta). Dopo un invio riuscito chiudi il dialog, crea la notifica 'risposta-inviata' ("Risposta inviata: il caso è ripartito") e togli l'evidenza alla domanda. Se lo Space risponde con un errore, mostralo nel dialog e lascia il modulo com'era.
 
-6. Premendo una notifica 'risolto' apri il modello nella sezione "Costruisci modello 3D da PDF", cartella "Casi risolti". Le altre notifiche aprono l'elenco "I tuoi casi in correzione".
+6. Premendo una notifica 'risolto' apri il modello nella sezione "Costruisci modello 3D da PDF", cartella "Casi risolti". Le altre notifiche aprono la sezione "Costruisci modello 3D da PDF", dove la pagina dello Space ha la finestra dei casi.
 
 7. Titoli e testi delle notifiche si mostrano sempre come testo, mai come HTML.
+```
+
+### Il testo per Lovable: un elenco solo
+
+Da incollare dopo i due testi qui sopra. I casi comparivano due volte: nella
+finestra «Casi» della pagina dello Space, dentro l'iframe, e nell'elenco che
+Glam disegnava sotto il visore. Resta la finestra; l'elenco di Glam se ne va.
+
+```text
+Nella sezione "Costruisci modello 3D da PDF" togli l'elenco "I tuoi casi in correzione" che sta sotto il visore (l'iframe della pagina dello Space): i casi in correzione li mostra già la pagina dello Space, nella sua finestra "Casi", e comparivano due volte. Togli solo l'elenco e il suo contenitore, senza lasciare spazio vuoto sotto il visore.
+
+Resta tutto il resto: la tabella pack3d_cases, l'ascolto dei messaggi "pack3d:caso" dall'iframe, gli endpoint /api/pack3d-case e /api/import-model, il parametro casi=1 nell'indirizzo dell'iframe, il badge sul tasto "Costruisci modello 3D da PDF", il toast all'apertura, la busta delle notifiche e il modulo di risposta che si apre premendo una notifica di tipo domanda.
+
+Le notifiche che prima aprivano l'elenco "I tuoi casi in correzione" (tutte tranne 'risolto' e 'domanda') ora aprono la sezione "Costruisci modello 3D da PDF". Il seen_at dei casi si aggiorna quando l'utente apre quella sezione, invece che quando apriva l'elenco.
 ```

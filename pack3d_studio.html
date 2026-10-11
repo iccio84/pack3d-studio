@@ -1229,10 +1229,12 @@ const GLAM_CARTELLA = 'Casi risolti';
 // dipende da quando arriva la risposta.
 const STIMA = 'Di solito arriva entro un\u2019ora.';
 
-// Glam Lab dice di saper mostrare i casi in correzione - lo stato, e le
-// domande della routine a chi ha caricato il PDF - mettendo casi=1
-// nell'indirizzo di questa pagina. Senza, le domande in Glam non si
-// promettono: non le vedrebbe nessuno.
+// Glam Lab dice di saper avvisare dei casi in correzione - le notifiche
+// della busta, con le domande della routine a chi ha caricato il PDF -
+// mettendo casi=1 nell'indirizzo di questa pagina. Senza, in Glam non si
+// promette niente: non lo vedrebbe nessuno. L'elenco dei casi sta in un
+// posto solo, la finestra dei casi di questa pagina: Glam non ne disegna
+// un altro sotto il visore (vedi GLAM.md).
 const GLAM_CASI = new URLSearchParams(location.search).get('casi') === '1';
 
 /** Dice a Glam Lab, che ospita la pagina, che un caso e' entrato in coda: Glam
@@ -1276,7 +1278,7 @@ function mostraCaso(v, blob){
   document.getElementById('caso-quando').textContent = v.in_coda
     ? STIMA + ' Se ci serve un\u2019informazione su com\u2019\u00e8 fatto o come si monta il'
       + ' pack, te la chiediamo nella finestra dei casi'
-      + (GLAM_CASI ? ' e in Glam Lab, fra i tuoi casi in correzione.' : '.')
+      + (GLAM_CASI ? ', e te lo diciamo con una notifica in Glam Lab.' : '.')
     : '';
   // un caso che aspetta Invia o Annulla non e' ancora di nessuno: il codice
   // si dice, ma non si promette niente
