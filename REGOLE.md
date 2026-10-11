@@ -2130,6 +2130,19 @@ Quello che una correzione rompe su un caso gia' risolto lo trova il parco del
 rilascio, prima che arrivi sul sito: chi aveva quel caso ha gia' il suo
 modello.
 
+**Il giro di un caso, corto.** Anche senza le verifiche, un caso costava
+per i passi e per quello che ogni passo si porta dietro. Un giro parte gia'
+con circa cinquantamila token di istruzioni, e un caso arrivava a
+duecentomila: REGOLE.md da solo ne vale centomila, `server.py` cinquanta, la
+pagina quaranta, e ogni immagine guardata resta fino alla fine. Per questo:
+tre comandi (`prove/parco.py prepara`, `consegna`, `approvato`) fanno i passi
+meccanici in uno e stampano poche righe; `prepara` fa un foglio solo da
+guardare (il PDF, il modello di adesso e quello respinto); MAPPA.md dice dove
+sta cosa, e i file lunghi si leggono a pezzi; la ricerca della causa la fa
+un sotto-agente, che restituisce solo file e righe. E dopo l'approvazione la
+routine non parte piu': il modello in Glam lo manda lo Space, col token
+d'import (`coda._in_glam`), e se non ci riesce rilancia la routine.
+
 Quando un caso entra in coda, lo Space avvia **subito** la routine col suo
 trigger API (`coda.avvia_routine`, vedi DEPLOY.md), e il lavoro comincia
 entro un minuto: solo per un caso nuovo, mai per lo stesso PDF ricaricato, e
