@@ -122,9 +122,12 @@ viste e la diagnosi, piu' una issue. Se il repository non e' privato non si
 carica niente, e il log lo dice.
 
 La coda la lavora una **routine di Claude Code** (claude.ai/code, Routines):
-una sessione nuova che segue CODA.md, prova ogni correzione sul
-parco del repository privato (`parco/`) e, se tutto torna, unisce da sola la
-PR - quindi pubblica sullo Space. Poi prova il caso sullo Space vero
+una sessione nuova che segue CODA.md. Ogni correzione la unisce da sola nel
+ramo `coda-settimana`, che lo Space non vede, e il modello va da approvare a
+chi ha caricato il PDF e poi in Glam. Una volta a settimana, nel giro
+programmato, la stessa routine fa il **rilascio**: prova tutte le correzioni
+sul parco del repository privato (`parco/`), le unisce in `main` - quindi
+pubblica sullo Space - e prova i casi della settimana sullo Space vero
 (`prove/parco.py spazio`), aspettando che `/api/ping` dica l'impronta del
 codice appena unito. Per questo nella rete dell'ambiente cloud e' consentito
 il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`

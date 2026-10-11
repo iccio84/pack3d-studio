@@ -32,7 +32,9 @@ coda sono accesi, e un caso "sbagliato" va in coda come quelli degli utenti.
 
 `glam` manda a Glam Lab, il viewer dove si guardano i pack, il modello che
 `spazio` ha appena costruito sullo Space - solo se il controllo ha detto "ok",
-e proprio quel GLB, non una costruzione nuova. Glam lo mette nella sezione
+e proprio quel GLB, non una costruzione nuova. Per un caso della coda manda
+il modello che chi l'ha caricato ha approvato (`modello.glb` nella cartella
+del caso), e solo dopo l'approvazione. Glam lo mette nella sezione
 "Costruisci modello 3D da PDF", cartella "Casi risolti", col nome del PDF:
 quello che Glam da' a un modello costruito da li', e quello che la pagina
 annuncia a chi ha caricato il caso respinto. Il token non sta qui: lo
@@ -44,14 +46,23 @@ Glam (X-Pack3d-Codice), che mette il modello a chi ha caricato quel caso.
 
 `caso` dice a Glam Lab a che punto e' un caso della coda, per chi l'ha
 caricato: in lavorazione, una domanda (con le risposte fra cui scegliere),
-risolto, non risolto. Il caso e' quello di CASI/casi/<data>_<CODICE>, e il
-nome quello che la pagina gli ha annunciato. La risposta a una domanda torna
+da approvare, risolto, non risolto. Con `--stato da-approvare --modello NOME`
+mette nella cartella del caso il modello da approvare: quello che
+`costruisci --solo NOME` ha costruito col codice della settimana (il giro di
+un caso, CODA.md), o quello provato sullo Space con `spazio`. Il caso e'
+quello di CASI/casi/<data>_<CODICE>, e il nome quello che la pagina gli ha
+annunciato. La risposta a una domanda torna
 dallo Space, sulla issue del caso (`coda.aggiungi`).
 
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
 
-Il flusso per ogni correzione - vedi CODA.md:
+Il giro di un caso costruisce solo quel caso, col codice della settimana:
+
+    python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>
+
+Il parco intero, prima e dopo, lo fa il rilascio della settimana (vedi
+CODA.md), da un clone del ramo `coda-settimana`:
 
     git -C . worktree add /tmp/prima origin/main
     python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_prima --codice /tmp/prima
@@ -161,10 +172,11 @@ def _costruisci_caso(url, cartella, caso):
 
 
 def costruisci(args):
-    from pack3d import vista
+    from pack3d import versione, vista
     casi = _casi(args.casi, args.solo)
     os.makedirs(args.uscita, exist_ok=True)
     codice = os.path.abspath(args.codice or QUI)
+    impronta = versione.impronta(codice)
     with open(os.path.join(args.uscita, "server.log"), "w") as log:
         p, url = _avvia(codice, log)
         try:
@@ -174,7 +186,7 @@ def costruisci(args):
                 stato, glb, avvisi, sec, _ = _costruisci_caso(url, args.casi, caso)
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
                              file=caso["file"], opzioni=caso.get("opzioni"),
-                             avvisi=avvisi, md5=None)
+                             avvisi=avvisi, md5=None, versione=impronta)
                 if glb is not None:
                     with open(os.path.join(args.uscita, nome + ".glb"), "wb") as fh:
                         fh.write(glb)
@@ -389,16 +401,40 @@ def nome_glam(caso):
     return base[:120] or "Pack"
 
 
+def _approvato(cartella):
+    """Chi ha caricato il caso ha approvato il modello da approvare piu'
+    recente: in `stato.json` c'e' "approvato" dopo l'ultimo "da-approvare"
+    (lo scrive lo Space, dalla finestra dei casi)."""
+    try:
+        with open(os.path.join(cartella, "stato.json"), encoding="utf-8") as fh:
+            storia = json.load(fh).get("storia") or []
+    except (OSError, ValueError, AttributeError):
+        return False
+    stati = [v.get("stato") for v in storia if isinstance(v, dict)]
+    if "da-approvare" not in stati:
+        return False
+    ultimo = len(stati) - 1 - stati[::-1].index("da-approvare")
+    return "approvato" in stati[ultimo + 1:]
+
+
 def glam(args):
-    """Il modello che lo Space ha appena approvato, nel viewer Glam Lab."""
+    """Il modello approvato, nel viewer Glam Lab: da chi ha caricato il caso
+    della coda, o dallo Space (`spazio`) per un caso del parco senza codice."""
     caso = _casi(args.casi, [args.nome])[0]
     base = os.path.join(args.uscita, args.nome + "_spazio")
+    dal_registro = False
     if not os.path.exists(base + ".json") and caso.get("codice"):
         # un caso approvato da chi l'ha caricato: il modello sta nel registro,
         # dove l'ha messo `caso --stato da-approvare` (forse un'altra sessione)
         cartella, _v = _caso_in_coda(args.casi, caso["codice"])
         if os.path.exists(os.path.join(cartella, "modello.json")):
             base = os.path.join(cartella, "modello")
+            dal_registro = True
+            if not _approvato(cartella):
+                raise SystemExit("chi ha caricato il caso %s non ha ancora approvato il "
+                                 "modello: in Glam va solo dopo l'approvazione (se e' "
+                                 "appena arrivata, aggiorna il clone del registro)"
+                                 % caso["codice"])
     try:
         with open(base + ".json", encoding="utf-8") as fh:
             esito = json.load(fh)
@@ -408,7 +444,11 @@ def glam(args):
         raise SystemExit("manca la prova sullo Space di %s in %s: prima `spazio`"
                          % (args.nome, args.uscita))
     verdetto = (esito.get("controllo") or {}).get("esito")
-    if verdetto != "ok":
+    # il modello costruito col codice della settimana non e' passato dal
+    # controllo dello Space: lo riprova il rilascio. Basta l'approvazione;
+    # ma un verdetto che non e' "ok", se c'e', ferma tutto
+    if not (verdetto == "ok" or (dal_registro and esito.get("provato") == "locale"
+                                 and verdetto is None)):
         raise SystemExit("lo Space non ha approvato %s (%s): in Glam va solo un "
                          "modello approvato" % (args.nome, verdetto or "nessun controllo"))
     if hashlib.md5(glb).hexdigest() != esito.get("md5"):
@@ -488,29 +528,43 @@ def _git(casi, *a):
 
 
 def _modello_da_approvare(args, cartella):
-    """Copia nella cartella del caso il modello che lo Space ha appena
-    approvato (`spazio`): `modello.glb` e `modello.json`, col verdetto e
-    l'impronta. Lo legge da li' la pagina, per farlo approvare, e `glam`,
-    quando arriva l'approvazione. Torna i percorsi da registrare."""
-    base = os.path.join(args.uscita, args.modello + "_spazio")
+    """Copia nella cartella del caso il modello da approvare: `modello.glb` e
+    `modello.json`, con l'impronta del codice e il verdetto dello Space, se
+    c'e'. Lo legge da li' la pagina, per farlo approvare, e `glam`, quando
+    arriva l'approvazione. Torna i percorsi da registrare.
+
+    Il modello e' quello che `costruisci --solo` ha costruito in USCITA col
+    codice della settimana (il giro di un caso: lo Space lo riprova al
+    rilascio), o quello provato sullo Space con `spazio`, se c'e'."""
+    spazio_ = os.path.join(args.uscita, args.modello + "_spazio")
+    locale = os.path.join(args.uscita, args.modello)
+    base = spazio_ if os.path.exists(spazio_ + ".json") else locale
     try:
         with open(base + ".json", encoding="utf-8") as fh:
             esito = json.load(fh)
         with open(base + ".glb", "rb") as fh:
             glb = fh.read()
     except (OSError, ValueError):
-        raise SystemExit("manca la prova sullo Space di %s in %s: prima `spazio`"
-                         % (args.modello, args.uscita))
-    if (esito.get("controllo") or {}).get("esito") != "ok":
-        raise SystemExit("lo Space non ha approvato %s: da approvare va solo un "
-                         "modello che lo Space dice ok" % args.modello)
+        raise SystemExit("manca il modello di %s in %s: prima `costruisci "
+                         "--solo %s` (o `spazio`)" % (args.modello, args.uscita,
+                                                      args.modello))
+    if base == spazio_:
+        if (esito.get("controllo") or {}).get("esito") != "ok":
+            raise SystemExit("lo Space non ha approvato %s: da approvare va solo un "
+                             "modello che lo Space dice ok" % args.modello)
+        provato = "spazio"
+    else:
+        if esito.get("stato") != 200 or not esito.get("versione"):
+            raise SystemExit("%s non si e' costruito (%s): da approvare va un modello"
+                             % (args.modello, esito.get("stato")))
+        provato = "locale"
     if hashlib.md5(glb).hexdigest() != esito.get("md5"):
-        raise SystemExit("%s.glb non e' il modello provato sullo Space" % base)
+        raise SystemExit("%s.glb non e' il modello costruito" % base)
     with open(os.path.join(cartella, "modello.glb"), "wb") as fh:
         fh.write(glb)
     with open(os.path.join(cartella, "modello.json"), "w", encoding="utf-8") as fh:
-        json.dump({k: esito.get(k) for k in ("nome", "versione", "md5", "controllo")},
-                  fh, ensure_ascii=False, indent=1)
+        json.dump(dict({k: esito.get(k) for k in ("nome", "versione", "md5", "controllo")},
+                       provato=provato), fh, ensure_ascii=False, indent=1)
     return [os.path.join(cartella, "modello.glb"), os.path.join(cartella, "modello.json")]
 
 
@@ -598,7 +652,7 @@ def caso(args):
     if args.stato == "da-approvare":
         if not args.modello:
             raise SystemExit("con --stato da-approvare ci vuole --modello: il caso "
-                             "del parco provato con `spazio`")
+                             "del parco costruito con `costruisci --solo`")
         altri = _modello_da_approvare(args, cartella)
     elif args.modello:
         raise SystemExit("--modello va con --stato da-approvare")
@@ -710,10 +764,11 @@ def main():
     q.add_argument("--opzione", action="append",
                    help="una risposta fra cui scegliere (ripetibile, al massimo 4)")
     q.add_argument("--modello", help="con --stato da-approvare: il caso del "
-                                     "parco provato con `spazio`, il cui modello "
-                                     "va a chi l'ha caricato da approvare")
+                                     "parco costruito con `costruisci --solo` (o "
+                                     "provato con `spazio`), il cui modello va a "
+                                     "chi l'ha caricato da approvare")
     q.add_argument("--uscita", default="/tmp/parco_spazio",
-                   help="la cartella dove `spazio` ha salvato GLB e verdetto")
+                   help="la cartella dove `costruisci` (o `spazio`) ha salvato il GLB")
     q.add_argument("--spazio", default=SPAZIO,
                    help="lo Space che manda l'email della domanda (di serie %s)" % SPAZIO)
     q.set_defaults(fai=caso)
