@@ -3850,12 +3850,27 @@ spessore fuori, per la sua lunghezza. I fianchi sono dritti fino alla piega.
 trapezio dalla base alla cresta, e chi aveva il pack in mano l'ha detto
 subito: "il laterale deve rientrare", con la foto. Il triangolo fra le due
 gambe della V - la base sulla piega, la punta in cima al fianco - si spinge
-dentro fino alla cresta, e i due spicchi fra la V e i bordi del fianco si
-piegano sotto le falde, contro il rovescio di fronte e retro. La punta entra
-di `(D - cresta) / 2`, 20,9 mm sul primo caso: e' l'unico valore per cui le
-gambe della V restano lunghe come sul foglio (`sqrt(falda^2 + (D/2)^2)`, 71,3
-mm). Da fuori si vede la gola: il triangolo che sale verso l'interno, coi
-bordi delle falde attorno.
+dentro fino alla cresta, di `(D - cresta) / 2` (20,9 mm sul primo caso), e i
+due spicchi fra la V e i bordi del fianco si piegano verso di lui.
+
+**E fronte e retro non si piegano dove si piega il fianco.** La seconda
+versione inclinava fronte e retro proprio sulla piega del fianco, a 102 mm:
+il soffietto rientrava, ma la gola restava un triangolo quasi a filo, e
+"deve rientrare meglio". Sulla foto il fronte resta dritto ben sopra la piega
+del fianco - si piega appena sopra il marchio - e la tasca ha due pareti
+alte: gli spicchi del fianco attaccati al fronte e al retro, che fra la piega
+e il punto in cui fronte e retro si inclinano si chiudono verso la punta; piu'
+su si appoggiano sotto le falde. Il DT lo permette: le gambe della V sono
+cordonature solo dalla punta a 13 mm dalla piega, poi tagli a 45 gradi fino
+agli angoli, e i tagli staccano gli spicchi dal triangolo proprio dove fanno
+la parete.
+
+Dove si inclinano il DT non lo segna: con pezzi rigidi il fronte dovrebbe
+piegarsi sulla piega del fianco, ed e' il cartoncino che si flette. La
+proporzione e' quindi **una stima tarata sulla foto del primo caso**:
+`punta.RISVOLTO` = 0,43 della falda, 29 mm su 67,6. La scatola esce alta 163,4
+mm invece di 166,2. Il cartellino lo dice. Al prossimo pack della famiglia si
+verifica con la sua foto.
 
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
@@ -3873,9 +3888,9 @@ stampato capovolto esce dritto da se'.
 
 ### Cosa manca
 
-Il soffietto prende le gambe della V dagli angoli della piega alla cima del
-fianco: sul foglio, negli ultimi 8 mm sopra la piega, piegano verso gli
-angoli, e il modello le tiene dritte. Non sono modellate le alette di colla
+Il soffietto e' fatto di facce piane: il cartoncino vero si incurva dove
+fronte e retro si inclinano, e gli spicchi si piegano lungo una linea che il
+DT non disegna. Non sono modellate le alette di colla
 del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
 ## Flowpack
@@ -5008,6 +5023,11 @@ Astucci, con la quota letta due volte che chiude il conto:
 
 ## Assunzioni non verificate
 
+- La **scatola a punta** e' costruita su un file solo. Viene dalla foto di
+  quel pack la proporzione per cui fronte e retro restano dritti sopra la
+  piega dei fianchi, prima di inclinarsi: `punta.RISVOLTO`, 0,43 della falda.
+  Il DT non la segna. Il prossimo pack della famiglia va guardato insieme
+  alla sua foto.
 - Il **controllo dell'AI** e la scelta del **rigonfiamento** sono stati
   provati con un'API finta, che risponde come quella vera, e guardando a mano
   le immagini che ricevono: il cono letto come astuccio, messo accanto al suo
