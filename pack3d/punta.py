@@ -271,12 +271,12 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     V, UV, T = [], [], []
 
     def quad(P3, S2, fuori, interno=True):
-        """Un pezzo piano: quattro angoli 3D e i loro punti sul foglio."""
+        """Un pezzo piano: tre o quattro angoli 3D e i loro punti sul foglio."""
         P3 = np.asarray(P3, float)
         n = np.cross(P3[1] - P3[0], P3[2] - P3[0])
-        tri = [(0, 1, 2), (0, 2, 3)]
+        tri = [(0, 1, 2), (0, 2, 3)][:len(P3) - 2]
         if float(n @ np.asarray(fuori, float)) < 0:
-            tri = [(0, 2, 1), (0, 3, 2)]
+            tri = [(i, k, j) for i, j, k in tri]
             n = -n
         n = n / (np.linalg.norm(n) or 1.0)
         b = len(V)
@@ -286,7 +286,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         if interno:
             b = len(V)
             V.extend((P3 - n * sp).tolist())
-            UV.extend([tuple(uv_interno)] * 4)
+            UV.extend([tuple(uv_interno)] * len(P3))
             T.extend([(b + i, b + k, b + j) for i, j, k in tri])
 
     hw = W / 2.0
@@ -324,17 +324,36 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     quad([(-hw, H, t / 2), (hw, H, t / 2), (hw, a0[1], a0[2]), (-hw, a0[1], a0[2])],
          [(x_corpo(-hw), p.yF0), (x_corpo(hw), p.yF0),
           (x_corpo(hw), p.yR), (x_corpo(-hw), p.yR)], (0, 1, 0))
-    # i fianchi: dritti fino alla piega, poi il soffietto, che da fuori si
-    # vede come un trapezio dalla base alla cresta
+    # i fianchi: dritti fino alla piega, poi il soffietto. Sopra la piega il
+    # fianco RIENTRA: il triangolo fra le due gambe della V - la base sulla
+    # piega, la punta in cima al fianco - si spinge dentro fino alla cresta,
+    # e i due spicchi fra la V e i bordi del fianco si piegano sotto le
+    # falde, contro il rovescio di fronte e retro. Da fuori si vede la gola:
+    # il triangolo che sale verso l'interno, coi bordi delle falde attorno.
+    # La punta entra di `(D - cresta) / 2`: e' quello che serve perche' le
+    # gambe della V restino lunghe come sul foglio.
     yS = p.yF0      # la cima del fianco sta alla cima del fronte
-    for destro, X, fuori in ((False, -hw, (-1, 0, 0)), (True, hw, (1, 0, 0))):
+    d = c           # di quanto rientra la punta
+    nf = np.array([0.0, c, v]) / s               # normale uscente del fronte
+    for destro, X, verso in ((False, -hw, -1.0), (True, hw, 1.0)):
+        fuori = (verso, 0, 0)
         quad([(X, 0, D / 2), (X, 0, -D / 2), (X, h1, -D / 2), (X, h1, D / 2)],
              [(x_fianco(D / 2, destro), p.yF1), (x_fianco(-D / 2, destro), p.yF1),
               (x_fianco(-D / 2, destro), p.yG), (x_fianco(D / 2, destro), p.yG)],
              fuori)
-        quad([(X, h1, D / 2), (X, h1, -D / 2), (X, H, -t / 2), (X, H, t / 2)],
+        Bf, Bb = np.array([X, h1, D / 2]), np.array([X, h1, -D / 2])
+        Tf, Tb = np.array([X, H, t / 2]), np.array([X, H, -t / 2])
+        A = np.array([X - verso * d, H, 0.0])
+        # la gola: guarda fuori e in su
+        quad([Bf, Bb, A],
              [(x_fianco(D / 2, destro), p.yG), (x_fianco(-D / 2, destro), p.yG),
-              (x_fianco(-t / 2, destro), yS), (x_fianco(t / 2, destro), yS)],
-             fuori)
+              (x_fianco(0.0, destro), yS)], (verso, 1.0, 0))
+        # gli spicchi, uno spessore e mezzo sotto le falde, stampa verso la gola
+        for B, Tc, n_falda, z in ((Bf, Tf, nf, D / 2),
+                                  (Bb, Tb, nf * [1, 1, -1], -D / 2)):
+            giu = 1.5 * sp * n_falda
+            quad([B - giu, Tc - giu, A - giu],
+                 [(x_fianco(z, destro), p.yG), (x_fianco(z, destro), yS),
+                  (x_fianco(0.0, destro), yS)], -n_falda, interno=False)
     return (np.asarray(V, np.float32), np.asarray(UV, np.float32),
             np.asarray(T, np.int64))
