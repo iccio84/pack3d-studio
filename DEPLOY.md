@@ -134,7 +134,7 @@ anteprima e la sua intestazione beta puo' cambiare: la nuova si mette in
 `PACK3D_ROUTINE_BETA`, senza toccare il codice.
 
 Un caso che lo Space approva finisce anche in **Glam Lab**
-(`glam-lab-view.lovable.app`), il viewer dove si guardano i pack:
+(`iccio-3d-viewer.lovable.app`), il viewer dove si guardano i pack:
 `prove/parco.py glam` manda il GLB appena provato al punto d'ingresso
 `POST /api/import-model` di Glam, che lo mette nella sezione "Costruisci
 modello 3D da PDF", cartella "Casi risolti", col nome del PDF, al posto del
@@ -148,7 +148,7 @@ percorso, e il punto d'ingresso li salva allo stesso modo. Per collegarli:
    `PACK3D_IMPORT_OWNER_EMAIL`, l'email dell'account del **sito** Glam a cui
    vanno i modelli. Poi **Publish** -> **Update**.
 2. Nell'ambiente cloud della routine, sezione **API credentials**: una
-   credenziale con Allowed websites `glam-lab-view.lovable.app`, header
+   credenziale con Allowed websites `iccio-3d-viewer.lovable.app`, header
    `Authorization`, prefisso `Bearer` e come valore lo stesso token, senza
    "Bearer" davanti. Il proxy dell'ambiente la aggiunge alle richieste per
    quel sito: il token non sta ne' nel codice ne' nella sessione, e il

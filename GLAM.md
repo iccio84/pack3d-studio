@@ -1,6 +1,6 @@
 # Glam Lab e i casi in correzione
 
-Chi carica un PDF lo fa da **Glam Lab** (`glam-lab-view.lovable.app`), che
+Chi carica un PDF lo fa da **Glam Lab** (`iccio-3d-viewer.lovable.app`), che
 ospita la pagina dello Space nella sezione "Costruisci modello 3D da PDF".
 Quando il modello non si costruisce, o il controllo dell'AI lo respinge, il
 caso va in coda e lo corregge una routine di Claude Code (CODA.md). Chi ha
