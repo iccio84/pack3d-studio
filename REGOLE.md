@@ -141,6 +141,28 @@ cambia e' che non dipende piu' dal colore. Sulla vernice del Nutella Donut,
 che la grafica non ce l'ha, prende il DT e non la miniatura colorata, che e'
 un quindicesimo dell'area.
 
+**Sugli astucci il DT e' il gruppo che porta la grafica.** La fustella degli
+astucci, dei vassoi e dei display la sceglie `dieline.extract` fra i gruppi di
+tratti tecnici collegati, e la sceglieva per **lunghezza totale**: il gruppo
+con piu' tratto. Una miniatura **tratteggiata fitta** ne ha piu' del DT vero.
+Su uno scrigno da 24 praline (T24) la miniatura nel cartiglio - campita a
+righe, con la cornice della tabella attorno - fa 2201 tratti e 31207 pt, il DT grande 195
+tratti e 15186 pt: vinceva lei, e il modello usciva una scatolina di **47 x 35
+x 23 mm** col tratteggio e la quota "38.5" sulle facce, mentre il pack e'
+largo 237. Adesso (`dieline._gruppo_principale`), fra i gruppi lunghi almeno
+un quarto del piu' lungo (`CANDIDATO_DT`), si guarda quanto del riquadro di
+ognuno e' dipinto sul **livello della grafica** - quello col DT spento, vedi
+*Togliere il disegno tecnico*: se il piu' lungo non ne porta (meno del 5%,
+`COPERTURA_DT`) e un altro si', vince il piu' lungo fra quelli che la portano.
+Sul T24 la miniatura copre l'1%, il DT l'82% (gli angoli del riquadro, fuori
+dalle alette, sono bianchi). La regola cambia la scelta solo quando il gruppo
+piu' lungo e' vuoto di grafica: una miniatura o una copia tecnica non sono
+mai il pack. Sul parco gli altri 32 casi restano identici al byte. Il T24 pero'
+non e' ancora giusto: e' uno scrigno - base 237 x 168 alta 36 con le pareti
+doppie e coperchio a libro sul dorso da 37 - e col DT giusto il solutore lo
+chiude come un astuccio di 236 x 168 x 168. Quella famiglia il codice non la
+conosce ancora.
+
 **La miniatura come riferimento.** "Forma e proporzioni dalla miniatura, scala
 dal disegno grande" (vedi *Cercare sempre il disegno tecnico in miniatura*).
 Quando le quote sono in curve e il codice non le legge - sul Kinder Cards anche

@@ -274,13 +274,82 @@ def _gruppi(segs, gap=25.0):
     return list(groups.values())
 
 
-def _largest_cluster(segs, gap=25.0):
+# Il DT e' il disegno su cui sta la grafica. Fra i gruppi di tratti abbastanza
+# lunghi da essere una fustella - almeno questa frazione del piu' lungo - se il
+# piu' lungo non porta grafica stampata e un altro si', vince quello. Misurato
+# su uno scrigno T24: la miniatura del cartiglio e' tratteggiata fitta, e
+# i suoi 2201 tratti fanno 31207 pt contro i 15186 del DT vero; la costruzione
+# usciva una scatolina di 47 x 35 x 23 mm col tratteggio sulle facce. Sul
+# livello della grafica la miniatura copre lo 0% del suo riquadro, il DT vero
+# quasi tutto.
+CANDIDATO_DT = 0.25
+# sotto questa copertura (frazione del riquadro dipinta sul livello della
+# grafica) un gruppo non porta grafica
+COPERTURA_DT = 0.05
+
+
+def _lunghezza(g):
+    return sum(x[0][3] - x[0][2] for x in g)
+
+
+def _riquadro_gruppo(g):
+    return (min(b[0] for _, b in g), min(b[1] for _, b in g),
+            max(b[2] for _, b in g), max(b[3] for _, b in g))
+
+
+def _coperture(pdf, page_no, riquadri, scala=0.25):
+    """Quanto di ogni riquadro e' dipinto sul livello della grafica, 0..1."""
+    import numpy as np
+    from . import strati
+    conti = dict(strati.CONTI)
+    try:
+        im = strati.rendi(pdf, page_no, scala, strati.GRAFICA)
+    finally:
+        strati.CONTI.clear()
+        strati.CONTI.update(conti)
+    a = np.asarray(im.convert("L"))
+    out = []
+    for x0, y0, x1, y1 in riquadri:
+        c = a[int(y0 * scala):int(np.ceil(y1 * scala)),
+              int(x0 * scala):int(np.ceil(x1 * scala))]
+        out.append(float((c < 235).mean()) if c.size else 0.0)
+    return out
+
+
+def _gruppo_principale(groups, pdf=None, page_no=0):
+    """Il gruppo che e' la fustella: il piu' lungo, se porta la grafica.
+
+    Senza `pdf` - o con un candidato solo - resta la regola di sempre, il piu'
+    lungo. Vedi CANDIDATO_DT."""
+    main = max(groups, key=_lunghezza)
+    if pdf is None:
+        return main
+    top = _lunghezza(main)
+    cand = sorted((g for g in groups if _lunghezza(g) >= CANDIDATO_DT * top),
+                  key=_lunghezza, reverse=True)
+    if len(cand) < 2:
+        return main
+    try:
+        cop = _coperture(pdf, page_no, [_riquadro_gruppo(g) for g in cand])
+    except Exception:
+        return main
+    if cop[0] >= COPERTURA_DT:
+        return main
+    for g, c in zip(cand[1:], cop[1:]):
+        if c >= COPERTURA_DT:
+            return g
+    return main
+
+
+def _largest_cluster(segs, gap=25.0, pdf=None, page_no=0):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
-    cartigli, legende e disegni di riepilogo posti a lato della fustella."""
+    cartigli, legende e disegni di riepilogo posti a lato della fustella.
+    Con `pdf`, fra i gruppi lunghi vince quello che porta la grafica: vedi
+    CANDIDATO_DT."""
     if not segs:
         return segs
     groups = {id(g): g for g in _gruppi(segs, gap)}
-    main = max(groups.values(), key=lambda g: sum(x[0][3] - x[0][2] for x in g))
+    main = _gruppo_principale(list(groups.values()), pdf, page_no)
     mx0 = min(b[0] for _, b in main); my0 = min(b[1] for _, b in main)
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)
 
@@ -409,7 +478,7 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
         all_segs = _segments(page)
         pens = _technical_pens(all_segs, page.width, page.height)
         segs = [s for s in all_segs if s[4] in pens] or all_segs
-        segs = _largest_cluster(segs)
+        segs = _largest_cluster(segs, pdf=pdf_path, page_no=page_no)
         # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
         # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
         # guardando solo quello che sta sulla fustella.
