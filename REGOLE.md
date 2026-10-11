@@ -3811,9 +3811,18 @@ Dritta per l'altezza dal piede alla piega (102 mm); sopra, le falde
 (67,6 mm) chiudono `(D - cresta) / 2` di profondita' ciascuna e salgono di
 `sqrt(falda^2 - ((D - cresta)/2)^2)`, 63,1 mm sul primo caso: 131,5 x 166,2 x
 45,3 mm. In cima la cresta fa da colmo; l'aletta scende sul retro, uno
-spessore fuori, per la sua lunghezza. I fianchi sono dritti fino alla piega e
-sopra, visti da fuori, un trapezio dalla base alla cresta, con la grafica
-presa dal fianco fra gli angoli della piega e il centro della cima.
+spessore fuori, per la sua lunghezza. I fianchi sono dritti fino alla piega.
+
+**Sopra la piega il fianco rientra.** La prima versione lo teneva piano, un
+trapezio dalla base alla cresta, e chi aveva il pack in mano l'ha detto
+subito: "il laterale deve rientrare", con la foto. Il triangolo fra le due
+gambe della V - la base sulla piega, la punta in cima al fianco - si spinge
+dentro fino alla cresta, e i due spicchi fra la V e i bordi del fianco si
+piegano sotto le falde, contro il rovescio di fronte e retro. La punta entra
+di `(D - cresta) / 2`, 20,9 mm sul primo caso: e' l'unico valore per cui le
+gambe della V restano lunghe come sul foglio (`sqrt(falda^2 + (D/2)^2)`, 71,3
+mm). Da fuori si vede la gola: il triangolo che sale verso l'interno, coi
+bordi delle falde attorno.
 
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
@@ -3831,9 +3840,10 @@ stampato capovolto esce dritto da se'.
 
 ### Cosa manca
 
-Il soffietto dei fianchi e' un trapezio piano: le pieghe a V che rientrano
-non sono modellate, e nemmeno le alette di colla del retro e del fondo, che
-stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
+Il soffietto prende le gambe della V dagli angoli della piega alla cima del
+fianco: sul foglio, negli ultimi 8 mm sopra la piega, piegano verso gli
+angoli, e il modello le tiene dritte. Non sono modellate le alette di colla
+del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
 ## Flowpack
 
