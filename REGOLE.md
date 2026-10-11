@@ -145,8 +145,8 @@ un quindicesimo dell'area.
 astucci, dei vassoi e dei display la sceglie `dieline.extract` fra i gruppi di
 tratti tecnici collegati, e la sceglieva per **lunghezza totale**: il gruppo
 con piu' tratto. Una miniatura **tratteggiata fitta** ne ha piu' del DT vero.
-Sul Rocher Origins T24 la miniatura nel cartiglio - campita a righe, con la
-cornice della tabella attorno - fa 2201 tratti e 31207 pt, il DT grande 195
+Su uno scrigno da 24 praline (T24) la miniatura nel cartiglio - campita a
+righe, con la cornice della tabella attorno - fa 2201 tratti e 31207 pt, il DT grande 195
 tratti e 15186 pt: vinceva lei, e il modello usciva una scatolina di **47 x 35
 x 23 mm** col tratteggio e la quota "38.5" sulle facce, mentre il pack e'
 largo 237. Adesso (`dieline._gruppo_principale`), fra i gruppi lunghi almeno

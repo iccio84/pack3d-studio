@@ -277,7 +277,7 @@ def _gruppi(segs, gap=25.0):
 # Il DT e' il disegno su cui sta la grafica. Fra i gruppi di tratti abbastanza
 # lunghi da essere una fustella - almeno questa frazione del piu' lungo - se il
 # piu' lungo non porta grafica stampata e un altro si', vince quello. Misurato
-# sul Rocher Origins T24: la miniatura del cartiglio e' tratteggiata fitta, e
+# su uno scrigno T24: la miniatura del cartiglio e' tratteggiata fitta, e
 # i suoi 2201 tratti fanno 31207 pt contro i 15186 del DT vero; la costruzione
 # usciva una scatolina di 47 x 35 x 23 mm col tratteggio sulle facce. Sul
 # livello della grafica la miniatura copre lo 0% del suo riquadro, il DT vero
