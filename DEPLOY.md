@@ -63,10 +63,36 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_ROUTINE_URL` | Variables | l'indirizzo `/fire` della routine | un caso appena entrato in coda **avvia subito** la routine che la lavora, vedi sotto |
 | `PACK3D_ROUTINE_TOKEN` | Secrets | il token della routine | quello generato nel trigger API della routine; serve solo ad avviarla |
 | `PACK3D_RISPOSTE_TOKEN` | Secrets | una stringa casuale lunga | la stessa nei segreti di Glam Lab: con questa Glam manda allo Space le **risposte** degli utenti alle domande della routine, vedi sotto |
+| `RESEND_API_KEY` | Secrets | la chiave di Resend | le **email** a chi ha mandato un caso, quando la routine gli fa una domanda, vedi sotto |
+| `PACK3D_EMAIL_DA` | Variables | `ICCIO PDFto3D <casi@tuodominio.it>` | il mittente di quelle email, su un dominio verificato in Resend |
+| `PACK3D_CASO_ATTESA` | Variables | secondi, di serie `1800` | quanto un caso nuovo aspetta Invia o Annulla prima di cancellarsi da solo |
+| `PACK3D_PAGINA_URL` | Variables | un indirizzo | dove porta il link delle email; di serie la pagina dello Space |
 | `OPENAI_API_KEY` | Secrets | la chiave | solo il controllo visivo dell'agente |
 
 Le chiavi vanno in **Secrets**, non in Variables: le Variables si leggono in
 chiaro dalla pagina dello Space.
+
+### Le email delle domande (Resend)
+
+Quando un caso nuovo entra in coda, la pagina chiede a chi l'ha caricato
+un'email (si puo' saltare). Quando la routine gli fa una domanda
+(`prove/parco.py caso --stato domanda`), lo Space gliela manda per email, una
+volta per domanda, col link alla pagina dove rispondere (`?caso=<codice>`
+apre la finestra dei casi su quel caso). L'email sta nel repository privato
+dei casi, in `contatti/<codice>.json`, e solo li'.
+
+Per attivarle:
+
+1. Crea un account su https://resend.com e, in **Domains**, aggiungi e
+   verifica un dominio tuo (i record DNS che Resend ti chiede). Senza un
+   dominio verificato Resend manda solo all'indirizzo dell'account.
+2. In **API Keys** crea una chiave con permesso *Sending access*.
+3. Nello Space, Settings -> **Secrets**: `RESEND_API_KEY` con la chiave; in
+   **Variables**: `PACK3D_EMAIL_DA`, il mittente sul dominio verificato, per
+   esempio `ICCIO PDFto3D <casi@tuodominio.it>`.
+
+Senza le due, le email restano nei casi e non parte niente; il log dello
+Space lo dice.
 
 ### Il controllo dell'AI e la coda dei casi nuovi
 

@@ -347,6 +347,10 @@ _URI = "-_.!~*'()"
 # di quella lista sono raggiungibili.
 GLAM = "https://iccio-3d-viewer.lovable.app"
 
+# Lo Space, a cui `caso` chiede di avvisare per email chi ha mandato il caso
+# quando la routine gli fa una domanda (/api/avviso).
+SPAZIO = "https://iccio-maurizio.hf.space"
+
 
 def _glam_assente(codice, testo):
     """Un 404 di Lovable con "Project not found" non viene da Glam: a
@@ -467,9 +471,76 @@ def nome_del_caso(verdetto):
     return base[:120] or "Pack"
 
 
+def _git(casi, *a):
+    return subprocess.run(["git", "-C", casi] + list(a), capture_output=True, text=True)
+
+
+def _registra_stato(casi, cartella, codice, corpo):
+    """Lo stato del caso in `stato.json`, nella sua cartella, per la pagina
+    dello Space: la finestra dei casi e le notifiche di chi l'ha mandato lo
+    leggono da li'. Commit e push su main del repository dei casi, come ogni
+    altra cosa del registro. Mai un errore: se non va, lo dice e basta."""
+    percorso = os.path.join(cartella, "stato.json")
+    try:
+        with open(percorso, encoding="utf-8") as fh:
+            dati = json.load(fh)
+    except (OSError, ValueError):
+        dati = {}
+    if not isinstance(dati, dict):
+        dati = {}
+    storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
+    voce = {k: corpo[k] for k in ("stato", "nome", "messaggio", "domanda", "opzioni")
+            if corpo.get(k) not in (None, "", [])}
+    voce["quando"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    dati["storia"] = (storia + [voce])[-30:]
+    with open(percorso, "w", encoding="utf-8") as fh:
+        json.dump(dati, fh, ensure_ascii=False, indent=1)
+    rel = os.path.relpath(percorso, casi)
+    # l'autore dei commit del registro: lo stesso dell'ultimo
+    autore = _git(casi, "log", "-1", "--format=%an%n%ae").stdout.split("\n")
+    chi = ["-c", "user.name=" + autore[0], "-c", "user.email=" + autore[1]] \
+        if len(autore) >= 2 and autore[0] and autore[1] else []
+    _git(casi, "add", rel)
+    fatto = _git(casi, *chi, "commit", "-m", "Caso %s: stato %s" % (codice, corpo["stato"]),
+                 "--", rel)
+    if fatto.returncode != 0 and "nothing to commit" not in fatto.stdout + fatto.stderr:
+        print("stato.json non registrato: %s" % (fatto.stderr or fatto.stdout).strip()[:300])
+        return False
+    for _ in range(3):
+        if _git(casi, "push", "origin", "HEAD:main").returncode == 0:
+            print("stato del caso registrato in %s" % rel)
+            return True
+        _git(casi, "pull", "--rebase", "--autostash", "origin", "main")
+    print("stato.json scritto ma non spinto su main: fallo tu (git push origin HEAD:main)")
+    return False
+
+
+def _avvisa(spazio, codice):
+    """Chiede allo Space di mandare la domanda per email a chi l'ha chiesto."""
+    req = urllib.request.Request(
+        spazio.rstrip("/") + "/api/avviso", method="POST",
+        data=json.dumps({"codice": codice}).encode("utf-8"),
+        headers={"Content-Type": "application/json", "User-Agent": "pack3d-studio"})
+    try:
+        with urllib.request.urlopen(req, timeout=60) as r:
+            esito = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        print("email della domanda non mandata (HTTP %d): %s"
+              % (e.code, e.read().decode("utf-8", "replace")[:200]))
+        return
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        print("lo Space non risponde per l'email della domanda: %s" % e)
+        return
+    if esito.get("inviate"):
+        print("email della domanda mandata a chi l'ha chiesta (%d)" % esito["inviate"])
+    else:
+        print("email della domanda: nessuna (%s)" % esito.get("perche", "-"))
+
+
 def caso(args):
-    """A che punto e' un caso della coda, in Glam Lab per chi l'ha caricato."""
-    _cartella, verdetto = _caso_in_coda(args.casi, args.codice)
+    """A che punto e' un caso della coda, in Glam Lab per chi l'ha caricato,
+    e nella pagina dello Space per chi l'ha mandato da li'."""
+    cartella, verdetto = _caso_in_coda(args.casi, args.codice)
     corpo = {"codice": args.codice, "nome": nome_del_caso(verdetto),
              "stato": args.stato}
     if args.messaggio:
@@ -484,6 +555,11 @@ def caso(args):
         corpo["opzioni"] = opzioni
     elif args.domanda or args.opzione:
         raise SystemExit("--domanda e --opzione vanno con --stato domanda")
+    # Prima la pagina dello Space, che non dipende da Glam: lo stato e la
+    # domanda li legge dal registro dei casi, e con una domanda lo Space
+    # scrive a chi ha lasciato l'email.
+    if _registra_stato(args.casi, cartella, args.codice, corpo) and args.stato == "domanda":
+        _avvisa(args.spazio, args.codice)
     req = urllib.request.Request(
         args.url.rstrip("/") + "/api/pack3d-case", method="POST",
         data=json.dumps(corpo, ensure_ascii=False).encode("utf-8"),
@@ -560,6 +636,8 @@ def main():
     q.add_argument("--domanda", help="con --stato domanda: la domanda all'utente")
     q.add_argument("--opzione", action="append",
                    help="una risposta fra cui scegliere (ripetibile, al massimo 4)")
+    q.add_argument("--spazio", default=SPAZIO,
+                   help="lo Space che manda l'email della domanda (di serie %s)" % SPAZIO)
     q.set_defaults(fai=caso)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")
