@@ -341,6 +341,35 @@ def spazio(args):
 # come encodeURIComponent, che e' quello che Glam decodifica
 _URI = "-_.!~*'()"
 
+# L'indirizzo di Glam Lab, quello che usano i comandi di CODA.md. Se cambia,
+# cambia anche fra gli Allowed websites della credenziale "Glam Lab"
+# dell'ambiente cloud: e' li' che il proxy aggiunge il token, e solo i siti
+# di quella lista sono raggiungibili.
+GLAM = "https://iccio-3d-viewer.lovable.app"
+
+
+def _glam_assente(codice, testo):
+    """Un 404 di Lovable con "Project not found" non viene da Glam: a
+    quell'indirizzo non c'e' piu' nessun sito."""
+    if codice == 404 and "project not found" in testo.lower():
+        print("a questo indirizzo Glam non c'e' (404 \"Project not found\" di "
+              "Lovable): l'indirizzo di Glam e' cambiato. Va aggiornato in "
+              "CODA.md (GLAM in prove/parco.py) e fra gli Allowed websites "
+              "della credenziale dell'ambiente cloud")
+        return True
+    return False
+
+
+def _glam_irraggiungibile(e):
+    """Il proxy dell'ambiente lascia passare solo i siti permessi: un 403
+    sul tunnel vuol dire che Glam non e' fra quelli, non che e' giu'."""
+    if "403" in str(e) or "tunnel" in str(e).lower():
+        print("Glam non e' raggiungibile da questo ambiente (%s): il suo "
+              "dominio va fra gli Allowed websites della credenziale \"Glam "
+              "Lab\" dell'ambiente cloud" % e)
+    else:
+        print("Glam non risponde: %s" % e)
+
 
 def nome_glam(caso):
     """Il nome del modello in Glam: il nome del primo PDF senza `.pdf`, come
@@ -396,11 +425,11 @@ def glam(args):
             print("Glam rifiuta il token (401): la credenziale dell'ambiente "
                   "cloud per questo sito manca, o non e' uguale al secret "
                   "PACK3D_IMPORT_TOKEN di Glam")
-        else:
+        elif not _glam_assente(e.code, testo):
             print("Glam non ha preso il modello (HTTP %d): %s" % (e.code, testo))
         raise SystemExit(1)
     except (urllib.error.URLError, OSError, ValueError) as e:
-        print("Glam non risponde: %s" % e)
+        _glam_irraggiungibile(e)
         raise SystemExit(1)
     print("in Glam: \"%s\" fra \"%s\" (id %s)%s" % (
         risposta.get("name", nome), risposta.get("category", args.categoria),
@@ -468,6 +497,8 @@ def caso(args):
             print("Glam rifiuta il token (401): la credenziale dell'ambiente "
                   "cloud per questo sito manca, o non e' uguale al secret "
                   "PACK3D_IMPORT_TOKEN di Glam")
+        elif _glam_assente(e.code, testo):
+            pass
         elif e.code == 404:
             print("Glam non conosce ancora i casi della coda (404 su "
                   "/api/pack3d-case): vedi DEPLOY.md, Glam Lab")
@@ -475,7 +506,7 @@ def caso(args):
             print("Glam non ha preso lo stato del caso (HTTP %d): %s" % (e.code, testo))
         raise SystemExit(1)
     except (urllib.error.URLError, OSError, ValueError) as e:
-        print("Glam non risponde: %s" % e)
+        _glam_irraggiungibile(e)
         raise SystemExit(1)
     print("in Glam: caso %s \"%s\" -> %s%s" % (
         args.codice, corpo["nome"], args.stato,
@@ -510,7 +541,7 @@ def main():
     s.set_defaults(fai=spazio)
     g = sub.add_parser("glam", help="manda a Glam Lab il modello che lo Space "
                                     "ha appena approvato")
-    g.add_argument("url", help="per esempio https://glam-lab-view.lovable.app")
+    g.add_argument("url", help="l'indirizzo di Glam Lab: %s" % GLAM)
     g.add_argument("casi", help="clone del repository privato dei casi")
     g.add_argument("nome", help="il caso del parco, gia' provato con `spazio`")
     g.add_argument("--uscita", default="/tmp/parco_spazio",
@@ -521,7 +552,7 @@ def main():
     g.set_defaults(fai=glam)
     q = sub.add_parser("caso", help="dice a Glam Lab a che punto e' un caso "
                                     "della coda, per chi l'ha caricato")
-    q.add_argument("url", help="per esempio https://glam-lab-view.lovable.app")
+    q.add_argument("url", help="l'indirizzo di Glam Lab: %s" % GLAM)
     q.add_argument("casi", help="clone del repository privato dei casi")
     q.add_argument("codice", help="il codice del caso, 10 cifre esadecimali")
     q.add_argument("--stato", required=True, choices=STATI)

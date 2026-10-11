@@ -21,7 +21,7 @@ perche' di ogni regola del codice sta in REGOLE.md; qui c'e' il metodo.
     viste approvate.
 - **Lo Space** si aggiorna da solo a ogni push su `main` (workflow
   "Sync to Hugging Face Spaces"). Unire una PR vuol dire pubblicare.
-- **Glam Lab** (`glam-lab-view.lovable.app`): il viewer dove si guardano i
+- **Glam Lab** (`iccio-3d-viewer.lovable.app`): il viewer dove si guardano i
   pack. Il modello di ogni caso risolto va, con `prove/parco.py glam`, nella
   sezione "Costruisci modello 3D da PDF", cartella "Casi risolti", col nome
   del PDF: e' li' che la pagina dello Space, quando respinge un modello e
@@ -114,7 +114,7 @@ unire due correzioni una sopra l'altra senza saperlo.
 - Prima di toccare il caso, mettigli l'etichetta `in-lavorazione` e un
   commento col link a questa sessione, e dillo a chi l'ha caricato:
 
-      python3 prove/parco.py caso https://glam-lab-view.lovable.app ../pack3d-casi <codice> --stato in-lavorazione
+      python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato in-lavorazione
 
   Alla fine, risolto o no, togli l'etichetta.
 - Prima del parco prima e dopo, e di nuovo prima di unire, riparti da `main`
@@ -149,7 +149,7 @@ stato, com'e' andato l'invio a Glam.
 
 - **"ok"** (uscita 0): prima del commento manda il modello in Glam,
 
-      python3 prove/parco.py glam https://glam-lab-view.lovable.app ../pack3d-casi <nome>
+      python3 prove/parco.py glam https://iccio-3d-viewer.lovable.app ../pack3d-casi <nome>
 
   che prende il GLB appena approvato sullo Space e lo mette nella sezione
   "Costruisci modello 3D da PDF", cartella "Casi risolti", col nome del PDF:
@@ -160,7 +160,7 @@ stato, com'e' andato l'invio a Glam.
   mano. Poi dillo a chi l'ha caricato, con due righe sue - dove trova il
   modello, e se serve cosa e' cambiato -
 
-      python3 prove/parco.py caso https://glam-lab-view.lovable.app ../pack3d-casi <codice> --stato risolto --messaggio "..."
+      python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato risolto --messaggio "..."
 
   e chiudi la issue come risolta.
 - **"dubbio" o "sbagliato"** (uscita 1 o 2): la issue resta aperta, col
@@ -249,7 +249,7 @@ finestre si chiede, ogni volta*.
    velocissima trova il caso gia' fermo e lo fa ripartire.
 3. Poi la domanda:
 
-       python3 prove/parco.py caso https://glam-lab-view.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..."
+       python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..."
 
    Una domanda sola, per chi conosce il suo pack ma non il codice: parole
    sue, niente nomi di funzioni ne' di regole. Da due a quattro risposte fra
@@ -267,7 +267,7 @@ servizio.
 un modo che da soli non si fa, o la regola non si trova - diglielo lo stesso,
 perche' non aspetti a vuoto:
 
-    python3 prove/parco.py caso https://glam-lab-view.lovable.app ../pack3d-casi <codice> --stato non-risolto --messaggio "..."
+    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato non-risolto --messaggio "..."
 
 con due righe sue: che il caso lo riprende a mano chi gestisce il servizio.
 
