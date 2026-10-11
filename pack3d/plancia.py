@@ -617,7 +617,7 @@ def tratti(pdf, riquadro, page_no=0):
         tutti = dl._segments(page)
         penne = dl._technical_pens(tutti, page.width, page.height)
         segs = [s for s in tutti if s[4] in penne] or tutti
-        segs = dl._largest_cluster(segs)
+        segs = dl._largest_cluster(segs, pdf=pdf, page_no=page_no)
         fustella = (dl.penne_di_fustella(segs, page.width, page.height)
                     or {s[4] for s in segs})
         for kind in ("line", "rect", "curve"):

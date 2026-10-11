@@ -893,7 +893,8 @@ def dt_principale(pdf, page_no=0):
     except Exception:
         return None
     penne = dl._technical_pens(segs, pw, ph)
-    S = dl._largest_cluster([s for s in segs if s[4] in penne])
+    S = dl._largest_cluster([s for s in segs if s[4] in penne],
+                            pdf=pdf, page_no=page_no)
     if not S:
         return None
     xs = [c for k, c, a, b, st in S if k == "V"]
