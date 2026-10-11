@@ -3853,24 +3853,28 @@ gambe della V - la base sulla piega, la punta in cima al fianco - si spinge
 dentro fino alla cresta, di `(D - cresta) / 2` (20,9 mm sul primo caso), e i
 due spicchi fra la V e i bordi del fianco si piegano verso di lui.
 
-**E fronte e retro non si piegano dove si piega il fianco.** La seconda
-versione inclinava fronte e retro proprio sulla piega del fianco, a 102 mm:
-il soffietto rientrava, ma la gola restava un triangolo quasi a filo, e
-"deve rientrare meglio". Sulla foto il fronte resta dritto ben sopra la piega
-del fianco - si piega appena sopra il marchio - e la tasca ha due pareti
-alte: gli spicchi del fianco attaccati al fronte e al retro, che fra la piega
-e il punto in cui fronte e retro si inclinano si chiudono verso la punta; piu'
-su si appoggiano sotto le falde. Il DT lo permette: le gambe della V sono
-cordonature solo dalla punta a 13 mm dalla piega, poi tagli a 45 gradi fino
-agli angoli, e i tagli staccano gli spicchi dal triangolo proprio dove fanno
-la parete.
+**Rientra, e poi sale.** La seconda versione portava il triangolo dritto
+dalla piega alla punta, e la gola restava quasi a filo; la terza teneva fronte
+e retro dritti 29 mm sopra la piega dei fianchi, una stima presa dalla foto, e
+chi aveva il pack l'ha corretta: il soffietto deve cominciare a piegarsi dove
+si piega il fronte, rientrare e poi salire fino alla chiusura. Fronte, retro e
+soffietto si piegano quindi tutti alla stessa altezza, la piega dei fianchi.
 
-Dove si inclinano il DT non lo segna: con pezzi rigidi il fronte dovrebbe
-piegarsi sulla piega del fianco, ed e' il cartoncino che si flette. La
-proporzione e' quindi **una stima tarata sulla foto del primo caso**:
-`punta.RISVOLTO` = 0,43 della falda, 29 mm su 67,6. La scatola esce alta 163,4
-mm invece di 166,2. Il cartellino lo dice. Al prossimo pack della famiglia si
-verifica con la sua foto.
+Quanto rientra lo dice il DT. Dagli angoli della piega partono due **tagli a
+45 gradi** che arrivano sulle gambe della V: sul primo caso finiscono 10,2 mm
+dentro dal bordo del fianco e 10,1 mm sopra la piega (`punta._ripiano`, che
+segue la catena di tratti dritti da ogni angolo). Fra la piega e la fine dei
+tagli il soffietto e' un **ripiano** che va dentro in piano, profondo quanto
+i tagli salgono (10,1 mm). Dalla fine dei tagli il triangolo fra le gambe
+della V **sale** fino alla punta, sulla cresta. Le pareti della tasca sono gli
+spicchi fra la V e i bordi del fianco, staccati dal ripiano proprio dai tagli:
+sotto, dal bordo del fianco alla gamba; sopra si appoggiano contro il rovescio
+delle falde. Senza tagli agli angoli il ripiano non c'e', e il triangolo sale
+dalla piega.
+
+La salita, a pezzi rigidi, sarebbe di qualche millimetro piu' corta della
+gamba sul foglio: il cartoncino vero si flette, e il modello tiene le facce
+piane.
 
 **L'aletta sta appoggiata sul retro.** Dal disegno non si capiva se stesse
 dritta in su, come la cresta di un cartone del latte, o piegata su una
@@ -3888,10 +3892,10 @@ stampato capovolto esce dritto da se'.
 
 ### Cosa manca
 
-Il soffietto e' fatto di facce piane: il cartoncino vero si incurva dove
-fronte e retro si inclinano, e gli spicchi si piegano lungo una linea che il
-DT non disegna. Non sono modellate le alette di colla
-del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
+Il soffietto e' fatto di facce piane: il cartoncino vero si incurva, e la
+parete della tasca si piega dal bordo del fianco alla punta lungo una linea
+che il DT non disegna. Non sono modellate le alette di colla del retro e del
+fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
 ## Flowpack
 
@@ -5023,11 +5027,6 @@ Astucci, con la quota letta due volte che chiude il conto:
 
 ## Assunzioni non verificate
 
-- La **scatola a punta** e' costruita su un file solo. Viene dalla foto di
-  quel pack la proporzione per cui fronte e retro restano dritti sopra la
-  piega dei fianchi, prima di inclinarsi: `punta.RISVOLTO`, 0,43 della falda.
-  Il DT non la segna. Il prossimo pack della famiglia va guardato insieme
-  alla sua foto.
 - Il **controllo dell'AI** e la scelta del **rigonfiamento** sono stati
   provati con un'API finta, che risponde come quella vera, e guardando a mano
   le immagini che ricevono: il cono letto come astuccio, messo accanto al suo

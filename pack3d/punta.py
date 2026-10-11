@@ -37,12 +37,6 @@ PT2MM = dl.PT2MM
 
 # la cresta e' una fascia stretta, una doppia cordonatura; oltre e' l'aletta
 CRESTA_MAX = 6.0
-# Quanto della falda il fronte resta dritto sopra la piega dei fianchi, prima
-# di inclinarsi. Il DT non lo segna - a pack chiuso il cartoncino si flette -
-# e la proporzione viene dalla foto del primo caso: il fronte si piega appena
-# sopra il marchio, a 29 mm dalla piega su 67,6 di falda. Vedi REGOLE.md,
-# *La scatola a punta*.
-RISVOLTO = 0.43
 ALETTA_MIN = 8.0
 FIANCO_MIN = 10.0
 
@@ -61,9 +55,11 @@ class Punta:
     yF1: float              # piede del fronte
     yB0: float              # piede del retro
     yB1: float              # cima del retro
-    # quanto il fronte resta dritto sopra la piega del fianco, prima di
-    # inclinarsi: vedi `_risvolto`
-    risvolto: float = 0.0
+    # il ripiano del soffietto: dove finiscono i tagli a 45 gradi che partono
+    # dagli angoli della piega, quanto dentro dal bordo del fianco (x) e
+    # quanto sopra la piega (y). Vedi `_ripiano`.
+    ripiano_x: float = 0.0
+    ripiano_y: float = 0.0
 
     @property
     def W(self):
@@ -94,20 +90,13 @@ class Punta:
         return (self.D - self.cresta) / 2.0
 
     @property
-    def risvolto_utile(self):
-        """Il risvolto, se lascia alla falda abbastanza per chiudere."""
-        return float(min(max(self.risvolto, 0.0),
-                         max(self.falda - self.chiude - 1.0, 0.0)))
-
-    @property
     def salita(self):
-        """Quanto sale la parte inclinata della falda."""
-        f = self.falda - self.risvolto_utile
-        return float(np.sqrt(max(f ** 2 - self.chiude ** 2, 0.0)))
+        """Quanto sale la falda: chiude mezza profondita' meno la cresta."""
+        return float(np.sqrt(max(self.falda ** 2 - self.chiude ** 2, 0.0)))
 
     @property
     def altezza(self):
-        return self.dritto + self.risvolto_utile + self.salita
+        return self.dritto + self.salita
 
     @property
     def fondo(self):
@@ -160,6 +149,48 @@ def _piega_dei_fianchi(d, fronte, fianchi, corpo):
                 and copre(*corpo) < 0.3):
             out.append(y)
     return out[0] if len(out) == 1 else None
+
+
+def _ripiano(tratti, angoli, verso_su):
+    """(x, y) in mm: dove finiscono i tagli a 45 gradi che dagli angoli della
+    piega del soffietto salgono verso le gambe della V. Da ogni angolo si
+    segue la catena di tratti obliqui allineati; la sua fine e' il punto in cui
+    la gamba della V - cordonatura - diventa taglio. (0, 0) se non ci sono su
+    tutti e quattro gli angoli: allora il soffietto non ha ripiano.
+
+    `verso_su` e' il segno di y verso la cima del fianco, sul foglio."""
+    segs = []
+    for p in tratti:
+        p = np.asarray(p, float)
+        for a, b in zip(p[:-1], p[1:]):
+            d = b - a
+            L = float(np.hypot(*d))
+            if L > 0.3 and 0.2 * L < abs(d[1]) < 0.98 * L:
+                segs.append((a, b))
+    fini = []
+    for c in angoli:
+        c = np.asarray(c, float)
+        fine, dirz = c, None
+        for _ in range(20):
+            passo = None
+            for a, b in segs:
+                for p, q in ((a, b), (b, a)):
+                    if np.hypot(*(p - fine)) > 0.6:
+                        continue
+                    d = (q - p) / np.hypot(*(q - p))
+                    if (q[1] - p[1]) * verso_su <= 0:
+                        continue            # verso la cima, non indietro
+                    if dirz is not None and float(d @ dirz) < 0.996:
+                        continue            # dritto, non la gamba della V
+                    passo = (q, d)
+            if passo is None:
+                break
+            fine, dirz = passo
+        if dirz is None:
+            return 0.0, 0.0
+        fini.append(np.abs(fine - c))
+    m = np.mean(fini, axis=0)
+    return float(m[0]), float(m[1])
 
 
 def riconosci(pdf, page_no=0):
@@ -236,7 +267,6 @@ def riconosci(pdf, page_no=0):
     p = Punta(regione=d.bbox, xL=corpo[0] * m, xR=corpo[1] * m, D=D,
               yP=yP * m, yR=yR * m, yF0=yF0 * m, yG=yG * m, yF1=yF1 * m,
               yB0=yB0 * m, yB1=fine * m)
-    p.risvolto = RISVOLTO * p.falda
     # la falda deve poter chiudere la profondita', e l'aletta starci sopra
     if p.falda <= (p.D - p.cresta) / 2.0 + 2.0 or p.aletta > p.falda + 2.0:
         return None
@@ -249,6 +279,11 @@ def riconosci(pdf, page_no=0):
     for f in fianchi:
         if _oblique(tratti, (f[0] * m, lo, f[1] * m, hi)) < p.falda:
             return None
+    angoli = [(x * m, p.yG) for f in fianchi for x in f]
+    rx, ry = _ripiano(tratti, angoli, np.sign(p.yF0 - p.yG))
+    # il ripiano deve stare nel fianco e sotto la cima
+    if 0.0 < rx < p.D / 2.0 - 1.0 and 0.0 < ry < min(p.chiude, p.falda / 2.0):
+        p.ripiano_x, p.ripiano_y = rx, ry
     return p
 
 
@@ -256,10 +291,9 @@ def dichiara(p):
     """Le righe che la pagina mostra prima di costruire."""
     return ["scatola a punta: %.1f x %.1f x %.1f mm" % p.dims_mm,
             "dritta per %.1f mm, poi fronte e retro si chiudono in cima con "
-            "falde da %.1f mm; fianchi a soffietto che rientrano"
-            % (p.dritto, p.falda),
-            "fronte e retro dritti ancora %.1f mm sopra la piega dei fianchi, "
-            "poi inclinati: una stima, il DT non lo segna" % p.risvolto_utile,
+            "falde da %.1f mm" % (p.dritto, p.falda),
+            "fianchi a soffietto: alla piega rientrano in piano per %.1f mm, "
+            "poi salgono fino alla cresta" % p.ripiano_y,
             "aletta da %.1f mm piegata giu' e incollata sul retro" % p.aletta,
             "fondo a soffietto (%.1f mm steso), sul modello piatto" % p.fondo]
 
@@ -275,12 +309,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     from .ballotin import STRISCIA
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     W, D, t = p.W, p.D, p.cresta
-    h1, s, c = p.dritto, p.falda, p.chiude
-    u = p.risvolto_utile               # il fronte dritto sopra la piega
-    hK = h1 + u                        # dove fronte e retro si inclinano
-    s2 = s - u                         # la parte inclinata della falda
-    v = p.salita
-    H = hK + v
+    h1, s, c, v = p.dritto, p.falda, p.chiude, p.salita
+    H = h1 + v
     Wt, Ht = misura_tex
     uv_interno = np.array([0.5, (Ht - 1.5 * STRISCIA) / Ht])
     ox, oy = origine_mm
@@ -296,9 +326,6 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         return p.xR + (D / 2.0 - Z) if destro else p.xL - (D / 2.0 - Z)
 
     yBG = p.yB0 + np.sign(p.yB1 - p.yB0) * h1      # piega del soffietto sul retro
-    # dove si inclinano, sul foglio: u oltre la piega, verso la cima
-    yK = p.yG + np.sign(p.yF0 - p.yG) * u
-    yBK = yBG + np.sign(p.yB1 - yBG) * u
     V, UV, T = [], [], []
 
     def quad(P3, S2, fuori, interno=True):
@@ -321,29 +348,29 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             T.extend([(b + i, b + k, b + j) for i, j, k in tri])
 
     hw = W / 2.0
-    # fronte, dritto fino a hK e poi inclinato
-    quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, hK, D / 2), (-hw, hK, D / 2)],
+    # fronte, dritto e falda
+    quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, h1, D / 2), (-hw, h1, D / 2)],
          [(x_corpo(-hw), p.yF1), (x_corpo(hw), p.yF1),
-          (x_corpo(hw), yK), (x_corpo(-hw), yK)], (0, 0, 1))
-    quad([(-hw, hK, D / 2), (hw, hK, D / 2), (hw, H, t / 2), (-hw, H, t / 2)],
-         [(x_corpo(-hw), yK), (x_corpo(hw), yK),
+          (x_corpo(hw), p.yG), (x_corpo(-hw), p.yG)], (0, 0, 1))
+    quad([(-hw, h1, D / 2), (hw, h1, D / 2), (hw, H, t / 2), (-hw, H, t / 2)],
+         [(x_corpo(-hw), p.yG), (x_corpo(hw), p.yG),
           (x_corpo(hw), p.yF0), (x_corpo(-hw), p.yF0)], (0, c, v))
-    # retro, uguale: la piega sul fondo non specchia le x
-    quad([(-hw, 0, -D / 2), (hw, 0, -D / 2), (hw, hK, -D / 2), (-hw, hK, -D / 2)],
+    # retro, dritto e falda: la piega sul fondo non specchia le x
+    quad([(-hw, 0, -D / 2), (hw, 0, -D / 2), (hw, h1, -D / 2), (-hw, h1, -D / 2)],
          [(x_corpo(-hw), p.yB0), (x_corpo(hw), p.yB0),
-          (x_corpo(hw), yBK), (x_corpo(-hw), yBK)], (0, 0, -1))
-    quad([(-hw, hK, -D / 2), (hw, hK, -D / 2), (hw, H, -t / 2), (-hw, H, -t / 2)],
-         [(x_corpo(-hw), yBK), (x_corpo(hw), yBK),
+          (x_corpo(hw), yBG), (x_corpo(-hw), yBG)], (0, 0, -1))
+    quad([(-hw, h1, -D / 2), (hw, h1, -D / 2), (hw, H, -t / 2), (-hw, H, -t / 2)],
+         [(x_corpo(-hw), yBG), (x_corpo(hw), yBG),
           (x_corpo(hw), p.yB1), (x_corpo(-hw), p.yB1)], (0, c, -v))
     # fondo: piatto, con la fascia del soffietto portata alla profondita'
     quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, 0, -D / 2), (-hw, 0, -D / 2)],
          [(x_corpo(-hw), p.yF1), (x_corpo(hw), p.yF1),
           (x_corpo(hw), p.yB0), (x_corpo(-hw), p.yB0)], (0, -1, 0))
     # l'aletta sul retro, uno spessore fuori: dalla cresta in giu' lungo la falda
-    giu = np.array([0.0, -v, -c]) / s2           # verso il basso lungo il retro
-    nb = np.array([0.0, c, -v]) / s2             # normale uscente del retro
+    giu = np.array([0.0, -v, -c]) / s            # verso il basso lungo il retro
+    nb = np.array([0.0, c, -v]) / s              # normale uscente del retro
     a0 = np.array([0.0, H, -t / 2]) + nb * sp
-    a1 = a0 + giu * min(p.aletta, s2)
+    a1 = a0 + giu * min(p.aletta, s)
     quad([(-hw, a0[1], a0[2]), (hw, a0[1], a0[2]), (hw, a1[1], a1[2]), (-hw, a1[1], a1[2])],
          [(x_corpo(-hw), p.yR), (x_corpo(hw), p.yR),
           (x_corpo(hw), p.yP), (x_corpo(-hw), p.yP)], nb, interno=False)
@@ -355,36 +382,50 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     quad([(-hw, H, t / 2), (hw, H, t / 2), (hw, a0[1], a0[2]), (-hw, a0[1], a0[2])],
          [(x_corpo(-hw), p.yF0), (x_corpo(hw), p.yF0),
           (x_corpo(hw), p.yR), (x_corpo(-hw), p.yR)], (0, 1, 0))
-    # i fianchi: dritti fino alla piega, poi il soffietto, che RIENTRA. La
-    # punta della V va dentro fino alla cresta, di quanto chiude una falda; il
-    # triangolo fra le due gambe sale dalla piega verso di lei. Fra la piega e
-    # dove il fronte si inclina (`risvolto`) gli spicchi del fianco attaccati
-    # a fronte e retro fanno le pareti della tasca, piegate verso la punta;
-    # sopra si appoggiano sotto le falde. Vedi REGOLE.md, *La scatola a punta*.
+    # i fianchi: dritti fino alla piega, poi il soffietto. Alla piega - la
+    # stessa altezza dove si piegano fronte e retro - il fianco RIENTRA: il
+    # ripiano fra la piega e la fine dei tagli a 45 gradi va dentro in piano,
+    # di `ripiano_y`; da li' il triangolo fra le gambe della V SALE fino alla
+    # cresta, con la punta dentro di quanto chiude una falda. Le pareti della
+    # tasca sono gli spicchi fra la V e i bordi del fianco: sotto, dalla piega
+    # alla gamba; sopra si appoggiano contro il rovescio delle falde. Vedi
+    # REGOLE.md, *La scatola a punta*.
     yS = p.yF0      # la cima del fianco sta alla cima del fronte
-    nf = np.array([0.0, c, v]) / s2              # normale uscente del fronte
+    e, w = p.ripiano_y, p.ripiano_x
+    yQ = p.yG + np.sign(p.yF0 - p.yG) * e        # fine dei tagli, sul foglio
+    nf = np.array([0.0, c, v]) / s               # normale uscente del fronte
     for destro, X, verso in ((False, -hw, -1.0), (True, hw, 1.0)):
         quad([(X, 0, D / 2), (X, 0, -D / 2), (X, h1, -D / 2), (X, h1, D / 2)],
              [(x_fianco(D / 2, destro), p.yF1), (x_fianco(-D / 2, destro), p.yF1),
               (x_fianco(-D / 2, destro), p.yG), (x_fianco(D / 2, destro), p.yG)],
              (verso, 0, 0))
         A = np.array([X - verso * c, H, 0.0])
-        # la gola: il triangolo fra le gambe della V, guarda fuori e in su
-        quad([(X, h1, D / 2), (X, h1, -D / 2), A],
-             [(x_fianco(D / 2, destro), p.yG), (x_fianco(-D / 2, destro), p.yG),
+        Q = {z: np.array([X - verso * e, h1, np.sign(z) * (D / 2 - w)])
+             for z in (D / 2, -D / 2)}
+        if e > 0.5:
+            # il ripiano, in piano verso l'interno
+            quad([(X, h1, D / 2), (X, h1, -D / 2), Q[-D / 2], Q[D / 2]],
+                 [(x_fianco(D / 2, destro), p.yG), (x_fianco(-D / 2, destro), p.yG),
+                  (x_fianco(-D / 2 + w, destro), yQ),
+                  (x_fianco(D / 2 - w, destro), yQ)], (0, 1, 0))
+        # la salita: dal ripiano alla punta, guarda fuori e in su
+        quad([Q[D / 2], Q[-D / 2], A],
+             [(x_fianco(D / 2 - w, destro), yQ), (x_fianco(-D / 2 + w, destro), yQ),
               (x_fianco(0.0, destro), yS)], (verso, 1.0, 0))
         for z, n_falda in ((D / 2, nf), (-D / 2, nf * [1, 1, -1])):
-            B, K = np.array([X, h1, z]), np.array([X, hK, z])
+            B = np.array([X, h1, z])
             Tc = np.array([X, H, np.sign(z) * t / 2])
-            # la parete della tasca, stampa verso la gola
-            if u > 0:
-                quad([B, K, A],
-                     [(x_fianco(z, destro), p.yG), (x_fianco(z, destro), yK),
-                      (x_fianco(0.0, destro), yS)], (verso, 0, -np.sign(z)))
-            # lo spicchio sotto la falda, uno spessore e mezzo dentro
+            if e > 0.5:
+                # la parete della tasca: dal bordo del fianco alla gamba
+                quad([B, A, Q[z]],
+                     [(x_fianco(z, destro), p.yG), (x_fianco(0.0, destro), yS),
+                      (x_fianco(np.sign(z) * (D / 2 - w), destro), yQ)],
+                     (verso, 0, -np.sign(z)))
+            # lo spicchio contro il rovescio della falda, uno spessore e mezzo
+            # dentro, stampa verso la tasca
             g = 1.5 * sp * n_falda
-            quad([K - g, Tc - g, A - g],
-                 [(x_fianco(z, destro), yK), (x_fianco(z, destro), yS),
+            quad([B - g, Tc - g, A - g],
+                 [(x_fianco(z, destro), p.yG), (x_fianco(z, destro), yS),
                   (x_fianco(0.0, destro), yS)], -n_falda, interno=False)
     return (np.asarray(V, np.float32), np.asarray(UV, np.float32),
             np.asarray(T, np.int64))
