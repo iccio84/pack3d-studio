@@ -904,7 +904,9 @@ def _nel_parco(casi, cartella, cod, verdetto):
         else:
             shutil.copyfile(os.path.join(cartella, f), dove)
     opzioni = dict(contesto.get("opzioni") or {})
-    if opzioni.get("kind") in ("flowpack", "riempimento"):
+    if opzioni.get("kind") == "riempimento" and opzioni.get("cu") == "carton":
+        opzioni.setdefault("spessore", 2)
+    elif opzioni.get("kind") in ("flowpack", "riempimento"):
         opzioni.setdefault("teeth", 20)
         opzioni.setdefault("soft", 5)
     elif opzioni.get("kind") == "carton":

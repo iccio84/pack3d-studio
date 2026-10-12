@@ -210,12 +210,20 @@ class Prodotto:
     spesso: float
     largo_pinne: float
     fronte: int             # +1 se la faccia stampata guarda il verso + dello spessore
+    rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
 
 
-def misura_prodotto(J, B):
+def misura_prodotto(J, B, rigido=False):
     V = vertici(J, B)
     lo, hi = V.min(0), V.max(0)
     ampi = hi - lo
+    if rigido:
+        # un astuccio e' il suo ingombro: le facce sono quadrilateri grandi,
+        # e a meta' non ha vertici da cui leggere una sezione
+        lungo, largo_i, spesso_i = (int(i) for i in np.argsort(-ampi))
+        return Prodotto((lungo, largo_i, spesso_i), (lo + hi) / 2.0, float(ampi[lungo]),
+                        float(ampi[lungo]), float(ampi[largo_i]), float(ampi[spesso_i]),
+                        float(ampi[largo_i]), +1, True)
     lungo = int(np.argmax(ampi))
     altri = [a for a in range(3) if a != lungo]
     centro = (lo + hi) / 2.0
@@ -287,7 +295,7 @@ def _quanti_lungo(lato, p, j):
     pareti si piegano. Gli altri due lati si schiacciano un poco."""
     if j == p.assi[0]:
         return int((lato + p.lungo - p.corpo) // p.lungo) if lato >= p.corpo else 0
-    return int(lato // (_misura(p, j) * (1.0 - COMPRIME)))
+    return int(lato // (_misura(p, j) * (1.0 - (0.0 if p.rigido else COMPRIME))))
 
 
 def _disposizione(vano, p, posa, dove, R, piega):
@@ -296,9 +304,14 @@ def _disposizione(vano, p, posa, dove, R, piega):
     for a in range(3):
         j = int(np.argmax(np.abs(R[a, :])))
         n.append(_quanti_lungo(lati[a], p, j))
+        if a == 1 and n[-1] == 0:
+            # piu' alto delle pareti: sta in piedi lo stesso, e sporge, come
+            # il T10 nel suo vassoio da 40 mm. Le pareti tengono il piede
+            n[-1] = 1
         # in altezza gli strati si appoggiano uno sull'altro; di lato e in
         # profondita' si allargano su tutto il vano
         passo.append(lati[a] / max(n[-1], 1) if a != 1
+                     else _misura(p, j) if _misura(p, j) > lati[1]
                      else min(_misura(p, j), lati[1] / max(n[-1], 1)))
     if min(n) < 1:
         return None
@@ -460,31 +473,36 @@ def adatta(P, N, p, d):
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
-def componi(glb_vassoio, glb_prodotto, quanti=None):
+def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
-    neanche uno."""
+    neanche uno. `rigido`: il pack e' un astuccio, che non ha pinne da
+    adattare e non si schiaccia."""
     Jv, Bv = leggi(glb_vassoio)
     Jp, Bp = leggi(glb_prodotto)
-    # il flowpack si misura nella scena e si adatta nella sua maglia: valgono
-    # insieme solo se i suoi nodi non spostano niente, come li fa build_flowpack
+    cosa = "l'astuccio" if rigido else "il flowpack"
+    # il pack si misura nella scena e si adatta nella sua maglia: valgono
+    # insieme solo se i suoi nodi non spostano niente, come li fanno
+    # build_flowpack e build_carton
     if any(k in n for n in Jp.get("nodes", [])
            for k in ("matrix", "rotation", "translation", "scale")):
-        raise ValueError("riempimento: il GLB del flowpack ha nodi trasformati")
+        raise ValueError("riempimento: il GLB del pack ha nodi trasformati")
     vano = misura_vassoio(Jv, Bv)
-    p = misura_prodotto(Jp, Bp)
+    p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
     d = scegli(vano, p, quanti)
     if d is None:
-        raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) il "
-                         "flowpack (%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
-                         % (vano.lati + (p.lungo, p.largo, p.spesso)))
+        raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) %s "
+                         "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
+                         % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
     massimo = d.capienza
     if quanti is None or quanti > massimo:
         quanti = massimo
     # il pezzo poggia col corpo: le pinne, piu' larghe, si stringono prima
-    Vp, _, _ = adatta(vertici(Jp, Bp), None, p, d)
+    Vp = vertici(Jp, Bp)
+    if not rigido:
+        Vp, _, _ = adatta(Vp, None, p, d)
     poste = pose(vano, p, d, quanti, Vp)
     R = d.R
 
@@ -536,6 +554,15 @@ def componi(glb_vassoio, glb_prodotto, quanti=None):
         me = json.loads(json.dumps(me))
         for prim in me["primitives"]:
             a = prim["attributes"]
+            if rigido:
+                # niente da adattare: la maglia dell'astuccio com'e'
+                for k, v in list(a.items()):
+                    a[k] = v + sposta["accessors"]
+                if "indices" in prim:
+                    prim["indices"] += sposta["accessors"]
+                if "material" in prim:
+                    prim["material"] += sposta["materials"]
+                continue
             P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
             Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
             P2, N2, piegate = adatta(P, Nn, p, d)
@@ -623,6 +650,12 @@ def componi(glb_vassoio, glb_prodotto, quanti=None):
     righe.append("vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
                  % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso,
                     p.corpo))
+    alto = _misura(p, int(np.argmax(np.abs(d.R[1, :]))))
+    if alto > vano.per_asse[1]:
+        righe.append("il pack e' alto %.1f mm e le pareti %.1f: sta in piedi e sporge dal "
+                     "vassoio" % (alto, vano.per_asse[1]))
+    if rigido:
+        return scrivi(J, bytes(B)), righe
     if piegate:
         righe.append("pinne piu' lunghe del posto del pezzo: le punte si piegano %s"
                      % ("verso il dietro" if d.posa == "frontali" else "in su contro la parete"))

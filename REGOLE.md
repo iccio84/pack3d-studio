@@ -422,7 +422,7 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 | **Pouch** - fondo a soffietto ed estremita' saldata | il PDF, e si costruisce | `build_pouch` |
 | **Cartotecnico** | **astuccio** (un solo elemento che si chiude da solo) o **scatola** (due o piu' elementi, per esempio base piu' coperchio); lo **spessore della carta**, da 1 a 3; l'astuccio un PDF, la scatola **di quante parti** e' fatta e poi **esattamente quei PDF**, uno per parte. Dopo lo studio, se l'astuccio ha un'**apertura a strappo**: chiuso - e allora se si vuole la **fustella dell'apertura modellata** - o aperto, e allora di **quanti gradi** si apre il coperchio. Se ha una finestra, la **pellicola** | passo `carto`, `parti`, `spessore`; pannelli `strappo` e `pellicola`; `pezzi`, `spessore`, `apertura`, `incisioni`, `pellicola` nell'intestazione |
 | **Vassoio** - contenitore espositivo per le CU, display con plancia compresi, realizzati vuoti | il PDF, e si costruisce | `build_vassoio`, `build_plancia` |
-| **Riempimenti** - TU: un vassoio o un display con dentro le CU | due posti, il **pack (CU)** e il **vassoio o display**; finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack | `analisi_riempimento`, `build_riempimento` |
+| **Riempimenti** - TU: un vassoio o un display con dentro le CU | che cosa e' il **pack (CU)**: flowpack o astuccio, e dell'astuccio lo spessore della carta; due posti, il **pack (CU)** e il **vassoio o display**, e finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack, o - per l'astuccio con l'apertura a strappo - se se ne vuole la fustella modellata | `cu`, `analisi_riempimento`, `build_riempimento` |
 
 Le famiglie da un PDF solo partono appena il PDF c'e'. Se la lettura o la
 costruzione si ferma, si torna al passo coi PDF ancora al loro posto: se ne
@@ -3328,6 +3328,35 @@ Sullo Space il Choco Fresh e' passato al primo colpo, ok: "Le righe sottili
 sul fronte sono i tagli dell'apertura a strappo incisi nel cartone, non
 residui stampati".
 
+#### La perforazione e' l'altra firma
+
+Sul KMS T10 Raspberry l'apertura non ha il taglio dal rovescio: e' una
+**perforazione**, una fila di trattini - 13 mm di taglio e 1,7 di ponticello -
+che parte dalla piega fra fronte e cielo, scende sui due lati del fronte,
+passa sul fondo, corre in orizzontale con la mezzaluna per il dito e torna
+sulla stessa piega. La firma di prima non la vedeva, e l'astuccio usciva
+liscio, senza nessuna domanda sull'apertura.
+
+`incisioni.perforata` la segue di trattino in trattino: il prossimo e' quello
+il cui capo sta a meno di 2,5 mm (`PONTE`) e che gira di meno, al piu' di 60
+gradi; cosi' alla mezzaluna la fila prende la corda dritta, e il mezzo cerchio
+resta un taglio vicino, la lunetta. Vale come apertura solo se:
+
+- ha almeno 8 ponticelli veri (`PONTI_MIN`), piu' lunghi di mezzo millimetro;
+- e' lunga almeno 80 mm (`PERFORATA_MIN`);
+- i due capi stanno **sulla stessa piega**, quella da cui parte.
+
+Una riga tratteggiata qualunque dentro una faccia - una piega di servizio, il
+riquadro di un'area - non torna sulla piega da cui parte. I tratti che corrono
+lungo il bordo di un pannello sono pieghe, e non si seguono.
+
+Chiusa, la perforazione si incide **trattino per trattino**: i ponticelli sono
+cartone intero, e sul modello il solco e' tratteggiato come sulla scatola. Per
+aprirla, il contorno e' la fila coi ponticelli colmati, senza taglio dal
+rovescio e quindi senza cartoncino sfogliato: la finestra si alza sulla piega
+col cielo, la linguetta gira sotto il fondo, la lunetta si spinge dentro. Sul
+T10: 37 trattini e la mezzaluna, 463 mm di contorno, cerniera di 144 mm.
+
 ### L'apertura a strappo, aperta
 
 Lo stesso astuccio si puo' volere **aperto**: la finestra sollevata di tot
@@ -5146,6 +5175,35 @@ display: 2 file da 13; il Tronky T1 nel suo: 4 file da 10.
 
 Sul KMS T1: 152,5 x 47,4 x 17,0 mm, corpo 127.
 
+### Le CU: flowpack o astucci
+
+Nei riempimenti la pagina chiede che cosa e' il pack (CU): **flowpack** o
+**astuccio**, un cartotecnico di un pezzo solo (`cu` nell'intestazione,
+`flowpack` di serie). L'astuccio si costruisce come astuccio, chiuso, con lo
+spessore della carta che si sceglie nello stesso passo; se ha l'apertura a
+strappo, la pagina chiede se se ne vuole la fustella modellata (`incisioni`).
+Aperto no: in un espositore il pack e' chiuso.
+
+L'astuccio e' **rigido**, e si tratta da rigido (`componi(rigido=True)`):
+
+- si misura sul suo **ingombro**. La sezione a meta' qui non dice niente: le
+  facce sono quadrilateri grandi, e a meta' non ci sono vertici - sul T10 la
+  sezione dava 7,5 x 0,2 mm;
+- **non si schiaccia**: il 2% vale per un film gonfio;
+- non ha pinne da stringere ne' da piegare: la sua maglia si richiama com'e',
+  e il GLB non ne copia i vertici.
+
+Il KMS T10 Raspberry nel suo vassoio T10x7: 7 astucci frontali in fila dal
+davanti al fondo, 187,4 mm di traverso nei 190 del vano.
+
+### Piu' alto delle pareti: sta in piedi e sporge
+
+Gli strati si contano fino alla parete piu' alta, ma **almeno uno ce n'e'
+sempre**: un pack piu' alto delle pareti sta in piedi lo stesso e sporge dal
+vassoio, che gli tiene il piede. Il T10 e' alto 146,5 mm e le pareti del suo
+vassoio 40,5: e' il display vero, e il cartellino lo dice. Prima lo strato
+non c'era, e il pack frontale non entrava mai in un vassoio basso.
+
 ### I pack sono frontali
 
 **Nel vassoio i pack stanno frontali**: la faccia stampata verso il davanti
@@ -5164,9 +5222,10 @@ Sul KMS Raspberry, T1x40: le pareti lunghe sono alte 98,6 mm, due barrette da
 
 La prima versione li metteva sdraiati con la faccia in su, 8 di traverso per 5
 strati: anche loro 40, ma da davanti si vedeva solo il bordo del film, e il
-vassoio vero non si riempie cosi'. Sdraiati si va solo se in piedi non ci
-stanno (un vassoio piu' basso del pack), e lo si dice. Di taglio, con la
-faccia verso i fianchi, mai.
+vassoio vero non si riempie cosi'. Sdraiati si va solo se frontali non ci
+stanno in pianta - il pack piu' largo del vassoio, o piu' profondo - e lo si
+dice: piu' alto delle pareti non basta, sta in piedi e sporge. Di taglio, con
+la faccia verso i fianchi, mai.
 
 ### Quanti ne stanno
 
@@ -5237,8 +5296,8 @@ riquadro del controllo.
 
 - Il pack frontale ruotato: oggi frontale vuol dire come sta nel suo modello.
   Un pack lungo che nel suo modello e' coricato non si prova in piedi.
-- I prodotti che non sono flowpack: astucci, pouch e coppe in un vassoio.
-- I pezzi rigidi che non si schiacciano: il 2% vale per un film gonfio.
+- Le CU che non sono flowpack ne' astucci: pouch, coppe, scatole in piu' pezzi.
+- L'astuccio aperto dentro l'espositore.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
 
 ## Casi calibrati
