@@ -2868,8 +2868,9 @@ document.getElementById('go').onclick = async () => {
 // nuovo artwork, e rimessa sul modello ogni cosa torna al suo posto. La
 // regola e' quella di pack3d/texture.py: una texture per immagine, col nome
 // della mesh che la usa, e oltre LATO_GLAM px di lato ridotta in proporzione,
-// perche' Glam Lab non ne prende di piu' grandi. Un modello ne ha una per
-// foglio: una quasi sempre, due coppa e cono col loro tappo e il riempimento.
+// perche' Glam Lab non ne prende di piu' grandi. Un modello ne ha una sola:
+// coppa, cono e riempimento hanno gli stesi dei loro fogli in un atlante
+// (pack3d/atlante.py); un GLB vecchio ne puo' avere piu' d'una.
 // Si scaricano col tasto; a Glam, che ospita la pagina, va con
 // pack3d:texture (GLAM.md, sezione 8), e solo se e' una: Glam la mette su
 // tutti i materiali del modello. `glb` e' la misura in byte del GLB, per

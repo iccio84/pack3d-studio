@@ -443,7 +443,8 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
 
     `tex` puo' essere una lista, una texture per ognuna delle `parti`: la
     coppa e il tappo vengono da due PDF, e ognuno ha il suo steso. Allora
-    `mr` e `normale` non ci sono.
+    `mr` e `normale` non ci sono, e chi chiama poi unisce le texture in
+    un'immagine sola (`pack3d.atlante`).
     """
     buf = bytearray()
     views, accessors = [], []

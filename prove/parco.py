@@ -28,8 +28,9 @@ avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
 Le immagini finiscono in DIR, di serie DOPO/confronto.
 
 `stesi` controlla che la texture di ogni modello sia lo steso del suo PDF
-(REGOLE.md, *La texture e' lo steso*): cerca ogni texture sulla prima pagina
-del PDF senza i livelli tecnici e senza le lastre che coprono la grafica,
+(REGOLE.md, *La texture e' lo steso*): cerca ogni texture - e ogni zona di
+un atlante, quello dei modelli di piu' fogli - sulla prima pagina del PDF
+senza i livelli tecnici e senza le lastre che coprono la grafica,
 girata di 0, 90, 180 o 270 gradi e a scale
 diverse, e dice dove combacia meglio. Deve combaciare dritta, a scala
 uniforme. Esce con 1 se una texture combacia nettamente meglio girata; una
@@ -1372,11 +1373,23 @@ def stesi(args):
                                             .to_pil().convert("L"), float)
                 doc.close()
             return rese[(i, dpi)]
+        # un atlante (`pack3d.atlante`) si cerca zona per zona: ognuna e' lo
+        # steso del suo foglio
+        pezzi = []
         for t in texture.texture(glb, 100000):
-            im = Image.open(io.BytesIO(t["dati"])).convert("L")
+            tutta = Image.open(io.BytesIO(t["dati"])).convert("L")
+            for z in t["zone"] or [None]:
+                if z is None:
+                    pezzi.append((t["nome"], tutta))
+                    continue
+                W, H = tutta.size
+                pezzi.append((z["nome"], tutta.crop((
+                    round(z["x"] * W), round(z["y"] * H),
+                    round((z["x"] + z["w"]) * W), round((z["y"] + z["h"]) * H)))))
+        for nome, im in pezzi:
             if max(im.size) < 64:
                 print("%-30s %-12s %5d x %-5d  troppo piccola per cercarla"
-                      % (caso["nome"], t["nome"], im.width, im.height))
+                      % (caso["nome"], nome, im.width, im.height))
                 continue
             R = float(round(min(72.0, max(30.0, STESI_PX * 300.0 / max(im.size)))))
             per_giro = {}
@@ -1393,7 +1406,7 @@ def stesi(args):
             if 0 not in per_giro:
                 # tutta di un colore: non c'e' niente da ritrovare
                 print("%-30s %-12s %5d x %-5d  di un colore solo, non si cerca"
-                      % (caso["nome"], t["nome"], im.width, im.height))
+                      % (caso["nome"], nome, im.width, im.height))
                 continue
             giro = max(per_giro, key=lambda k: per_giro[k][0])
             c, dpi, i = per_giro[giro]
@@ -1409,7 +1422,7 @@ def stesi(args):
                 esito = ("incerta, da guardare: girata di %d gradi %.2f, dritta "
                          "%.2f" % (giro, c, dritta))
             print("%-30s %-12s %5d x %-5d  %s (pdf %d, %.0f dpi, correlazione %.2f)"
-                  % (caso["nome"], t["nome"], im.width, im.height, esito, i + 1,
+                  % (caso["nome"], nome, im.width, im.height, esito, i + 1,
                      dpi, c))
     if girate:
         raise SystemExit(1)

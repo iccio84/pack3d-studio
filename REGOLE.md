@@ -5343,15 +5343,28 @@ toccare la costruzione: le verifiche girano prima, sui telai di sempre.
 | display con plancia | il DT con un millimetro attorno, anche oltre i pezzi della maglia | via la coda delle tinte, le UV portate sul DT (`steso.allarga`), giro indietro |
 | ballotin, scatola a punta | il DT con un millimetro attorno | via le strisce del rovescio e del taglio |
 | astuccio | il DT con un millimetro attorno | lo steso al posto delle facce (*Astucci*, *La texture e' lo steso*) |
-| coppa, cono | uno per foglio: lo sleeve e il fondo, il tappo; il cono, il lid | il foglio che `coppa.orienta` aveva girato sulla tavola torna nel verso del suo PDF; il rovescio bianco e' un colore pieno; l'anello del tappo, che sullo steso c'e' una volta, attorno si ripete a settori, uno per modulo, e nessun triangolo ne scavalca il bordo |
-| riempimento | quello del vassoio e quello del pack | niente: sono i due modelli com'escono |
+| coppa, cono | uno per foglio: lo sleeve e il fondo, il tappo; il cono, il lid - in un atlante | il foglio che `coppa.orienta` aveva girato sulla tavola torna nel verso del suo PDF; il rovescio bianco e' un colore pieno; l'anello del tappo, che sullo steso c'e' una volta, attorno si ripete a settori, uno per modulo, e nessun triangolo ne scavalca il bordo |
+| riempimento | quello del vassoio e quello del pack - in un atlante | i due modelli com'escono, e i loro stesi nell'atlante |
 
 - **Le tinte piene** - il rovescio, il taglio, il solco - non stanno nella
   texture: sono materiali senza texture, col colore in `baseColorFactor`,
   lineare come vuole glTF (`steso.lineare`). Il viewer della pagina e le viste
   del controllo lo riportano in sRGB.
-- **Una texture per foglio**: una quasi sempre; due la coppa col tappo e il
-  cono col lid, che vengono da due PDF, e il riempimento.
+- **Una texture sola, anche per piu' fogli**: la coppa col tappo, il cono col
+  lid e il riempimento vengono da due PDF, e ognuno ha il suo steso; i due
+  stesi stanno in un'immagine sola, l'**atlante** (`pack3d/atlante.py`). Ogni
+  zona e' lo steso del suo foglio, intero, nel suo verso e alla sua
+  risoluzione - coppa e cono rendono i due fogli allo stesso dpi, e le zone
+  hanno la stessa scala; nel riempimento vassoio e pack hanno ognuno la sua.
+  Le zone si dispongono col lato piu' corto (in fila, in colonna, il pezzo
+  grande con gli altri accanto o sotto), con 16 px di margine coi pixel del
+  bordo ripetuti, perche' da lontano il filtro della texture non mescoli i
+  pezzi; le UV di ogni triangolo puntano alla sua zona, e il metallo e il
+  rilievo vanno in un atlante loro con la stessa disposizione. Le zone sono
+  scritte nel GLB (`extras.pack3d_zone` dell'immagine): il template ci
+  scrive il nome dei pezzi, e `prove/parco.py stesi` cerca ogni zona nel suo
+  PDF. Glam mette una texture sola su tutto il modello: cosi' la texture e il
+  template ce l'hanno tutti.
 - **Il modello non cambia**: sul parco le viste del controllo sono quelle di
   prima, a meno della compressione JPEG. Cambiano solo il file della texture e
   le UV, insieme.
@@ -5381,18 +5394,19 @@ immagine di colore, coi nomi delle mesh se sono piu' d'una
   pagina con `pack3d:texture`, dalla routine e dallo Space con
   `/api/import-texture`, dopo il modello. **Solo se e' una**: Glam mette la
   texture scelta su tutti i materiali con una texture, e due non saprebbe
-  dove metterle. Se Glam non la prende, il modello c'e' lo stesso: si scrive
-  e si va avanti.
+  dove metterle - per questo i modelli di piu' fogli hanno l'atlante. Se
+  Glam non la prende, il modello c'e' lo stesso: si scrive e si va avanti.
 
 ### Il template PSD
 
-Per «Scarica Template» di Glam ogni modello con una texture sola ha anche il
-suo **template**: un PSD fatto dal GLB (`pack3d/template.py`), con la
+Per «Scarica Template» di Glam ogni modello - con una texture sola, e coi
+modelli di piu' fogli in atlante sono tutti - ha anche il suo **template**: un PSD fatto dal GLB (`pack3d/template.py`), con la
 struttura del template ufficiale del Nutella 750 g. Sotto, il gruppo «La tua
 grafica» con la texture, cioe' lo steso; sopra, le «Guide UV»: tutti gli
 spigoli della mappatura e la scacchiera A0-J9 (nascosti), l'area che il
-modello non prende velata di nero al 60%, i contorni in magenta e i nomi
-delle facce di un astuccio.
+modello non prende velata di nero al 60%, i contorni in magenta, i nomi
+delle facce di un astuccio e, in un atlante, il nome di ogni pezzo (COPPA,
+TAPPO, VASSOIO, FLOWPACK...) nella sua zona.
 
 - **I contorni sono quelli che servono a chi disegna**: il bordo di quello
   che il modello prende - il DT, le finestre, i solchi - preso dalla

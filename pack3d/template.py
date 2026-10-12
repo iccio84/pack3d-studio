@@ -32,14 +32,19 @@ si accendono e si spengono, ma non si dipingono per sbaglio:
   le fustelle, perche' si vedano sulla grafica;
 - *Nomi delle facce*: FRONTE, RETRO, FIANCO SX... al centro di ogni faccia
   di un astuccio (`NOMI`), dove il GLB le chiama per nome; in verticale
-  sulle facce alte e strette.
+  sulle facce alte e strette;
+- *Nomi dei pezzi*: in un modello di piu' fogli - la coppa col tappo, il
+  cono col lid, il riempimento - la texture e' un atlante coi loro stesi
+  (`pack3d.atlante`), e ogni zona ha in alto a sinistra il nome del suo
+  pezzo (`PEZZI`): COPPA, TAPPO, VASSOIO, FLOWPACK...
 
 La composizione salvata nel file, quella che vede chi non legge i livelli,
 e' quella dei livelli accesi.
 
 Il template si fa solo se il modello ha una texture sola, come la texture
-che va a Glam: Glam mette una texture su tutto il modello, e il template e'
-la tela di quella texture. Le guide sono solo dei materiali che la usano:
+che va a Glam - e coi modelli di piu' fogli in atlante, ce l'hanno tutti:
+Glam mette una texture su tutto il modello, e il template e' la tela di
+quella texture. Le guide sono solo dei materiali che la usano:
 l'interno, il taglio, il rovescio e la pellicola sono colori pieni, e la
 texture di una variante non li tocca. Se il PSD supera `LIMITE`, si rifa'
 piu' piccolo: le UV sono frazioni dell'immagine, e un template piu' piccolo
@@ -77,6 +82,10 @@ LIMITE = 45_000_000
 MIME = "image/vnd.adobe.photoshop"
 # le facce dell'astuccio, come le chiama `folding`: il fianco sinistro e'
 # quello a sinistra guardando il fronte
+# i pezzi di un atlante, come li chiama il GLB (`pack3d.atlante`)
+PEZZI = {"coppa": "COPPA", "tappo": "TAPPO", "cono": "CONO", "lid": "LID",
+         "vassoio": "VASSOIO", "display": "DISPLAY", "flowpack": "FLOWPACK",
+         "packaging": "ASTUCCIO"}
 NOMI = {"front": "FRONTE", "back": "RETRO", "left": "FIANCO SX",
         "right": "FIANCO DX", "top": "CIELO", "bottom": "FONDO",
         "back_top": "RETRO", "back_bottom": "RETRO"}
@@ -436,7 +445,27 @@ def _nomi(misura, UV, nomi):
     return im if scritte else None
 
 
-def _psd(tela, P, UV, nomi):
+def _pezzi(misura, zone):
+    """I nomi dei pezzi di un atlante, in alto a sinistra di ogni zona; None
+    se la texture non e' un atlante."""
+    from PIL import Image, ImageDraw
+    if not zone:
+        return None
+    w, h = misura
+    im = Image.new("RGBA", misura, (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    for z in zone:
+        zx, zy, zw, zh = z["x"] * w, z["y"] * h, z["w"] * w, z["h"] * h
+        f = _font(min(min(zw, zh) / 8, max(w, h) / 30))
+        bordo = max(1, round(f.size / 10))
+        d.text((zx + f.size * 0.4, zy + f.size * 0.3),
+               PEZZI.get(z.get("nome"), str(z.get("nome") or "").upper()),
+               fill=SCRITTE + (255,), font=f, stroke_width=bordo,
+               stroke_fill=(255, 255, 255, 255))
+    return im
+
+
+def _psd(tela, P, UV, nomi, zone=()):
     """`(byte del PSD, pieghe, spigoli)` sulla `tela` (la texture, RGB)."""
     from psd_tools import PSDImage
     from psd_tools.constants import ProtectedFlags, Tag
@@ -454,11 +483,12 @@ def _psd(tela, P, UV, nomi):
     linee = _livello(_tratti(misura, pieghe, spessore,
                              _bordo(dentro, max(1, spessore // 2 + 1))), CONTORNI)
     scritte = _nomi(misura, UV, nomi)
+    nomi_pezzi = _pezzi(misura, zone)
     # la composizione dei livelli accesi
     composizione = tela.convert("RGBA")
     velo = fuori.copy()
     velo.putalpha(fuori.getchannel("A").point(lambda a: a * VELO // 255))
-    for sopra in (velo, linee, scritte):
+    for sopra in (velo, linee, scritte, nomi_pezzi):
         if sopra is not None:
             composizione.alpha_composite(sopra)
     # Il documento nasce RGBA perche' psd-tools tenga la trasparenza dei
@@ -475,7 +505,8 @@ def _psd(tela, P, UV, nomi):
             (griglia, "Griglia texture", False, 255, True),
             (fuori, "Area non modificabile", True, VELO, True),
             (linee, "Contorni", True, 255, False),
-            (scritte, "Nomi delle facce", True, 255, False)):
+            (scritte, "Nomi delle facce", True, 255, False),
+            (nomi_pezzi, "Nomi dei pezzi", True, 255, False)):
         if im is None:
             continue
         livello = guide.create_pixel_layer(im, name=nome, opacity=opaco)
@@ -507,7 +538,7 @@ def template(glb, lato_max=_texture.LATO_GLAM):
     tela = Image.open(io.BytesIO(t["dati"])).convert("RGB")
     P, UV, nomi = triangoli(glb, t["sorgente"])
     while True:
-        dati, n_pieghe, n_tutti = _psd(tela, P, UV, nomi)
+        dati, n_pieghe, n_tutti = _psd(tela, P, UV, nomi, t["zone"])
         if len(dati) <= LIMITE or max(tela.size) <= 1024:
             break
         r = 0.8 * (LIMITE / len(dati)) ** 0.5

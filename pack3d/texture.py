@@ -4,11 +4,12 @@ E' l'immagine che il GLB usa come colore del pack, con le stesse UV, ed e'
 lo steso del PDF: la grafica pulita, nel verso del foglio, inquadrata sul DT
 (`pack3d.steso`). Ci si sovrappone il nuovo artwork di una variante e la si
 rimette sul modello - come fa Glam Lab con le texture della sua sezione - e
-ogni cosa torna al suo posto. Un modello ne ha una per foglio: una quasi
-sempre; due la coppa col tappo e il cono col lid, che vengono da due PDF, e
-il riempimento, il vassoio e il pack. A parte si danno tutte, ma Glam, che
-mette una texture sola su tutto il modello, la riceve solo se e' una
-(`per_glam`).
+ogni cosa torna al suo posto. Un modello ne ha una sola: anche quello fatto
+di piu' fogli - la coppa col tappo, il cono col lid, il riempimento - ha gli
+stesi dei suoi PDF in un'immagine sola, l'atlante (`pack3d.atlante`), e le
+sue zone (`"zone"`). Un GLB vecchio, con piu' immagini, le da' tutte, ma
+Glam, che mette una texture sola su tutto il modello, la riceve solo se e'
+una (`per_glam`).
 
 Glam accetta immagini fino a 5000 px di lato (`LATO_GLAM`). Una texture piu'
 grande - un display in HD arriva a 8192 px - si riduce in proporzione: le UV
@@ -48,9 +49,11 @@ def _parti(glb):
 def texture(glb, lato_max=LATO_GLAM):
     """Le texture del colore del modello, una per immagine, nell'ordine del
     GLB: `[{"nome", "dati", "mime", "estensione", "lato", "ridotta",
-    "sorgente"}]`. `nome` e' quello della prima mesh che la usa (vassoio,
-    flowpack, packaging...), `lato` la misura `(l, a)` del file che esce,
-    `sorgente` l'indice dell'immagine nel GLB."""
+    "sorgente", "zone"}]`. `nome` e' quello della prima mesh che la usa
+    (vassoio, flowpack, packaging...), `lato` la misura `(l, a)` del file che
+    esce, `sorgente` l'indice dell'immagine nel GLB, `zone` quelle di un
+    atlante (`pack3d.atlante`: nome e riquadro in frazioni dell'immagine),
+    o una lista vuota."""
     from PIL import Image
     J, binario = _parti(glb)
     materiali = J.get("materials") or []
@@ -90,7 +93,8 @@ def texture(glb, lato_max=LATO_GLAM):
             dati, mime, ridotta = bio.getvalue(), "image/jpeg", True
         fuori.append({"nome": nomi.get(s, ""), "dati": dati, "mime": mime,
                       "estensione": ESTENSIONI.get(mime, "jpg"), "lato": lato,
-                      "ridotta": ridotta, "sorgente": s})
+                      "ridotta": ridotta, "sorgente": s,
+                      "zone": list((im.get("extras") or {}).get("pack3d_zone") or [])})
     return fuori
 
 
