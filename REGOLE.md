@@ -408,26 +408,38 @@ allora si gira la scatola intera, guscio, interno e coste
 
 ## Domande all'utente
 
-| regola | dove |
-|---|---|
-| Su **ogni** PDF chiedere prima la tipologia: Cartotecnico, Flowpack, Vassoio espositore, Altro. La tipologia si dichiara, non si indovina — **e la dichiarazione vale anche quando dice di no**, vedi sotto. | pannello del frontend + `analyze_pdf(pdf, kind)` |
-| Solo cartotecnico: chiedere **di quanti pezzi** e' fatto il pack, digitato e senza valore proposto. **Ogni pezzo e' un PDF**: se ne sono arrivati meno si chiedono gli altri, se di piu' ci si ferma. Vedi *Il cartotecnico dice di quanti pezzi e' fatto*. | pannello `pezzi`, `pezzi` nell'intestazione; `server.in_piu_pezzi` |
-| Solo flowpack: chiedere il **numero esatto** di dentini, digitato dall'utente. Nessuna alternativa proposta, 0 = pinne lisce. | campo numerico senza valore predefinito |
-| Solo flowpack: chiedere il **rigonfiamento** fra quattro opzioni: Rigido (1-3), Medio (4-6), Morbido (7-10), "Scegli tu". Con "Scegli tu" il livello lo sceglie Claude guardando l'artwork, con le regole qui sotto; senza chiave API si ripiega sul 5 e lo si grida. | `gonfiore()` in `server.py`, `controllo.rigonfiamento` |
-| Solo flowpack: chiedere l'**apertura delle pinne**, da 1 a 3. Non si deduce dal rigonfiamento. | cursore `pinne`, `build_flowpack` |
-| Solo flowpack: chiedere se il **film avvolge una scatola**. | casella `scatola`, `parametri_costruzione.avvolge_scatola` |
-| Solo astuccio con l'**apertura a strappo**, quando l'analisi la trova: chiedere se lo si vuole **chiuso**, coi tagli modellati, o **aperto** di quanti gradi (proposti 60). Senza apertura la domanda non c'e'. | pannello `strappo`, `strappo_astuccio` in `server.py`, `apertura` nell'intestazione |
+**La prima domanda e' la famiglia, prima di ogni PDF.** Appena aperta, la
+pagina chiede: *Che tipo di Pack/Riempimento intendi realizzare?* - Flowpack,
+Pouch, Cartotecnico, Vassoio, Riempimenti - ognuna con la sua descrizione in
+una riga. Senza la famiglia non si carica niente: un PDF trascinato prima
+riceve solo la richiesta di sceglierla, e al server non parte nulla. Scelta
+la famiglia, il passo della famiglia chiede il resto e ha **un posto per ogni
+PDF**, col suo nome: si sa sempre quali file mancano.
+
+| famiglia | cosa chiede, in ordine | dove |
+|---|---|---|
+| **Flowpack** - pack con saldature e pinne laterali | il PDF; dopo lo studio della fustella: il **numero dei denti** della zigrinatura, digitato e senza valore proposto (0 = pinne lisce); il **rigonfiamento**, da 1 (molto rigido, effetto sottovuoto) a 10 (molto gonfio, per prodotti tondeggianti o con aria), o "Scegli tu" e lo sceglie Claude guardando l'artwork; l'**apertura delle pinne**, da 1 (chiuse, alte quanto il pack) a 3 (molto aperte, a farfalla), che non si deduce dal rigonfiamento; se il **film avvolge una scatola** | pannello `params`; `gonfiore()`, `controllo.rigonfiamento`, `build_flowpack` |
+| **Pouch** - fondo a soffietto ed estremita' saldata | il PDF, e si costruisce | `build_pouch` |
+| **Cartotecnico** | **astuccio** (un solo elemento che si chiude da solo) o **scatola** (due o piu' elementi, per esempio base piu' coperchio); lo **spessore della carta**, da 1 a 3; l'astuccio un PDF, la scatola **di quante parti** e' fatta e poi **esattamente quei PDF**, uno per parte. Dopo lo studio, se l'astuccio ha un'**apertura a strappo**: chiuso - e allora se si vuole la **fustella dell'apertura modellata** - o aperto, e allora di **quanti gradi** si apre il coperchio. Se ha una finestra, la **pellicola** | passo `carto`, `parti`, `spessore`; pannelli `strappo` e `pellicola`; `pezzi`, `spessore`, `apertura`, `incisioni`, `pellicola` nell'intestazione |
+| **Vassoio** - contenitore espositivo per le CU, display con plancia compresi, realizzati vuoti | il PDF, e si costruisce | `build_vassoio`, `build_plancia` |
+| **Riempimenti** - TU: un vassoio o un display con dentro le CU | due posti, il **pack (CU)** e il **vassoio o display**; finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack | `analisi_riempimento`, `build_riempimento` |
+
+Le famiglie da un PDF solo partono appena il PDF c'e'. Se la lettura o la
+costruzione si ferma, si torna al passo coi PDF ancora al loro posto: se ne
+cambia uno, o si riprova. *Annulla* e *Cambia tipo* tornano alla prima
+domanda.
 
 ### Il cartotecnico dice di quanti pezzi e' fatto
 
-Scelto **Cartotecnico**, la pagina chiede di quanti pezzi e' fatto il pack, e
-il numero va digitato: come i dentini, non si deduce. Ogni pezzo e' un PDF,
-e il risolutore lo deve sapere prima di cominciare - un astuccio e' un file
-solo, la coppa col tappo sono due, lo sleeve e il tappo, e da un file solo
-non c'e' modo di sapere che l'altro esiste. Se i PDF caricati sono meno dei
-pezzi la pagina chiede gli altri, e li aggiunge a quelli che ci sono; se
-sono di piu' si ferma. Il server ricontrolla: `pezzi` nell'intestazione deve
-essere il numero dei PDF arrivati, o la richiesta torna indietro.
+Scelto **Cartotecnico**, la pagina chiede se e' un **astuccio** - un pezzo
+solo - o una **scatola**, e della scatola di quante parti e' fatta, da 2 a 8:
+come i dentini, non si deduce. Ogni parte e' un PDF, e il risolutore lo deve
+sapere prima di cominciare - un astuccio e' un file solo, la coppa col tappo
+sono due, lo sleeve e il tappo, e da un file solo non c'e' modo di sapere che
+l'altro esiste. La pagina mostra un posto per parte e si va avanti solo con
+tutti i PDF; se ne arrivano di piu' insieme, quelli in piu' non si prendono e
+lo si dice. Il server ricontrolla: `pezzi` nell'intestazione deve essere il
+numero dei PDF arrivati, o la richiesta torna indietro.
 
 - **Un pezzo**: l'astuccio, come sempre - ma prima si guarda se e' lo steso
   di un cono, dai soli tratti, in due decimi di secondo (`coppa.e_un_cono`):
@@ -447,7 +459,7 @@ essere il numero dei PDF arrivati, o la richiesta torna indietro.
 
 ### Il cartotecnico dice di che carta e' fatto
 
-Nello stesso pannello la pagina chiede lo **spessore della carta**, da 1 a
+Nello stesso passo la pagina chiede lo **spessore della carta**, da 1 a
 3, e anche questo non si deduce: senza la scelta non si va avanti. Il cono
 gelato e' poco piu' spesso di un foglio di carta, un astuccio no, e dal PDF
 non si legge - il cartiglio della coppa lo scrive, quello del cono no.
@@ -470,11 +482,17 @@ byte.
 ### L'apertura a strappo: chiusa o aperta
 
 Quando l'astuccio ha un'apertura a strappo, la pagina chiede come lo si
-vuole: **chiuso**, coi tagli modellati come solchi nel cartone (vedi
-*L'apertura a strappo si incide, non si disegna*), o **aperto** di quanti
-gradi, con la finestra sollevata sulla sua cerniera e la scatola appoggiata
-sulla faccia opposta (vedi *L'apertura a strappo, aperta*). Si propone
-chiuso; aperto, si propongono 60 gradi e si digita da 1 a 180.
+vuole, senza proporre niente:
+
+- **chiuso**, e allora se si vuole la **fustella dell'apertura modellata**:
+  si', i tagli come solchi nel cartone (vedi *L'apertura a strappo si incide,
+  non si disegna*); no, l'astuccio liscio, come se l'apertura non ci fosse
+  (`incisioni: 0`);
+- **aperto**, e allora di **quanti gradi** si apre il coperchio, da 1 a 180
+  (proposti 60), con la finestra sollevata sulla sua cerniera e la scatola
+  appoggiata sulla faccia opposta (vedi *L'apertura a strappo, aperta*).
+
+Dall'API, senza `incisioni`, l'astuccio chiuso porta i solchi come prima.
 
 La domanda si fa solo se c'e' qualcosa da chiedere. L'analisi che la pagina
 chiede prima di costruire (`/api/analyze`) cerca l'apertura con la **stessa
@@ -5082,9 +5100,10 @@ flowpack, e un GLB solo (`pack3d/riempimento.py`).
 
 ### Si dichiara, e i PDF si riconoscono da soli
 
-Il riempimento non si indovina: lo dichiara chi carica, col tasto della
-tipologia. Se ha caricato un PDF solo, la pagina chiede l'altro. Quale dei
-due e' il vassoio lo dice la lettura: si prova il vassoio su tutti e due
+Il riempimento non si indovina: lo dichiara chi carica, scegliendo
+*Riempimenti*. La pagina ha due posti, il **pack (CU)** e il **vassoio o
+display**, e finche' non ci sono tutti e due non si procede. Quale dei due e'
+il vassoio lo verifica comunque la lettura: si prova il vassoio su tutti e due
 (`analisi_riempimento`), e deve passare **uno solo**. Se passano tutti e due,
 o nessuno, ci si ferma e lo si dice. L'altro si legge come flowpack, con le
 domande di sempre: zigrinatura, gonfiore, pinne.
@@ -5109,6 +5128,13 @@ Il vano e' l'ingombro del vassoio meno lo spessore del cartoncino (1 mm) su
 ogni lato e sul fondo. Si impila fino alla **parete piu' alta**: su un display
 il fronte e' basso perche' il prodotto si deve vedere, e la pila la reggono i
 fianchi. Sul KMS Raspberry il vano e' 145,5 x 383,4 mm, alto 98,6.
+
+**Il display si misura senza la plancia.** Il display esce come due nodi, la
+scatola e la plancia, sugli stessi vertici: si distinguono solo dai
+triangoli. Il vano si misura sui vertici che i triangoli della scatola usano
+davvero, plancia esclusa; con la plancia il vano arrivava in cima al cartello,
+244 mm sul Nutella Biscuits invece di 104. Il Nutella Biscuits T3 nel suo
+display: 2 file da 13; il Tronky T1 nel suo: 4 file da 10.
 
 ### Il flowpack si misura sulla sua maglia
 

@@ -53,12 +53,20 @@ combinazione funziona.
 
 ## Cosa fa l'interfaccia
 
-1. **Carica PDF** accetta solo PDF. Se e' un astuccio il modello parte subito;
-   se e' un flowpack compaiono prima le domande obbligatorie: numero di
-   dentini, rigonfiamento, apertura delle pinne, e la casella per dire se il
-   film avvolge una scatola. Se il pack ha una finestra - un ballotin, un
-   astuccio col retro aperto fra due falde - la pagina chiede se ci va la
-   pellicola trasparente, che di solito c'e' ma non sempre.
+1. Per prima cosa la pagina chiede **che tipo di Pack/Riempimento** si vuole
+   realizzare: Flowpack, Pouch, Cartotecnico, Vassoio, Riempimenti. Poi il
+   passo della famiglia, con un posto per ogni PDF (solo PDF):
+   - **Flowpack**: il PDF, poi le domande obbligatorie - numero dei denti
+     della zigrinatura, rigonfiamento, apertura delle pinne - e la casella
+     per dire se il film avvolge una scatola;
+   - **Pouch** e **Vassoio** (display compresi): il PDF, e il modello parte;
+   - **Cartotecnico**: astuccio o scatola e lo spessore della carta;
+     l'astuccio un PDF, la scatola di quante parti e' fatta e un PDF per
+     parte. Se l'astuccio ha un'apertura a strappo, chiuso (con o senza la
+     fustella dell'apertura modellata) o aperto di quanti gradi; se il pack
+     ha una finestra, se ci va la pellicola trasparente;
+   - **Riempimenti**: il pack (CU) e il vassoio o display, poi quanti pack
+     mettere e le domande del flowpack.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.

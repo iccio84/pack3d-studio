@@ -351,9 +351,38 @@
             background:color-mix(in oklab,var(--secondary) 40%,transparent)}
   .pannello.on{display:block}
   .pannello > .tit{display:block;margin-bottom:12px}
-  #packtype .scelte{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  /* La prima domanda, prima di ogni PDF: la famiglia del pack. Poi il passo
+     della famiglia, con le sue richieste e un posto per ogni PDF. */
+  .domanda{margin:2px 0 14px;text-align:center;font-size:16px;font-weight:600;
+           line-height:1.35;color:var(--foreground)}
+  .carte{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
+  .carte.due{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:14px}
+  .carte[hidden]{display:none}
+  .carte button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;
+                padding:14px;text-align:left;text-transform:none;letter-spacing:0;
+                font-weight:400;font-size:12px;line-height:1.4;color:var(--muted-foreground)}
+  .carte button b{font-size:11px;font-weight:600;letter-spacing:.12em;
+                  text-transform:uppercase;color:var(--primary)}
+  .carte button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
+    background:color-mix(in oklab,var(--primary) 10%,var(--surface))}
+  .testa-passo{display:flex;align-items:center;justify-content:space-between;gap:10px;
+               margin-bottom:8px}
+  .testa-passo button{padding:6px 12px;font-size:10px}
+  .descr{margin:0 0 14px;font-size:12.5px;line-height:1.5;color:var(--foreground)}
+  .descr:empty{display:none}
+  .griglia[hidden]{display:none}
+  .slot{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+  .slot:empty{display:none}
+  .slot li{display:flex;align-items:center;gap:8px 12px;flex-wrap:wrap;padding:10px 12px;
+           border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--surface)}
+  .slot .cosa{flex:1 1 220px;font-size:12px;font-weight:600;color:var(--foreground)}
+  .slot .nome{flex:1 1 160px;font-size:11px;color:var(--muted-foreground);overflow-wrap:anywhere}
+  .slot li.pieno .nome{color:var(--primary);font-weight:600}
+  .slot li button{padding:7px 12px;font-size:10px}
+  #continua{width:100%;max-width:300px;margin:12px auto 0;display:block}
+  #continua[hidden]{display:none}
 
-  #params .griglia, #pezzi .griglia, #strappo .griglia, #pellicola .griglia{display:grid;gap:14px;border:1px solid var(--border);
+  #params .griglia, #passo .griglia, #strappo .griglia, #pellicola .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   .fld{display:flex;flex-direction:column;gap:7px}
@@ -369,10 +398,11 @@
              cursor:pointer}
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
-  #go, #avanti, #strappo-go{width:100%;max-width:300px;margin:6px auto 0;display:block}
-  #spessore, #strappo-scelta, #pellicola-scelta{display:flex;gap:8px;flex-wrap:wrap}
+  #go, #strappo-go{width:100%;max-width:300px;margin:12px auto 0;display:block}
+  #spessore, #strappo-scelta, #pellicola-scelta, #fustella-scelta{display:flex;gap:8px;flex-wrap:wrap}
   #spessore button[aria-pressed="true"],
   #pellicola-scelta button[aria-pressed="true"],
+  #fustella-scelta button[aria-pressed="true"],
   #strappo-scelta button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
     background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
   .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:10px;
@@ -413,8 +443,8 @@
          prendere un minuto. <span class="sec" id="sveglia-sec"></span></div>
   </div>
   <div id="empty">
-    <strong>Carica un artwork PDF</strong>
-    <div>Il modello 3D comparirà qui. Puoi anche trascinare il file.</div>
+    <strong>Il modello 3D comparir&agrave; qui</strong>
+    <div>Scegli qui sotto il tipo di pack, poi carica i PDF: puoi anche trascinarli qui.</div>
     <button id="riprova" type="button" hidden>Riprova</button>
   </div>
   <div id="caso" role="alert">
@@ -489,36 +519,43 @@
     <ul id="ai-righe"></ul>
   </section>
 
-  <div id="packtype" class="pannello">
-    <span class="tit">Che tipo di pack &egrave;</span>
-    <div class="scelte">
-      <button data-k="carton">Cartotecnico</button>
-      <button data-k="flowpack">Flowpack</button>
-      <button data-k="vassoio">Vassoio espositore</button>
-      <button data-k="pouch">Pouch</button>
-      <button data-k="riempimento" title="Un vassoio espositore e il flowpack che ci va dentro: due PDF">Riempimento &middot; vassoio + flowpack</button>
+  <div id="famiglie" class="pannello on">
+    <h2 class="domanda">Che tipo di Pack/Riempimento intendi realizzare?</h2>
+    <div class="carte" role="group" aria-label="Famiglia del pack">
+      <button type="button" data-f="flowpack"><b>Flowpack</b><span>Pack con saldature e pinne laterali</span></button>
+      <button type="button" data-f="pouch"><b>Pouch</b><span>Pack con fondo a soffietto ed estremit&agrave; saldata</span></button>
+      <button type="button" data-f="carton"><b>Cartotecnico</b><span>Astuccio o scatola</span></button>
+      <button type="button" data-f="vassoio"><b>Vassoio</b><span>Vassoi espositori e display, realizzati vuoti</span></button>
+      <button type="button" data-f="riempimento"><b>Riempimenti</b><span>Un vassoio o un display con dentro le CU</span></button>
     </div>
   </div>
 
-  <div id="pezzi" class="pannello">
-    <span class="tit">Di quanti pezzi &egrave; fatto il pack, e di che carta</span>
-    <div class="griglia">
-    <div class="fld">
-      <label for="npezzi">Pezzi del pack cartotecnico &mdash; un PDF per pezzo</label>
-      <input id="npezzi" type="number" min="1" max="8" step="1" placeholder="digita il numero">
-      <p class="note">Un astuccio &egrave; un pezzo solo. La coppa col tappo ne ha due, lo sleeve e il tappo, e il cono gelato col lid anche: ognuno nel suo PDF. Se hai caricato meno PDF dei pezzi, qui carichi gli altri.</p>
+  <div id="passo" class="pannello">
+    <div class="testa-passo">
+      <span class="tit" id="passo-tit"></span>
+      <button type="button" id="cambia">Cambia tipo</button>
     </div>
-    <div class="fld">
-      <label>Spessore della carta <b id="spessoreval">scegli 1, 2 o 3</b></label>
-      <div id="spessore" role="group" aria-label="Spessore della carta">
-        <button type="button" data-s="1" aria-pressed="false">1 &middot; carta</button>
-        <button type="button" data-s="2" aria-pressed="false">2 &middot; cartoncino</button>
-        <button type="button" data-s="3" aria-pressed="false">3 &middot; cartoncino spesso</button>
+    <p class="descr" id="passo-descr"></p>
+    <div id="carto" class="carte due" role="group" aria-label="Astuccio o scatola" hidden>
+      <button type="button" data-c="astuccio" aria-pressed="false"><b>Astuccio</b><span>Pack cartotecnico composto da un solo elemento, che si chiude da solo</span></button>
+      <button type="button" data-c="scatola" aria-pressed="false"><b>Scatola</b><span>Pack cartotecnico composto da due o pi&ugrave; elementi. Esempio: base pi&ugrave; coperchio</span></button>
+    </div>
+    <div class="griglia" id="passo-campi" hidden>
+      <div class="fld" id="parti-fld" hidden>
+        <label for="parti">Di quante parti &egrave; fatto il pack</label>
+        <input id="parti" type="number" min="2" max="8" step="1" placeholder="da 2 a 8">
       </div>
-      <p class="note">1 = poco pi&ugrave; spesso di un foglio di carta, ~0,1 mm, come il cono gelato &middot; 2 = il cartoncino di astucci e coppe, ~0,4 mm &middot; 3 = cartoncino spesso, ~0,7 mm. Lo spessore fa le coste, il rovescio e il sormonto del modello.</p>
+      <div class="fld" id="spessore-fld" hidden>
+        <label>Spessore della carta <b id="spessoreval">scegli 1, 2 o 3</b></label>
+        <div id="spessore" role="group" aria-label="Spessore della carta">
+          <button type="button" data-s="1" aria-pressed="false">1 &middot; carta</button>
+          <button type="button" data-s="2" aria-pressed="false">2 &middot; cartoncino</button>
+          <button type="button" data-s="3" aria-pressed="false">3 &middot; cartoncino spesso</button>
+        </div>
+      </div>
+      <ul id="slot" class="slot"></ul>
     </div>
-    </div>
-    <button id="avanti" class="primary">Continua</button>
+    <button id="continua" class="primary" hidden>Continua</button>
   </div>
 
   <div id="pellicola" class="pannello">
@@ -531,9 +568,6 @@
       </div>
       <p class="note" id="pellicola-dove"></p>
     </div>
-    <div class="fld">
-      <p class="note">Le finestre di solito hanno una lastra di plastica trasparente sottilissima, incollata dall&rsquo;interno, ma non sempre. Con la pellicola la finestra ha un velo lucido; senza resta aperta, e si vede dentro.</p>
-    </div>
     </div>
   </div>
 
@@ -542,56 +576,61 @@
     <div class="griglia">
     <div class="fld">
       <div id="strappo-scelta" role="group" aria-label="Apertura a strappo">
-        <button type="button" data-a="chiusa" aria-pressed="true">Chiuso &middot; tagli modellati</button>
-        <button type="button" data-a="aperta" aria-pressed="false">Aperto</button>
+        <button type="button" data-a="chiusa" aria-pressed="false">Astuccio chiuso</button>
+        <button type="button" data-a="aperta" aria-pressed="false">Astuccio aperto</button>
       </div>
       <p class="note" id="strappo-dove"></p>
     </div>
-    <div class="fld">
-      <label for="strappo-gradi">Di quanti gradi si apre la finestra <b id="strappo-val">chiusa</b></label>
-      <input id="strappo-gradi" type="number" min="1" max="180" step="1" value="60" disabled>
-      <p class="note">Chiuso, i tagli si vedono come solchi nel cartone e la grafica resta intera. Aperto, la finestra ruota sulla sua cerniera con la linguetta, e la scatola appoggia sulla faccia opposta: 90 la tiene in piedi, 180 la stende dall&rsquo;altra parte.</p>
+    <div class="fld" id="fustella-fld" hidden>
+      <label>Vuoi la fustella dell&rsquo;apertura modellata nel modello?</label>
+      <div id="fustella-scelta" role="group" aria-label="Fustella dell'apertura modellata">
+        <button type="button" data-i="1" aria-pressed="false">S&igrave;</button>
+        <button type="button" data-i="0" aria-pressed="false">No</button>
+      </div>
+    </div>
+    <div class="fld" id="gradi-fld" hidden>
+      <label for="strappo-gradi">Di quanti gradi si apre il coperchio <b id="strappo-val"></b></label>
+      <input id="strappo-gradi" type="number" min="1" max="180" step="1" value="60">
     </div>
     </div>
     <button id="strappo-go" class="primary">Costruisci</button>
   </div>
 
   <div id="params" class="pannello">
-    <span class="tit">Parametri di costruzione</span>
+    <span class="tit" id="params-tit">Opzioni del flowpack</span>
     <div class="griglia">
     <div class="fld" id="quanti-fld" hidden>
-      <label for="quanti">Quanti flowpack nel vassoio</label>
+      <label for="quanti">Quanti pack (CU) nel vassoio</label>
       <input id="quanti" type="number" min="1" max="2000" step="1" placeholder="vuoto = pieno">
-      <p class="note">Li dispongo io nel vano, frontali: la faccia stampata verso il davanti del vassoio e il marchio dritto, in file dal davanti al fondo, a strati uguali (40 in due strati: 2 file da 20). Sdraiati solo se in piedi non ci stanno. Vuoto: pieno, quanti ne stanno. Se ne chiedi pi&ugrave; di quanti ne stanno, metto il massimo e te lo dico.</p>
+      <p class="note">Li dispongo frontali: la faccia stampata verso il davanti e il marchio dritto, in file dal davanti al fondo, a strati uguali. Vuoto: quanti ne stanno.</p>
     </div>
     <div class="fld">
-      <label for="teeth">Dentini zigrinatura per lato</label>
+      <label for="teeth">Numero denti zigrinatura</label>
       <input id="teeth" type="number" min="0" max="400" step="1" placeholder="digita il numero">
+      <p class="note">Il numero dei dentini sulle pinne di saldatura. Con 0 le pinne restano lisce.</p>
     </div>
     <div class="fld">
       <label for="soft">Rigonfiamento <b id="softval">Medio 5/10</b></label>
       <input id="soft" type="range" min="1" max="10" step="1" value="5">
-      <label class="auto"><input id="softauto" type="checkbox"> Scegli tu — decide l’AI in base al prodotto</label>
-      <p class="note">1-3 teso e aderente · 4-6 volume standard · 7-10 volumetrico e gonfio. A steso invariato la sezione passa dal rettangolo all’ellisse: il perimetro del film resta quello, il pack si gonfia in entrambe le direzioni.</p>
+      <label class="auto"><input id="softauto" type="checkbox"> Scegli tu &mdash; decide l&rsquo;AI in base al prodotto</label>
+      <p class="note">Scegli quanto &egrave; gonfio il pack. 1: molto rigido, effetto simile al sottovuoto. 10: molto gonfio, per prodotti tondeggianti o con aria dentro.</p>
     </div>
     <div class="fld">
       <label for="pinne">Apertura pinne <b id="pinneval">Aperte 3/3</b></label>
       <input id="pinne" type="range" min="1" max="3" step="1" value="3">
-      <p class="note">3 = pinne aperte, piu’ alte del pack: il tubo si appiattisce e il bordo arriva a metà perimetro (Milch-Schnitte). 1 = pinne alte quanto il pack, senza svaso, tipico di quando il film avvolge un corpo rigido (Kinder Brioss). 2 sta in mezzo.</p>
+      <p class="note">1: pinne chiuse, alte quanto il pack. 3: pinne molto aperte, effetto farfalla.</p>
     </div>
     <div class="fld">
       <label class="auto"><input id="scatola" type="checkbox"> Il film avvolge una scatola</label>
-      <p class="note">Un multipack in astuccio, una vaschetta, un blister. Le ganasce appiattiscono un tubo solo se dentro c’è aria: con la scatola dentro la pinna resta larga quanto la faccia del pack invece di svasarsi.</p>
+      <p class="note">Un multipack in astuccio, una vaschetta, un blister: le pinne restano larghe quanto il pack.</p>
     </div>
     </div>
     <button id="go" class="primary">Costruisci</button>
-    <p class="note">Il numero di dentini va digitato: non e’ deducibile dalla dimensione del pack. Con 0 le pinne restano lisce. I denti sono triangoli equilateri contati sul bordo della pinna.</p>
   </div>
 
   <div class="row">
     <span class="tit">Strumenti</span>
     <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
-    <button id="upload" class="primary">Carica PDF</button>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
     <button id="casi-btn" type="button" aria-expanded="false" aria-controls="casi">Casi</button>
@@ -916,51 +955,56 @@ const statusEl = document.getElementById('status');
 const params = document.getElementById('params');
 const quantiFld = document.getElementById('quanti-fld');
 const quantiEl = document.getElementById('quanti');
-const packtype = document.getElementById('packtype');
-const pezziEl = document.getElementById('pezzi');
-const npezzi = document.getElementById('npezzi');
-const avanti = document.getElementById('avanti');
+// La prima domanda e' la famiglia, prima di ogni PDF; poi il passo della
+// famiglia, con le sue richieste e un posto per ogni PDF.
+const famiglieEl = document.getElementById('famiglie');
+const passoEl = document.getElementById('passo');
+const cartoEl = document.getElementById('carto');
+const passoCampi = document.getElementById('passo-campi');
+const partiFld = document.getElementById('parti-fld');
+const partiEl = document.getElementById('parti');
+const spessoreFld = document.getElementById('spessore-fld');
+const slotEl = document.getElementById('slot');
+const continuaBtn = document.getElementById('continua');
+const fileEl = document.getElementById('file');
 const spessoreEl = document.getElementById('spessore');
 const spessoreVal = document.getElementById('spessoreval');
 const NOMI_SPESSORE = {1: 'carta', 2: 'cartoncino', 3: 'cartoncino spesso'};
-// lo spessore della carta dichiarato nel pannello dei pezzi, 0 finche' non si
-// sceglie: come i pezzi si dichiara, non si indovina
+// lo spessore della carta del cartotecnico, 0 finche' non si sceglie: come
+// le parti si dichiara, non si indovina
 let spessoreScelto = 0;
 // L'apertura a strappo: se l'analisi la trova, prima di costruire si chiede
-// se l'astuccio si vuole chiuso, coi tagli modellati, o aperto di tot gradi.
+// se l'astuccio si vuole chiuso - con la fustella dell'apertura modellata o
+// liscio - o aperto di tot gradi.
 const strappoEl = document.getElementById('strappo');
 const strappoScelta = document.getElementById('strappo-scelta');
+const fustellaFld = document.getElementById('fustella-fld');
+const fustellaScelta = document.getElementById('fustella-scelta');
+const gradiFld = document.getElementById('gradi-fld');
 const strappoGradi = document.getElementById('strappo-gradi');
 const strappoVal = document.getElementById('strappo-val');
-let aperturaScelta = 'chiusa';
+let aperturaScelta = null, incisioniScelte = null;
 // La pellicola delle finestre: se l'analisi trova una finestra, prima di
 // costruire si chiede se ci va la pellicola trasparente. Di solito c'e', ma
 // non sempre: lo dice chi carica il PDF, ogni volta.
 const pellicolaEl = document.getElementById('pellicola');
 const pellicolaScelta = document.getElementById('pellicola-scelta');
 const dlBtn = document.getElementById('download');
-const upBtn = document.getElementById('upload');
 const annBtn = document.getElementById('annulla');
 
 /* Tre fasi, e ognuna mostra solo i tasti che in quel momento hanno senso.
-   vuoto  - Carica PDF, e basta: scaricare un GLB che non esiste non serve.
+   vuoto  - nessun tasto: si comincia scegliendo la famiglia.
    lavoro - solo Annulla: mentre si sceglie e si costruisce l'unica altra
             cosa sensata e' tornare indietro.
    pronto - Scarica GLB e Annulla; premendo uno qualsiasi dei due si
             ricomincia da capo. */
 function setFase(f){
-  upBtn.style.display  = f === 'vuoto'  ? '' : 'none';
   dlBtn.style.display  = f === 'pronto' ? '' : 'none';
   annBtn.style.display = f === 'vuoto'  ? 'none' : '';
 }
 let glbBlob = null, glbName = 'modello.glb', pending = null;
-// >0 mentre il cartotecnico aspetta i PDF dei pezzi che mancano: quello che
-// si carica allora si aggiunge ai PDF che ci sono, non li sostituisce
-let attesiPezzi = 0;
-// il riempimento aspetta il secondo PDF: il vassoio o il flowpack
-let attesoRiempimento = false;
 const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
-// quanti pezzi puo' avere un cartotecnico: lo stesso tetto del campo `npezzi`
+// di quante parti puo' essere una scatola: lo stesso tetto del campo `parti`
 const MAX_PEZZI = 8;
 let backendUp = false;
 const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagina con ?api=https://tuo-server';
@@ -2212,34 +2256,194 @@ function nomiPdf(p){
   return (p.nomi && p.nomi.length ? p.nomi : [p.name]).map(n => encodeURIComponent(n));
 }
 
-async function handle(lista){
+/* --------------------------- famiglia e passo --------------------------- */
+// La prima domanda e' la famiglia, prima di ogni PDF: decide le richieste
+// che seguono e quanti PDF servono. Il nome, cosa e', e un posto per PDF;
+// il cartotecnico i posti li decide la scelta fra astuccio e scatola.
+const FAMIGLIE = {
+  flowpack: {nome: 'Flowpack', descr: 'Pack con saldature e pinne laterali.',
+             slot: ['Il PDF del flowpack']},
+  pouch: {nome: 'Pouch', descr: 'Pack con fondo a soffietto ed estremità saldata.',
+          slot: ['Il PDF del pouch']},
+  carton: {nome: 'Cartotecnico', descr: '', slot: []},
+  vassoio: {nome: 'Vassoio',
+            descr: 'Contenitore espositivo che contiene le CU (Consumer Unit): flowpack, '
+                 + 'cartotecnici e altri pack. Comprende anche i display, che si riconoscono '
+                 + 'dalla plancia nel DT. Vassoi e display si realizzano vuoti.',
+            slot: ['Il PDF del vassoio o del display']},
+  riempimento: {nome: 'Riempimenti',
+                descr: 'I riempimenti sono TU (Trade Unit): contenitori come vassoi e display, '
+                     + 'con dentro le CU desiderate. Per ora le CU sono flowpack.',
+                slot: ['Inserisci il pack (CU) desiderato',
+                       'Inserisci il vassoio o il display desiderato']},
+};
+// queste partono da sole appena c'e' il PDF: nessun'altra domanda prima
+const DA_SOLE = ['flowpack', 'pouch', 'vassoio'];
+// la famiglia scelta, astuccio o scatola, e i PDF caricati, uno per posto
+let famiglia = null, carto = null, slots = [], slotAttivo = -1;
+
+/** Che cosa va in ogni posto. */
+function nomiSlot(){
+  if (famiglia !== 'carton') return FAMIGLIE[famiglia].slot;
+  if (carto === 'astuccio') return ['Il PDF dell’astuccio'];
+  return slots.map((_, k) => 'Parte ' + (k + 1) + ' — il suo PDF');
+}
+
+/** Tutto quello che il passo chiede c'e'. */
+function pronto(){
+  if (!slots.length || slots.some(x => !x)) return false;
+  return famiglia !== 'carton' || (!!carto && !!spessoreScelto);
+}
+
+/** Le parti della scatola digitate, o 0 se non e' un numero da 2 a MAX_PEZZI. */
+function partiDigitate(){
+  const n = parseInt(partiEl.value, 10);
+  return n >= 2 && n <= MAX_PEZZI ? n : 0;
+}
+
+function mostraFamiglie(){
+  famiglia = null; carto = null; slots = []; slotAttivo = -1;
+  passoEl.classList.remove('on');
+  famiglieEl.classList.add('on');
+}
+
+function scegliFamiglia(f){
+  if (!FAMIGLIE[f]) return;
+  famiglia = f; carto = null; slotAttivo = -1;
+  slots = FAMIGLIE[f].slot.map(() => null);
+  partiEl.value = '';
+  scegliSpessore(0);
+  famiglieEl.classList.remove('on');
+  disegnaPasso();
+  passoEl.classList.add('on');
+  setFase('lavoro');
+  statoPasso();
+}
+
+function scegliCarto(c){
+  carto = c;
+  partiEl.value = '';
+  slots = c === 'astuccio' ? [null] : [];
+  disegnaPasso();
+  statoPasso();
+  if (c === 'scatola') partiEl.focus();
+}
+
+/** Il passo della famiglia: la descrizione, le richieste e i posti dei PDF. */
+function disegnaPasso(){
+  const F = FAMIGLIE[famiglia], c = famiglia === 'carton';
+  document.getElementById('passo-tit').textContent = F.nome;
+  document.getElementById('passo-descr').textContent = F.descr;
+  cartoEl.hidden = !c;
+  cartoEl.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.c === carto)));
+  passoCampi.hidden = c && !carto;
+  partiFld.hidden = !(c && carto === 'scatola');
+  spessoreFld.hidden = !(c && carto);
+  const nomi = nomiSlot();
+  slotEl.textContent = '';
+  slots.forEach((x, k) => {
+    const li = document.createElement('li');
+    if (x) li.className = 'pieno';
+    const cosa = document.createElement('span');
+    cosa.className = 'cosa'; cosa.textContent = nomi[k];
+    const nome = document.createElement('span');
+    nome.className = 'nome'; nome.textContent = x ? x.name : 'nessun PDF';
+    const bt = document.createElement('button');
+    bt.type = 'button'; bt.textContent = x ? 'Cambia PDF' : 'Carica PDF';
+    bt.onclick = () => apriFile(k);
+    li.append(cosa, nome, bt);
+    slotEl.appendChild(li);
+  });
+  // le famiglie da un PDF partono da sole: Continua serve solo per riprovare
+  continuaBtn.hidden = (c && !carto) || (DA_SOLE.includes(famiglia) && !pronto());
+  continuaBtn.disabled = !pronto();
+}
+
+/** La riga di stato dice cosa manca al passo. */
+function statoPasso(errore){
+  const F = FAMIGLIE[famiglia];
+  const mancano = slots.filter(x => !x).length;
+  let t;
+  if (famiglia === 'carton' && !carto) t = 'Cartotecnico: astuccio o scatola?';
+  else if (carto === 'scatola' && !slots.length) t = 'Scatola: digita di quante parti è fatto il pack, da 2 a ' + MAX_PEZZI;
+  else if (mancano) t = F.nome + ': ' + (slots.length === 1 ? 'carica il PDF'
+       : mancano === 1 ? 'carica il PDF che manca' : 'carica i ' + mancano + ' PDF che mancano');
+  else if (famiglia === 'carton' && !spessoreScelto) t = 'Scegli lo spessore della carta: 1, 2 o 3';
+  else t = 'Premi Continua';
+  setStatus(t, errore ? 'err' : '');
+}
+
+/** La finestra dei file per il posto k: si apre solo da un clic. */
+function apriFile(k){
+  slotAttivo = k;
+  fileEl.multiple = famiglia === 'carton' && carto === 'scatola';
+  fileEl.click();
+}
+
+/** I file scelti o trascinati: nel posto scelto, poi nei posti vuoti. Un
+ *  GLB gia' pronto si guarda e basta, in ogni momento. */
+async function riceviFile(lista){
   // la lista si copia SUBITO: chi chiama azzera il campo file appena torna
   const files = Array.from(lista || []).filter(Boolean);
+  const k0 = slotAttivo;
+  slotAttivo = -1;
   if (!files.length) return;
-  nascondiCaso();
-  const file = files[0];
-  if (files.length === 1 && /\.glb$/i.test(file.name)){   // comodo per guardare un GLB gia' pronto
-    glbBlob = file; glbName = file.name;
-    show(await file.arrayBuffer()); setFase('pronto'); setTitolo(file.name);
+  if (files.length === 1 && /\.glb$/i.test(files[0].name)){
+    const f = files[0];
+    nascondiCaso();
+    famiglieEl.classList.remove('on'); passoEl.classList.remove('on');
+    params.classList.remove('on'); strappoEl.classList.remove('on');
+    pellicolaEl.classList.remove('on');
+    glbBlob = f; glbName = f.name;
+    show(await f.arrayBuffer()); setFase('pronto'); setTitolo(f.name);
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
+  if (!famiglia){ setStatus('Prima scegli che tipo di pack vuoi realizzare','err'); return; }
+  if (!passoEl.classList.contains('on')){
+    setStatus('Per cambiare i PDF premi Annulla e ricomincia','err'); return;
+  }
   if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
-  // piu' PDF insieme servono solo a un cartotecnico in piu' pezzi, uno per pezzo
-  if (files.length > MAX_PEZZI){ setStatus('Al massimo ' + MAX_PEZZI + ' PDF insieme, uno per pezzo del pack','err'); return; }
+  if (famiglia === 'carton' && !carto){ statoPasso(true); return; }
+  if (!slots.length){ statoPasso(true); return; }
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
-  // prima domanda obbligatoria su ogni PDF: la tipologia la dichiara l'utente
-  const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
-  pending = {buf: bufs[0], bufs, name: file.name, nomi: files.map(f => f.name)};
-  attesiPezzi = 0; attesoRiempimento = false; pezziEl.classList.remove('on');
-  quantiFld.hidden = true;
-  setTitolo(files.map(f => f.name).join(' + '));
-  params.classList.remove('on'); strappoEl.classList.remove('on');
-  pellicolaEl.classList.remove('on'); setMeta([]);
-  packtype.classList.add('on');
-  setFase('lavoro');
-  setStatus(files.length > 1 ? files.length + ' PDF: insieme vanno solo per un cartotecnico in piu\' pezzi'
-                             : 'Indica il tipo di pack','');
+  let k = k0 >= 0 ? k0 : slots.findIndex(x => !x);
+  if (k < 0 && slots.length === 1) k = 0;
+  if (k < 0){
+    setStatus('I PDF ci sono tutti: per cambiarne uno usa il suo tasto','err'); return;
+  }
+  const letti = await Promise.all(files.map(async f => ({name: f.name, buf: await f.arrayBuffer()})));
+  let messi = 0;
+  for (const x of letti){
+    if (k < 0) break;
+    slots[k] = x; messi++;
+    const dopo = slots.findIndex((y, i) => !y && i > k);
+    k = dopo >= 0 ? dopo : slots.findIndex(y => !y);
+  }
+  disegnaPasso();
+  if (messi < letti.length){
+    setStatus('Il pack ha ' + slots.length + ' PDF: ' + (letti.length - messi)
+              + (letti.length - messi === 1 ? ' in più non l’ho preso' : ' in più non li ho presi'), 'err');
+    return;
+  }
+  if (DA_SOLE.includes(famiglia) && pronto()) return avanti();
+  statoPasso();
+}
+
+/** Dal passo all'analisi: con tutti i PDF e le risposte. */
+async function avanti(){
+  if (!famiglia || !passoEl.classList.contains('on')) return;
+  if (!pronto()){ statoPasso(true); return; }
+  pending = {buf: slots[0].buf, bufs: slots.map(x => x.buf), name: slots[0].name,
+             nomi: slots.map(x => x.name)};
+  setTitolo(pending.nomi.join(' + '));
+  setMeta([]);
+  passoEl.classList.remove('on');
+  if (famiglia === 'riempimento') return riempimentoAvanti();
+  if (famiglia === 'carton')
+    return procedi('carton', {pezzi: slots.length, spessore: spessoreScelto});
+  return procedi(famiglia, {});
 }
 
 /** Il corpo della richiesta: un PDF, o piu' PDF di fila con le lunghezze. */
@@ -2249,45 +2453,8 @@ function corpo(p){
           parti: p.bufs.map(b => b.byteLength)};
 }
 
-async function withKind(kind){
-  if (kind === 'carton'){
-    // Il cartotecnico dice di quanti pezzi e' fatto, e ogni pezzo e' un PDF:
-    // il risolutore deve sapere se il pack ne ha uno o piu' d'uno.
-    packtype.classList.remove('on');
-    npezzi.value = '';
-    scegliSpessore(0);
-    pezziEl.classList.add('on');
-    tastoAvanti();
-    setStatus('Cartotecnico: digita di quanti pezzi e\' fatto il pack e scegli lo spessore della carta','');
-    return;
-  }
-  if (kind === 'riempimento'){
-    // un vassoio e il flowpack che ci va dentro: due PDF, in qualsiasi ordine
-    if (pending.bufs.length > 2){
-      setStatus('Riempimento: due PDF, il vassoio e il flowpack: annulla e ricarica','err');
-      return;
-    }
-    packtype.classList.remove('on');
-    if (pending.bufs.length < 2){
-      attesoRiempimento = true;
-      setStatus('Riempimento: carica anche l\'altro PDF, il vassoio o il flowpack','');
-      // dal clic sul tasto la finestra dei file si puo' aprire
-      document.getElementById('file').click();
-      return;
-    }
-    await riempimentoAvanti();
-    return;
-  }
-  if (pending.bufs.length > 1){
-    setStatus('Piu\' PDF insieme solo per un cartotecnico in piu\' pezzi: per questa tipologia caricane uno','err');
-    return;
-  }
-  packtype.classList.remove('on');
-  await procedi(kind, {});
-}
-
-/** Il riempimento con i due PDF: la lettura dice quale e' il vassoio, poi i
- *  parametri del flowpack e quanti pezzi mettere nel vassoio. */
+/** Il riempimento con i due PDF: la lettura dice quale e' il vassoio, poi
+ *  quanti pack mettere e le opzioni del flowpack. */
 async function riempimentoAvanti(){
   const c = corpo(pending);
   const opts = {kind: 'riempimento', parti: c.parti, nomi: nomiPdf(pending)};
@@ -2296,29 +2463,13 @@ async function riempimentoAvanti(){
     setMeta(info.meta || []);
     pending.riempimento = {c, info};
     document.getElementById('teeth').value = '';
+    document.getElementById('params-tit').textContent = 'Opzioni del riempimento e del flowpack (CU)';
     quantiEl.value = '';
     quantiFld.hidden = false;
     params.classList.add('on');
-    setStatus('Riempimento: quanti flowpack nel vassoio, poi i dentini e il rigonfiamento del flowpack','');
+    setStatus('Riempimento: quanti pack nel vassoio, poi le opzioni del flowpack','');
     quantiEl.focus();
   }catch(err){ fermato(err); }
-}
-
-/** Il secondo PDF del riempimento. */
-async function aggiungiRiempimento(lista){
-  const files = Array.from(lista || []).filter(Boolean);
-  if (!files.length) return;
-  if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
-  const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
-  if (pending.bufs.length + bufs.length !== 2){
-    setStatus('Riempimento: due PDF in tutto, il vassoio e il flowpack','err');
-    return;
-  }
-  attesoRiempimento = false;
-  pending.bufs.push(...bufs);
-  pending.nomi.push(...files.map(f => f.name));
-  setTitolo(pending.nomi.join(' + '));
-  await riempimentoAvanti();
 }
 
 /** Lo spessore della carta: 1, 2 o 3, o 0 per nessuno. */
@@ -2326,70 +2477,8 @@ function scegliSpessore(n){
   spessoreScelto = n;
   spessoreEl.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(Number(b.dataset.s) === n)));
-  spessoreVal.textContent = n ? n + ' \u00b7 ' + NOMI_SPESSORE[n] : 'scegli 1, 2 o 3';
-}
-
-/** Il numero di pezzi digitato, o 0 se non e' un numero da 1 a MAX_PEZZI. */
-function pezziDigitati(){
-  const n = parseInt(npezzi.value, 10);
-  return n >= 1 && n <= MAX_PEZZI ? n : 0;
-}
-
-/** Il tasto del pannello dice cosa fa: continuare, o caricare i PDF mancanti. */
-function tastoAvanti(){
-  const n = pezziDigitati(), k = pending ? pending.bufs.length : 0;
-  const m = n - k;
-  avanti.textContent = m > 0 ? (m === 1 ? 'Carica l\'altro PDF' : 'Carica gli altri ' + m + ' PDF')
-                             : 'Continua';
-}
-
-/** Dal pannello dei pezzi: si costruisce quando i PDF sono tanti quanti i pezzi. */
-async function pezziAvanti(apri){
-  if (!pending) return;
-  const n = pezziDigitati();
-  tastoAvanti();
-  if (!n){ setStatus('Digita di quanti pezzi e\' fatto il pack, da 1 a ' + MAX_PEZZI,'err'); return; }
-  const k = pending.bufs.length;
-  if (k > n){
-    setStatus('Hai caricato ' + k + ' PDF per un pack di ' + n + (n === 1 ? ' pezzo' : ' pezzi')
-              + ': annulla e ricarica', 'err');
-    return;
-  }
-  if (k < n){
-    attesiPezzi = n;
-    const m = n - k;
-    setStatus('Il pack ha ' + n + ' pezzi e i PDF sono ' + k + ': carica '
-              + (m === 1 ? 'quello che manca' : 'gli altri ' + m), '');
-    // la finestra dei file si apre solo da un clic: dopo un caricamento il
-    // tasto resta li', con scritto quanti ne mancano
-    if (apri) document.getElementById('file').click();
-    return;
-  }
-  if (!spessoreScelto){
-    setStatus('Scegli lo spessore della carta: 1 carta, 2 cartoncino, 3 cartoncino spesso','err');
-    return;
-  }
-  attesiPezzi = 0;
-  pezziEl.classList.remove('on');
-  await procedi('carton', {pezzi: n, spessore: spessoreScelto});
-}
-
-/** I PDF che mancavano ai pezzi del cartotecnico: si aggiungono a quelli che ci sono. */
-async function aggiungi(lista){
-  const files = Array.from(lista || []).filter(Boolean);
-  if (!files.length) return;
-  if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
-  const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
-  pending.bufs.push(...bufs);
-  pending.nomi.push(...files.map(f => f.name));
-  setTitolo(pending.nomi.join(' + '));
-  await pezziAvanti(false);
-}
-
-/** Un file arrivato dal campo o trascinato: nuovo pack, o pezzo che mancava. */
-function ricevi(lista){
-  if (attesoRiempimento && pending) return aggiungiRiempimento(lista);
-  return (attesiPezzi && pending) ? aggiungi(lista) : handle(lista);
+  spessoreVal.textContent = n ? n + ' · ' + NOMI_SPESSORE[n] : 'scegli 1, 2 o 3';
+  if (famiglia) disegnaPasso();
 }
 
 async function procedi(kind, extra){
@@ -2400,9 +2489,10 @@ async function procedi(kind, extra){
     setMeta(info.meta || []);
     if (kind === 'flowpack'){
       document.getElementById('teeth').value = '';
+      document.getElementById('params-tit').textContent = 'Opzioni del flowpack';
       quantiFld.hidden = true;
       params.classList.add('on');
-      setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
+      setStatus('Flowpack: digita i denti della zigrinatura, poi rigonfiamento e apertura delle pinne','');
       return;
     }
     if (info.finestre){
@@ -2427,6 +2517,10 @@ function fermato(err){
     glbName = pending.name.replace(/\.pdf$/i,'') + '.glb';
     mostraCaso(err.verdetto, null);
   }
+  // si torna al passo: i PDF restano, e se ne puo' cambiare uno o riprovare
+  params.classList.remove('on'); strappoEl.classList.remove('on');
+  pellicolaEl.classList.remove('on');
+  if (famiglia){ disegnaPasso(); passoEl.classList.add('on'); }
   const m = testoErrore(err);
   setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
                                    : m.slice(0,200), 'err');
@@ -2473,45 +2567,64 @@ function chiediStrappo(c, opts, info){
   const s = info.strappo;
   pending.strappo = {c, opts, titolo: info.title || 'Modello pronto'};
   document.getElementById('strappo-dove').textContent =
-    'Dal disegno: ' + (s.dove || 'la finestra resta attaccata a una piega') + '.';
+    'Dal disegno: ' + (s.dove || 'il coperchio resta attaccato a una piega') + '.';
   strappoGradi.max = String(s.gradi_max || 180);
   strappoGradi.value = String(s.gradi || 60);
-  scegliStrappo('chiusa');
+  scegliStrappo(null);
+  scegliFustella(null);
   strappoEl.classList.add('on');
-  setStatus('Apertura a strappo: chiuso coi tagli modellati, o aperto di quanti gradi?','');
+  setStatus('Apertura a strappo: astuccio chiuso o aperto?','');
 }
 
-/** Chiuso o aperto: i gradi si digitano solo per l'astuccio aperto. */
+/** Chiuso o aperto: chiuso si chiede la fustella, aperto i gradi. */
 function scegliStrappo(a){
   aperturaScelta = a;
   strappoScelta.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.a === a)));
-  strappoGradi.disabled = a !== 'aperta';
+  fustellaFld.hidden = a !== 'chiusa';
+  gradiFld.hidden = a !== 'aperta';
   mostraGradi();
+}
+
+/** Chiuso: la fustella dell'apertura modellata come solchi (1) o liscio (0). */
+function scegliFustella(i){
+  incisioniScelte = i;
+  fustellaScelta.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(i !== null && Number(b.dataset.i) === i)));
 }
 
 function mostraGradi(){
   const g = parseInt(strappoGradi.value, 10);
-  strappoVal.textContent = aperturaScelta !== 'aperta' ? 'chiusa'
-    : (g >= 1 && g <= Number(strappoGradi.max) ? g + '\u00b0' : 'da 1 a ' + strappoGradi.max);
+  strappoVal.textContent = g >= 1 && g <= Number(strappoGradi.max) ? g + '\u00b0'
+                                                                    : 'da 1 a ' + strappoGradi.max;
 }
 
 async function strappoAvanti(){
   if (!pending || !pending.strappo) return;
   const s = pending.strappo;
-  let gradi = 0;
+  const scelta = {};
   if (aperturaScelta === 'aperta'){
-    gradi = parseInt(strappoGradi.value, 10);
+    const gradi = parseInt(strappoGradi.value, 10);
     const max = Number(strappoGradi.max) || 180;
     if (!(gradi >= 1 && gradi <= max)){
-      setStatus('Digita di quanti gradi si apre la finestra, da 1 a ' + max,'err');
+      setStatus('Digita di quanti gradi si apre il coperchio, da 1 a ' + max,'err');
       return;
     }
+    scelta.apertura = gradi;
+  } else if (aperturaScelta === 'chiusa'){
+    if (incisioniScelte === null){
+      setStatus('Dimmi se vuoi la fustella dell\u2019apertura modellata nel modello','err');
+      return;
+    }
+    scelta.apertura = 0;
+    scelta.incisioni = incisioniScelte;
+  } else {
+    setStatus('Scegli: astuccio chiuso o aperto','err');
+    return;
   }
   strappoEl.classList.remove('on');
   try{
-    esitoFinale(await build(s.c.buf, pending.name,
-                            Object.assign({}, s.opts, {apertura: gradi})), s.titolo);
+    esitoFinale(await build(s.c.buf, pending.name, Object.assign({}, s.opts, scelta)), s.titolo);
   }catch(err){ fermato(err); }
 }
 
@@ -2545,16 +2658,15 @@ function togliModello(){
 }
 
 function annulla(){
-  pending = null; glbBlob = null; attesiPezzi = 0; attesoRiempimento = false;
+  pending = null; glbBlob = null;
   quantiFld.hidden = true;
   params.classList.remove('on');
-  packtype.classList.remove('on');
-  pezziEl.classList.remove('on');
   strappoEl.classList.remove('on');
   pellicolaEl.classList.remove('on');
   setMeta([]); setTitolo('');
   nascondiCaso();
   togliModello();
+  mostraFamiglie();
   document.getElementById('empty').style.display = '';
   setStatus(backendUp ? (API ? ('Pronto \u2014 backend ' + API) : 'Pronto \u2014 backend locale')
                       : OFFLINE,
@@ -2569,11 +2681,26 @@ setFase('vuoto');
 // cui gli await cedono il turno
 document.getElementById('riprova').onclick = cercaBackend;
 cercaBackend();
-document.getElementById('upload').onclick = () => document.getElementById('file').click();
-document.getElementById('file').onchange = e => { ricevi(e.target.files); e.target.value=''; };
-avanti.onclick = () => pezziAvanti(true);
+fileEl.onchange = e => { riceviFile(e.target.files); e.target.value=''; };
+// se la finestra dei file si chiude senza scegliere, il posto non resta in attesa
+fileEl.addEventListener('cancel', () => { slotAttivo = -1; });
+famiglieEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliFamiglia(b.dataset.f); });
+cartoEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCarto(b.dataset.c); });
+document.getElementById('cambia').onclick = annulla;
+continuaBtn.onclick = avanti;
+partiEl.oninput = () => {
+  const n = partiDigitate();
+  slots = n ? Array.from({length: n}, (_, k) => slots[k] || null) : [];
+  disegnaPasso();
+  if (partiEl.value.trim() === '1')
+    setStatus('Una scatola ha almeno due parti: per un elemento solo scegli Astuccio','err');
+  else statoPasso();
+};
 strappoScelta.querySelectorAll('button').forEach(b => {
   b.onclick = () => { scegliStrappo(b.dataset.a); if (b.dataset.a === 'aperta') strappoGradi.focus(); };
+});
+fustellaScelta.querySelectorAll('button').forEach(b => {
+  b.onclick = () => scegliFustella(Number(b.dataset.i));
 });
 strappoGradi.oninput = mostraGradi;
 strappoGradi.onkeydown = e => { if (e.key === 'Enter') strappoAvanti(); };
@@ -2604,12 +2731,7 @@ setInterval(() => { if (document.visibilityState === 'visible') aggiornaCasi(); 
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') aggiornaCasi(); });
 spessoreEl.querySelectorAll('button').forEach(b => {
-  b.onclick = () => scegliSpessore(Number(b.dataset.s));
-});
-npezzi.oninput = tastoAvanti;
-npezzi.onkeydown = e => { if (e.key === 'Enter') pezziAvanti(true); };
-document.querySelectorAll('#packtype button').forEach(b => {
-  b.onclick = () => withKind(b.dataset.k);
+  b.onclick = () => { scegliSpessore(Number(b.dataset.s)); statoPasso(); };
 });
 document.getElementById('go').onclick = async () => {
   if (!pending) return;
@@ -2647,7 +2769,7 @@ document.getElementById('go').onclick = async () => {
       const v = await build(pending.buf, pending.name, Object.assign(fp, {kind: 'flowpack'}));
       esitoFinale(v, 'Modello pronto');
     }
-  }catch(err){ setStatus(testoErrore(err).slice(0,200),'err'); }
+  }catch(err){ fermato(err); }
 };
 dlBtn.onclick = () => {
   if (!glbBlob) return;
@@ -2664,7 +2786,7 @@ dlBtn.onclick = () => {
 ['dragleave','drop'].forEach(ev => addEventListener(ev, e => {
   e.preventDefault(); if (ev==='drop' || e.target===document.documentElement)
     document.body.classList.remove('dragging'); }));
-addEventListener('drop', e => { ricevi(e.dataTransfer.files); });
+addEventListener('drop', e => { riceviFile(e.dataTransfer.files); });
 
 resize();
 </script>
