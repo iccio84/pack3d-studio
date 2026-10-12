@@ -50,25 +50,26 @@ Per l'analisi guidata da Claude serve `ANTHROPIC_API_KEY` fra le variabili
 d'ambiente del backend.
 
 
-Da artwork PDF a modello 3D mappato. Carica il PDF, il sistema riconosce la
-tipologia di packaging, ricostruisce la geometria dalla fustella e restituisce
-un GLB scaricabile.
+Da artwork PDF a modello 3D mappato. La pagina chiede prima la famiglia -
+Flowpack, Pouch, Cartotecnico, Vassoio, Riempimenti - poi i PDF che servono a
+quella famiglia, uno per posto, e le sue domande; il sistema ricostruisce la
+geometria dalla fustella e restituisce un GLB scaricabile.
 
 Tipologie coperte: astuccio a fasciatura verticale, astuccio a fasciatura
 orizzontale, ballotin - la scatola a tronco di piramide coi coperchi in cima -,
 flowpack, vassoio espositore e display con plancia - la scatola chiusa che si
 apre in espositore, costruita aperta - e pouch, la busta stand-up col
-soffietto sul fondo. Un astuccio con l'apertura a strappo esce
-chiuso, coi tagli dell'apertura incisi nel cartone come sulla scatola vera.
-La pagina chiede se lo si vuole cosi' o aperto di tot gradi: la finestra
-sollevata sulla sua cerniera e la scatola appoggiata sul retro. Un pack con
+soffietto sul fondo. Di un astuccio con l'apertura a strappo la pagina
+chiede se lo si vuole chiuso - con la fustella dell'apertura incisa nel
+cartone come sulla scatola vera, o liscio - o aperto di tot gradi: il
+coperchio sollevato sulla sua cerniera e la scatola appoggiata sul retro. Un pack con
 le finestre - il ballotin, l'astuccio col retro aperto fra due falde - fa
 chiedere se ci va la pellicola trasparente, che di solito c'e' ma non
 sempre. Se il DT ha la lastra dell'embossing, marchi e disegni escono in
 rilievo. Per i flowpack vengono chieste zigrinatura e tipo di gonfiore prima
 di costruire.
 
-Il **riempimento** mette insieme due PDF, un vassoio espositore e il suo
-flowpack: costruisce i due modelli, chiede quanti flowpack mettere (vuoto
-vuol dire pieno) e li dispone nel vassoio frontali - la faccia stampata
+Il **riempimento** mette insieme due PDF, il pack (CU, per ora un flowpack)
+e il vassoio o il display: costruisce i due modelli, chiede quanti pack
+mettere (vuoto vuol dire pieno) e li dispone frontali - la faccia stampata
 verso il davanti, in file dal davanti al fondo - in un GLB solo.

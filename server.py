@@ -523,11 +523,12 @@ def nota_apertura(meta):
 
 def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                  colata_riquadro=None, carta=None, apertura=None,
-                 pellicola=None):
+                 pellicola=None, incisioni=True):
     """L'astuccio. `carta` e' lo spessore del cartoncino in mm se l'utente
     l'ha dichiarato (`SPESSORI_CARTA`); senza, `folding.SPESSORE_CRT`. Con
     `apertura`, in gradi, l'apertura a strappo esce aperta: vedi
-    `apri_apertura`. Con `pellicola` la finestra del retro di un astuccio
+    `apri_apertura`; chiusa, i suoi tagli si incidono come solchi, se non
+    e' `incisioni=False`. Con `pellicola` la finestra del retro di un astuccio
     aperto - fra le due falde - ha la sua pellicola trasparente."""
     dpi, tmax = risoluzione(quality)
     # L'ordine e' quello delle regole: una pagina sola, poi le quote lette
@@ -585,7 +586,7 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     aperta, riga_aperta = (apri_apertura(pdf, d, faces, esito.get("girate"),
                                          spessore, apertura)
                            if apertura and not d.curva_mm else (False, None))
-    incisa = (None if aperta or d.curva_mm else
+    incisa = (None if aperta or d.curva_mm or not incisioni else
               incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
     # il rilievo dell'embossing, se il DT ne ha la lastra: una mappa delle
     # normali per faccia, ritagliata e girata come la sua texture
@@ -2089,7 +2090,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
                 "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti")
+                "quanti", "incisioni")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2155,6 +2156,18 @@ def finestre_da_chiedere(quante, dove):
     """La domanda della pellicola, per la pagina: va fatta ogni volta che il
     pack ha una finestra."""
     return dict(quante=quante, dove=dove)
+
+
+def incisioni_scelte(valore):
+    """Se l'astuccio chiuso porta la fustella dell'apertura a strappo
+    modellata come solchi: si', di serie; no se chi carica la vuole liscia.
+    ValueError se non e' un si' o un no."""
+    if valore in (None, ""):
+        return True
+    try:
+        return bool(pellicola_scelta(valore))
+    except ValueError:
+        raise ValueError("La fustella dell'apertura modellata si dice con si' o no")
 
 
 def pellicola_scelta(valore):
@@ -2925,6 +2938,7 @@ class Handler(BaseHTTPRequestHandler):
                     carta = spessore_carta(opts.get("spessore"))
                     gradi_aperta = apertura_gradi(opts.get("apertura"))
                     con_pellicola = pellicola_scelta(opts.get("pellicola"))
+                    con_incisioni = incisioni_scelte(opts.get("incisioni"))
                     quanti = quanti_pezzi(opts.get("quanti"))
                 except ValueError as e:
                     return self._send(400, str(e))
@@ -3092,7 +3106,8 @@ class Handler(BaseHTTPRequestHandler):
                                 return build_carton(pdf, uscita, q, lastre, col_riq,
                                                     carta=carta,
                                                     apertura=gradi_aperta,
-                                                    pellicola=con_pellicola)
+                                                    pellicola=con_pellicola,
+                                                    incisioni=con_incisioni)
                         elif info["kind"] == "riempimento":
                             # un vassoio coi suoi flowpack: due costruzioni e
                             # un GLB solo, vedi `pack3d.riempimento`
@@ -3142,7 +3157,7 @@ class Handler(BaseHTTPRequestHandler):
                             # di un pack solo: sul vassoio pieno ancora no
                             righe_ai.append("controllo AI: sui riempimenti non "
                                             "c'e' ancora, guarda tu il vassoio "
-                                            "pieno")
+                                            "o il display pieno")
                             meta.append(righe_ai[-1])
                         elif controllo.attivo():
                             try:

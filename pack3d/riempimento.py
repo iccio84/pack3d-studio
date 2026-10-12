@@ -139,16 +139,23 @@ def _quaternione(R):
     return q
 
 
-def vertici(J, B):
-    """Tutti i vertici della scena, in mm, nel riferimento della scena."""
+def vertici(J, B, senza=()):
+    """I vertici della scena, in mm, nel riferimento della scena: quelli che
+    i triangoli usano davvero, senza i nodi che si chiamano come `senza`. Il
+    display e la sua plancia stanno sugli stessi vertici, e si distinguono
+    solo dai triangoli."""
     out = []
 
     def visita(i, M):
         nodo = J["nodes"][i]
+        if nodo.get("name") in senza:
+            return
         M = M @ _matrice(nodo)
         if "mesh" in nodo:
             for prim in J["meshes"][nodo["mesh"]]["primitives"]:
                 P = _dati(J, B, prim["attributes"]["POSITION"]).astype(float)
+                if "indices" in prim:
+                    P = P[np.unique(_dati(J, B, prim["indices"]).ravel())]
                 P = (np.c_[P, np.ones(len(P))] @ M.T)[:, :3]
                 out.append(P)
         for c in nodo.get("children", []):
@@ -183,7 +190,9 @@ class Vano:
 
 
 def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO):
-    V = vertici(J, B)
+    # del display conta la scatola: la plancia sta dietro, in alto, e non
+    # contiene niente
+    V = vertici(J, B, senza=("plancia",))
     lo, hi = V.min(0), V.max(0)
     return Vano(lo[0] + spessore, hi[0] - spessore, lo[2] + spessore, hi[2] - spessore,
                 lo[1] + spessore, hi[1])
