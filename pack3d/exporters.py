@@ -92,6 +92,95 @@ def write_obj(faces, outdir, basename="model", tex_quality=92):
 
 
 # --------------------------------------------------------------------------- #
+# L'atlante: le immagini delle facce in una texture sola
+# --------------------------------------------------------------------------- #
+# Un astuccio ha un'immagine per faccia, ma il modello ne porta una sola: le
+# facce stanno in un atlante, ognuna nel suo riquadro, e le UV puntano li'.
+# Cosi' la texture si puo' dare a parte e un viewer che la cambia - Glam Lab
+# mette la texture scelta su tutti i materiali che ne hanno una - ritrova
+# ogni faccia al suo posto. Fra un riquadro e l'altro c'e' il bordo della
+# faccia ripetuto (`MARGINE_ATLANTE` px): i livelli ridotti della texture
+# (mipmap) non prendono il colore della faccia accanto. Le UV cadono sui
+# centri dei pixel di bordo, mezzo pixel dentro il riquadro, come faceva il
+# bordo bloccato (CLAMP_TO_EDGE) della texture di una faccia sola.
+MARGINE_ATLANTE = 8
+NORMALE_PIATTA = (128, 128, 255)
+
+
+def _scaffali(misure, margine):
+    """`(L, A, posizioni)`: i riquadri `misure` (l, a) in file orizzontali,
+    dal piu' alto, con `margine` px attorno a ognuno; `posizioni[i]` e'
+    l'angolo in alto a sinistra dell'immagine i, margine escluso. Fra le
+    larghezze possibili vince quella col lato piu' lungo piu' corto: il
+    lato e' quello che deve stare sotto il massimo della texture."""
+    ordine = sorted(range(len(misure)), key=lambda i: (-misure[i][1], -misure[i][0]))
+    piene = [(l + 2 * margine, a + 2 * margine) for l, a in misure]
+    minimo, totale = max(l for l, _ in piene), sum(l for l, _ in piene)
+    meglio = None
+    for passo in range(65):
+        L = int(minimo + (totale - minimo) * passo / 64)
+        pos, x, y, riga = [None] * len(misure), 0, 0, 0
+        for i in ordine:
+            l, a = piene[i]
+            if x and x + l > L:
+                x, y, riga = 0, y + riga, 0
+            pos[i] = (x + margine, y + margine)
+            x, riga = x + l, max(riga, a)
+        larga = max(pos[i][0] + misure[i][0] + margine for i in ordine)
+        prova = (max(larga, y + riga), larga * (y + riga), larga, y + riga, pos)
+        if meglio is None or prova[:2] < meglio[:2]:
+            meglio = prova
+    return meglio[2], meglio[3], meglio[4]
+
+
+def _incolla(tela, im, x, y, margine):
+    """`im` sulla `tela` in (x, y), col suo bordo ripetuto per `margine` px."""
+    a = np.asarray(im.convert("RGB"))
+    a = np.pad(a, ((margine, margine), (margine, margine), (0, 0)), mode="edge")
+    from PIL import Image
+    tela.paste(Image.fromarray(a), (x - margine, y - margine))
+
+
+def atlante(immagini, lato_max, normali=None, margine=MARGINE_ATLANTE):
+    """Le `immagini` (PIL) in una texture sola, col lato piu' lungo entro
+    `lato_max`: se non ci stanno, si riducono tutte della stessa misura.
+    Torna `(texture, mappa_normali o None, riquadri)`: `riquadri[i]` e'
+    `(x, y, l, a, L, A)`, dove sta l'immagine i e quanto e' grande la
+    texture. `normali[i]`, se c'e', e' la mappa delle normali della stessa
+    immagine: va nello stesso riquadro di una seconda texture, piatta dove
+    non ce n'e'."""
+    from PIL import Image
+    s = 1.0
+    while True:
+        misure = [(max(1, round(im.width * s)), max(1, round(im.height * s)))
+                  for im in immagini]
+        L, A, pos = _scaffali(misure, margine)
+        if max(L, A) <= lato_max or max(max(m) for m in misure) <= 1:
+            break
+        s *= lato_max / max(L, A) * 0.99
+    tela = Image.new("RGB", (L, A), (255, 255, 255))
+    for im, (x, y), m in zip(immagini, pos, misure):
+        _incolla(tela, im if im.size == m else im.resize(m, Image.LANCZOS), x, y, margine)
+    mappa = None
+    if normali and any(n is not None for n in normali):
+        mappa = Image.new("RGB", (L, A), NORMALE_PIATTA)
+        for n, (x, y), m in zip(normali, pos, misure):
+            if n is not None:
+                _incolla(mappa, n if n.size == m else n.resize(m, Image.LANCZOS),
+                         x, y, margine)
+    return tela, mappa, [(x, y, m[0], m[1], L, A) for (x, y), m in zip(pos, misure)]
+
+
+def uv_atlante(uv, riquadro):
+    """Le UV di una faccia (0-1 sulla sua immagine) nel suo riquadro
+    dell'atlante, sui centri dei pixel di bordo."""
+    x, y, l, a, L, A = riquadro
+    uv = np.asarray(uv, np.float64)
+    return np.stack([(x + 0.5 + uv[:, 0] * (l - 1)) / L,
+                     (y + 0.5 + uv[:, 1] * (a - 1)) / A], 1).astype(np.float32)
+
+
+# --------------------------------------------------------------------------- #
 # glTF binario (GLB) monofile
 # --------------------------------------------------------------------------- #
 def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
@@ -99,7 +188,11 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
     """unit_scale: le quote sono in mm, glTF lavora in metri. `pellicola`,
     se c'e', e' `(V, T)` in mm: la pellicola trasparente delle finestre, un
     nodo a parte col suo materiale (`PELLICOLA`). Una faccia con la chiave
-    `normale` porta la mappa delle normali del suo rilievo."""
+    `normale` porta la mappa delle normali del suo rilievo.
+
+    Ogni faccia ha il suo materiale, col suo nome, ma la texture e' una
+    sola: l'atlante delle immagini delle facce (`atlante`), entro `tex_max`
+    px di lato. Lo stesso per le mappe delle normali, se ce ne sono."""
     buf = bytearray()
     views, accessors, images, textures, materials, prims = [], [], [], [], [], []
 
@@ -141,58 +234,75 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
                                      "TEXCOORD_0": a_uv},
                       "indices": len(accessors) - 1, "material": materiale})
 
-    def materiale(nome, im, normale=None):
-        if max(im.size) > tex_max:
-            r = tex_max / max(im.size)
-            im = im.resize((max(1, int(im.width * r)), max(1, int(im.height * r))))
-        bio = io.BytesIO()
-        im.convert("RGB").save(bio, "JPEG", quality=tex_quality, subsampling=0)
-        iv = add_view(bio.getvalue())
-        images.append({"bufferView": iv, "mimeType": "image/jpeg"})
-        textures.append({"source": len(images) - 1})
-        materials.append({
-            "name": nome,
-            "pbrMetallicRoughness": {
-                "baseColorTexture": {"index": len(textures) - 1},
-                "metallicFactor": 0.0, "roughnessFactor": 0.85,
-            },
-        })
+    # le immagini delle facce, una volta sola anche se piu' facce hanno la
+    # stessa (le tinte piene dell'interno e del taglio), e la tinta del solco
+    # delle incisioni se qualche faccia ne ha uno
+    solco = None
+    if any(f.get("maglia") and f["maglia"][1] is not None for f in faces):
+        from PIL import Image
+        from .folding import TAGLIO
+        solco = Image.new("RGB", (4, 4), TAGLIO)
+    chiavi, immagini, normali = {}, [], []
+
+    def posto(im, normale=None):
+        k = (id(im), id(normale))
+        if k not in chiavi:
+            chiavi[k] = len(immagini)
+            immagini.append(im)
+            normali.append(normale)
+        return chiavi[k]
+
+    for f in faces:
+        posto(f["tex"], f.get("normale"))
+    if solco is not None:
+        posto(solco)
+    tela, mappa, riquadri = atlante(immagini, tex_max, normali)
+
+    def materiale(nome, normale):
+        m = {"name": nome,
+             "pbrMetallicRoughness": {"baseColorTexture": {"index": 0},
+                                      "metallicFactor": 0.0,
+                                      "roughnessFactor": 0.85}}
         if normale is not None:
-            # il rilievo della faccia (`rilievo.sulle_facce`), in PNG
-            bio = io.BytesIO()
-            normale.convert("RGB").save(bio, "PNG", optimize=True)
-            images.append({"bufferView": add_view(bio.getvalue()),
-                           "mimeType": "image/png"})
-            textures.append({"source": len(images) - 1})
-            materials[-1]["normalTexture"] = {"index": len(textures) - 1}
+            # il rilievo della faccia (`rilievo.sulle_facce`)
+            m["normalTexture"] = {"index": 1}
+        materials.append(m)
         return len(materials) - 1
 
-    solco = None
+    m_solco = None
     for f in faces:
+        q = riquadri[posto(f["tex"], f.get("normale"))]
+        m = materiale(f["name"], f.get("normale"))
         if f.get("maglia"):
             # la faccia incisa (`incisioni.incidi`): la superficie con la sua
             # texture, il solco con la tinta del cartoncino tagliato
-            m = materiale(f["name"], f["tex"], f.get("normale"))
             sup, inc = f["maglia"]
             if sup is not None:
                 V, N, UV, T = sup
-                primitiva(np.asarray(V) * unit_scale, N, UV, T, m)
+                primitiva(np.asarray(V) * unit_scale, N, uv_atlante(UV, q), T, m)
             if inc is not None:
-                if solco is None:
-                    from PIL import Image
-                    from .folding import TAGLIO
-                    solco = materiale("solco", Image.new("RGB", (4, 4), TAGLIO))
+                if m_solco is None:
+                    m_solco = materiale("solco", None)
                 V, N, UV, T = inc
-                primitiva(np.asarray(V) * unit_scale, N, UV, T, solco)
+                primitiva(np.asarray(V) * unit_scale, N,
+                          uv_atlante(UV, riquadri[posto(solco)]), T, m_solco)
             continue
         quad = np.array(f["quad"], np.float32) * unit_scale
         nrm = np.tile(_normal(f["quad"]).astype(np.float32), (4, 1))
-        uv = np.array([[0, 0], [1, 0], [1, 1], [0, 1]], np.float32)
+        uv = uv_atlante([[0, 0], [1, 0], [1, 1], [0, 1]], q)
         idx = np.array([0, 2, 1, 0, 3, 2], np.uint16)
-        # prima i vertici e poi l'immagine, come e' sempre stato: un astuccio
-        # senza incisioni esce identico al byte
-        primitiva(quad, nrm, uv, idx, len(materials))
-        materiale(f["name"], f["tex"], f.get("normale"))
+        primitiva(quad, nrm, uv, idx, m)
+
+    # l'atlante, e accanto, nello stesso ordine, le normali in PNG
+    bio = io.BytesIO()
+    tela.save(bio, "JPEG", quality=tex_quality, subsampling=0)
+    images.append({"bufferView": add_view(bio.getvalue()), "mimeType": "image/jpeg"})
+    textures.append({"source": 0})
+    if mappa is not None:
+        bio = io.BytesIO()
+        mappa.save(bio, "PNG", optimize=True)
+        images.append({"bufferView": add_view(bio.getvalue()), "mimeType": "image/png"})
+        textures.append({"source": 1})
 
     nodi = [{"mesh": 0, "name": "packaging"}]
     mesh = [{"name": "packaging", "primitives": prims}]

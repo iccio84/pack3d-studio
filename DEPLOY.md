@@ -181,7 +181,10 @@ modello 3D da PDF", cartella "Casi risolti", col nome del PDF, al posto del
 modello con lo stesso nome. E' quello che la pagina dello Space annuncia
 quando respinge un modello e mette il caso in coda. Glam sceglie la sezione
 dal percorso del file: i modelli costruiti da PDF hanno `/pdf/` nel
-percorso, e il punto d'ingresso li salva allo stesso modo. Per collegarli:
+percorso, e il punto d'ingresso li salva allo stesso modo. Subito dopo manda
+la texture del modello a `POST /api/import-texture`, con la stessa
+credenziale, e Glam la mette nella sezione texture di quel modello (GLAM.md,
+sezione 8). Per collegarli:
 
 1. In Glam (Lovable), scheda **Cloud** -> **Secrets**:
    `PACK3D_IMPORT_TOKEN`, una stringa casuale di 64 lettere e numeri, e

@@ -501,6 +501,55 @@ def glam(args):
         risposta.get("name", nome), risposta.get("category", args.categoria),
         risposta.get("id", "?"),
         ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
+    _texture_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"))
+
+
+def _texture_in_glam(url, glb, nome, categoria, codice):
+    """La texture del modello appena mandato, nella sezione texture di Glam,
+    legata a quel modello (GLAM.md, sezione 8): `pack3d.texture`. Il
+    modello in Glam c'e' gia': se la texture non passa lo si dice, e il
+    comando finisce bene lo stesso."""
+    from pack3d import texture
+    try:
+        t = texture.per_glam(glb)
+    except Exception as e:      # noqa: BLE001 - il modello e' gia' in Glam
+        print("texture: non si legge dal GLB (%s): in Glam va solo il modello" % e)
+        return
+    if t is None:
+        print("texture: il modello ne ha piu' d'una (un riempimento), e Glam ne "
+              "mette una sola su tutto il modello: in Glam va solo il modello")
+        return
+    file = texture.nomi_file(nome, [t])[0]
+    intestazioni = {"Content-Type": t["mime"],
+                    "X-Model-Name": quote(nome, safe=_URI),
+                    "X-Model-Category": quote(categoria, safe=_URI),
+                    "X-Texture-Name": quote(file, safe=_URI),
+                    "User-Agent": "pack3d-studio"}
+    if codice:
+        intestazioni["X-Pack3d-Codice"] = codice
+    req = urllib.request.Request(
+        url.rstrip("/") + "/api/import-texture", data=t["dati"], method="POST",
+        headers=intestazioni)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            risposta = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        testo = e.read().decode("utf-8", "replace")[:300]
+        if e.code == 401:
+            print("Glam rifiuta il token della texture (401): e' lo stesso di "
+                  "/api/import-model, PACK3D_IMPORT_TOKEN")
+        elif not _glam_assente(e.code, testo):
+            print("Glam non ha preso la texture (HTTP %d): %s - il modello c'e'. "
+                  "Se /api/import-texture non esiste, Glam non conosce ancora le "
+                  "texture: GLAM.md, sezione 8" % (e.code, testo))
+        return
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        _glam_irraggiungibile(e)
+        return
+    print("in Glam anche la texture \"%s\", %d x %d px%s%s" % (
+        file, t["lato"][0], t["lato"][1],
+        " (ridotta a %d px, il massimo di Glam)" % texture.LATO_GLAM if t["ridotta"] else "",
+        ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
 
 
 # Gli stati di un caso della coda, come li mostra Glam a chi l'ha caricato.

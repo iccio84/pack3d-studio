@@ -646,6 +646,7 @@
     <span class="tit">Strumenti</span>
     <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
+    <button id="texture-btn" type="button" style="display:none">Scarica texture</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
     <button id="casi-btn" type="button" aria-expanded="false" aria-controls="casi">Casi</button>
     <button id="notifiche-btn" type="button" aria-expanded="false" aria-controls="notifiche">Notifiche</button>
@@ -1005,16 +1006,23 @@ const pellicolaEl = document.getElementById('pellicola');
 const pellicolaScelta = document.getElementById('pellicola-scelta');
 const dlBtn = document.getElementById('download');
 const annBtn = document.getElementById('annulla');
+// la texture a parte, vedi `preparaTexture`
+const texBtn = document.getElementById('texture-btn');
+let textureGlb = null;      // le texture del modello in vista: [{nome, blob, lato, file}]
+let textureDi = null;       // il GLB da cui vengono
 
 /* Tre fasi, e ognuna mostra solo i tasti che in quel momento hanno senso.
    vuoto  - nessun tasto: si comincia scegliendo la famiglia.
    lavoro - solo Annulla: mentre si sceglie e si costruisce l'unica altra
             cosa sensata e' tornare indietro.
    pronto - Scarica GLB e Annulla; premendo uno qualsiasi dei due si
-            ricomincia da capo. */
+            ricomincia da capo. Accanto, appena e' pronta, Scarica texture,
+            che invece lascia il modello dov'e'. */
 function setFase(f){
   dlBtn.style.display  = f === 'pronto' ? '' : 'none';
   annBtn.style.display = f === 'vuoto'  ? 'none' : '';
+  texBtn.style.display = f === 'pronto' && textureGlb ? '' : 'none';
+  if (f === 'pronto') preparaTexture();
 }
 let glbBlob = null, glbName = 'modello.glb', pending = null;
 const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
@@ -2846,6 +2854,99 @@ document.getElementById('go').onclick = async () => {
     }
   }catch(err){ fermato(err); }
 };
+/* --------------------------- la texture a parte --------------------------- */
+// La texture del modello e' l'immagine che il GLB usa come colore, con le
+// stesse UV: messa al posto della grafica, ogni cosa torna al suo posto. La
+// regola e' quella di pack3d/texture.py: una texture per immagine, col nome
+// della mesh che la usa, e oltre LATO_GLAM px di lato ridotta in proporzione,
+// perche' Glam Lab non ne prende di piu' grandi. Un modello ne ha una -
+// l'astuccio ha le facce in un atlante - il riempimento due, vassoio e pack.
+// Si scaricano col tasto; a Glam, che ospita la pagina, va con
+// pack3d:texture (GLAM.md, sezione 8), e solo se e' una: Glam la mette su
+// tutti i materiali del modello. `glb` e' la misura in byte del GLB, per
+// legarla al modello giusto fra quelli che Glam riceve con pack3d:built.
+// Niente Response.blob() qui: Glam se ne serve per prendere il GLB.
+const LATO_GLAM = 5000;
+
+async function textureDelGlb(buf){
+  const g = parseGLB(buf), mats = g.json.materials || [];
+  const colore = m => {
+    const t = ((mats[m] || {}).pbrMetallicRoughness || {}).baseColorTexture;
+    return t ? g.json.textures[t.index].source : null;
+  };
+  const usate = [];
+  mats.forEach((_, m) => { const s = colore(m); if (s !== null && !usate.includes(s)) usate.push(s); });
+  const nomi = {};
+  for (const mesh of g.json.meshes || [])
+    for (const p of mesh.primitives || []){
+      const s = p.material === undefined ? null : colore(p.material);
+      if (s !== null && !(s in nomi)) nomi[s] = mesh.name || '';
+    }
+  const fuori = [];
+  for (const s of usate){
+    const im = g.json.images[s], bv = g.json.bufferViews[im.bufferView];
+    let blob = new Blob([new Uint8Array(g.bin, bv.byteOffset || 0, bv.byteLength)],
+                        {type: im.mimeType || 'image/jpeg'});
+    const bmp = await createImageBitmap(blob);
+    let l = bmp.width, a = bmp.height;
+    if (Math.max(l, a) > LATO_GLAM){
+      const r = LATO_GLAM / Math.max(l, a);
+      l = Math.max(1, Math.round(l * r)); a = Math.max(1, Math.round(a * r));
+      const c = document.createElement('canvas');
+      c.width = l; c.height = a;
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(bmp, 0, 0, l, a);
+      blob = await new Promise(ok => c.toBlob(ok, 'image/jpeg', 0.9));
+    }
+    if (bmp.close) bmp.close();
+    fuori.push({nome: nomi[s] || '', blob, lato: [l, a]});
+  }
+  return fuori;
+}
+
+/** I nomi dei file: base_texture.jpg, o base_texture_vassoio.jpg... */
+function nomiTexture(base, tex){
+  const est = t => ({'image/png': 'png', 'image/webp': 'webp'})[t.blob.type] || 'jpg';
+  if (tex.length === 1) return [base + '_texture.' + est(tex[0])];
+  const nomi = [];
+  tex.forEach((t, i) => {
+    const n = t.nome.replace(/[^\p{L}\p{N}]/gu, '_').replace(/^_+|_+$/g, '') || String(i + 1);
+    let nome = base + '_texture_' + n + '.' + est(t);
+    if (nomi.includes(nome)) nome = base + '_texture_' + n + '_' + (i + 1) + '.' + est(t);
+    nomi.push(nome);
+  });
+  return nomi;
+}
+
+async function preparaTexture(){
+  const blob = glbBlob;
+  if (!blob || blob === textureDi) return;
+  textureDi = blob; textureGlb = null; texBtn.style.display = 'none';
+  let tex;
+  try{ tex = await textureDelGlb(await blob.arrayBuffer()); }
+  catch(e){ return; }
+  // nel frattempo e' arrivato un altro modello, o si e' tornati indietro
+  if (blob !== glbBlob || !tex.length) return;
+  const nomi = nomiTexture(glbName.replace(/\.glb$/i, '') || 'modello', tex);
+  textureGlb = tex.map((t, i) => Object.assign(t, {file: nomi[i]}));
+  texBtn.textContent = tex.length > 1 ? 'Scarica le texture' : 'Scarica texture';
+  texBtn.style.display = dlBtn.style.display;
+  if (tex.length === 1)
+    aGlam({type: 'pack3d:texture', nome: nomi[0], blob: tex[0].blob,
+           larghezza: tex[0].lato[0], altezza: tex[0].lato[1], glb: blob.size});
+}
+
+texBtn.onclick = () => {
+  if (!textureGlb) return;
+  // piu' file: uno alla volta, se no il browser ne tiene solo il primo
+  textureGlb.forEach((t, i) => setTimeout(() => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(t.blob); a.download = t.file; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }, i * 500));
+};
+
 dlBtn.onclick = () => {
   if (!glbBlob) return;
   const a = document.createElement('a');

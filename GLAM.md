@@ -11,7 +11,8 @@ in Glam. Cioè:
 - a che punto è il caso;
 - le **domande** della routine, quando dal PDF non si capisce come è fatto o
   come si monta il pack, e la possibilità di rispondere, anche con una foto;
-- il modello corretto, nel **suo** account;
+- il modello corretto, nel **suo** account, con la sua texture nella sezione
+  texture del modello (sezione 8);
 - un caso che non serve più, da eliminare: lo può fare un admin, o l'account
   design per i suoi (sezione 7).
 
@@ -231,6 +232,70 @@ eliminato fuori dall'app, per esempio da chi gestisce il servizio - la pagina
 lo toglie e manda lo stesso `pack3d:elimina`: lo Space risponde `404`, e Glam
 cancella il suo. Così in Glam non restano casi fantasma.
 
+## 8. La texture del modello
+
+Oltre al GLB, ogni modello ha la sua **texture a parte**: l'immagine che il
+GLB usa come colore, con le stesse UV (REGOLE.md, *La texture a parte*). In
+Glam va nella **sezione texture del modello** - il riquadro «Texture modello
+selezionato», la tabella `user_textures` col `model_key` del modello
+(`up_<id>`), il file nel bucket `textures` - come una texture caricata a mano
+con «Carica texture».
+
+Glam mette la texture scelta su tutti i materiali del modello che hanno un
+colore da immagine. Per questo arriva solo per i modelli che ne hanno **una**:
+tutti, l'astuccio compreso (ha le facce in un atlante), tranne il
+riempimento, che ne ha due (vassoio e pack) e le dà solo da scaricare. Al
+massimo 5000 px per lato, il limite di «Carica texture»: lo Space riduce in
+proporzione quelle più grandi.
+
+**Dalla pagina** - il modello costruito nell'iframe. Quando il modello è
+pronto la pagina manda alla finestra che la ospita, solo se è della stessa
+origine:
+
+```js
+{ type: "pack3d:texture",
+  nome: "NOME_DEL_PDF_texture.jpg",   // il nome della texture in Glam
+  blob: Blob,                         // image/jpeg, o image/png
+  larghezza: 1801, altezza: 1700,     // px, al massimo 5000 per lato
+  glb: 4447372 }                      // la misura in byte del GLB del modello
+```
+
+Arriva subito prima o subito dopo il `pack3d:built` dello stesso modello, a
+volte più di una volta. Glam tiene l'ultima; quando salva il modello di
+`pack3d:built`, se `glb` è uguale alla misura di quel GLB salva anche la
+texture, per lui. Una texture con un'altra misura è di un altro modello e non
+si salva.
+
+**Dalla routine e dallo Space** - il modello corretto di un caso, o uno del
+parco. Subito dopo `/api/import-model`, con la stessa autorizzazione:
+
+```
+POST /api/import-texture
+Authorization: Bearer <PACK3D_IMPORT_TOKEN>
+Content-Type: image/jpeg
+X-Model-Name: NOME_DEL_PDF                    (encodeURIComponent, come per l'import)
+X-Model-Category: Casi%20risolti
+X-Texture-Name: NOME_DEL_PDF_texture.jpg
+X-Pack3d-Codice: b312f1e238                   (facoltativa, come per l'import)
+
+<i byte dell'immagine>
+```
+
+I destinatari sono quelli di `/api/import-model`: gli utenti del caso, o
+l'account di `PACK3D_IMPORT_OWNER_EMAIL`. Per ognuno Glam prende il suo
+modello con quel nome in quella cartella - quello appena arrivato - e gli
+mette la texture, al posto di quella con lo stesso nome se c'era.
+
+| risposta di Glam | |
+|---|---|
+| `200 {"ok": true, "utenti": N}` | salvata per N utenti |
+| `400` | il corpo non è un'immagine PNG, JPEG o WebP, o è più di 25 MB: il motivo è nel testo |
+| `401` | il token non è quello di Glam |
+| `404` | nessun destinatario ha un modello con quel nome in quella cartella |
+
+Se la texture non passa, il modello resta dov'è: lo Space e la routine
+(`prove/parco.py glam`) lo scrivono e vanno avanti.
+
 ## Il testo per Lovable
 
 Da incollare in Lovable così com'è. Dei due segreti, `PACK3D_IMPORT_TOKEN`
@@ -337,4 +402,19 @@ Aggiungi l'eliminazione dei casi in correzione. I casi li mostra la pagina dello
 4. Dopo un'eliminazione riuscita aggiorna il badge sul tasto "Costruisci modello 3D da PDF" e la busta delle notifiche (invalida le query dei casi e delle notifiche).
 
 5. Tutto il resto resta com'è: endpoint, token, tabelle, notifiche e modulo di risposta.
+```
+
+### Il testo per Lovable: la texture del modello
+
+Da incollare dopo i testi qui sopra. Non servono segreti nuovi:
+`PACK3D_IMPORT_TOKEN` c'è già.
+
+```text
+Ogni modello costruito da PDF deve avere anche la sua texture nella sezione texture del modello ("Texture modello selezionato"), come se l'utente l'avesse caricata con "Carica texture". Il contratto completo è in GLAM.md, sezione 8, del repository iccio84/pack3d-studio.
+
+1. Dalla pagina dello Space. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già "pack3d:built" dall'iframe, ascolta anche { type: "pack3d:texture", nome, blob, larghezza, altezza, glb }, con lo stesso controllo e.origin === window.location.origin, e solo se blob è un Blob di tipo image/jpeg, image/png o image/webp. Tieni l'ultima ricevuta (può arrivare prima o dopo "pack3d:built", e più di una volta). Quando salvi il modello arrivato con "pack3d:built", se la texture tenuta ha glb uguale a blob.size di quel modello, subito dopo aver salvato il modello salva anche la texture per lui, con le stesse funzioni del server di "Carica texture": file nel bucket "textures", riga in user_textures con model_key = "up_" + id del modello appena salvato, name = nome, mime_type = il tipo del blob. Se la texture non si salva, il modello resta salvato: mostra solo un toast "Texture non salvata". Quando arriva un "pack3d:built" con un GLB nuovo, la texture tenuta vale solo se il suo glb è uguale alla misura del nuovo GLB.
+
+2. Nuovo endpoint server POST /api/import-texture, autorizzato esattamente come /api/import-model (Bearer PACK3D_IMPORT_TOKEN). Il corpo sono i byte dell'immagine: Content-Type image/jpeg, image/png o image/webp, al massimo 25 MB (le misure le garantisce lo Space: al massimo 5000 px per lato). Intestazioni: X-Model-Name e X-Model-Category (decodeURIComponent, come in /api/import-model), X-Texture-Name (decodeURIComponent, al massimo 160 caratteri) e X-Pack3d-Codice facoltativa (10 cifre esadecimali). I destinatari sono gli stessi di /api/import-model: gli utenti che hanno il caso X-Pack3d-Codice in pack3d_cases, oppure, se l'intestazione manca o il caso non ha utenti, l'utente di PACK3D_IMPORT_OWNER_EMAIL. Per ciascuno trova il suo modello in user_models con quel nome e quella categoria (il più recente, se sono più d'uno) e salva l'immagine come fa "Carica texture": file nel bucket "textures", riga in user_textures con model_key = "up_" + id del modello, name = X-Texture-Name, mime_type, user_id del destinatario. Se quel modello ha già una texture con lo stesso nome, sostituiscila (cancella la riga e il file vecchi). Risposta 200 {"ok": true, "utenti": N}; 400 col motivo se il corpo non va; 401 se il token non è quello; 404 {"error": "nessun modello con quel nome in quella categoria"} se nessun destinatario ha il modello.
+
+3. Tutto il resto resta com'è: /api/import-model, "pack3d:built", la sezione texture, "Carica texture" e i suoi limiti per chi carica a mano.
 ```

@@ -3644,6 +3644,37 @@ Sul parco: 29 casi identici al byte; cambia solo il caso nuovo, che adesso e'
 chiuso sopra e sotto, col logo dell'aletta dritto sul cielo e il fronte curvo
 con i biscotti davanti.
 
+### Una texture sola: l'atlante delle facce
+
+Ogni faccia si costruisce con la sua immagine - il riquadro del suo pannello,
+girato - ma nel GLB le immagini stanno **in una texture sola**, un atlante
+(`exporters.atlante`): ogni faccia nel suo riquadro, comprese le tinte piene
+dell'interno, del taglio e del solco, e le UV che puntano li'. Ogni faccia
+tiene il suo materiale, col suo nome; la texture e' la stessa per tutti.
+
+- **Perche'**: la texture si da' a parte (*La texture a parte*), e un viewer
+  che la cambia - Glam Lab mette la texture scelta su tutti i materiali che
+  ne hanno una - deve ritrovare ogni faccia al suo posto. Con un'immagine per
+  faccia, in Glam, il fronte finiva su tutte le facce.
+- **I bordi**: fra un riquadro e l'altro 8 px del bordo della faccia ripetuto
+  (`MARGINE_ATLANTE`), e le UV cadono sui centri dei pixel di bordo, mezzo
+  pixel dentro il riquadro, come faceva il bordo bloccato della texture di una
+  faccia sola: i livelli ridotti della texture (mipmap) non prendono il
+  colore della faccia accanto.
+- **Il lato**: entro il massimo della qualita', e se le facce non ci stanno
+  si riducono tutte della stessa misura. In HD (8192 px) non succede: sugli
+  astucci del parco gli atlanti stanno fra 2174 e 4458 px di lato, e nessuna
+  faccia si riduce. In "web" (1700 px) e' l'astuccio intero a stare in 1700
+  px, non piu' ogni faccia: e' la qualita' leggera, e lo e' di piu'.
+- **Il rilievo** va in un secondo atlante, delle normali, con gli stessi
+  riquadri, piatto dove la faccia non ne ha.
+
+Provato nel viewer della pagina e nelle viste del controllo su KC T8, Self
+Love chiuso e aperto e T10 aperto, da vicino e alla misura di un telefono:
+l'astuccio esce come prima, con differenze solo sui contorni del disegno -
+il ricampionamento, meno dello 0,6% dei pixel - e nessun colore che sborda
+da una faccia all'altra.
+
 ## Finestre e rilievi
 
 Due cose che il PDF dice solo in parte, e che sul modello si vedono: la
@@ -3734,7 +3765,9 @@ Tiefpragung vanno in dentro.
 - **Sugli astucci** la mappa e' una per faccia, fatta come la sua texture: il
   riquadro del pannello, girato degli stessi gradi (`girate`); la normale si
   calcola dopo il giro, sull'altezza gia' girata - girare una mappa delle
-  normali vorrebbe dire girarne anche i vettori. Provato su una copia del KC
+  normali vorrebbe dire girarne anche i vettori. Nel GLB le mappe stanno in
+  un atlante delle normali, negli stessi riquadri dell'atlante delle texture
+  (*Astucci*, *Una texture sola*). Provato su una copia del KC
   T8 con la tinta `Kinder Orange` rinominata `Embossing`: le lettere "inder"
   spariscono dalla texture e restano in rilievo bianco, al loro posto, sul
   fronte e sul cielo.
@@ -5299,6 +5332,33 @@ riquadro del controllo.
 - Le CU che non sono flowpack ne' astucci: pouch, coppe, scatole in piu' pezzi.
 - L'astuccio aperto dentro l'espositore.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
+
+## La texture a parte
+
+Oltre al GLB, ogni modello ha **la sua texture a parte**: l'immagine che il
+GLB usa come colore, con le stesse UV. Messa al posto della grafica del
+modello, ogni cosa torna al suo posto. La regola e' in `pack3d/texture.py` e,
+uguale, nella pagina (`textureDelGlb`).
+
+- **Una per modello**: flowpack, pouch, coppa e cono, vassoio e display,
+  ballotin, scatola a punta, astuccio (che ha le facce nell'atlante, vedi
+  *Astucci*). Il **riempimento** ne ha due, il vassoio e il pack, coi nomi
+  delle mesh: `..._texture_vassoio.jpg`, `..._texture_flowpack.jpg`.
+- **Al massimo 5000 px di lato** (`LATO_GLAM`), il limite di Glam Lab: una
+  texture piu' grande - un display in HD arriva a 8192 - si riduce in
+  proporzione, e le UV, che sono frazioni dell'immagine, restano giuste.
+  Sotto il limite esce coi byte del GLB, senza ricomprimerla.
+- **Solo il colore**: le mappe del metallo, della ruvidita' e del rilievo
+  restano nel modello. Glam cambia solo il colore.
+- **Nella pagina** c'e' «Scarica texture» («Scarica le texture» per il
+  riempimento) accanto a «Scarica GLB»; a differenza di quello non svuota la
+  pagina.
+- **In Glam** va nella sezione texture del modello (GLAM.md, sezione 8): dalla
+  pagina con `pack3d:texture`, dalla routine e dallo Space con
+  `/api/import-texture`, dopo il modello. **Solo se e' una**: Glam mette la
+  texture scelta su tutti i materiali del modello, e due non saprebbe dove
+  metterle. Se Glam non la prende, il modello c'e' lo stesso: si scrive e si
+  va avanti.
 
 ## Casi calibrati
 

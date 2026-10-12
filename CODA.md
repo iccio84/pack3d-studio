@@ -172,7 +172,7 @@ approvato**» o «**Modello NON approvato**» - e in `stato.json`, e toglie
 `da-approvare`.
 
 - **Approvato**: lo Space, se ha il token di Glam, manda da solo il modello
-  in Glam, mette il caso risolto e la issue `da-rilasciare`, con un commento
+  in Glam, con la sua texture (GLAM.md, sezione 8), mette il caso risolto e la issue `da-rilasciare`, con un commento
   «**In Glam**»; la routine non parte nemmeno. Se non ci riesce rilancia la
   routine: il caso e' libero, e `prepara` vede che e' approvato e fa da solo
   quello che fa
