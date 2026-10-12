@@ -357,6 +357,7 @@
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   .fld{display:flex;flex-direction:column;gap:7px}
+  .fld[hidden]{display:none}
   .fld > label{font-size:10px;font-weight:500;letter-spacing:.1em;
                text-transform:uppercase;color:var(--muted-foreground)}
   .fld > label b{color:var(--primary);font-weight:600}
@@ -495,6 +496,7 @@
       <button data-k="flowpack">Flowpack</button>
       <button data-k="vassoio">Vassoio espositore</button>
       <button data-k="pouch">Pouch</button>
+      <button data-k="riempimento" title="Un vassoio espositore e il flowpack che ci va dentro: due PDF">Riempimento &middot; vassoio + flowpack</button>
     </div>
   </div>
 
@@ -557,6 +559,11 @@
   <div id="params" class="pannello">
     <span class="tit">Parametri di costruzione</span>
     <div class="griglia">
+    <div class="fld" id="quanti-fld" hidden>
+      <label for="quanti">Quanti flowpack nel vassoio</label>
+      <input id="quanti" type="number" min="1" max="2000" step="1" placeholder="vuoto = pieno">
+      <p class="note">Li dispongo io nel vano: sdraiati con la faccia stampata in su, strato per strato dal fondo; l&rsquo;ultimo strato, se non &egrave; pieno, ha i pezzi al centro. Vuoto: pieno, quanti ne stanno. Se ne chiedi pi&ugrave; di quanti ne stanno, metto il massimo e te lo dico.</p>
+    </div>
     <div class="fld">
       <label for="teeth">Dentini zigrinatura per lato</label>
       <input id="teeth" type="number" min="0" max="400" step="1" placeholder="digita il numero">
@@ -659,7 +666,12 @@ function buildScene(g){
     t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return (texture[src] = t);
   };
-  for (const mesh of g.json.meshes){
+  // Geometria e materiale una volta per mesh: il riempimento richiama la
+  // stessa mesh del flowpack da tanti nodi, uno per pezzo.
+  const fatte = {};
+  const parti = mi => {
+    if (fatte[mi]) return fatte[mi];
+    const mesh = g.json.meshes[mi], out = [];
     for (const prim of mesh.primitives){
       const geo = new THREE.BufferGeometry();
       geo.setAttribute('position', attributo(prim.attributes.POSITION, 3));
@@ -707,12 +719,38 @@ function buildScene(g){
         const k = m.normalTexture.scale ?? 1;
         mat.normalScale = new THREE.Vector2(k, -k);
       }
-      const pezzo = new THREE.Mesh(geo, mat);
-      if (trasparente) pezzo.renderOrder = 1;
-      pezzo.name = mesh.name || '';
-      group.add(pezzo);
+      out.push({geo, mat, trasparente, nome: mesh.name || ''});
     }
-  }
+    return (fatte[mi] = out);
+  };
+  const metti = (mi, dove) => {
+    for (const p of parti(mi)){
+      const pezzo = new THREE.Mesh(p.geo, p.mat);
+      if (p.trasparente) pezzo.renderOrder = 1;
+      pezzo.name = p.nome;
+      dove.add(pezzo);
+    }
+  };
+  // I nodi della scena, con le loro posizioni: nei GLB di un pack solo c'e' un
+  // nodo per mesh, senza spostamenti; nel riempimento un nodo per pezzo.
+  const nodo = (i, dove) => {
+    const n = g.json.nodes[i], o = new THREE.Group();
+    if (n.matrix){
+      o.matrix.fromArray(n.matrix);
+      o.matrix.decompose(o.position, o.quaternion, o.scale);
+    } else {
+      if (n.translation) o.position.fromArray(n.translation);
+      if (n.rotation) o.quaternion.fromArray(n.rotation);
+      if (n.scale) o.scale.fromArray(n.scale);
+    }
+    o.name = n.name || '';
+    if (n.mesh !== undefined) metti(n.mesh, o);
+    for (const c of n.children || []) nodo(c, o);
+    dove.add(o);
+  };
+  const sc = g.json.scenes && g.json.scenes[g.json.scene || 0];
+  if (sc && g.json.nodes) for (const r of sc.nodes) nodo(r, group);
+  else for (let mi = 0; mi < g.json.meshes.length; mi++) metti(mi, group);
   return group;
 }
 
@@ -876,6 +914,8 @@ function show(buf){
 /* ------------------------------- stato -------------------------------- */
 const statusEl = document.getElementById('status');
 const params = document.getElementById('params');
+const quantiFld = document.getElementById('quanti-fld');
+const quantiEl = document.getElementById('quanti');
 const packtype = document.getElementById('packtype');
 const pezziEl = document.getElementById('pezzi');
 const npezzi = document.getElementById('npezzi');
@@ -917,6 +957,8 @@ let glbBlob = null, glbName = 'modello.glb', pending = null;
 // >0 mentre il cartotecnico aspetta i PDF dei pezzi che mancano: quello che
 // si carica allora si aggiunge ai PDF che ci sono, non li sostituisce
 let attesiPezzi = 0;
+// il riempimento aspetta il secondo PDF: il vassoio o il flowpack
+let attesoRiempimento = false;
 const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
 // quanti pezzi puo' avere un cartotecnico: lo stesso tetto del campo `npezzi`
 const MAX_PEZZI = 8;
@@ -2189,7 +2231,8 @@ async function handle(lista){
   // prima domanda obbligatoria su ogni PDF: la tipologia la dichiara l'utente
   const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
   pending = {buf: bufs[0], bufs, name: file.name, nomi: files.map(f => f.name)};
-  attesiPezzi = 0; pezziEl.classList.remove('on');
+  attesiPezzi = 0; attesoRiempimento = false; pezziEl.classList.remove('on');
+  quantiFld.hidden = true;
   setTitolo(files.map(f => f.name).join(' + '));
   params.classList.remove('on'); strappoEl.classList.remove('on');
   pellicolaEl.classList.remove('on'); setMeta([]);
@@ -2218,12 +2261,64 @@ async function withKind(kind){
     setStatus('Cartotecnico: digita di quanti pezzi e\' fatto il pack e scegli lo spessore della carta','');
     return;
   }
+  if (kind === 'riempimento'){
+    // un vassoio e il flowpack che ci va dentro: due PDF, in qualsiasi ordine
+    if (pending.bufs.length > 2){
+      setStatus('Riempimento: due PDF, il vassoio e il flowpack: annulla e ricarica','err');
+      return;
+    }
+    packtype.classList.remove('on');
+    if (pending.bufs.length < 2){
+      attesoRiempimento = true;
+      setStatus('Riempimento: carica anche l\'altro PDF, il vassoio o il flowpack','');
+      // dal clic sul tasto la finestra dei file si puo' aprire
+      document.getElementById('file').click();
+      return;
+    }
+    await riempimentoAvanti();
+    return;
+  }
   if (pending.bufs.length > 1){
     setStatus('Piu\' PDF insieme solo per un cartotecnico in piu\' pezzi: per questa tipologia caricane uno','err');
     return;
   }
   packtype.classList.remove('on');
   await procedi(kind, {});
+}
+
+/** Il riempimento con i due PDF: la lettura dice quale e' il vassoio, poi i
+ *  parametri del flowpack e quanti pezzi mettere nel vassoio. */
+async function riempimentoAvanti(){
+  const c = corpo(pending);
+  const opts = {kind: 'riempimento', parti: c.parti, nomi: nomiPdf(pending)};
+  try{
+    const info = await analyze(c.buf, opts);
+    setMeta(info.meta || []);
+    pending.riempimento = {c, info};
+    document.getElementById('teeth').value = '';
+    quantiEl.value = '';
+    quantiFld.hidden = false;
+    params.classList.add('on');
+    setStatus('Riempimento: quanti flowpack nel vassoio, poi i dentini e il rigonfiamento del flowpack','');
+    quantiEl.focus();
+  }catch(err){ fermato(err); }
+}
+
+/** Il secondo PDF del riempimento. */
+async function aggiungiRiempimento(lista){
+  const files = Array.from(lista || []).filter(Boolean);
+  if (!files.length) return;
+  if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
+  const bufs = await Promise.all(files.map(f => f.arrayBuffer()));
+  if (pending.bufs.length + bufs.length !== 2){
+    setStatus('Riempimento: due PDF in tutto, il vassoio e il flowpack','err');
+    return;
+  }
+  attesoRiempimento = false;
+  pending.bufs.push(...bufs);
+  pending.nomi.push(...files.map(f => f.name));
+  setTitolo(pending.nomi.join(' + '));
+  await riempimentoAvanti();
 }
 
 /** Lo spessore della carta: 1, 2 o 3, o 0 per nessuno. */
@@ -2293,6 +2388,7 @@ async function aggiungi(lista){
 
 /** Un file arrivato dal campo o trascinato: nuovo pack, o pezzo che mancava. */
 function ricevi(lista){
+  if (attesoRiempimento && pending) return aggiungiRiempimento(lista);
   return (attesiPezzi && pending) ? aggiungi(lista) : handle(lista);
 }
 
@@ -2304,6 +2400,7 @@ async function procedi(kind, extra){
     setMeta(info.meta || []);
     if (kind === 'flowpack'){
       document.getElementById('teeth').value = '';
+      quantiFld.hidden = true;
       params.classList.add('on');
       setStatus('Flowpack: digita i dentini e scegli il rigonfiamento','');
       return;
@@ -2448,7 +2545,8 @@ function togliModello(){
 }
 
 function annulla(){
-  pending = null; glbBlob = null; attesiPezzi = 0;
+  pending = null; glbBlob = null; attesiPezzi = 0; attesoRiempimento = false;
+  quantiFld.hidden = true;
   params.classList.remove('on');
   packtype.classList.remove('on');
   pezziEl.classList.remove('on');
@@ -2519,17 +2617,36 @@ document.getElementById('go').onclick = async () => {
   if (t === '' || isNaN(parseInt(t))){
     setStatus('Digita il numero di dentini','err'); return;
   }
+  const r = pending.riempimento;
+  let quanti = '';
+  if (r){
+    const q = quantiEl.value.trim();
+    if (q !== ''){
+      quanti = parseInt(q, 10);
+      if (!(quanti >= 1 && quanti <= 2000)){
+        setStatus('Quanti flowpack nel vassoio: un numero da 1 a 2000, o vuoto per pieno','err');
+        return;
+      }
+    }
+  }
   params.classList.remove('on');
+  const fp = {teeth: document.getElementById('teeth').value,
+              nomi: nomiPdf(pending),
+              scatola: document.getElementById('scatola').checked,
+              pinne: Number(document.getElementById('pinne').value),
+              soft:  document.getElementById('softauto').checked
+                       ? 'auto'
+                       : Number(document.getElementById('soft').value)};
   try{
-    const v = await build(pending.buf, pending.name,
-                {kind:'flowpack', teeth: document.getElementById('teeth').value,
-                 nomi: nomiPdf(pending),
-                 scatola: document.getElementById('scatola').checked,
-                 pinne: Number(document.getElementById('pinne').value),
-                 soft:  document.getElementById('softauto').checked
-                          ? 'auto'
-                          : Number(document.getElementById('soft').value)});
-    esitoFinale(v, 'Modello pronto');
+    if (r){
+      setStatus('Costruisco il vassoio, il flowpack e il riempimento: ci vuole qualche minuto','');
+      const v = await build(r.c.buf, pending.name,
+                  Object.assign(fp, {kind: 'riempimento', parti: r.c.parti, quanti}));
+      esitoFinale(v, r.info.title || 'Vassoio pieno');
+    } else {
+      const v = await build(pending.buf, pending.name, Object.assign(fp, {kind: 'flowpack'}));
+      esitoFinale(v, 'Modello pronto');
+    }
   }catch(err){ setStatus(testoErrore(err).slice(0,200),'err'); }
 };
 dlBtn.onclick = () => {

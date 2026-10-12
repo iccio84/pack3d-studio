@@ -28,6 +28,7 @@ mappata sulle facce giuste.
 | `pack3d/apertura.py` | la stessa apertura aperta di tot gradi sulla sua cerniera, con la scatola appoggiata sul retro |
 | `pack3d/ballotin.py` | il ballotin, la scatola a tronco di piramide con gli spigoli a lente: la fustella letta faccia per faccia |
 | `pack3d/materiali.py` | il materiale del film dai DT secondari: alluminio, white plate e vernice opaca diventano metallo e ruvidita' nel GLB |
+| `pack3d/riempimento.py` | il riempimento: il vassoio espositore pieno dei suoi flowpack, un GLB solo con il flowpack una volta e un nodo per pezzo |
 | `pack3d/rilievo.py` | l'embossing (o il debossing) dalla sua lastra: una mappa delle normali che mette in rilievo marchi e disegni sul modello |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |
 | `GLAM.md` | come chi ha caricato il PDF segue il suo caso da Glam Lab: stato, domande, risposte, modello corretto; il testo per Lovable |
@@ -66,3 +67,8 @@ chiedere se ci va la pellicola trasparente, che di solito c'e' ma non
 sempre. Se il DT ha la lastra dell'embossing, marchi e disegni escono in
 rilievo. Per i flowpack vengono chieste zigrinatura e tipo di gonfiore prima
 di costruire.
+
+Il **riempimento** mette insieme due PDF, un vassoio espositore e il suo
+flowpack: costruisce i due modelli, chiede quanti flowpack mettere (vuoto
+vuol dire pieno) e li dispone nel vassoio, sdraiati quando ci stanno, in un
+GLB solo.
