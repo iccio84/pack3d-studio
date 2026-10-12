@@ -13,6 +13,7 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py prepara CASI CODICE [--riprendi]
     python3 prove/parco.py consegna CASI CODICE --messaggio TESTO --commento TESTO
     python3 prove/parco.py approvato CASI CODICE
+    python3 prove/parco.py prossimo CASI CODICE
     python3 prove/parco.py versione [--codice DIR]
 
 `costruisci` avvia un server col codice di DIR (di serie quello di questo
@@ -61,7 +62,9 @@ dallo Space, sulla issue del caso (`coda.aggiungi`).
 restituisce.
 
 Il giro di un caso (CODA.md) usa `prepara`, `consegna` e `approvato`, qui
-sotto, e costruisce solo quel caso, col codice della settimana:
+sotto, e costruisce solo quel caso, col codice della settimana. Alla fine
+`prossimo` chiede allo Space di avviare una sessione nuova se in coda c'e'
+un altro caso libero (`consegna` lo chiede da sola):
 
     python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>
 
@@ -654,6 +657,42 @@ def _avvisa(spazio, codice):
         print("email a chi ha mandato il caso: nessuna (%s)" % esito.get("perche", "-"))
 
 
+def _prossimo(spazio, codice):
+    """Chiede allo Space di avviare una sessione nuova della routine, se in
+    coda c'e' un altro caso libero (`coda.prossimo`). Un caso per sessione:
+    costa meno che lavorarne due nella stessa."""
+    for prova in (1, 2):
+        req = urllib.request.Request(
+            spazio.rstrip("/") + "/api/prossimo", method="POST",
+            data=json.dumps({"codice": codice}).encode("utf-8"),
+            headers={"Content-Type": "application/json", "User-Agent": "pack3d-studio"})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                esito = json.loads(r.read().decode("utf-8") or "{}")
+            break
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and prova == 1:
+                time.sleep(20)          # un'altra sessione ha appena guardato
+                continue
+            print("prossimo caso: lo Space dice HTTP %d: %s"
+                  % (e.code, e.read().decode("utf-8", "replace")[:200]))
+            return
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            print("prossimo caso: lo Space non risponde (%s); lo prende il giro di "
+                  "sicurezza" % e)
+            return
+    if esito.get("avviata"):
+        print("prossimo caso: %s, in una sessione nuova" % esito.get("caso"))
+    else:
+        print("prossimo caso: nessuno (%s)" % (esito.get("perche") or "-"))
+
+
+def prossimo(args):
+    """Fine del giro, comunque sia andato: se c'e' un altro caso libero, una
+    sessione nuova lo prende."""
+    _prossimo(args.spazio, args.codice)
+
+
 def caso(args):
     """A che punto e' un caso della coda, in Glam Lab per chi l'ha caricato,
     e nella pagina dello Space per chi l'ha mandato da li'."""
@@ -969,9 +1008,10 @@ def prepara(args):
     if fermi:
         raise SystemExit("il caso %s non e' libero: ha %s (CODA.md)" % (cod, ", ".join(fermi)))
     if "in-lavorazione" in etichette and not args.riprendi:
-        raise SystemExit("il caso %s ha gia' il lucchetto in-lavorazione: se e' di una "
-                         "sessione morta (piu' di sei ore, negli eventi della issue) "
-                         "usa --riprendi" % cod)
+        raise SystemExit("il caso %s ha gia' il lucchetto in-lavorazione. Se l'ha preso "
+                         "un'altra sessione da poco, prendi il caso libero successivo "
+                         "(o hai finito); se e' di una sessione morta (piu' di sei ore, "
+                         "negli eventi della issue) usa --riprendi" % cod)
     _metti(args.repo, n, "in-lavorazione")
     sessione = _sessione()
     _commenta(args.repo, n, "%s%s." % ("Ripreso: il lucchetto era di una sessione ferma da "
@@ -1090,6 +1130,7 @@ def consegna(args):
     glam_ok = "in Glam: caso" in rumore.getvalue()
     print("caso %s consegnato da approvare (issue #%d)%s" % (
         cod, n, "" if glam_ok else "; Glam non ha preso lo stato: scrivilo nel riassunto"))
+    _prossimo(args.spazio, cod)
 
 
 def approvato(args):
@@ -1205,7 +1246,9 @@ def main():
                              ("consegna", consegna, "dopo la correzione: il modello a chi "
                               "l'ha caricato, da approvare"),
                              ("approvato", approvato, "dopo l'approvazione: in Glam, risolto, "
-                              "da rilasciare")):
+                              "da rilasciare"),
+                             ("prossimo", prossimo, "fine del giro: se in coda c'e' un altro "
+                              "caso libero, lo Space avvia una sessione nuova")):
         x = sub.add_parser(nome, help=aiuto)
         x.add_argument("casi", help="clone del repository privato dei casi")
         x.add_argument("codice", help="il codice del caso, 10 cifre esadecimali")

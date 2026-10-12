@@ -164,6 +164,15 @@ Space dice perche' e il caso aspetta il giro di sicurezza. L'endpoint e' in
 anteprima e la sua intestazione beta puo' cambiare: la nuova si mette in
 `PACK3D_ROUTINE_BETA`, senza toccare il codice.
 
+Ogni sessione lavora **un caso solo**. Finito il caso, la routine chiede allo
+Space se in coda ce n'e' un altro libero (`POST /api/prossimo`, senza token):
+se c'e', lo Space avvia una sessione nuova per lui, con lo stesso trigger. Non
+rilancia per un caso appena entrato o appena avviato negli ultimi dieci
+minuti, che ha gia' la sua sessione: le sessioni restano al massimo una per
+caso libero. Cosi' un caso rimasto
+senza sessione non aspetta il giorno dopo, e il giro di sicurezza, che ne
+prende uno, fa partire anche gli altri, uno dopo l'altro.
+
 Un caso che lo Space approva finisce anche in **Glam Lab**
 (`iccio-3d-viewer.lovable.app`), il viewer dove si guardano i pack:
 `prove/parco.py glam` manda il GLB appena provato al punto d'ingresso

@@ -117,7 +117,14 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    cambiato, registra `come_deve_venire`, manda il modello da approvare
    (`modello.glb` nella cartella del caso), chiede allo Space l'email per chi
    l'ha lasciata, commenta, mette `da-approvare` e toglie `in-lavorazione`.
-   **Il giro finisce qui.**
+   Poi chiede allo Space se in coda c'e' un altro caso libero: se c'e', lo
+   Space avvia una **sessione nuova** per lui. **Il giro finisce qui**: il
+   caso dopo non lo prendi tu, perche' una sessione nuova costa meno di
+   questa, che ha gia' tutto il caso alle spalle.
+8. **Se il giro finisce senza `consegna`** - una domanda a chi l'ha caricato,
+   un caso che non si costruisce o non si risolve - l'ultima cosa e':
+
+       python3 prove/parco.py prossimo ../pack3d-casi <codice>
 
 ## Un caso alla volta
 
@@ -125,6 +132,9 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
   `da-rilasciare` ne' `in-lavorazione` - o `in-lavorazione` da piu' di **sei
   ore** (negli eventi della issue): allora la sessione che l'aveva preso e'
   morta, e lo riprendi con `prepara --riprendi`.
+- Se `prepara` trova il lucchetto messo **da poco** - un'altra sessione,
+  partita insieme a te, l'ha preso un attimo prima - prendi il caso libero
+  successivo; se non ce n'e', hai finito.
 - Una issue chiusa con `eliminato` l'ha tolta dalla coda chi poteva farlo,
   dall'app: non si riapre e non si lavora. Se la trovi chiusa mentre ci
   lavori, fermati: niente PR, niente stato a Glam, scrivilo nel riassunto.
