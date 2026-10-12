@@ -786,12 +786,18 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     px_mm = 4.0
     pz = plancia.pezzi(pdf, p, d, px_mm)
     rx0, ry0, rx1, ry1 = pz.riquadro()
-    lato = max(rx1 - rx0, ry1 - ry0)
+    # lo steso, la texture del GLB, e' il DT con un millimetro attorno: lo
+    # stesso foglio, oltre i pezzi della maglia (`pack3d.steso`)
+    m_dt = 1.0 / PT2MM
+    dt = (min(rx0, d.bbox[0] - m_dt), min(ry0, d.bbox[1] - m_dt),
+          max(rx1, d.bbox[2] + m_dt), max(ry1, d.bbox[3] + m_dt))
+    lato = max(dt[2] - dt[0], dt[3] - dt[1])
     dpi_tex = min(dpi, tmax * 72.0 / lato) if lato > 0 else dpi
+    esito = {}
     tex, avvisi_tex = artwork.texture_astuccio(
         pdf, {"steso": Panel(rx0, ry0, rx1, ry1, "steso")}, dpi_tex,
         lastre_extra=lastre_extra, colata_riquadro=colata_riquadro,
-        regione=d.bbox)
+        regione=d.bbox, esito=esito, steso=dt)
     # la coda prima della maglia, come nel vassoio: le UV dell'interno e del
     # taglio si misurano sull'altezza che la texture ha davvero
     steso = vassoio.con_coda(tex["steso"])
@@ -808,10 +814,14 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     # nel GLB, sugli stessi vertici e la stessa texture. La plancia e' stesa
     # per ultima, quindi i suoi triangoli stanno in fondo.
     inizio = min(a for k, (a, _b) in parti.items() if k.startswith("plancia"))
-    # la texture e' lo steso del PDF, come nel vassoio: il riquadro e' gia'
-    # quello della fustella
-    tela, UV, tinte = lo_steso.senza_strisce(tex["steso"].height, steso, UV, T,
-                                             TINTE_VASSOIO)
+    # la texture e' lo steso del PDF, come nel vassoio: senza la coda, sul DT
+    # intero e nel verso del PDF
+    _tela, UV, tinte = lo_steso.senza_strisce(tex["steso"].height, steso, UV, T,
+                                              TINTE_VASSOIO)
+    tela, box = esito["steso"]
+    sc = esito["scala"]
+    UV = lo_steso.allarga(UV, tuple(round(c * sc) for c in (rx0, ry0, rx1, ry1)),
+                          box)
     tela, UV = lo_steso.nel_verso_del_pdf(gradi, tela, UV)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
                              parti=[("display", 0, inizio),
@@ -828,7 +838,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
             + ([riscontro] if riscontro else []))
 
 
-def _pezzi_tondi(pdfs, dichiarato="coppa"):
+def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
     """`{cosa: pdf}`: quale dei PDF e' quale pezzo, ognuno a pagina unica.
 
     I pack tondi arrivano in piu' file - la coppa con lo sleeve e il tappo, il
@@ -841,13 +851,16 @@ def _pezzi_tondi(pdfs, dichiarato="coppa"):
     non e' nessuno di questi e' un errore, e l'errore dice a chi ha
     dichiarato un cartotecnico in piu' pezzi che cosa il risolutore sa
     montare.
+
+    In `giri`, se c'e', finiscono i gradi di cui ogni pezzo e' stato girato
+    sul verso della grafica: lo steso ci torna alla fine (`pack3d.steso`).
     """
     from pack3d import coppa as cp
     trovati = {}
     for k, pdf in enumerate(pdfs):
         pdf, _n = artwork.pagina_unica(pdf)
         # girato sulla tavola si legge girato: vedi `coppa.orienta`
-        pdf, cosa, _gradi = cp.orienta(pdf, dischi=len(pdfs) > 1)
+        pdf, cosa, gradi = cp.orienta(pdf, dischi=len(pdfs) > 1)
         if cosa is None:
             if dichiarato == "carton":
                 raise ValueError(
@@ -866,6 +879,8 @@ def _pezzi_tondi(pdfs, dichiarato="coppa"):
                                 if cosa in ("coppa", "tappo")
                                 else "il cono e il lid"))
         trovati[cosa] = pdf
+        if giri is not None:
+            giri[cosa] = int(gradi or 0)
     if {"coppa", "tappo"} & set(trovati) and {"cono", "lid"} & set(trovati):
         raise ValueError("i PDF sono pezzi di due pack diversi: %s"
                          % ", ".join(sorted(trovati)))
@@ -1066,7 +1081,8 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
     """
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
-    pezzi = _pezzi_tondi(pdfs, dichiarato)
+    giri = {}
+    pezzi = _pezzi_tondi(pdfs, dichiarato, giri)
     if _cono(pezzi):
         cono, lid = pezzi.get("cono"), pezzi.get("lid")
         V, UV, T, A, parti, meta, bianchi = cp.costruisci_cono(
@@ -1087,6 +1103,14 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
                        "chiuderla" if sleeve
                   else "solo il tappo: carica anche il PDF dello sleeve")
         nodi = "la coppa e il tappo sono due nodi del GLB"
+    # lo steso di ogni pezzo torna nel verso del suo PDF, se `orienta` aveva
+    # girato il foglio; le parti hanno vertici loro
+    for k, (nome, a, b) in enumerate(parti):
+        op = lo_steso.INDIETRO[giri.get(nome, 0) % 360]
+        if op is not None:
+            usati = np.unique(np.asarray(T)[a:b].ravel())
+            UV[usati] = lo_steso.applica(lo_steso.matrice(op), UV[usati])
+            A[k] = A[k].transpose(op)
     tinte = lo_steso.Tinte(np.where(bianchi, 0, -1).astype(np.int32),
                            [("rovescio", cp.BIANCO)])
     exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti,

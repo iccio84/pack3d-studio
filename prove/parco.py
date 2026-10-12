@@ -29,10 +29,12 @@ Le immagini finiscono in DIR, di serie DOPO/confronto.
 
 `stesi` controlla che la texture di ogni modello sia lo steso del suo PDF
 (REGOLE.md, *La texture e' lo steso*): cerca ogni texture sulla prima pagina
-del PDF, girata di 0, 90, 180 o 270 gradi e a scale diverse, e dice dove
-combacia meglio. Deve combaciare dritta, a scala uniforme. Esce con 1 se una
-texture combacia meglio girata; una texture che non si ritrova (un PDF che si
-rende con il DT sopra la grafica) lo dice, ma non conta come errore.
+del PDF senza i livelli tecnici e senza le lastre che coprono la grafica,
+girata di 0, 90, 180 o 270 gradi e a scale
+diverse, e dice dove combacia meglio. Deve combaciare dritta, a scala
+uniforme. Esce con 1 se una texture combacia nettamente meglio girata; una
+"incerta" (un pack quasi simmetrico pareggia dritto e capovolto) o una che non
+si ritrova sulla pagina va guardata a occhio, ma non conta come errore.
 
 `spazio` prova un caso sullo Space vero, dopo una pubblicazione: aspetta che
 /api/ping dica la versione di questo clone (`pack3d/versione.py`), cioe' che
@@ -1244,10 +1246,20 @@ def approvato(args):
         cod, "in Glam" if in_glam else "Glam non l'ha preso", n))
 
 
-# `stesi`: una texture si cerca sulla pagina resa a STESI_DPI, girata e a
-# scale da 40 a 400 dpi; combacia se la correlazione supera STESI_SOGLIA
-STESI_DPI = 24.0
+# `stesi`: una texture si cerca sulla pagina senza i livelli tecnici
+# (`strati.senza_tecnici`: il DT sopra la grafica pesava piu' della grafica) e
+# senza le coperture (`artwork.senza_coperture`),
+# resa perche' la texture ci stia su almeno STESI_PX pixel - fra 30 e 72 dpi -
+# girata di 0, 90, 180 e 270 gradi e a scale fra 100 e 400 dpi. Il verso dritto
+# vince se e' il migliore a meno di STESI_PARI; un altro vince se lo stacca di
+# STESI_MARGINE; nel mezzo e' incerta, da guardare. Sotto STESI_SOGLIA la
+# texture sulla pagina non si ritrova. Un pack quasi simmetrico - il film di
+# un flowpack piccolo, bianco e azzurro sopra e sotto - pareggia dritto e
+# capovolto: e' giusto che lo dica, e non che scelga.
+STESI_PX = 300
 STESI_SOGLIA = 0.3
+STESI_PARI = 0.02
+STESI_MARGINE = 0.1
 
 
 def _correlazione(P, t):
@@ -1281,7 +1293,7 @@ def stesi(args):
     import numpy as np
     import pypdfium2 as pdfium
     from PIL import Image
-    from pack3d import texture
+    from pack3d import artwork, strati, texture
     girate = 0
     for caso in _casi(args.casi, args.solo):
         try:
@@ -1289,34 +1301,61 @@ def stesi(args):
                 glb = fh.read()
         except OSError:
             continue
-        pagine = []
+        # la pagina come la vede chi apre il file - col suo /Rotate, che
+        # `pagina_unica` cuoce e la copia senza livelli perderebbe - senza i
+        # livelli tecnici e senza le lastre che coprono la grafica, come la
+        # pulisce la costruzione (`artwork.senza_coperture`: la vernice del
+        # Nutella Donut, resa, copre tutto il foglio), resa a una risoluzione
+        # per texture
+        puliti = []
         for f in caso["file"]:
-            doc = pdfium.PdfDocument(os.path.join(args.casi, "parco", "pdf", f))
-            pagine.append(np.asarray(doc[0].render(scale=STESI_DPI / 72.0)
-                                     .to_pil().convert("L"), float))
+            una, _n = artwork.pagina_unica(os.path.join(args.casi, "parco", "pdf", f))
+            puliti.append(artwork.senza_coperture(strati.senza_tecnici(una)[0])[0])
+        rese = {}
+
+        def pagina(i, dpi):
+            if (i, dpi) not in rese:
+                doc = pdfium.PdfDocument(puliti[i])
+                rese[(i, dpi)] = np.asarray(doc[0].render(scale=dpi / 72.0)
+                                            .to_pil().convert("L"), float)
+                doc.close()
+            return rese[(i, dpi)]
         for t in texture.texture(glb, 100000):
             im = Image.open(io.BytesIO(t["dati"])).convert("L")
-            meglio = None
+            if max(im.size) < 64:
+                print("%-30s %-12s %5d x %-5d  troppo piccola per cercarla"
+                      % (caso["nome"], t["nome"], im.width, im.height))
+                continue
+            R = float(round(min(72.0, max(30.0, STESI_PX * 300.0 / max(im.size)))))
+            per_giro = {}
             for k in range(4):
                 g = im.rotate(90 * k, expand=True)
-                for dpi in np.geomspace(40, 400, 60):
-                    w = max(1, round(g.width * STESI_DPI / dpi))
-                    h = max(1, round(g.height * STESI_DPI / dpi))
-                    if w < 8 or h < 8:
-                        continue
+                for dpi in np.geomspace(100, 400, 32):
+                    w = max(1, round(g.width * R / dpi))
+                    h = max(1, round(g.height * R / dpi))
                     a = np.asarray(g.resize((w, h), Image.BILINEAR), float)
-                    for i, P in enumerate(pagine):
-                        c = _correlazione(P, a)[0]
-                        if meglio is None or c > meglio[0]:
-                            meglio = (c, 90 * k, dpi, i)
-            c, giro, dpi, i = meglio
+                    for i in range(len(puliti)):
+                        c = _correlazione(pagina(i, R), a)[0]
+                        if c > per_giro.get(90 * k, (-1.0,))[0]:
+                            per_giro[90 * k] = (c, dpi, i)
+            if 0 not in per_giro:
+                # tutta di un colore: non c'e' niente da ritrovare
+                print("%-30s %-12s %5d x %-5d  di un colore solo, non si cerca"
+                      % (caso["nome"], t["nome"], im.width, im.height))
+                continue
+            giro = max(per_giro, key=lambda k: per_giro[k][0])
+            c, dpi, i = per_giro[giro]
+            dritta, dpi0, i0 = per_giro[0]
             if c < STESI_SOGLIA:
                 esito = "non si ritrova sulla pagina"
-            elif giro:
+            elif dritta >= c - STESI_PARI:
+                esito, c, dpi, i = "dritta", dritta, dpi0, i0
+            elif c - dritta >= STESI_MARGINE:
                 esito = "GIRATA di %d gradi" % giro
                 girate += 1
             else:
-                esito = "dritta"
+                esito = ("incerta, da guardare: girata di %d gradi %.2f, dritta "
+                         "%.2f" % (giro, c, dritta))
             print("%-30s %-12s %5d x %-5d  %s (pdf %d, %.0f dpi, correlazione %.2f)"
                   % (caso["nome"], t["nome"], im.width, im.height, esito, i + 1,
                      dpi, c))

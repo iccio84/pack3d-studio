@@ -218,3 +218,15 @@ def riscontro(faces, tela, punti=400, tolleranza=0.9):
         if uguali < tolleranza:
             no.append((f["name"], float(uguali)))
     return no
+
+
+def allarga(UV, box, box_steso):
+    """Le UV di un'immagine che copre il riquadro `box` del foglio (pixel,
+    arrotondati come i ritagli di `folding.rasterize_panels`) portate sullo
+    steso, che dallo stesso foglio copre `box_steso`, piu' grande."""
+    x0, y0, x1, y1 = box
+    X0, Y0, X1, Y1 = box_steso
+    UV = np.asarray(UV, float)
+    return np.stack([(x0 - X0 + UV[:, 0] * (x1 - x0)) / (X1 - X0),
+                     (y0 - Y0 + UV[:, 1] * (y1 - y0)) / (Y1 - Y0)],
+                    1).astype(np.float32)

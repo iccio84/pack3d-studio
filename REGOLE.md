@@ -5340,10 +5340,10 @@ toccare la costruzione: le verifiche girano prima, sui telai di sempre.
 | flowpack | il rettangolo del film | si gira indietro dei gradi del foglio, e dei 90 del film coricato; con lei la mappa del metallo |
 | pouch | il foglio della busta | niente: era gia' lo steso |
 | vassoio | il DT con un millimetro attorno, invece della pagina intera | via la coda delle tinte, ritaglio, giro indietro |
-| display con plancia | il riquadro della fustella | via la coda delle tinte, giro indietro |
+| display con plancia | il DT con un millimetro attorno, anche oltre i pezzi della maglia | via la coda delle tinte, le UV portate sul DT (`steso.allarga`), giro indietro |
 | ballotin, scatola a punta | il DT con un millimetro attorno | via le strisce del rovescio e del taglio |
 | astuccio | il DT con un millimetro attorno | lo steso al posto delle facce (*Astucci*, *La texture e' lo steso*) |
-| coppa, cono | uno per foglio: lo sleeve e il fondo, il tappo; il cono, il lid | il rovescio bianco e' un colore pieno; l'anello del tappo, che sullo steso c'e' una volta, attorno si ripete a settori, uno per modulo, e nessun triangolo ne scavalca il bordo |
+| coppa, cono | uno per foglio: lo sleeve e il fondo, il tappo; il cono, il lid | il foglio che `coppa.orienta` aveva girato sulla tavola torna nel verso del suo PDF; il rovescio bianco e' un colore pieno; l'anello del tappo, che sullo steso c'e' una volta, attorno si ripete a settori, uno per modulo, e nessun triangolo ne scavalca il bordo |
 | riempimento | quello del vassoio e quello del pack | niente: sono i due modelli com'escono |
 
 - **Le tinte piene** - il rovescio, il taglio, il solco - non stanno nella
@@ -5355,6 +5355,11 @@ toccare la costruzione: le verifiche girano prima, sui telai di sempre.
 - **Il modello non cambia**: sul parco le viste del controllo sono quelle di
   prima, a meno della compressione JPEG. Cambiano solo il file della texture e
   le UV, insieme.
+- **Si controlla** con `prove/parco.py stesi`: ogni texture si cerca sulla
+  pagina del suo PDF, pulita come la pulisce la costruzione, girata di 0, 90,
+  180 e 270 gradi e a scale diverse, e deve combaciare dritta. Un film quasi
+  simmetrico pareggia dritto e capovolto, e lo strumento lo dice «incerta»:
+  si guarda a occhio.
 
 ### La texture a parte
 
