@@ -915,12 +915,26 @@ def in_piu_pezzi(kind, pdfs):
     return kind == "coppa" or (kind == "carton" and len(pdfs) > 1)
 
 
-def analisi_riempimento(pdfs):
-    """Il riempimento: un vassoio espositore e il flowpack che ci va dentro,
-    in due PDF in qualsiasi ordine. Il vassoio e' quello dei due che si legge
-    come vassoio; l'altro si legge come flowpack. Vedi `pack3d.riempimento`."""
+# Che cosa va nel vassoio: il flowpack, o l'astuccio - un cartotecnico di un
+# pezzo solo. Lo dichiara chi carica, come la famiglia.
+CU_RIEMPIMENTO = ("flowpack", "carton")
+
+
+def cu_riempimento(valore):
+    """Il pack (CU) del riempimento: 'flowpack' di serie, o 'carton'."""
+    v = normalizza_kind(valore or "flowpack")
+    if v not in CU_RIEMPIMENTO:
+        raise ValueError("Riempimento: il pack (CU) e' un flowpack o un astuccio")
+    return v
+
+
+def analisi_riempimento(pdfs, cu="flowpack"):
+    """Il riempimento: un vassoio espositore - o un display - e il pack che ci
+    va dentro, in due PDF in qualsiasi ordine. Il vassoio e' quello dei due
+    che si legge come vassoio; l'altro si legge come `cu`, flowpack o
+    astuccio. Vedi `pack3d.riempimento`."""
     if len(pdfs) != 2:
-        raise ValueError("riempimento: carica due PDF, il vassoio e il flowpack")
+        raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
     letti = []
     for p in pdfs:
         try:
@@ -931,19 +945,26 @@ def analisi_riempimento(pdfs):
     if len(vassoi) != 1:
         raise ValueError("riempimento: dei due PDF %s" % (
             "nessuno si legge come vassoio espositore" if not vassoi else
-            "tutti e due si leggono come vassoi: l'altro deve essere il flowpack"))
+            "tutti e due si leggono come vassoi: l'altro deve essere il pack (CU)"))
     iv = vassoi[0]
     ifp = 1 - iv
-    fp = analyze_pdf(pdfs[ifp], "flowpack")
-    meta = (["riempimento: il vassoio e' il PDF %d, il flowpack il PDF %d"
-             % (iv + 1, ifp + 1)]
+    nome_cu = "astuccio" if cu == "carton" else "flowpack"
+    # l'astuccio con le sue domande: l'apertura a strappo, se c'e'
+    fp = analyze_pdf(pdfs[ifp], cu, domande=(cu == "carton"))
+    meta = (["riempimento: il vassoio e' il PDF %d, %s il PDF %d"
+             % (iv + 1, "l'astuccio" if cu == "carton" else "il flowpack", ifp + 1)]
             + ["vassoio: %s" % m for m in letti[iv].get("meta", [])[:3]]
-            + ["flowpack: %s" % m for m in fp.get("meta", [])[:3]])
-    return dict(kind="riempimento", title="Riempimento: %s coi suoi flowpack"
-                % (letti[iv].get("title") or "vassoio"),
-                meta=meta, vassoio=iv, flowpack=ifp,
-                teeth_default=fp.get("teeth_default", 20),
-                soft_default=fp.get("soft_default", "medio"))
+            + ["%s: %s" % (nome_cu, m) for m in fp.get("meta", [])[:3]])
+    out = dict(kind="riempimento", cu=cu,
+               title="Riempimento: %s coi suoi %s"
+               % (letti[iv].get("title") or "vassoio",
+                  "astucci" if cu == "carton" else "flowpack"),
+               meta=meta, vassoio=iv, flowpack=ifp,
+               teeth_default=fp.get("teeth_default", 20),
+               soft_default=fp.get("soft_default", "medio"))
+    if cu == "carton" and fp.get("strappo"):
+        out["strappo"] = fp["strappo"]
+    return out
 
 
 def quanti_pezzi(valore):
@@ -959,25 +980,33 @@ def quanti_pezzi(valore):
     return n
 
 
-def build_riempimento(pdfs, info, out_glb, quanti, flowpack, quality="hd"):
-    """Il vassoio pieno: il vassoio e il flowpack costruiti ognuno dalla sua
-    famiglia, poi `quanti` pezzi messi nel vano (None: pieno). `flowpack` sono
-    gli argomenti di `build_flowpack` dopo il PDF e il file d'uscita."""
+def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
+                      carta=None, incisioni=True):
+    """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
+    famiglia, poi `quanti` pezzi messi nel vano (None: pieno). Il flowpack
+    con `flowpack`, gli argomenti di `build_flowpack` dopo il PDF e il file
+    d'uscita; l'astuccio (`info["cu"] == "carton"`) chiuso, con lo spessore
+    `carta` e la fustella dell'apertura a strappo se `incisioni`."""
     from pack3d import riempimento
+    astuccio = info.get("cu") == "carton"
     with tempfile.TemporaryDirectory() as td:
         gv = os.path.join(td, "vassoio.glb")
-        gf = os.path.join(td, "flowpack.glb")
+        gf = os.path.join(td, "pack.glb")
         av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality)
-        av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
+        if astuccio:
+            av_f = build_carton(pdfs[info["flowpack"]], gf, quality, carta=carta,
+                                incisioni=incisioni)
+        else:
+            av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
         with open(gv, "rb") as fh:
             glb_v = fh.read()
         with open(gf, "rb") as fh:
             glb_f = fh.read()
-    glb, righe = riempimento.componi(glb_v, glb_f, quanti)
+    glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio)
     with open(out_glb, "wb") as fh:
         fh.write(glb)
     return (righe + ["vassoio: %s" % a for a in av_v]
-            + ["flowpack: %s" % a for a in av_f])
+            + ["%s: %s" % ("astuccio" if astuccio else "flowpack", a) for a in av_f])
 
 
 def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
@@ -2090,7 +2119,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
                 "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "incisioni")
+                "quanti", "incisioni", "cu")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2231,7 +2260,7 @@ def _analyze_pdf(pdf, kind=None, domande=False):
     if kind == "riempimento":
         # due PDF, non uno: vedi `analisi_riempimento`. Qui non deve mai
         # arrivare, e se arriva non deve cadere nel ramo del flowpack.
-        raise ValueError("riempimento: carica due PDF, il vassoio e il flowpack")
+        raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
     if kind == "pouch":
         pu = analisi_pouch(pdf)
         return dict(kind="pouch", title="Pouch",
@@ -2940,20 +2969,21 @@ class Handler(BaseHTTPRequestHandler):
                     con_pellicola = pellicola_scelta(opts.get("pellicola"))
                     con_incisioni = incisioni_scelte(opts.get("incisioni"))
                     quanti = quanti_pezzi(opts.get("quanti"))
+                    cu = cu_riempimento(opts.get("cu"))
                 except ValueError as e:
                     return self._send(400, str(e))
                 # (`coppa` resta per chi chiama l'API: dalla pagina la coppa
                 # e' un cartotecnico in due pezzi)
                 if kind == "riempimento" and len(pdfs) != 2:
                     return self._send(400, "Riempimento: carica due PDF, il "
-                                           "vassoio e il flowpack")
+                                           "vassoio e il pack (CU)")
                 if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento"):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")
                 if kind == "riempimento" and self.path.startswith("/api/analyze"):
                     try:
-                        letto = analisi_riempimento(pdfs)
+                        letto = analisi_riempimento(pdfs, cu)
                     except Exception as e:
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
                                                       blocchi)
@@ -3001,7 +3031,7 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_riempimento(pdfs) if kind == "riempimento"
+                        info = (analisi_riempimento(pdfs, cu) if kind == "riempimento"
                                 else analisi_coppa(pdfs, kind)
                                 if in_piu_pezzi(kind, pdfs)
                                 else analyze_pdf(pdf, kind))
@@ -3108,6 +3138,12 @@ class Handler(BaseHTTPRequestHandler):
                                                     apertura=gradi_aperta,
                                                     pellicola=con_pellicola,
                                                     incisioni=con_incisioni)
+                        elif info["kind"] == "riempimento" and info.get("cu") == "carton":
+                            # un vassoio coi suoi astucci, chiusi
+                            def costruisci(lastre, uscita):
+                                return build_riempimento(
+                                    pdfs, info, uscita, quanti, quality=q,
+                                    carta=carta, incisioni=con_incisioni)
                         elif info["kind"] == "riempimento":
                             # un vassoio coi suoi flowpack: due costruzioni e
                             # un GLB solo, vedi `pack3d.riempimento`

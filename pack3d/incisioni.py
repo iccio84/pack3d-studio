@@ -60,6 +60,15 @@ CORTO = 1.0
 # puo' stare un taglio che le appartiene (la mezzaluna per il dito).
 ACCANTO = 10.0
 VICINO = 3.0
+# La seconda firma, la PERFORAZIONE: una fila di trattini - sul KMS T10 13 mm
+# di taglio e 1,7 di ponticello - che parte da una piega, gira attorno alla
+# finestra e torna sulla stessa piega. Il ponticello piu' lungo fra due
+# trattini, in mm; quanti ponticelli almeno; quanto e' lunga almeno, in mm;
+# e di quanti gradi al piu' gira la fila da un trattino al successivo.
+PONTE = 2.5
+PONTI_MIN = 8
+PERFORATA_MIN = 80.0
+SVOLTA = 60.0
 
 
 def _tratti_tecnici(pdf, page_no=0):
@@ -262,6 +271,112 @@ def firma(pdf, panels, facce, page_no=0):
     return aperture, vicini, rovescio
 
 
+def _di_bordo(linea, quadri, tol=1.0 * MM):
+    """La linea corre tutta lungo un lato di un pannello: e' una piega."""
+    for p in quadri:
+        for (ax, ay), (bx, by) in (((p.x0, p.y0), (p.x1, p.y0)), ((p.x0, p.y1), (p.x1, p.y1)),
+                                   ((p.x0, p.y0), (p.x0, p.y1)), ((p.x1, p.y0), (p.x1, p.y1))):
+            if all(_distanza_punto(q, [(ax, ay), (bx, by)]) <= tol for q in linea):
+                return True
+    return False
+
+
+def _sul_lato(q, quadri, tol=0.5 * MM):
+    """(indice del pannello, lato) dei lati su cui sta il punto."""
+    out = set()
+    for k, p in enumerate(quadri):
+        for lato, (a, b) in enumerate((((p.x0, p.y0), (p.x1, p.y0)), ((p.x0, p.y1), (p.x1, p.y1)),
+                                       ((p.x0, p.y0), (p.x0, p.y1)), ((p.x1, p.y0), (p.x1, p.y1)))):
+            if _distanza_punto(q, [a, b]) <= tol:
+                out.add((k, lato))
+    return out
+
+
+def _direzione(a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = math.hypot(dx, dy) or 1.0
+    return dx / n, dy / n
+
+
+def perforata(pdf, panels, facce, page_no=0):
+    """L'apertura a strappo PERFORATA, o None: {"catena": il contorno intero,
+    i ponticelli colmati, in punti PDF; "pezzi": i trattini, come sono;
+    "vicini": i tagli attaccati al contorno coi due capi, come la mezzaluna
+    per il dito}.
+
+    Sul KMS T10 l'apertura non ha il taglio dal rovescio: e' una fila di
+    trattini che parte dalla piega fra fronte e cielo, scende sui due lati,
+    passa sul fondo e torna. La fila si segue di trattino in trattino - il
+    prossimo e' quello il cui capo sta a meno di PONTE mm e che gira di meno -
+    e vale come apertura solo se ha almeno PONTI_MIN ponticelli veri, e' lunga
+    almeno PERFORATA_MIN mm e i due capi stanno sulla stessa piega: una riga
+    tratteggiata qualunque dentro una faccia - il riquadro di un'area, una
+    piega di servizio - non torna sulla piega da cui parte.
+    """
+    percorsi = _tratti_tecnici(pdf, page_no)
+    quadri = [panels[n] for n in facce if n in panels]
+    if not percorsi or not quadri:
+        return None
+    segmenti = [sg for sg in _segmenti(percorsi)
+                if any(_dentro_pannello(sg, p) is not None for p in quadri)]
+    pezzi = [l for l in _catene(segmenti) if not _di_bordo(l, quadri)]
+    if len(pezzi) < PONTI_MIN:
+        return None
+    ponte = PONTE * MM
+
+    def segui(i, capo):
+        """La fila dal capo `capo` (0 o -1) del pezzo i, che sta su una piega."""
+        primo = pezzi[i] if capo == 0 else pezzi[i][::-1]
+        fila, usati, ponti = [primo], {i}, 0
+        while True:
+            q = fila[-1][-1]
+            u = _direzione(fila[-1][-2], q)
+            best = None
+            for j, l in enumerate(pezzi):
+                if j in usati:
+                    continue
+                for e in (0, -1):
+                    d = math.hypot(l[e][0] - q[0], l[e][1] - q[1])
+                    if d > ponte:
+                        continue
+                    m = l if e == 0 else l[::-1]
+                    v = _direzione(m[0], m[1])
+                    giro = math.degrees(math.acos(max(-1.0, min(1.0, u[0] * v[0] + u[1] * v[1]))))
+                    if giro > SVOLTA:
+                        continue
+                    if best is None or (giro, d) < best[0]:
+                        best = ((giro, d), j, m, d)
+            if best is None:
+                return fila, usati, ponti
+            _k, j, m, d = best
+            usati.add(j)
+            ponti += d > 0.5 * MM
+            fila.append(m)
+
+    migliore = None
+    for i, l in enumerate(pezzi):
+        for capo in (0, -1):
+            lati = _sul_lato(l[capo], quadri)
+            if not lati:
+                continue
+            fila, usati, ponti = segui(i, capo)
+            fine = fila[-1][-1]
+            lunga = sum(_lunghezza(m) for m in fila) * PT2MM
+            if (ponti >= PONTI_MIN and lunga >= PERFORATA_MIN
+                    and lati & _sul_lato(fine, quadri)
+                    and (migliore is None or lunga > migliore[0])):
+                migliore = (lunga, fila, usati)
+    if migliore is None:
+        return None
+    _lunga, fila, usati = migliore
+    catena = list(fila[0])
+    for m in fila[1:]:
+        catena += m if math.hypot(m[0][0] - catena[-1][0], m[0][1] - catena[-1][1]) > CUCI else m[1:]
+    vicini = [l for j, l in enumerate(pezzi) if j not in usati
+              and _distanza_punto(l[0], catena) <= 1.5 and _distanza_punto(l[-1], catena) <= 1.5]
+    return {"catena": catena, "pezzi": [list(m) for m in fila], "vicini": vicini}
+
+
 def tagli(pdf, panels, facce, page_no=0):
     """{faccia: [linea, ...]} i tagli d'apertura da incidere, in punti PDF.
 
@@ -279,10 +394,16 @@ def tagli(pdf, panels, facce, page_no=0):
     fondo esce in due pezzi, uno sul fronte e uno sul fondo.
     """
     trovata = firma(pdf, panels, facce, page_no)
-    if trovata is None:
-        return {}
-    aperture, vicini, _rovescio = trovata
-    scelte = [l for g in aperture + vicini for l in g]
+    if trovata is not None:
+        aperture, vicini, _rovescio = trovata
+        scelte = [l for g in aperture + vicini for l in g]
+    else:
+        # la perforazione si incide trattino per trattino: i ponticelli sono
+        # cartone intero
+        p = perforata(pdf, panels, facce, page_no)
+        if p is None:
+            return {}
+        scelte = p["pezzi"] + p["vicini"]
     out = {}
     for nome in facce:
         p = panels.get(nome)

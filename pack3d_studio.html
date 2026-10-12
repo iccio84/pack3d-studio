@@ -357,6 +357,7 @@
            line-height:1.35;color:var(--foreground)}
   .carte{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
   .carte.due{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:14px}
+  .solo-flowpack[hidden]{display:none}
   .carte[hidden]{display:none}
   .carte button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;
                 padding:14px;text-align:left;text-transform:none;letter-spacing:0;
@@ -399,7 +400,8 @@
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
   #go, #strappo-go{width:100%;max-width:300px;margin:12px auto 0;display:block}
-  #spessore, #strappo-scelta, #pellicola-scelta, #fustella-scelta{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore, #strappo-scelta, #pellicola-scelta, #fustella-scelta, #cu-fustella{display:flex;gap:8px;flex-wrap:wrap}
+  #cu-fustella button[aria-pressed="true"],
   #spessore button[aria-pressed="true"],
   #pellicola-scelta button[aria-pressed="true"],
   #fustella-scelta button[aria-pressed="true"],
@@ -540,6 +542,10 @@
       <button type="button" data-c="astuccio" aria-pressed="false"><b>Astuccio</b><span>Pack cartotecnico composto da un solo elemento, che si chiude da solo</span></button>
       <button type="button" data-c="scatola" aria-pressed="false"><b>Scatola</b><span>Pack cartotecnico composto da due o pi&ugrave; elementi. Esempio: base pi&ugrave; coperchio</span></button>
     </div>
+    <div id="cu-scelta" class="carte due" role="group" aria-label="Il pack (CU)" hidden>
+      <button type="button" data-u="flowpack" aria-pressed="false"><b>CU: Flowpack</b><span>Pack con saldature e pinne laterali</span></button>
+      <button type="button" data-u="carton" aria-pressed="false"><b>CU: Astuccio</b><span>Pack cartotecnico composto da un solo elemento, che si chiude da solo</span></button>
+    </div>
     <div class="griglia" id="passo-campi" hidden>
       <div class="fld" id="parti-fld" hidden>
         <label for="parti">Di quante parti &egrave; fatto il pack</label>
@@ -604,23 +610,31 @@
       <input id="quanti" type="number" min="1" max="2000" step="1" placeholder="vuoto = pieno">
       <p class="note">Li dispongo frontali: la faccia stampata verso il davanti e il marchio dritto, in file dal davanti al fondo, a strati uguali. Vuoto: quanti ne stanno.</p>
     </div>
-    <div class="fld">
+    <div class="fld" id="cu-fustella-fld" hidden>
+      <label>L&rsquo;astuccio ha un&rsquo;apertura a strappo: vuoi la fustella dell&rsquo;apertura modellata nel modello?</label>
+      <div id="cu-fustella" role="group" aria-label="Fustella dell'apertura dell'astuccio">
+        <button type="button" data-i="1" aria-pressed="false">S&igrave;</button>
+        <button type="button" data-i="0" aria-pressed="false">No</button>
+      </div>
+      <p class="note" id="cu-fustella-dove"></p>
+    </div>
+    <div class="fld solo-flowpack">
       <label for="teeth">Numero denti zigrinatura</label>
       <input id="teeth" type="number" min="0" max="400" step="1" placeholder="digita il numero">
       <p class="note">Il numero dei dentini sulle pinne di saldatura. Con 0 le pinne restano lisce.</p>
     </div>
-    <div class="fld">
+    <div class="fld solo-flowpack">
       <label for="soft">Rigonfiamento <b id="softval">Medio 5/10</b></label>
       <input id="soft" type="range" min="1" max="10" step="1" value="5">
       <label class="auto"><input id="softauto" type="checkbox"> Scegli tu &mdash; decide l&rsquo;AI in base al prodotto</label>
       <p class="note">Scegli quanto &egrave; gonfio il pack. 1: molto rigido, effetto simile al sottovuoto. 10: molto gonfio, per prodotti tondeggianti o con aria dentro.</p>
     </div>
-    <div class="fld">
+    <div class="fld solo-flowpack">
       <label for="pinne">Apertura pinne <b id="pinneval">Aperte 3/3</b></label>
       <input id="pinne" type="range" min="1" max="3" step="1" value="3">
       <p class="note">1: pinne chiuse, alte quanto il pack. 3: pinne molto aperte, effetto farfalla.</p>
     </div>
-    <div class="fld">
+    <div class="fld solo-flowpack">
       <label class="auto"><input id="scatola" type="checkbox"> Il film avvolge una scatola</label>
       <p class="note">Un multipack in astuccio, una vaschetta, un blister: le pinne restano larghe quanto il pack.</p>
     </div>
@@ -2273,7 +2287,7 @@ const FAMIGLIE = {
             slot: ['Il PDF del vassoio o del display']},
   riempimento: {nome: 'Riempimenti',
                 descr: 'I riempimenti sono TU (Trade Unit): contenitori come vassoi e display, '
-                     + 'con dentro le CU desiderate. Per ora le CU sono flowpack.',
+                     + 'con dentro le CU desiderate: flowpack o astucci.',
                 slot: ['Inserisci il pack (CU) desiderato',
                        'Inserisci il vassoio o il display desiderato']},
 };
@@ -2281,6 +2295,13 @@ const FAMIGLIE = {
 const DA_SOLE = ['flowpack', 'pouch', 'vassoio'];
 // la famiglia scelta, astuccio o scatola, e i PDF caricati, uno per posto
 let famiglia = null, carto = null, slots = [], slotAttivo = -1;
+// il pack (CU) del riempimento: 'flowpack' o 'carton' (l'astuccio); e, se
+// l'astuccio ha l'apertura a strappo, se se ne vuole la fustella modellata
+let cuScelta = null, cuIncisioni = null;
+const cuSceltaEl = document.getElementById('cu-scelta');
+const cuFustellaFld = document.getElementById('cu-fustella-fld');
+const cuFustella = document.getElementById('cu-fustella');
+const soloFlowpack = () => document.querySelectorAll('#params .solo-flowpack');
 
 /** Che cosa va in ogni posto. */
 function nomiSlot(){
@@ -2292,6 +2313,7 @@ function nomiSlot(){
 /** Tutto quello che il passo chiede c'e'. */
 function pronto(){
   if (!slots.length || slots.some(x => !x)) return false;
+  if (famiglia === 'riempimento') return !!cuScelta && (cuScelta !== 'carton' || !!spessoreScelto);
   return famiglia !== 'carton' || (!!carto && !!spessoreScelto);
 }
 
@@ -2309,7 +2331,7 @@ function mostraFamiglie(){
 
 function scegliFamiglia(f){
   if (!FAMIGLIE[f]) return;
-  famiglia = f; carto = null; slotAttivo = -1;
+  famiglia = f; carto = null; slotAttivo = -1; cuScelta = null;
   slots = FAMIGLIE[f].slot.map(() => null);
   partiEl.value = '';
   scegliSpessore(0);
@@ -2329,6 +2351,13 @@ function scegliCarto(c){
   if (c === 'scatola') partiEl.focus();
 }
 
+/** Il pack (CU) del riempimento: flowpack o astuccio. */
+function scegliCu(u){
+  cuScelta = u;
+  disegnaPasso();
+  statoPasso();
+}
+
 /** Il passo della famiglia: la descrizione, le richieste e i posti dei PDF. */
 function disegnaPasso(){
   const F = FAMIGLIE[famiglia], c = famiglia === 'carton';
@@ -2337,9 +2366,13 @@ function disegnaPasso(){
   cartoEl.hidden = !c;
   cartoEl.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.c === carto)));
+  const r = famiglia === 'riempimento';
+  cuSceltaEl.hidden = !r;
+  cuSceltaEl.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.u === cuScelta)));
   passoCampi.hidden = c && !carto;
   partiFld.hidden = !(c && carto === 'scatola');
-  spessoreFld.hidden = !(c && carto);
+  spessoreFld.hidden = !((c && carto) || (r && cuScelta === 'carton'));
   const nomi = nomiSlot();
   slotEl.textContent = '';
   slots.forEach((x, k) => {
@@ -2366,6 +2399,9 @@ function statoPasso(errore){
   const mancano = slots.filter(x => !x).length;
   let t;
   if (famiglia === 'carton' && !carto) t = 'Cartotecnico: astuccio o scatola?';
+  else if (famiglia === 'riempimento' && !cuScelta) t = 'Riempimenti: il pack (CU) \u00e8 un flowpack o un astuccio?';
+  else if (famiglia === 'riempimento' && cuScelta === 'carton' && !spessoreScelto)
+    t = 'Scegli lo spessore della carta dell\u2019astuccio: 1, 2 o 3';
   else if (carto === 'scatola' && !slots.length) t = 'Scatola: digita di quante parti è fatto il pack, da 2 a ' + MAX_PEZZI;
   else if (mancano) t = F.nome + ': ' + (slots.length === 1 ? 'carica il PDF'
        : mancano === 1 ? 'carica il PDF che manca' : 'carica i ' + mancano + ' PDF che mancano');
@@ -2457,17 +2493,30 @@ function corpo(p){
  *  quanti pack mettere e le opzioni del flowpack. */
 async function riempimentoAvanti(){
   const c = corpo(pending);
-  const opts = {kind: 'riempimento', parti: c.parti, nomi: nomiPdf(pending)};
+  const cu = cuScelta || 'flowpack';
+  const opts = {kind: 'riempimento', cu, parti: c.parti, nomi: nomiPdf(pending)};
+  if (cu === 'carton') opts.spessore = spessoreScelto;
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
-    pending.riempimento = {c, info};
+    pending.riempimento = {c, info, cu};
+    const astuccio = cu === 'carton';
     document.getElementById('teeth').value = '';
-    document.getElementById('params-tit').textContent = 'Opzioni del riempimento e del flowpack (CU)';
+    document.getElementById('params-tit').textContent =
+      astuccio ? 'Opzioni del riempimento' : 'Opzioni del riempimento e del flowpack (CU)';
+    soloFlowpack().forEach(el => { el.hidden = astuccio; });
+    // l'astuccio con l'apertura a strappo: chiuso, con o senza la fustella
+    cuIncisioni = null;
+    cuFustella.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+    cuFustellaFld.hidden = !(astuccio && info.strappo);
+    document.getElementById('cu-fustella-dove').textContent =
+      info.strappo && info.strappo.dove ? 'Dal disegno: ' + info.strappo.dove + '.' : '';
     quantiEl.value = '';
     quantiFld.hidden = false;
     params.classList.add('on');
-    setStatus('Riempimento: quanti pack nel vassoio, poi le opzioni del flowpack','');
+    setStatus(astuccio ? 'Riempimento: quanti astucci nel vassoio'
+                         + (info.strappo ? ', e la fustella dell\u2019apertura a strappo' : '')
+                       : 'Riempimento: quanti pack nel vassoio, poi le opzioni del flowpack','');
     quantiEl.focus();
   }catch(err){ fermato(err); }
 }
@@ -2491,6 +2540,8 @@ async function procedi(kind, extra){
       document.getElementById('teeth').value = '';
       document.getElementById('params-tit').textContent = 'Opzioni del flowpack';
       quantiFld.hidden = true;
+      cuFustellaFld.hidden = true;
+      soloFlowpack().forEach(el => { el.hidden = false; });
       params.classList.add('on');
       setStatus('Flowpack: digita i denti della zigrinatura, poi rigonfiamento e apertura delle pinne','');
       return;
@@ -2658,7 +2709,7 @@ function togliModello(){
 }
 
 function annulla(){
-  pending = null; glbBlob = null;
+  pending = null; glbBlob = null; cuScelta = null; cuIncisioni = null;
   quantiFld.hidden = true;
   params.classList.remove('on');
   strappoEl.classList.remove('on');
@@ -2686,6 +2737,14 @@ fileEl.onchange = e => { riceviFile(e.target.files); e.target.value=''; };
 fileEl.addEventListener('cancel', () => { slotAttivo = -1; });
 famiglieEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliFamiglia(b.dataset.f); });
 cartoEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCarto(b.dataset.c); });
+cuSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCu(b.dataset.u); });
+cuFustella.querySelectorAll('button').forEach(b => {
+  b.onclick = () => {
+    cuIncisioni = Number(b.dataset.i);
+    cuFustella.querySelectorAll('button').forEach(x =>
+      x.setAttribute('aria-pressed', String(Number(x.dataset.i) === cuIncisioni)));
+  };
+});
 document.getElementById('cambia').onclick = annulla;
 continuaBtn.onclick = avanti;
 partiEl.oninput = () => {
@@ -2735,21 +2794,37 @@ spessoreEl.querySelectorAll('button').forEach(b => {
 });
 document.getElementById('go').onclick = async () => {
   if (!pending) return;
+  const r = pending.riempimento;
+  const astuccio = !!(r && r.cu === 'carton');
   const t = document.getElementById('teeth').value;
-  if (t === '' || isNaN(parseInt(t))){
+  if (!astuccio && (t === '' || isNaN(parseInt(t)))){
     setStatus('Digita il numero di dentini','err'); return;
   }
-  const r = pending.riempimento;
   let quanti = '';
   if (r){
     const q = quantiEl.value.trim();
     if (q !== ''){
       quanti = parseInt(q, 10);
       if (!(quanti >= 1 && quanti <= 2000)){
-        setStatus('Quanti flowpack nel vassoio: un numero da 1 a 2000, o vuoto per pieno','err');
+        setStatus('Quanti pack nel vassoio: un numero da 1 a 2000, o vuoto per pieno','err');
         return;
       }
     }
+  }
+  if (astuccio){
+    if (r.info.strappo && cuIncisioni === null){
+      setStatus('Dimmi se vuoi la fustella dell\u2019apertura modellata nel modello','err');
+      return;
+    }
+    params.classList.remove('on');
+    const o = {kind: 'riempimento', cu: 'carton', parti: r.c.parti, nomi: nomiPdf(pending),
+               spessore: spessoreScelto, quanti};
+    if (r.info.strappo) o.incisioni = cuIncisioni;
+    try{
+      setStatus('Costruisco il vassoio, l\u2019astuccio e il riempimento: ci vuole qualche minuto','');
+      esitoFinale(await build(r.c.buf, pending.name, o), r.info.title || 'Vassoio pieno');
+    }catch(err){ fermato(err); }
+    return;
   }
   params.classList.remove('on');
   const fp = {teeth: document.getElementById('teeth').value,
@@ -2763,7 +2838,7 @@ document.getElementById('go').onclick = async () => {
     if (r){
       setStatus('Costruisco il vassoio, il flowpack e il riempimento: ci vuole qualche minuto','');
       const v = await build(r.c.buf, pending.name,
-                  Object.assign(fp, {kind: 'riempimento', parti: r.c.parti, quanti}));
+                  Object.assign(fp, {kind: 'riempimento', cu: 'flowpack', parti: r.c.parti, quanti}));
       esitoFinale(v, r.info.title || 'Vassoio pieno');
     } else {
       const v = await build(pending.buf, pending.name, Object.assign(fp, {kind: 'flowpack'}));

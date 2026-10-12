@@ -463,12 +463,18 @@ def _leggi(pdf, panels, facce):
     su un'apertura che la costruzione sa aprire.
     """
     trovata = incisioni.firma(pdf, panels, facce)
-    if trovata is None:
-        return None
-    aperture, vicini, rovescio = trovata
-    if len(aperture) != 1:
-        return None
-    catena = _cuci(aperture[0])
+    if trovata is not None:
+        aperture, vicini, rovescio = trovata
+        if len(aperture) != 1:
+            return None
+        catena = _cuci(aperture[0])
+    else:
+        # la perforazione: il contorno e' la fila dei trattini coi ponticelli
+        # colmati, e non c'e' taglio dal rovescio ne' cartoncino sfogliato
+        p = incisioni.perforata(pdf, panels, facce)
+        if p is None:
+            return None
+        catena, vicini, rovescio = p["catena"], [[v] for v in p["vicini"]], []
     if catena is None:
         return None
     cerniera = _cerniera(catena, panels, facce)

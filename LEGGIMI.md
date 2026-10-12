@@ -65,8 +65,9 @@ combinazione funziona.
      parte. Se l'astuccio ha un'apertura a strappo, chiuso (con o senza la
      fustella dell'apertura modellata) o aperto di quanti gradi; se il pack
      ha una finestra, se ci va la pellicola trasparente;
-   - **Riempimenti**: il pack (CU) e il vassoio o display, poi quanti pack
-     mettere e le domande del flowpack.
+   - **Riempimenti**: che cosa e' il pack (CU), flowpack o astuccio; il pack
+     e il vassoio o display; poi quanti pack mettere e le domande del
+     flowpack, o la fustella dell'apertura a strappo dell'astuccio.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.

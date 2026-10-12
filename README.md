@@ -69,7 +69,7 @@ sempre. Se il DT ha la lastra dell'embossing, marchi e disegni escono in
 rilievo. Per i flowpack vengono chieste zigrinatura e tipo di gonfiore prima
 di costruire.
 
-Il **riempimento** mette insieme due PDF, il pack (CU, per ora un flowpack)
+Il **riempimento** mette insieme due PDF, il pack (CU: un flowpack o un astuccio)
 e il vassoio o il display: costruisce i due modelli, chiede quanti pack
 mettere (vuoto vuol dire pieno) e li dispone frontali - la faccia stampata
 verso il davanti, in file dal davanti al fondo - in un GLB solo.
