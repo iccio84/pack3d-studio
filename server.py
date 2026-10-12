@@ -914,6 +914,71 @@ def in_piu_pezzi(kind, pdfs):
     return kind == "coppa" or (kind == "carton" and len(pdfs) > 1)
 
 
+def analisi_riempimento(pdfs):
+    """Il riempimento: un vassoio espositore e il flowpack che ci va dentro,
+    in due PDF in qualsiasi ordine. Il vassoio e' quello dei due che si legge
+    come vassoio; l'altro si legge come flowpack. Vedi `pack3d.riempimento`."""
+    if len(pdfs) != 2:
+        raise ValueError("riempimento: carica due PDF, il vassoio e il flowpack")
+    letti = []
+    for p in pdfs:
+        try:
+            letti.append(analyze_pdf(p, "vassoio"))
+        except Exception:
+            letti.append(None)
+    vassoi = [k for k, l in enumerate(letti) if l is not None]
+    if len(vassoi) != 1:
+        raise ValueError("riempimento: dei due PDF %s" % (
+            "nessuno si legge come vassoio espositore" if not vassoi else
+            "tutti e due si leggono come vassoi: l'altro deve essere il flowpack"))
+    iv = vassoi[0]
+    ifp = 1 - iv
+    fp = analyze_pdf(pdfs[ifp], "flowpack")
+    meta = (["riempimento: il vassoio e' il PDF %d, il flowpack il PDF %d"
+             % (iv + 1, ifp + 1)]
+            + ["vassoio: %s" % m for m in letti[iv].get("meta", [])[:3]]
+            + ["flowpack: %s" % m for m in fp.get("meta", [])[:3]])
+    return dict(kind="riempimento", title="Riempimento: %s coi suoi flowpack"
+                % (letti[iv].get("title") or "vassoio"),
+                meta=meta, vassoio=iv, flowpack=ifp,
+                teeth_default=fp.get("teeth_default", 20),
+                soft_default=fp.get("soft_default", "medio"))
+
+
+def quanti_pezzi(valore):
+    """Quanti pezzi nel vassoio: un intero da 1, o None per pieno."""
+    if valore in (None, "", 0, "0", "pieno"):
+        return None
+    try:
+        n = int(valore)
+    except (TypeError, ValueError):
+        raise ValueError("Quanti flowpack nel vassoio va digitato come numero intero")
+    if n < 1 or n > 2000:
+        raise ValueError("Quanti flowpack nel vassoio: da 1 a 2000")
+    return n
+
+
+def build_riempimento(pdfs, info, out_glb, quanti, flowpack, quality="hd"):
+    """Il vassoio pieno: il vassoio e il flowpack costruiti ognuno dalla sua
+    famiglia, poi `quanti` pezzi messi nel vano (None: pieno). `flowpack` sono
+    gli argomenti di `build_flowpack` dopo il PDF e il file d'uscita."""
+    from pack3d import riempimento
+    with tempfile.TemporaryDirectory() as td:
+        gv = os.path.join(td, "vassoio.glb")
+        gf = os.path.join(td, "flowpack.glb")
+        av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality)
+        av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
+        with open(gv, "rb") as fh:
+            glb_v = fh.read()
+        with open(gf, "rb") as fh:
+            glb_f = fh.read()
+    glb, righe = riempimento.componi(glb_v, glb_f, quanti)
+    with open(out_glb, "wb") as fh:
+        fh.write(glb)
+    return (righe + ["vassoio: %s" % a for a in av_v]
+            + ["flowpack: %s" % a for a in av_f])
+
+
 def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
                 dichiarato="coppa", carta=None):
     """La coppa di carta col tappo, o il cono col lid, da uno o due PDF: vedi
@@ -1990,7 +2055,10 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  "lid": "coppa",
                  # la busta stand-up col soffietto, vedi `pack3d.pouch`
                  "pouch": "pouch", "doypack": "pouch", "stand-up": "pouch",
-                 "standup": "pouch", "busta": "pouch", "bag": "pouch"}
+                 "standup": "pouch", "busta": "pouch", "bag": "pouch",
+                 # un vassoio coi suoi flowpack dentro, vedi `pack3d.riempimento`
+                 "riempimento": "riempimento", "riempimenti": "riempimento",
+                 "vassoio pieno": "riempimento", "filling": "riempimento"}
 
 
 def normalizza_kind(kind):
@@ -1999,11 +2067,12 @@ def normalizza_kind(kind):
     return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
 
 
-KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch")
+KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch", "riempimento")
 # come l'utente ha chiamato il pack, per il controllo dell'AI
 NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
              "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato",
-             "pouch": "pouch (busta stand-up col soffietto sul fondo)"}
+             "pouch": "pouch (busta stand-up col soffietto sul fondo)",
+             "riempimento": "riempimento (un vassoio espositore coi suoi flowpack)"}
 
 
 def dichiarazione(kind, pezzi):
@@ -2019,7 +2088,8 @@ def dichiarazione(kind, pezzi):
 VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
-                "spessore", "apertura", "pellicola", "quality", "materiali")
+                "spessore", "apertura", "pellicola", "quality", "materiali",
+                "quanti")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2145,6 +2215,10 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                          % (kind, " o ".join("'%s'" % k for k in KIND_NOTI)))
     if kind == "coppa":
         return analisi_coppa([pdf])
+    if kind == "riempimento":
+        # due PDF, non uno: vedi `analisi_riempimento`. Qui non deve mai
+        # arrivare, e se arriva non deve cadere nel ramo del flowpack.
+        raise ValueError("riempimento: carica due PDF, il vassoio e il flowpack")
     if kind == "pouch":
         pu = analisi_pouch(pdf)
         return dict(kind="pouch", title="Pouch",
@@ -2851,14 +2925,26 @@ class Handler(BaseHTTPRequestHandler):
                     carta = spessore_carta(opts.get("spessore"))
                     gradi_aperta = apertura_gradi(opts.get("apertura"))
                     con_pellicola = pellicola_scelta(opts.get("pellicola"))
+                    quanti = quanti_pezzi(opts.get("quanti"))
                 except ValueError as e:
                     return self._send(400, str(e))
                 # (`coppa` resta per chi chiama l'API: dalla pagina la coppa
                 # e' un cartotecnico in due pezzi)
-                if len(pdfs) > 1 and kind not in ("coppa", "carton"):
+                if kind == "riempimento" and len(pdfs) != 2:
+                    return self._send(400, "Riempimento: carica due PDF, il "
+                                           "vassoio e il flowpack")
+                if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento"):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")
+                if kind == "riempimento" and self.path.startswith("/api/analyze"):
+                    try:
+                        letto = analisi_riempimento(pdfs)
+                    except Exception as e:
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
+                                                      blocchi)
+                        return self._send(500, errore, controllo=verdetto)
+                    return self._send(200, json.dumps(letto))
                 if (in_piu_pezzi(kind, pdfs)
                         and self.path.startswith("/api/analyze")):
                     # anche da /api/analyze-ai: i pezzi li misura il codice,
@@ -2901,7 +2987,8 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_coppa(pdfs, kind)
+                        info = (analisi_riempimento(pdfs) if kind == "riempimento"
+                                else analisi_coppa(pdfs, kind)
                                 if in_piu_pezzi(kind, pdfs)
                                 else analyze_pdf(pdf, kind))
                         t1 = traccia("analisi", t0,
@@ -2925,36 +3012,9 @@ class Handler(BaseHTTPRequestHandler):
                         # togliere e del file d'uscita: la correzione dell'AI
                         # la rifa' con le lastre tecniche che ha riconosciuto,
                         # con tutto il resto uguale.
-                        if info["kind"] == "coppa":
-                            def costruisci(lastre, uscita):
-                                return build_coppa(pdfs, uscita, q, lastre,
-                                                   dichiarato=kind or "coppa",
-                                                   carta=carta)
-                        elif info["kind"] == "vassoio":
-                            def costruisci(lastre, uscita):
-                                return build_vassoio(pdf, uscita, q, lastre, col_riq)
-                        elif info["kind"] == "pouch":
-                            def costruisci(lastre, uscita):
-                                return build_pouch(pdf, uscita, q, lastre, col_riq)
-                        elif info["kind"] == "ballotin":
-                            def costruisci(lastre, uscita):
-                                return build_ballotin(pdf, uscita, q, lastre,
-                                                      col_riq, carta=carta,
-                                                      pellicola=con_pellicola)
-                        elif info["kind"] == "punta":
-                            def costruisci(lastre, uscita):
-                                return build_punta(pdf, uscita, q, lastre,
-                                                   col_riq, carta=carta)
-                        elif info["kind"] == "carton":
-                            # build_carton i suoi avvisi li restituiva gia', ed
-                            # era il chiamante a buttarli e poi a leggere una
-                            # variabile che su questo ramo non esisteva.
-                            def costruisci(lastre, uscita):
-                                return build_carton(pdf, uscita, q, lastre, col_riq,
-                                                    carta=carta,
-                                                    apertura=gradi_aperta,
-                                                    pellicola=con_pellicola)
-                        else:
+                        def parametri_flowpack(pdf_fp, nome_fp):
+                            """Rigonfiamento, scatola, pinne e materiali del
+                            flowpack: dalla pagina, o scelti dall'AI."""
                             soft = opts.get("soft", "medio")
                             if str(soft).strip().lower() == "auto":
                                 # "Scegli tu": il livello lo decide l'agente in
@@ -2968,7 +3028,7 @@ class Handler(BaseHTTPRequestHandler):
                                     # Si e' dentro il posto di costruzione, e
                                     # deve essere cosi': la pagina passa da
                                     # pdfium.
-                                    sc = controllo.rigonfiamento(pdf, nomi[0])
+                                    sc = controllo.rigonfiamento(pdf_fp, nome_fp)
                                     if "errore" in sc:
                                         perche = "l'AI non ha risposto (%s)" % sc["errore"]
                                     else:
@@ -3001,7 +3061,55 @@ class Handler(BaseHTTPRequestHandler):
                             pinne = opts.get("pinne")
                             if pinne in (None, "", "auto"):
                                 pinne = pinne_da_agente(opts.get("params"))
-                            mat = materiali_dichiarati(opts.get("materiali"))
+                            return (soft, scatola, pinne,
+                                    materiali_dichiarati(opts.get("materiali")))
+
+                        if info["kind"] == "coppa":
+                            def costruisci(lastre, uscita):
+                                return build_coppa(pdfs, uscita, q, lastre,
+                                                   dichiarato=kind or "coppa",
+                                                   carta=carta)
+                        elif info["kind"] == "vassoio":
+                            def costruisci(lastre, uscita):
+                                return build_vassoio(pdf, uscita, q, lastre, col_riq)
+                        elif info["kind"] == "pouch":
+                            def costruisci(lastre, uscita):
+                                return build_pouch(pdf, uscita, q, lastre, col_riq)
+                        elif info["kind"] == "ballotin":
+                            def costruisci(lastre, uscita):
+                                return build_ballotin(pdf, uscita, q, lastre,
+                                                      col_riq, carta=carta,
+                                                      pellicola=con_pellicola)
+                        elif info["kind"] == "punta":
+                            def costruisci(lastre, uscita):
+                                return build_punta(pdf, uscita, q, lastre,
+                                                   col_riq, carta=carta)
+                        elif info["kind"] == "carton":
+                            # build_carton i suoi avvisi li restituiva gia', ed
+                            # era il chiamante a buttarli e poi a leggere una
+                            # variabile che su questo ramo non esisteva.
+                            def costruisci(lastre, uscita):
+                                return build_carton(pdf, uscita, q, lastre, col_riq,
+                                                    carta=carta,
+                                                    apertura=gradi_aperta,
+                                                    pellicola=con_pellicola)
+                        elif info["kind"] == "riempimento":
+                            # un vassoio coi suoi flowpack: due costruzioni e
+                            # un GLB solo, vedi `pack3d.riempimento`
+                            pdf_fp = pdfs[info["flowpack"]]
+                            soft, scatola, pinne, mat = parametri_flowpack(
+                                pdf_fp, nomi[info["flowpack"]])
+                            case_fp = CASI.get(_sig(pdf_fp))
+
+                            def costruisci(lastre, uscita):
+                                return build_riempimento(
+                                    pdfs, info, uscita, quanti,
+                                    (int(opts.get("teeth", 20)), str(soft), case_fp, q,
+                                     sezione_da_agente(opts.get("params")),
+                                     scatola, pinne, lastre, col_riq, mat, mat_ai), q)
+                        else:
+                            soft, scatola, pinne, mat = parametri_flowpack(pdf, nomi[0])
+
                             def costruisci(lastre, uscita):
                                 return build_flowpack(
                                     pdf, uscita, int(opts.get("teeth", 20)),
@@ -3029,7 +3137,14 @@ class Handler(BaseHTTPRequestHandler):
                         # fuori, a posto restituito: e' solo attesa di rete, e
                         # chi viene dopo intanto costruisce.
                         quadro = None
-                        if controllo.attivo():
+                        if info["kind"] == "riempimento":
+                            # il controllo confronta il modello con l'artwork
+                            # di un pack solo: sul vassoio pieno ancora no
+                            righe_ai.append("controllo AI: sui riempimenti non "
+                                            "c'e' ancora, guarda tu il vassoio "
+                                            "pieno")
+                            meta.append(righe_ai[-1])
+                        elif controllo.attivo():
                             try:
                                 quadro = controllo.prepara(pdfs, out)
                             except Exception as e:
@@ -3082,7 +3197,8 @@ class Handler(BaseHTTPRequestHandler):
                             righe_ai.insert(0, riga)
                         meta.insert(0, controllo.avviso(verdetto))
                         righe_ai.insert(0, meta[0])
-                    elif controllo.manca_la_chiave():
+                    elif (controllo.manca_la_chiave()
+                          and info["kind"] != "riempimento"):
                         # spento perche' manca la chiave, non perche' qualcuno
                         # l'ha spento apposta: chi gestisce lo Space lo deve sapere
                         righe_ai.append("controllo AI spento: manca la chiave "

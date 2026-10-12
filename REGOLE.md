@@ -5075,6 +5075,112 @@ piu' del 30% della carta e' fondo, e si toglie prima di cercare il gruppo piu'
 grande (`FONDO_VIVO`). Resta il marchio Camy Apolo, a +4,9 gradi dalla
 mezzeria dello steso.
 
+## I riempimenti
+
+Un vassoio espositore pieno dei suoi flowpack. Due PDF, il vassoio e il
+flowpack, e un GLB solo (`pack3d/riempimento.py`).
+
+### Si dichiara, e i PDF si riconoscono da soli
+
+Il riempimento non si indovina: lo dichiara chi carica, col tasto della
+tipologia. Se ha caricato un PDF solo, la pagina chiede l'altro. Quale dei
+due e' il vassoio lo dice la lettura: si prova il vassoio su tutti e due
+(`analisi_riempimento`), e deve passare **uno solo**. Se passano tutti e due,
+o nessuno, ci si ferma e lo si dice. L'altro si legge come flowpack, con le
+domande di sempre: zigrinatura, gonfiore, pinne.
+
+### Quanti: la domanda, e il vuoto vuol dire pieno
+
+Prima di costruire la pagina chiede **quanti flowpack mettere**. Vuoto vuol
+dire pieno: quanti ne stanno, nella posa sdraiata. Il numero va da 1 a 2000.
+Se se ne chiedono piu' di quanti ne stanno, si mettono quelli che ci stanno e
+lo si dice in cima agli avvisi: il modello esce lo stesso. Se non ne sta
+neanche uno, ci si ferma con le misure del vano e del pezzo.
+
+### I due modelli, ognuno dalla sua famiglia
+
+Il vassoio si costruisce come vassoio, il flowpack come flowpack, con tutte le
+loro regole. Il riempimento non tocca nessuna delle due costruzioni, e i loro
+avvisi arrivano nei dettagli tecnici, uno dopo l'altro.
+
+### Il vano
+
+Il vano e' l'ingombro del vassoio meno lo spessore del cartoncino (1 mm) su
+ogni lato e sul fondo. Si impila fino alla **parete piu' alta**: su un display
+il fronte e' basso perche' il prodotto si deve vedere, e la pila la reggono i
+fianchi. Sul KMS Raspberry il vano e' 145,5 x 383,4 mm, alto 98,6.
+
+### Il flowpack si misura sulla sua maglia
+
+- L'**asse lungo** e' il lato piu' lungo dell'ingombro.
+- La **sezione a meta'** da' la larghezza e lo spessore del corpo pieno,
+  rigonfiamento compreso. Lo spessore e' il piu' piccolo dei due.
+- Il **corpo** finisce dove lo spessore scende sotto meta' di quello a meta';
+  oltre ci sono le pinne.
+
+Sul KMS T1: 152,5 x 47,4 x 17,0 mm, corpo 127.
+
+### Le pose
+
+Si provano quattro pose: sdraiato (la faccia stampata in su) o di taglio, con
+l'asse lungo per il largo o per il lungo del vassoio. Per ognuna si contano i
+pezzi in fila, le file affiancate e gli strati.
+
+- **In fila** conta la lunghezza intera, pinne comprese. Due pezzi vicini non
+  infilano le pinne uno nell'altro; si piegano solo quelle contro le due
+  pareti, e la fila ne recupera la lunghezza.
+- **Affiancati e impilati**, un pezzo gonfio si schiaccia del 2% fra i
+  vicini (`COMPRIME`). Senza, 8 barrette da 47,4 mm non stavano in 383 mm
+  per qualche decimo, e il vassoio vero ne tiene 8.
+
+Vince la **posa sdraiata**, se i pezzi ci stanno, perche' e' cosi' che si
+espone. Fra due sdraiate vince quella con meno strati. Di taglio si va solo se
+sdraiati non ci stanno, e lo si dice. Sul KMS: 40 pezzi, 8 barrette di
+traverso per 5 strati.
+
+### Si riempie dal basso
+
+Gli strati si riempiono dal fondo. L'ultimo, se non e' pieno, mette i pezzi
+nei posti piu' vicini al centro, come fa chi riempie il vassoio a mano.
+
+### Il flowpack si adatta al vano, una volta per tutti
+
+- **Le pinne si stringono** quanto il passo fra due file, sfumando dal corpo
+  alla punta. Il film e' piu' largo del corpo: due pinne vicine sullo stesso
+  piano si compenetravano, e nel viewer sfarfallavano.
+- **Le punte che uscirebbero dal vano si piegano in su** di 80 gradi contro
+  la parete, a 0,6 mm da lei, come fa il film vero.
+
+Il corpo non si tocca: e' quello che si vede.
+
+### Il GLB: il flowpack una volta, un nodo per pezzo
+
+Il GLB e' il vassoio com'e', con dentro il flowpack **una volta sola** come
+maglia e un nodo per pezzo, ognuno con la sua rotazione e traslazione. La
+texture del flowpack c'e' una volta: con 40 pezzi il KMS pesa 9,8 MB.
+
+**Il viewer della pagina deve seguire i nodi.** Il suo lettore GLB metteva in
+scena ogni mesh una volta, e dei nodi non sapeva niente: di un riempimento
+mostrava solo il vassoio. Ora percorre i nodi della scena, con le loro
+trasformazioni e i figli. I modelli di un pezzo solo e la coppa si vedono
+uguali al pixel.
+
+Il flowpack si misura nella scena e si adatta nella sua maglia: le due cose
+coincidono solo se i suoi nodi non spostano niente, ed e' cosi' che li fa
+`build_flowpack`. Un flowpack coi nodi trasformati ferma il riempimento.
+
+### Il controllo dell'AI non c'e' ancora
+
+Il controllo confronta il modello con l'artwork di un pack solo: sul vassoio
+pieno non saprebbe cosa guardare. Il riempimento lo salta, e lo dice nel
+riquadro del controllo.
+
+### Cosa manca
+
+- I prodotti che non sono flowpack: astucci, pouch e coppe in un vassoio.
+- I pezzi rigidi che non si schiacciano: il 2% vale per un film gonfio.
+- Il vassoio coi separatori: oggi il vano e' uno solo.
+
 ## Casi calibrati
 
 Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel
