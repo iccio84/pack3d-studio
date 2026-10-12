@@ -17,22 +17,22 @@ La disposizione la decide il vano del vassoio:
   spessore resta oltre meta'. Le pinne sono film: piu' larghe del corpo e piu'
   lunghe del vano, si piegano e si accartocciano, e la disposizione non le
   conta;
-- si provano le pose sdraiate - la faccia stampata in su, l'asse lungo per il
-  largo o per il lungo del vano - e di taglio; vince la sdraiata, se i pezzi
-  ci stanno, e fra due sdraiate quella con meno strati. Il KMS Raspberry T1x40: 8 barrette di
-  traverso per 5 strati, 40 pezzi.
+- i pack stanno frontali: la faccia stampata verso il davanti del vassoio e il
+  marchio dritto, come stanno nel loro modello, in file dal davanti al fondo e
+  a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
+  Sdraiati, la faccia in su, solo se in piedi non ci stanno.
 
 Poi il flowpack si adatta al vano, una volta per tutti i pezzi: le pinne si
 stringono quanto il passo fra due pezzi, perche' due pinne sovrapposte sullo
 stesso piano nel viewer sfarfallano, e le punte che uscirebbero dal vano si
-piegano in su contro la parete, come fa il film vero.
+piegano sullo spessore contro la parete, come fa il film vero.
 """
 from __future__ import annotations
 
 import json
 import math
 import struct
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -41,6 +41,7 @@ GIOCO = 0.6                 # mm fra le punte piegate e la parete
 COMPRIME = 0.02             # quanto si schiaccia un pezzo gonfio fra i vicini
 PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
+PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
 
 
 # --------------------------------------------------------------------------- #
@@ -175,6 +176,11 @@ class Vano:
     def lati(self):
         return self.x1 - self.x0, self.z1 - self.z0, self.tetto - self.fondo
 
+    @property
+    def per_asse(self):
+        """Le misure lungo X, Y (l'altezza) e Z della scena."""
+        return self.x1 - self.x0, self.tetto - self.fondo, self.z1 - self.z0
+
 
 def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO):
     V = vertici(J, B)
@@ -233,168 +239,212 @@ def misura_prodotto(J, B):
 
 @dataclass
 class Disposizione:
-    posa: str               # a parole
-    lungo_su: int           # l'asse della scena lungo cui va l'asse lungo (0 = X, 2 = Z)
-    verticale: str          # "spesso" (sdraiato) o "largo" (di taglio)
-    per_fila: int           # pezzi lungo l'asse lungo del prodotto
-    file: int               # file affiancate
-    strati: int
-    passo_lungo: float
-    passo_fila: float
-    passo_strato: float
-    capienza: int
-    pose: list = field(default_factory=list)    # (R 3x3, t mm) per pezzo
+    """Come stanno i pezzi nel vano. `R` porta il riferimento del prodotto
+    nella scena: le sue colonne sono gli assi del prodotto visti nella scena.
+    `n` e' quanti pezzi stanno al massimo lungo X, Y e Z della scena, `passo`
+    a che distanza; `piega` il verso, lungo lo spessore del prodotto, in cui
+    si piegano le punte delle pinne."""
+    posa: str               # "frontali" o "sdraiati"
+    dove: str               # a parole
+    R: np.ndarray
+    n: tuple
+    passo: tuple
+    piega: float
+
+    @property
+    def capienza(self):
+        return self.n[0] * self.n[1] * self.n[2]
 
     @property
     def per_strato(self):
-        return self.per_fila * self.file
+        return self.n[0] * self.n[2]
+
+    def asse(self, j):
+        """L'asse della scena lungo cui va l'asse j del prodotto."""
+        return int(np.argmax(np.abs(self.R[:, j])))
+
+
+def _misura(p, j):
+    """La misura del prodotto lungo il suo asse j: tutto per il lungo, il
+    corpo per gli altri due."""
+    lungo, largo, _ = p.assi
+    return p.lungo if j == lungo else p.largo if j == largo else p.spesso
+
+
+def _quanti_lungo(lato, p, j):
+    """Quanti pezzi stanno in fila su un lato del vano, con l'asse j del
+    prodotto lungo quel lato. Per il lungo conta la lunghezza intera, ma le
+    pinne di due pezzi vicini non si compenetrano: solo quelle contro le due
+    pareti si piegano. Gli altri due lati si schiacciano un poco."""
+    if j == p.assi[0]:
+        return int((lato + p.lungo - p.corpo) // p.lungo) if lato >= p.corpo else 0
+    return int(lato // (_misura(p, j) * (1.0 - COMPRIME)))
+
+
+def _disposizione(vano, p, posa, dove, R, piega):
+    lati = vano.per_asse
+    n, passo = [], []
+    for a in range(3):
+        j = int(np.argmax(np.abs(R[a, :])))
+        n.append(_quanti_lungo(lati[a], p, j))
+        # in altezza gli strati si appoggiano uno sull'altro; di lato e in
+        # profondita' si allargano su tutto il vano
+        passo.append(lati[a] / max(n[-1], 1) if a != 1
+                     else min(_misura(p, j), lati[1] / max(n[-1], 1)))
+    if min(n) < 1:
+        return None
+    return Disposizione(posa, dove, R, tuple(n), tuple(passo), piega)
 
 
 def disposizioni(vano, p):
-    """Le pose possibili, la migliore prima."""
-    L, Wv, H = vano.lati
+    """Le pose possibili, la migliore prima.
+
+    Frontali: il pezzo sta nel vassoio come sta nel suo modello, con la faccia
+    stampata verso il davanti del vassoio e il marchio dritto; le file vanno
+    dal davanti al fondo. E' cosi' che si espone, e si prova per prima.
+    Sdraiati, la faccia stampata in su, solo se in piedi non ci stanno."""
+    lungo, largo, spesso = p.assi
     out = []
-    for verticale in ("spesso", "largo"):
-        alto = p.spesso if verticale == "spesso" else p.largo
-        fianco = p.largo if verticale == "spesso" else p.spesso
-        for lungo_su in (0, 2):
-            lungo_vano = L if lungo_su == 0 else Wv
-            fianco_vano = Wv if lungo_su == 0 else L
-            # in fila, le pinne di due pezzi vicini non si compenetrano: solo
-            # quelle contro le due pareti si piegano
-            pinne = p.lungo - p.corpo
-            per_fila = int((lungo_vano + pinne) // p.lungo) if lungo_vano >= p.corpo else 0
-            file = int(fianco_vano // (fianco * (1.0 - COMPRIME)))
-            strati = int(H // (alto * (1.0 - COMPRIME)))
-            if per_fila < 1 or file < 1 or strati < 1:
-                continue
-            out.append(Disposizione(
-                ("sdraiati" if verticale == "spesso" else "di taglio")
-                + (", per il largo del vassoio" if lungo_su == 0 else ", per il lungo del vassoio"),
-                lungo_su, verticale, per_fila, file, strati,
-                lungo_vano / per_fila, fianco_vano / file, min(alto, H / strati),
-                per_fila * file * strati))
+    d = _disposizione(vano, p, "frontali", "la faccia stampata verso il davanti, il marchio dritto",
+                      np.eye(3), -float(p.fronte))
+    if d:
+        out.append(d)
+    e = np.eye(3)
+    for lungo_su in (0, 2):
+        R = np.zeros((3, 3))
+        R[:, lungo] = e[lungo_su]
+        R[:, spesso] = e[1] * p.fronte
+        R[:, largo] = e[2 if lungo_su == 0 else 0]
+        if np.linalg.det(R) < 0:
+            R[:, largo] = -R[:, largo]
+        d = _disposizione(vano, p, "sdraiati",
+                          "la faccia stampata in su, " + ("per il largo del vassoio"
+                                                          if lungo_su == 0 else
+                                                          "per il lungo del vassoio"),
+                          R, float(p.fronte))
+        if d:
+            out.append(d)
     return out
 
 
 def scegli(vano, p, quanti):
-    """La disposizione per `quanti` pezzi, o None se non ci stanno in nessuna
-    posa (allora la capienza massima e' quella della prima di `disposizioni`)."""
+    """La disposizione per `quanti` pezzi (None: pieno), o None se il prodotto
+    non ci sta in nessuna posa. Frontali sempre, se in piedi ci stanno: se ne
+    chiedi di piu', si mettono quelli che ci stanno. Sdraiati, quella che li
+    tiene tutti con meno strati, o la piu' capiente."""
     cand = disposizioni(vano, p)
+    if not cand:
+        return None
+    if cand[0].posa == "frontali":
+        return cand[0]
+    if quanti is None:
+        return max(cand, key=lambda d: d.capienza)
     buone = [d for d in cand if d.capienza >= quanti]
     if not buone:
-        return None, max((d.capienza for d in cand), default=0)
-    # sdraiati quando ci stanno, come si espone; poi meno strati
-    buone.sort(key=lambda d: (d.verticale != "spesso", -(-quanti // d.per_strato),
-                              -d.per_strato))
-    return buone[0], buone[0].capienza
+        return max(cand, key=lambda d: d.capienza)
+    buone.sort(key=lambda d: (-(-quanti // d.per_strato), -d.per_strato))
+    return buone[0]
 
 
 def capienza(vano, p):
-    cand = disposizioni(vano, p)
-    return max((d.capienza for d in cand), default=0)
+    d = scegli(vano, p, None)
+    return d.capienza if d else 0
 
 
-def _rotazione(p, d):
-    """La rotazione che porta il riferimento del prodotto nella posa: l'asse
-    lungo lungo X o Z della scena; sdraiato, lo spessore in su con la faccia
-    stampata sopra; di taglio, la larghezza in su. Le colonne di R sono gli
-    assi del prodotto visti nella scena."""
-    lungo, largo, spesso = p.assi
-    su = spesso if d.verticale == "spesso" else largo
-    terzo = largo if d.verticale == "spesso" else spesso
-    e = np.eye(3)
-    R = np.zeros((3, 3))
-    R[:, lungo] = e[d.lungo_su]
-    R[:, su] = e[1] * (p.fronte if d.verticale == "spesso" else 1.0)
-    R[:, terzo] = e[2 if d.lungo_su == 0 else 0]
-    if np.linalg.det(R) < 0:
-        R[:, terzo] = -R[:, terzo]
-    return R
+def _strati(d, quanti):
+    """Quanti pezzi per strato, dal basso. Frontali: strati uguali, 40 in due
+    strati fanno 20 e 20 (se avanzano, uno in piu' sotto). Sdraiati: strati
+    pieni, e l'ultimo con quelli che restano."""
+    s = -(-quanti // d.per_strato)
+    if d.posa == "frontali":
+        return [quanti // s + (1 if k < quanti % s else 0) for k in range(s)]
+    return [min(d.per_strato, quanti - k * d.per_strato) for k in range(s)]
 
 
 def pose(vano, p, d, quanti, V_prodotto):
-    """Le pose dei `quanti` pezzi: (R, t) in mm. Si riempie dal basso, strato
-    per strato; l'ultimo strato, se non e' pieno, ha i pezzi al centro."""
-    R = _rotazione(p, d)
+    """Le pose dei `quanti` pezzi: (R, t) in mm, con t dove va il centro del
+    prodotto. `V_prodotto` sono i vertici del prodotto gia' adattato al vano:
+    il pezzo poggia sul piano col corpo, non con le pinne."""
+    R = d.R
     W = (V_prodotto - p.centro) @ R.T
-    base = -W[:, 1].min()               # il pezzo poggia sul piano
-    lungo_vano = (vano.x0, vano.x1) if d.lungo_su == 0 else (vano.z0, vano.z1)
-    fianco_vano = (vano.z0, vano.z1) if d.lungo_su == 0 else (vano.x0, vano.x1)
-    posti = []
-    for s in range(d.strati):
-        strato = []
-        for f in range(d.file):
-            for k in range(d.per_fila):
-                strato.append((s, f, k))
-        posti.append(strato)
-    scelti = []
-    resto = quanti
-    for strato in posti:
-        if resto <= 0:
-            break
-        if resto >= len(strato):
-            scelti.extend(strato)
-            resto -= len(strato)
-        else:
-            # i posti piu' vicini al centro, in ordine
-            c_f, c_k = (d.file - 1) / 2.0, (d.per_fila - 1) / 2.0
-            ordine = sorted(strato, key=lambda q: (abs(q[1] - c_f) + abs(q[2] - c_k), q[1], q[2]))
-            scelti.extend(sorted(ordine[:resto]))
-            resto = 0
+    base = -W[:, 1].min()
+    nx, _, nz = d.n
     out = []
-    for s, f, k in scelti:
-        a = lungo_vano[0] + (k + 0.5) * d.passo_lungo
-        b = fianco_vano[0] + (f + 0.5) * d.passo_fila
-        y = vano.fondo + base + s * d.passo_strato
-        t = np.array([a, y, b]) if d.lungo_su == 0 else np.array([b, y, a])
-        out.append((R, t - R @ np.zeros(3)))
-    return out, R
+    for s, c in enumerate(_strati(d, quanti)):
+        y = vano.fondo + base + s * d.passo[1]
+        if d.posa == "frontali":
+            # le file dal davanti al fondo, allargate su tutta la profondita':
+            # al massimo un quinto di spessore d'aria fra due pezzi, se no si
+            # appoggiano al davanti
+            righe = -(-c // nx)
+            pz = min(vano.per_asse[2] / righe, _misura(p, int(np.argmax(np.abs(R[2, :]))))
+                     * PASSO_MAX)
+            posti = [(r, f) for r in range(righe) for f in range(nx)]
+            dove = lambda r, f: (vano.x0 + (f + 0.5) * d.passo[0], vano.z1 - (r + 0.5) * pz)
+        else:
+            posti = [(r, f) for r in range(nz) for f in range(nx)]
+            dove = lambda r, f: (vano.x0 + (f + 0.5) * d.passo[0],
+                                 vano.z0 + (r + 0.5) * d.passo[2])
+        if c < len(posti):
+            # i posti piu' vicini al centro della fila o dello strato
+            cr = (max(r for r, _ in posti)) / 2.0
+            cf = (nx - 1) / 2.0
+            if d.posa == "frontali":
+                pieni = [q for q in posti if q[0] < c // nx]
+                resto = sorted((q for q in posti if q[0] == c // nx),
+                               key=lambda q: (abs(q[1] - cf), q[1]))[:c - len(pieni)]
+                posti = pieni + sorted(resto)
+            else:
+                posti = sorted(sorted(posti, key=lambda q: (abs(q[0] - cr) + abs(q[1] - cf),
+                                                            q))[:c])
+        for r, f in posti:
+            x, z = dove(r, f)
+            out.append((R, np.array([x, y, z])))
+    return out
 
 
 # --------------------------------------------------------------------------- #
 # Il prodotto adattato al vano
 
-def adatta(P, N, p, d, vano):
+def adatta(P, N, p, d):
     """Posizioni e normali del prodotto (mm, nel suo riferimento) con le
-    pinne strette quanto il passo fra due file e le punte piegate in su dove
-    uscirebbero dal vano. Torna (P, N, quante pinne piegate)."""
+    pinne strette quanto il passo fra due pezzi lungo la loro larghezza, e le
+    punte che uscirebbero dal posto del pezzo piegate contro la parete:
+    sdraiati in su, frontali verso il dietro. Torna (P, N, quante pinne
+    piegate)."""
     lungo, largo, spesso = p.assi
-    fianco_i = largo if d.verticale == "spesso" else spesso
-    su_i = spesso if d.verticale == "spesso" else largo
     P = P.copy()
     N = N.copy() if N is not None else None
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
-    # 1. le pinne non piu' larghe del passo fra due file
-    fianco = p.largo if d.verticale == "spesso" else p.spesso
-    largo_pinne = p.largo_pinne if d.verticale == "spesso" else fianco
-    k = min(1.0, (d.passo_fila - GIOCO) / max(largo_pinne, 1e-6))
+    # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
+    # sullo stesso piano nel viewer sfarfallano
+    k = min(1.0, (d.passo[d.asse(largo)] - GIOCO) / max(p.largo_pinne, 1e-6))
     if k < 1.0:
         sfuma = np.clip((np.abs(x) - fine) / max(0.25 * (p.lungo / 2.0 - fine), 1e-6), 0.0, 1.0)
         f = 1.0 - (1.0 - k) * sfuma
-        c = p.centro[fianco_i]
-        P[:, fianco_i] = c + (P[:, fianco_i] - c) * f
-    # 2. le punte che uscirebbero dal vano, piegate in su contro la parete
-    meta_vano = d.passo_lungo / 2.0 - GIOCO
+        c = p.centro[largo]
+        P[:, largo] = c + (P[:, largo] - c) * f
+    # 2. le punte che uscirebbero, piegate sullo spessore come il film vero
+    meta = d.passo[d.asse(lungo)] / 2.0 - GIOCO
     piegate = 0
-    if p.lungo / 2.0 > meta_vano and meta_vano > fine:
-        c_su = p.centro[su_i]
-        alto = p.fronte if d.verticale == "spesso" else 1.0    # dov'e' su
+    if p.lungo / 2.0 > meta > fine:
+        c_sp = p.centro[spesso]
+        verso = d.piega
+        cs, sn = math.cos(PIEGA_PINNA), math.sin(PIEGA_PINNA)
         for segno in (1.0, -1.0):
-            m = segno * x > meta_vano
+            m = segno * x > meta
             if not m.any():
                 continue
             piegate += 1
-            dx = segno * x[m] - meta_vano
-            dz = (P[m, su_i] - c_su) * alto
-            cs, sn = math.cos(PIEGA_PINNA), math.sin(PIEGA_PINNA)
-            P[m, lungo] = p.centro[lungo] + segno * (meta_vano + dx * cs - dz * sn)
-            P[m, su_i] = c_su + alto * (dx * sn + dz * cs)
+            dx = segno * x[m] - meta
+            dz = (P[m, spesso] - c_sp) * verso
+            P[m, lungo] = p.centro[lungo] + segno * (meta + dx * cs - dz * sn)
+            P[m, spesso] = c_sp + verso * (dx * sn + dz * cs)
             if N is not None:
-                nl, ns = N[m, lungo] * segno, N[m, su_i] * alto
+                nl, ns = N[m, lungo] * segno, N[m, spesso] * verso
                 N[m, lungo] = segno * (nl * cs - ns * sn)
-                N[m, su_i] = alto * (nl * sn + ns * cs)
+                N[m, spesso] = verso * (nl * sn + ns * cs)
     return P, N, piegate
 
 
@@ -416,19 +466,18 @@ def componi(glb_vassoio, glb_prodotto, quanti=None):
     vano = misura_vassoio(Jv, Bv)
     p = misura_prodotto(Jp, Bp)
     chiesti = quanti
-    massimo = capienza(vano, p)
-    if massimo < 1:
+    d = scegli(vano, p, quanti)
+    if d is None:
         raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) il "
                          "flowpack (%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (p.lungo, p.largo, p.spesso)))
+    massimo = d.capienza
     if quanti is None or quanti > massimo:
-        # pieno: la posa sdraiata, se c'e', anche se di taglio ne starebbero di piu'
-        sdraiati = max((c.capienza for c in disposizioni(vano, p) if c.verticale == "spesso"),
-                       default=0)
-        quanti = massimo if quanti is not None else (sdraiati or massimo)
-    d, cap = scegli(vano, p, quanti)
-    Vp = vertici(Jp, Bp)
-    poste, R = pose(vano, p, d, quanti, Vp)
+        quanti = massimo
+    # il pezzo poggia col corpo: le pinne, piu' larghe, si stringono prima
+    Vp, _, _ = adatta(vertici(Jp, Bp), None, p, d)
+    poste = pose(vano, p, d, quanti, Vp)
+    R = d.R
 
     J = json.loads(json.dumps(Jv))
     B = bytearray(Bv)
@@ -480,7 +529,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None):
             a = prim["attributes"]
             P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
             Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
-            P2, N2, piegate = adatta(P, Nn, p, d, vano)
+            P2, N2, piegate = adatta(P, Nn, p, d)
             for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2)):
                 if arr is None:
                     continue
@@ -538,24 +587,38 @@ def componi(glb_vassoio, glb_prodotto, quanti=None):
             J[chiave] = u
     righe = []
     if chiesti is not None and chiesti > quanti:
-        righe.append("ne hai chiesti %d, ma nel vassoio ce ne stanno al massimo %d: "
-                     "ne ho messi %d" % (chiesti, massimo, quanti))
-    strati = -(-quanti // d.per_strato)
-    righe += ["riempimento: %d %s nel vassoio%s, %s"
-              % (quanti, "pezzo" if quanti == 1 else "pezzi",
-                 " (pieno)" if chiesti is None else "", d.posa),
-             "%d per strato (%d x %d), %d %s: ce ne stanno fino a %d"
-             % (d.per_strato, d.file, d.per_fila, strati,
-                "strato" if strati == 1 else "strati", d.capienza),
-             "vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
-             % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso, p.corpo)]
+        righe.append("ne hai chiesti %d, ma %s nel vassoio ce ne stanno al massimo %d: "
+                     "ne ho messi %d" % (chiesti, d.posa, massimo, quanti))
+    conti = _strati(d, quanti)
+    pezzi = "pezzo" if quanti == 1 else "pezzi"
+    strati = "%d %s" % (len(conti), "strato" if len(conti) == 1 else "strati")
+    if d.posa == "frontali":
+        nx = d.n[0]
+        file = [c // nx + (1 if f < c % nx else 0) for c in conti for f in range(nx)]
+        file = [f for f in file if f]
+        da = ("%d" % file[0] if len(set(file)) == 1
+              else ", ".join("%d" % f for f in file))
+        righe += ["riempimento: %d %s nel vassoio%s, frontali (%s): %d %s da %s, dal "
+                  "davanti al fondo" % (quanti, pezzi, " (pieno)" if chiesti is None else "",
+                                        d.dove, len(file), "fila" if len(file) == 1 else "file",
+                                        da),
+                  "%s, %d %s per strato: frontali ce ne stanno fino a %d (%d per fila)"
+                  % (strati, nx, "fila" if nx == 1 else "file", d.capienza, d.n[2])]
+    else:
+        righe += ["riempimento: %d %s nel vassoio%s, sdraiati (%s)"
+                  % (quanti, pezzi, " (pieno)" if chiesti is None else "", d.dove),
+                  "%d per strato (%d x %d), %s: ce ne stanno fino a %d"
+                  % (d.per_strato, d.n[2], d.n[0], strati, d.capienza),
+                  "sdraiati perche' in piedi, con la faccia verso il davanti, nel vano non "
+                  "ci stanno"]
+    righe.append("vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
+                 % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso,
+                    p.corpo))
     if piegate:
-        righe.append("pinne piu' lunghe del vano: le punte si piegano in su contro la parete")
-    if d.verticale != "spesso":
-        sdraiati = max((c.capienza for c in disposizioni(vano, p) if c.verticale == "spesso"),
-                       default=0)
-        righe.append("di taglio perche' sdraiati ce ne stanno al massimo %d" % sdraiati)
-    if d.verticale == "spesso" and p.largo_pinne > d.passo_fila:
+        righe.append("pinne piu' lunghe del posto del pezzo: le punte si piegano %s"
+                     % ("verso il dietro" if d.posa == "frontali" else "in su contro la parete"))
+    passo = d.passo[d.asse(p.assi[1])]
+    if p.largo_pinne > passo:
         righe.append("pinne piu' larghe del passo fra due pezzi (%.1f contro %.1f): si "
-                     "stringono come il film accartocciato" % (p.largo_pinne, d.passo_fila))
+                     "stringono come il film accartocciato" % (p.largo_pinne, passo))
     return scrivi(J, bytes(B)), righe

@@ -70,5 +70,5 @@ di costruire.
 
 Il **riempimento** mette insieme due PDF, un vassoio espositore e il suo
 flowpack: costruisce i due modelli, chiede quanti flowpack mettere (vuoto
-vuol dire pieno) e li dispone nel vassoio, sdraiati quando ci stanno, in un
-GLB solo.
+vuol dire pieno) e li dispone nel vassoio frontali - la faccia stampata
+verso il davanti, in file dal davanti al fondo - in un GLB solo.

@@ -5092,7 +5092,7 @@ domande di sempre: zigrinatura, gonfiore, pinne.
 ### Quanti: la domanda, e il vuoto vuol dire pieno
 
 Prima di costruire la pagina chiede **quanti flowpack mettere**. Vuoto vuol
-dire pieno: quanti ne stanno, nella posa sdraiata. Il numero va da 1 a 2000.
+dire pieno: quanti ne stanno, frontali. Il numero va da 1 a 2000.
 Se se ne chiedono piu' di quanti ne stanno, si mettono quelli che ci stanno e
 lo si dice in cima agli avvisi: il modello esce lo stesso. Se non ne sta
 neanche uno, ci si ferma con le misure del vano e del pezzo.
@@ -5120,36 +5120,68 @@ fianchi. Sul KMS Raspberry il vano e' 145,5 x 383,4 mm, alto 98,6.
 
 Sul KMS T1: 152,5 x 47,4 x 17,0 mm, corpo 127.
 
-### Le pose
+### I pack sono frontali
 
-Si provano quattro pose: sdraiato (la faccia stampata in su) o di taglio, con
-l'asse lungo per il largo o per il lungo del vassoio. Per ognuna si contano i
-pezzi in fila, le file affiancate e gli strati.
+**Nel vassoio i pack stanno frontali**: la faccia stampata verso il davanti
+del vassoio, il marchio dritto, come li vede chi passa davanti allo scaffale.
+Il davanti del vassoio e' quello del suo modello, il lato corto con la parete
+bassa (+Z); il pack sta come sta nel suo modello, anche lui col fronte su +Z e
+il marchio dritto. La posa frontale e' quindi il pack **senza rotazioni**:
 
-- **In fila** conta la lunghezza intera, pinne comprese. Due pezzi vicini non
-  infilano le pinne uno nell'altro; si piegano solo quelle contro le due
-  pareti, e la fila ne recupera la lunghezza.
-- **Affiancati e impilati**, un pezzo gonfio si schiaccia del 2% fra i
-  vicini (`COMPRIME`). Senza, 8 barrette da 47,4 mm non stavano in 383 mm
-  per qualche decimo, e il vassoio vero ne tiene 8.
+- il Milch-Schnitte e' una barretta coricata sul fianco, l'asse lungo di
+  traverso nel vassoio;
+- il Kinder Choco Fresh sta in piedi.
 
-Vince la **posa sdraiata**, se i pezzi ci stanno, perche' e' cosi' che si
-espone. Fra due sdraiate vince quella con meno strati. Di taglio si va solo se
-sdraiati non ci stanno, e lo si dice. Sul KMS: 40 pezzi, 8 barrette di
-traverso per 5 strati.
+I pezzi vanno **in file dal davanti al fondo**, uno dietro l'altro, e a strati.
+Sul KMS Raspberry, T1x40: le pareti lunghe sono alte 98,6 mm, due barrette da
+47,4 una sull'altra; in profondita' 383 mm, 20 barrette. **2 file da 20.**
 
-### Si riempie dal basso
+La prima versione li metteva sdraiati con la faccia in su, 8 di traverso per 5
+strati: anche loro 40, ma da davanti si vedeva solo il bordo del film, e il
+vassoio vero non si riempie cosi'. Sdraiati si va solo se in piedi non ci
+stanno (un vassoio piu' basso del pack), e lo si dice. Di taglio, con la
+faccia verso i fianchi, mai.
 
-Gli strati si riempiono dal fondo. L'ultimo, se non e' pieno, mette i pezzi
-nei posti piu' vicini al centro, come fa chi riempie il vassoio a mano.
+### Quanti ne stanno
+
+Lungo ogni asse del vano si conta quanti pezzi ci stanno:
+
+- **lungo l'asse lungo del pack** conta la lunghezza intera, pinne comprese.
+  Due pezzi vicini non infilano le pinne uno nell'altro; si piegano solo
+  quelle contro le pareti, e la fila ne recupera la lunghezza. Basta che ci
+  stia il corpo;
+- **lungo gli altri due**, un pezzo gonfio si schiaccia del 2% fra i vicini
+  (`COMPRIME`).
+
+### Strati uguali, file su tutta la profondita'
+
+- **Frontali, gli strati sono uguali**: 40 pezzi in strati da 22 al massimo
+  fanno 20 e 20, non 22 e 18. Se avanzano, quello in piu' va sotto (41: 21 e
+  20).
+- **Ogni fila si allarga su tutta la profondita'**, dal davanti: 20 barrette
+  in 383 mm stanno a 19,2 mm l'una dall'altra, poco piu' dello spessore, come
+  nel vassoio vero. Fra due pezzi pero' al massimo un quinto di spessore
+  d'aria (`PASSO_MAX`): con pochi pezzi stanno appoggiati al davanti, e il
+  fondo resta vuoto.
+- Se l'ultima fila non e' piena, i pezzi vanno nei posti piu' vicini al
+  centro.
+- Sdraiati, gli strati si riempiono pieni dal fondo, e l'ultimo mette i pezzi
+  al centro.
 
 ### Il flowpack si adatta al vano, una volta per tutti
 
-- **Le pinne si stringono** quanto il passo fra due file, sfumando dal corpo
-  alla punta. Il film e' piu' largo del corpo: due pinne vicine sullo stesso
-  piano si compenetravano, e nel viewer sfarfallavano.
-- **Le punte che uscirebbero dal vano si piegano in su** di 80 gradi contro
-  la parete, a 0,6 mm da lei, come fa il film vero.
+- **Le pinne si stringono** quanto il passo fra due pezzi lungo la loro
+  larghezza, sfumando dal corpo alla punta. Il film e' piu' largo del corpo:
+  due pinne vicine sullo stesso piano si compenetravano, e nel viewer
+  sfarfallavano. Frontali, il passo e' fra i due strati; sdraiati, fra due
+  file.
+- **Le punte che uscirebbero dal posto del pezzo si piegano** di 80 gradi a
+  0,6 mm dalla parete, come fa il film vero. Si piegano sullo spessore, intorno
+  alla larghezza della pinna: frontali verso il dietro, cosi' il davanti resta
+  pulito; sdraiati in su, contro la parete.
+- **Il pezzo poggia col corpo.** L'altezza da terra si misura sul pack gia'
+  adattato: con le pinne larghe la barretta frontale stava 5 mm sopra il
+  fondo.
 
 Il corpo non si tocca: e' quello che si vede.
 
@@ -5177,6 +5209,8 @@ riquadro del controllo.
 
 ### Cosa manca
 
+- Il pack frontale ruotato: oggi frontale vuol dire come sta nel suo modello.
+  Un pack lungo che nel suo modello e' coricato non si prova in piedi.
 - I prodotti che non sono flowpack: astucci, pouch e coppe in un vassoio.
 - I pezzi rigidi che non si schiacciano: il 2% vale per un film gonfio.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
