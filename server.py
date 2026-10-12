@@ -44,6 +44,7 @@ from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
 # piu' di un costruttore
 from pack3d import steso as lo_steso
+from pack3d import template as il_template
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
 from pack3d.flowpack import Flowpack, fin_on_surface
@@ -2850,6 +2851,36 @@ class Handler(BaseHTTPRequestHandler):
                                    "fra poco")
         return self._send(200, json.dumps(esito, ensure_ascii=False))
 
+    # Il template PSD di un modello (`pack3d.template`): il corpo e' il GLB
+    # che la pagina ha appena ricevuto, la risposta il PSD, o 204 se il
+    # modello non ha una texture sola. La pagina lo chiede solo dentro Glam,
+    # per «Scarica Template» (GLAM.md, sezione 9). Uno alla volta: un
+    # template da 5000 px tiene in memoria qualche livello grande.
+    _un_template = threading.Semaphore(1)
+
+    def _template(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        if n <= 0:
+            return self._send(400, "Nessun modello ricevuto")
+        if n > MAX_UPLOAD:
+            return self._send(413, "Modello troppo grande (limite %d MB)"
+                              % (MAX_UPLOAD // (1024 * 1024)))
+        glb = self.rfile.read(n)
+        if glb[:4] != b"glTF":
+            return self._send(400, "Il file non e' un GLB")
+        try:
+            with self._un_template:
+                t = il_template.template(glb)
+        except Exception as e:                          # noqa: BLE001
+            traceback.print_exc()
+            return self._send(500, "Template non riuscito: %s" % e)
+        if t is None:
+            return self._send(204, b"")
+        return self._send(200, t["dati"], ctype=il_template.MIME)
+
     # La voce di chi ha caricato il PDF, dopo che il caso e' entrato in coda
     # (`coda.aggiungi`): una nota dalla pagina, o la risposta a una domanda
     # della routine, da Glam Lab. Corpi JSON, non PDF; la foto e' un data URL.
@@ -2995,6 +3026,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._avviso()
         if self.path.startswith("/api/prossimo"):
             return self._prossimo()
+        if self.path.startswith("/api/template"):
+            return self._template()
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:

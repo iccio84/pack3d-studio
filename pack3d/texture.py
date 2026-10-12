@@ -47,9 +47,10 @@ def _parti(glb):
 
 def texture(glb, lato_max=LATO_GLAM):
     """Le texture del colore del modello, una per immagine, nell'ordine del
-    GLB: `[{"nome", "dati", "mime", "estensione", "lato", "ridotta"}]`.
-    `nome` e' quello della prima mesh che la usa (vassoio, flowpack,
-    packaging...), `lato` la misura `(l, a)` del file che esce."""
+    GLB: `[{"nome", "dati", "mime", "estensione", "lato", "ridotta",
+    "sorgente"}]`. `nome` e' quello della prima mesh che la usa (vassoio,
+    flowpack, packaging...), `lato` la misura `(l, a)` del file che esce,
+    `sorgente` l'indice dell'immagine nel GLB."""
     from PIL import Image
     J, binario = _parti(glb)
     materiali = J.get("materials") or []
@@ -89,7 +90,7 @@ def texture(glb, lato_max=LATO_GLAM):
             dati, mime, ridotta = bio.getvalue(), "image/jpeg", True
         fuori.append({"nome": nomi.get(s, ""), "dati": dati, "mime": mime,
                       "estensione": ESTENSIONI.get(mime, "jpg"), "lato": lato,
-                      "ridotta": ridotta})
+                      "ridotta": ridotta, "sorgente": s})
     return fuori
 
 

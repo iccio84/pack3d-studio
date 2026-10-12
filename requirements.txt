@@ -24,3 +24,9 @@ pypdfium2==5.13.0
 # lasciarlo libero.
 anthropic==1.11.0
 openai>=1.60
+
+# Il template PSD dei modelli, per «Scarica Template» di Glam
+# (pack3d/template.py). Fissato perche' il modulo usa due cose interne: la
+# composizione gia' fatta, che psd-tools rifarebbe in venti secondi, e il
+# blocco dei livelli, che `lock()` di questa versione non scrive.
+psd-tools==1.24.0

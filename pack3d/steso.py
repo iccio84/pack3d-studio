@@ -172,8 +172,12 @@ def facce_sullo_steso(faces, panels, girate, scala, box, gradi):
     foglio (`folding.rasterize_panels`, coi pixel arrotondati), girato di
     `girate[nome]` (`artwork.gira_sulla_grafica`); lo steso e' il riquadro
     `box` (pixel) dello stesso foglio, e il foglio di lavoro e' il PDF girato
-    di `gradi` in senso orario. Le facce di colore pieno non ne hanno
-    bisogno. Torna la trasposizione che riporta lo steso nel verso del PDF."""
+    di `gradi` in senso orario. Anche una faccia stampata di un colore solo
+    - il fondo tutto rosso di un astuccio - va sullo steso: la texture di una
+    variante, in Glam, deve arrivare anche li', e il template ne disegna il
+    contorno (`pack3d.template`). Restano di colore pieno le facce che un
+    pannello non ce l'hanno, l'interno e il taglio. Torna la trasposizione
+    che riporta lo steso nel verso del PDF."""
     from .artwork import GIRO_TEXTURE
     sx0, sy0, sx1, sy1 = box
     W, H = float(sx1 - sx0), float(sy1 - sy0)
@@ -181,7 +185,7 @@ def facce_sullo_steso(faces, panels, girate, scala, box, gradi):
     indietro = matrice(op)
     for f in faces:
         p = panels.get(f["name"])
-        if p is None or uniforme(f["tex"]) is not None:
+        if p is None:
             continue
         bx0, by0, bx1, by1 = (round(c * scala) for c in (p.x0, p.y0, p.x1, p.y1))
         g = (girate or {}).get(f["name"])

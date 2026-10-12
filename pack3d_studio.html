@@ -2941,9 +2941,36 @@ async function preparaTexture(){
   textureGlb = tex.map((t, i) => Object.assign(t, {file: nomi[i]}));
   texBtn.textContent = tex.length > 1 ? 'Scarica le texture' : 'Scarica texture';
   texBtn.style.display = dlBtn.style.display;
-  if (tex.length === 1)
+  if (tex.length === 1){
     aGlam({type: 'pack3d:texture', nome: nomi[0], blob: tex[0].blob,
            larghezza: tex[0].lato[0], altezza: tex[0].lato[1], glb: blob.size});
+    preparaTemplate(blob);
+  }
+}
+
+/* ----------------------------- il template PSD ---------------------------- */
+// In Glam ogni modello ha «Scarica Template»: un PSD con la texture e le
+// guide UV, su cui il grafico appoggia il nuovo artwork (pack3d/template.py,
+// GLAM.md sezione 9). Lo fa lo Space dal GLB appena ricevuto, e la pagina lo
+// passa a Glam con pack3d:template, legato al modello dalla misura del GLB
+// come la texture. Solo dentro Glam e solo con una texture sola: fuori da
+// Glam non c'e' dove scaricarlo. Se non riesce, il modello e la texture ci
+// sono lo stesso. La risposta si legge con arrayBuffer() e non con blob():
+// Glam intercetta Response.blob() per prendersi il GLB.
+async function preparaTemplate(blob){
+  if (window.parent === window) return;
+  let psd;
+  try{
+    const r = await fetch(url('/api/template'), {method: 'POST', body: blob,
+                                                 headers: {'Content-Type': 'model/gltf-binary'}});
+    if (r.status !== 200) return;
+    psd = await r.arrayBuffer();
+  }catch(e){ return; }
+  // nel frattempo e' arrivato un altro modello
+  if (blob !== glbBlob) return;
+  const base = glbName.replace(/\.glb$/i, '') || 'modello';
+  aGlam({type: 'pack3d:template', nome: base + '_template.psd',
+         blob: new Blob([psd], {type: 'image/vnd.adobe.photoshop'}), glb: blob.size});
 }
 
 texBtn.onclick = () => {

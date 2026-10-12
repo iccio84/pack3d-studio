@@ -24,6 +24,9 @@ legge solo il pezzo (`sed -n 'A,Bp'`, o Read con offset e limit).
   tinte tolte; per l'astuccio il telaio di ogni faccia e il riscontro.
 - `pack3d/texture.py`: la texture a parte, dal GLB: quella che la pagina fa
   scaricare e che va nella sezione texture di Glam.
+- `pack3d/template.py`: il template PSD, dal GLB, per «Scarica Template» di
+  Glam: la texture e le guide UV a livelli, come il template ufficiale.
+  Lo chiede la pagina (`/api/template`), lo mandano la routine e lo Space.
 - `pack3d/controllo.py`: il controllo dell'AI. **Non si cambia da soli**:
   quello che considera un difetto si propone in bozza (CODA.md).
 
