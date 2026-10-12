@@ -6,6 +6,7 @@ e' pubblico. Qui c'e' solo lo strumento.
 
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
+    python3 prove/parco.py stesi CASI USCITA [--solo a,b]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
@@ -25,6 +26,13 @@ costruzione e le quattro viste (`pack3d.vista`).
 `confronta` dice quali modelli sono cambiati fra due costruzioni, con gli
 avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
 Le immagini finiscono in DIR, di serie DOPO/confronto.
+
+`stesi` controlla che la texture di ogni modello sia lo steso del suo PDF
+(REGOLE.md, *La texture e' lo steso*): cerca ogni texture sulla prima pagina
+del PDF, girata di 0, 90, 180 o 270 gradi e a scale diverse, e dice dove
+combacia meglio. Deve combaciare dritta, a scala uniforme. Esce con 1 se una
+texture combacia meglio girata; una texture che non si ritrova (un PDF che si
+rende con il DT sopra la grafica) lo dice, ma non conta come errore.
 
 `spazio` prova un caso sullo Space vero, dopo una pubblicazione: aspetta che
 /api/ping dica la versione di questo clone (`pack3d/versione.py`), cioe' che
@@ -1236,6 +1244,86 @@ def approvato(args):
         cod, "in Glam" if in_glam else "Glam non l'ha preso", n))
 
 
+# `stesi`: una texture si cerca sulla pagina resa a STESI_DPI, girata e a
+# scale da 40 a 400 dpi; combacia se la correlazione supera STESI_SOGLIA
+STESI_DPI = 24.0
+STESI_SOGLIA = 0.3
+
+
+def _correlazione(P, t):
+    """La correlazione normalizzata di `t` su `P` (grigi, `t` piu' piccolo):
+    `(massimo, y, x)`."""
+    import numpy as np
+    H, W = P.shape
+    h, w = t.shape
+    tz = t - t.mean()
+    nt = np.sqrt((tz ** 2).sum())
+    if h > H or w > W or nt < 1e-6:
+        return -1.0, 0, 0
+    F = (H + h, W + w)
+    num = np.fft.irfft2(np.fft.rfft2(P, F) * np.fft.rfft2(tz[::-1, ::-1], F),
+                        F)[h - 1:H, w - 1:W]
+
+    def finestra(A):
+        S = np.cumsum(np.cumsum(np.pad(A, ((1, 0), (1, 0))), 0), 1)
+        return S[h:, w:] - S[:-h, w:] - S[h:, :-w] + S[:-h, :-w]
+    s1, s2 = finestra(P), finestra(P ** 2)
+    var = s2 - s1 ** 2 / (h * w)
+    c = num / (np.sqrt(np.maximum(var, 1e-9)) * nt)
+    c[var < 1e-3 * h * w] = -1
+    k = np.unravel_index(np.argmax(c), c.shape)
+    return float(c[k]), int(k[0]), int(k[1])
+
+
+def stesi(args):
+    """Ogni texture contro la pagina del suo PDF: dritta, a scala uniforme."""
+    import io
+    import numpy as np
+    import pypdfium2 as pdfium
+    from PIL import Image
+    from pack3d import texture
+    girate = 0
+    for caso in _casi(args.casi, args.solo):
+        try:
+            with open(os.path.join(args.uscita, caso["nome"] + ".glb"), "rb") as fh:
+                glb = fh.read()
+        except OSError:
+            continue
+        pagine = []
+        for f in caso["file"]:
+            doc = pdfium.PdfDocument(os.path.join(args.casi, "parco", "pdf", f))
+            pagine.append(np.asarray(doc[0].render(scale=STESI_DPI / 72.0)
+                                     .to_pil().convert("L"), float))
+        for t in texture.texture(glb, 100000):
+            im = Image.open(io.BytesIO(t["dati"])).convert("L")
+            meglio = None
+            for k in range(4):
+                g = im.rotate(90 * k, expand=True)
+                for dpi in np.geomspace(40, 400, 60):
+                    w = max(1, round(g.width * STESI_DPI / dpi))
+                    h = max(1, round(g.height * STESI_DPI / dpi))
+                    if w < 8 or h < 8:
+                        continue
+                    a = np.asarray(g.resize((w, h), Image.BILINEAR), float)
+                    for i, P in enumerate(pagine):
+                        c = _correlazione(P, a)[0]
+                        if meglio is None or c > meglio[0]:
+                            meglio = (c, 90 * k, dpi, i)
+            c, giro, dpi, i = meglio
+            if c < STESI_SOGLIA:
+                esito = "non si ritrova sulla pagina"
+            elif giro:
+                esito = "GIRATA di %d gradi" % giro
+                girate += 1
+            else:
+                esito = "dritta"
+            print("%-30s %-12s %5d x %-5d  %s (pdf %d, %.0f dpi, correlazione %.2f)"
+                  % (caso["nome"], t["nome"], im.width, im.height, esito, i + 1,
+                     dpi, c))
+    if girate:
+        raise SystemExit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cosa", required=True)
@@ -1252,6 +1340,13 @@ def main():
     k.add_argument("dopo")
     k.add_argument("--immagini", help="dove salvare le viste affiancate")
     k.set_defaults(fai=confronta)
+    t = sub.add_parser("stesi", help="controlla che ogni texture sia lo steso "
+                                     "del suo PDF, dritta")
+    t.add_argument("casi", help="clone del repository privato dei casi")
+    t.add_argument("uscita", help="la cartella di una costruzione del parco")
+    t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                   help="solo questi casi, separati da virgole")
+    t.set_defaults(fai=stesi)
     s = sub.add_parser("spazio", help="prova un caso sullo Space vero, "
                                       "appena ripartito col codice di qui")
     s.add_argument("url", help="per esempio https://iccio-maurizio.hf.space")

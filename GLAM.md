@@ -235,18 +235,23 @@ cancella il suo. Così in Glam non restano casi fantasma.
 ## 8. La texture del modello
 
 Oltre al GLB, ogni modello ha la sua **texture a parte**: l'immagine che il
-GLB usa come colore, con le stesse UV (REGOLE.md, *La texture a parte*). In
-Glam va nella **sezione texture del modello** - il riquadro «Texture modello
-selezionato», la tabella `user_textures` col `model_key` del modello
-(`up_<id>`), il file nel bucket `textures` - come una texture caricata a mano
-con «Carica texture».
+GLB usa come colore, con le stesse UV. È **lo steso del PDF**: la grafica
+senza disegno tecnico, nel verso in cui sta nel file, inquadrata sul DT
+(REGOLE.md, *La texture è lo steso*). Chi vuole una variante ci sovrappone il
+nuovo artwork - stesso DT, stesso verso, stessa scala - e la carica sullo
+stesso modello: ogni cosa torna al suo posto. In Glam va nella **sezione
+texture del modello** - il riquadro «Texture modello selezionato», la tabella
+`user_textures` col `model_key` del modello (`up_<id>`), il file nel bucket
+`textures` - come una texture caricata a mano con «Carica texture».
 
 Glam mette la texture scelta su tutti i materiali del modello che hanno un
-colore da immagine. Per questo arriva solo per i modelli che ne hanno **una**:
-tutti, l'astuccio compreso (ha le facce in un atlante), tranne il
-riempimento, che ne ha due (vassoio e pack) e le dà solo da scaricare. Al
-massimo 5000 px per lato, il limite di «Carica texture»: lo Space riduce in
-proporzione quelle più grandi.
+colore da immagine; il rovescio e il taglio del cartoncino sono colori pieni,
+senza texture, e restano come sono. Per questo la texture arriva solo per i
+modelli che ne hanno **una**, cioè quasi tutti. Ne hanno due la coppa col
+tappo e il cono col lid, che vengono da due PDF, e il riempimento (vassoio e
+pack): quelle si scaricano dalla pagina. Al massimo 5000 px per lato, il
+limite di «Carica texture»: lo Space riduce in proporzione quelle più
+grandi.
 
 **Dalla pagina** - il modello costruito nell'iframe. Quando il modello è
 pronto la pagina manda alla finestra che la ospita, solo se è della stessa
@@ -410,7 +415,7 @@ Da incollare dopo i testi qui sopra. Non servono segreti nuovi:
 `PACK3D_IMPORT_TOKEN` c'è già.
 
 ```text
-Ogni modello costruito da PDF deve avere anche la sua texture nella sezione texture del modello ("Texture modello selezionato"), come se l'utente l'avesse caricata con "Carica texture". Il contratto completo è in GLAM.md, sezione 8, del repository iccio84/pack3d-studio.
+Ogni modello costruito da PDF deve avere anche la sua texture nella sezione texture del modello ("Texture modello selezionato"), come se l'utente l'avesse caricata con "Carica texture". La texture è lo steso del PDF, senza disegno tecnico: chi vuole una variante ci sovrappone il nuovo artwork e la carica sullo stesso modello. Il contratto completo è in GLAM.md, sezione 8, del repository iccio84/pack3d-studio.
 
 1. Dalla pagina dello Space. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già "pack3d:built" dall'iframe, ascolta anche { type: "pack3d:texture", nome, blob, larghezza, altezza, glb }, con lo stesso controllo e.origin === window.location.origin, e solo se blob è un Blob di tipo image/jpeg, image/png o image/webp. Tieni l'ultima ricevuta (può arrivare prima o dopo "pack3d:built", e più di una volta). Quando salvi il modello arrivato con "pack3d:built", se la texture tenuta ha glb uguale a blob.size di quel modello, subito dopo aver salvato il modello salva anche la texture per lui, con le stesse funzioni del server di "Carica texture": file nel bucket "textures", riga in user_textures con model_key = "up_" + id del modello appena salvato, name = nome, mime_type = il tipo del blob. Se la texture non si salva, il modello resta salvato: mostra solo un toast "Texture non salvata". Quando arriva un "pack3d:built" con un GLB nuovo, la texture tenuta vale solo se il suo glb è uguale alla misura del nuovo GLB.
 

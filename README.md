@@ -29,6 +29,7 @@ mappata sulle facce giuste.
 | `pack3d/ballotin.py` | il ballotin, la scatola a tronco di piramide con gli spigoli a lente: la fustella letta faccia per faccia |
 | `pack3d/materiali.py` | il materiale del film dai DT secondari: alluminio, white plate e vernice opaca diventano metallo e ruvidita' nel GLB |
 | `pack3d/riempimento.py` | il riempimento: il vassoio espositore pieno dei suoi flowpack, un GLB solo con il flowpack una volta e un nodo per pezzo |
+| `pack3d/steso.py` | la texture di ogni modello e' lo steso del PDF, pulito, nel verso del foglio e inquadrato sul DT: ci si sovrappone il nuovo artwork di una variante |
 | `pack3d/texture.py` | la texture a parte: l'immagine del colore del GLB, da scaricare dalla pagina e per la sezione texture di Glam Lab |
 | `pack3d/rilievo.py` | l'embossing (o il debossing) dalla sua lastra: una mappa delle normali che mette in rilievo marchi e disegni sul modello |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |

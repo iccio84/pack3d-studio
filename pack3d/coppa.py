@@ -63,6 +63,11 @@ ROSSO = "(255, 0, 0)"
 # perche' le UV si calcolano vertice per vertice sull'arco vero.
 LATI = 256
 
+# Le UV di un pezzo di colore pieno - il rovescio bianco: `Maglia.giro` con
+# TINTA al posto della funzione delle UV. Sul modello e' un materiale senza
+# texture, e la texture resta lo steso e basta (`pack3d.steso`).
+TINTA = "tinta"
+
 
 # --------------------------------------------------------------------------- #
 # i tracciati della pagina, anche dentro i form
@@ -1385,7 +1390,7 @@ def riconosci(pdf):
 
 
 # --------------------------------------------------------------------------- #
-# le texture: tre ritagli dei due fogli in un atlante solo
+# le texture: lo steso di ogni foglio, e i ritagli dentro
 # --------------------------------------------------------------------------- #
 def ritagli(pdf, riquadri, dpi, regione, lastre_extra=()):
     """`({nome: immagine}, avvisi)`: i riquadri del foglio (pt) puliti.
@@ -1418,84 +1423,34 @@ def ritagli(pdf, riquadri, dpi, regione, lastre_extra=()):
 
 @dataclass
 class Zona:
-    """Un ritaglio dentro l'atlante: dove sta, e quale riquadro del foglio."""
+    """Un ritaglio dentro lo steso del suo foglio: dove sta, e quale riquadro
+    del foglio (`zona_nello_steso`)."""
     x: int
     y: int
     w: int
     h: int
     riquadro: tuple            # pt
-    W: int = 1                 # misure dell'atlante, per normalizzare
+    W: int = 1                 # misure dello steso, per normalizzare
     H: int = 1
 
     def uv(self, X, Y):
-        """UV dell'atlante per i punti (X, Y) del foglio, in pt."""
+        """UV dello steso per i punti (X, Y) del foglio, in pt."""
         x0, y0, x1, y1 = self.riquadro
         px = self.x + (np.asarray(X) - x0) / (x1 - x0) * self.w
         py = self.y + (np.asarray(Y) - y0) / (y1 - y0) * self.h
         return px / self.W, py / self.H
 
 
-def atlante(immagini, giri=None):
-    """Mette le immagini in un atlante solo: `(atlante, {nome: Zona})`.
-
-    `immagini` e' {nome: (PIL.Image, riquadro pt)}; l'anello va ripetuto,
-    e `giri` dice quante volte, affiancato a se stesso. Lo sleeve sta sopra
-    da solo, sotto il corpo del tappo, l'anello e la toppa bianca del
-    rovescio. Fra i pezzi 16 pixel di margine, riempiti col colore del bordo,
-    perche' il filtro della scheda video non peschi nel vicino.
-    """
-    from PIL import Image
-    giri = giri or {}
-    pad = 16
-    pezzi = {}
-    for nome, (im, riq) in immagini.items():
-        n = giri.get(nome, 1)
-        if n > 1:
-            fila = Image.new("RGB", (im.width * n, im.height))
-            for k in range(n):
-                fila.paste(im, (k * im.width, 0))
-            x0, y0, x1, y1 = riq
-            riq = (x0, y0, x0 + (x1 - x0) * n, y1)
-            im = fila
-        pezzi[nome] = (im.convert("RGB"), riq)
-    bianco = Image.new("RGB", (8, 8), BIANCO)
-    pezzi["bianco"] = (bianco, (0.0, 0.0, 1.0, 1.0))
-    # sopra lo sleeve; sotto, da sinistra, il corpo e una colonna con
-    # l'anello e il bianco
-    posti = {}
-    x = y = 0
-    alto = 0
-    if "sleeve" in pezzi:
-        im = pezzi["sleeve"][0]
-        posti["sleeve"] = (0, 0)
-        y = im.height + pad
-    riga = ["corpo"] if "corpo" in pezzi else []
-    for nome in riga:
-        im = pezzi[nome][0]
-        posti[nome] = (x, y)
-        x += im.width + pad
-        alto = max(alto, im.height)
-    yy = y
-    for nome in ("anello", "fondo", "bianco"):
-        if nome in pezzi:
-            im = pezzi[nome][0]
-            posti[nome] = (x, yy)
-            yy += im.height + pad
-    alto = max(alto, yy - y)
-    W = max(p[0] + pezzi[k][0].width for k, p in posti.items())
-    H = max(p[1] + pezzi[k][0].height for k, p in posti.items())
-    A = Image.new("RGB", (W + pad, H + pad), BIANCO)
-    zone = {}
-    for nome, (px, py) in posti.items():
-        im, riq = pezzi[nome]
-        # il margine: il bordo del pezzo allungato tutt'attorno
-        largo = im.resize((im.width + 2 * pad, im.height + 2 * pad))
-        A.paste(largo, (max(px - pad, 0), max(py - pad, 0)))
-        A.paste(im, (px, py))
-        zone[nome] = Zona(px, py, im.width, im.height, riq)
-    for z in zone.values():
-        z.W, z.H = A.size
-    return A, zone
+def zona_nello_steso(riquadro, regione, dpi, steso):
+    """La `Zona` del `riquadro` del foglio (pt) dentro lo steso del foglio,
+    che e' la `regione` resa a `dpi` coi pixel arrotondati come quelli dei
+    ritagli (`folding.rasterize_panels`): le UV di `Zona.uv` cadono sullo
+    steso, la texture del modello (`pack3d.steso`)."""
+    sc = dpi / 72.0
+    sx0, sy0 = round(regione[0] * sc), round(regione[1] * sc)
+    x0, y0, x1, y1 = (round(c * sc) for c in riquadro)
+    return Zona(x0 - sx0, y0 - sy0, x1 - x0, y1 - y0, tuple(riquadro),
+                steso.width, steso.height)
 
 
 # --------------------------------------------------------------------------- #
@@ -1621,14 +1576,17 @@ def _marchio(s, rho0, rho1, sleeve, riquadro):
 # la maglia: solidi di rivoluzione
 # --------------------------------------------------------------------------- #
 class Maglia:
-    """Vertici, UV e triangoli, e le parti per nome."""
+    """Vertici, UV e triangoli, e le parti per nome. Dopo `arrays`,
+    `tinta` dice quali triangoli sono il rovescio bianco, di colore pieno."""
 
     def __init__(self):
         self.V, self.UV, self.T = [], [], []
+        self.tinte = []
         self.n = 0
         self.parti = {}
+        self.tinta = None
 
-    def giro(self, profilo, uv, inizio=0.0, lati=LATI):
+    def giro(self, profilo, uv, inizio=0.0, lati=LATI, tagli=None):
         """Il solido di rivoluzione del profilo `[(r, y)]` attorno all'asse y.
 
         La faccia che si vede e' a destra di chi percorre il profilo:
@@ -1636,29 +1594,50 @@ class Maglia:
         interna guarda dentro. `uv(j, s, teta)` da' le UV del punto j del
         profilo, a `s` mm di profilo dal primo punto, all'angolo `teta` -
         teta e' una fila, e la colonna in teta = inizio + 2pi e' doppia: la
-        cucitura ha le sue UV.
+        cucitura ha le sue UV. Con `uv` = TINTA il pezzo e' di colore pieno.
+
+        `tagli`, se ci sono, sono altri angoli dove la colonna e' doppia: il
+        giro si fa a settori, e `uv(j, s, teta, k)` sa in quale. Serve a un
+        motivo che si ripete attorno - l'anello del tappo - preso una volta
+        sola dallo steso: ogni settore e' un modulo, e nessun triangolo ne
+        scavalca il bordo.
         """
         P = np.asarray(profilo, float)
         s = np.r_[0.0, np.cumsum(np.hypot(*np.diff(P, axis=0).T))]
-        teta = inizio + 2 * math.pi * np.arange(lati + 1) / lati
+        fine = inizio + 2 * math.pi
+        bordi = [inizio] + sorted(tagli or []) + [fine]
+        for k in range(len(bordi) - 1):
+            a, b = bordi[k], bordi[k + 1]
+            n = max(1, int(math.ceil((b - a) * lati / (2 * math.pi) - 1e-9)))
+            teta = a + (b - a) * np.arange(n + 1) / n
+            self._striscia(P, s, teta, uv, None if not tagli else k)
+        return s[-1]
+
+    def _striscia(self, P, s, teta, uv, k):
+        """Le righe del profilo `P` agli angoli `teta`, e i loro triangoli."""
         base = self.n
+        colonne = len(teta)
+        pieno = uv is TINTA
         for j, (r, y) in enumerate(P):
-            u, v = uv(j, s[j], teta)
-            self.V.append(np.c_[r * np.sin(teta), np.full(lati + 1, y),
+            if pieno:
+                u = v = np.zeros(teta.shape)
+            else:
+                u, v = uv(j, s[j], teta) if k is None else uv(j, s[j], teta, k)
+            self.V.append(np.c_[r * np.sin(teta), np.full(colonne, y),
                                 r * np.cos(teta)])
             self.UV.append(np.c_[np.broadcast_to(u, teta.shape),
                                  np.broadcast_to(v, teta.shape)])
-        self.n += len(P) * (lati + 1)
-        i = np.arange(lati)
+        self.n += len(P) * colonne
+        i = np.arange(colonne - 1)
         tris = []
         for j in range(len(P) - 1):
-            a = base + j * (lati + 1) + i
-            b, c = a + 1, a + lati + 1
+            a = base + j * colonne + i
+            b, c = a + 1, a + colonne
             d = c + 1
             tris.append(np.c_[a, b, d])
             tris.append(np.c_[a, d, c])
         self.T.extend(tris)
-        return s[-1]
+        self.tinte.extend(np.full(len(t), pieno) for t in tris)
 
     def falda(self, V, UV):
         """Una superficie a righe: `V[i]` e `UV[i]` sono i vertici della riga
@@ -1679,6 +1658,7 @@ class Maglia:
             d = c + 1
             self.T.append(np.c_[a, b, d])
             self.T.append(np.c_[a, d, c])
+            self.tinte.extend([np.zeros(len(i), bool)] * 2)
 
     def segna(self, nome, primo):
         self.parti[nome] = (primo, self.triangoli())
@@ -1699,6 +1679,7 @@ class Maglia:
         A = np.linalg.norm(np.cross(V[T[:, 1]] - V[T[:, 0]],
                                     V[T[:, 2]] - V[T[:, 0]]), axis=1)
         tieni = A > 1e-12
+        self.tinta = np.concatenate(self.tinte)[tieni]
         prima = np.r_[0, np.cumsum(tieni)]
         parti = [(nome, int(prima[a]), int(prima[b]))
                  for nome, (a, b) in sorted(self.parti.items(),
@@ -1886,13 +1867,17 @@ def riscontri(c, T):
 # --------------------------------------------------------------------------- #
 def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
                tex_max=8192, carta=None):
-    """`(V, UV, T, atlante, parti, meta)` della coppa, del tappo, o dei due.
+    """`(V, UV, T, stesi, parti, meta, tinta)` della coppa, del tappo, o dei
+    due.
 
     V in mm, asse della coppa su y, base a y = 0, fronte verso +z. `parti`
     e' `[(nome, primo, ultimo)]` sui triangoli: la coppa e il tappo sono due
-    nodi del GLB, e il tappo si toglie. Il dpi si abbassa fino a quello che
-    l'atlante terra' davvero sotto `tex_max`, come per il vassoio: rendere
-    lo sleeve a 300 dpi per poi ridurlo a 1700 punti e' memoria buttata.
+    nodi del GLB, e il tappo si toglie. `stesi` sono le texture delle parti,
+    nello stesso ordine: lo steso del foglio di ognuna (`pack3d.steso`).
+    `tinta` dice i triangoli del rovescio bianco, di colore pieno. Il dpi si
+    abbassa fino a quello che lo steso terra' davvero sotto `tex_max`, come
+    per il vassoio: rendere lo sleeve a 300 dpi per poi ridurlo a 1700 punti
+    e' memoria buttata.
     `carta` e' lo spessore del cartoncino in mm, se l'utente l'ha
     dichiarato; senza, quello del cartiglio del Nutella POT.
     """
@@ -1901,6 +1886,7 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
     t_carta = CARTA if carta is None else float(carta)
     meta, avvisi = [], []
     immagini, giri = {}, {}
+    stesi, zone = {}, {}
     c = p = None
     Tc = None
     if pdf_coppa:
@@ -1916,13 +1902,17 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
         riq_f = (fx - R, fy - R, fx + R, fy + R)
         regione = (min(riq_s[0], riq_f[0]), min(riq_s[1], riq_f[1]),
                    max(riq_s[2], riq_f[2]), max(riq_s[3], riq_f[3]))
-        tex, avv = ritagli(pdf_coppa, {"sleeve": riq_s, "fondo": riq_f}, dpi,
+        tex, avv = ritagli(pdf_coppa, {"sleeve": riq_s, "fondo": riq_f,
+                                       "steso": regione}, dpi,
                            regione, lastre_extra)
         avvisi += ["sleeve: " + a for a in avv]
         immagini["sleeve"] = (tex["sleeve"], riq_s)
+        stesi["coppa"] = tex["steso"]
+        zone["sleeve"] = zona_nello_steso(riq_s, regione, dpi, tex["steso"])
         fondo = np.asarray(tex["fondo"].convert("L"), float)
         if (fondo < 200).mean() > 0.02:
             immagini["fondo"] = (tex["fondo"], riq_f)
+            zone["fondo"] = zona_nello_steso(riq_f, regione, dpi, tex["steso"])
         meta.append("coppa: alta %.1f mm, bocca %.1f, fondo %.1f, bordo "
                     "arrotolato %.1f, fondo rientrato %.1f - dalla vista montata "
                     "in miniatura, misurata a 1:%.2f sui cerchi del fondo"
@@ -1943,18 +1933,17 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
         riq_a = (ax0, ry0 - 3, ax1, ry1 + 3)
         regione = (min(riq_c[0], riq_a[0]), min(riq_c[1], riq_a[1]),
                    max(riq_c[2], riq_a[2]), max(riq_c[3], riq_a[3]))
-        tex, avv = ritagli(pdf_tappo, {"corpo": riq_c, "anello": riq_a}, dpi,
+        tex, avv = ritagli(pdf_tappo, {"corpo": riq_c, "anello": riq_a,
+                                       "steso": regione}, dpi,
                            regione, lastre_extra)
         avvisi += ["tappo: " + a for a in avv]
-        # l'anello e' righe: meta' risoluzione bastano, e l'atlante resta
-        # sotto gli 8192 punti anche ripetuto
-        an = tex["anello"]
-        an = an.resize((max(an.width // 2, 1), max(an.height // 2, 1)))
+        stesi["tappo"] = tex["steso"]
+        zone["corpo"] = zona_nello_steso(riq_c, regione, dpi, tex["steso"])
+        zone["anello"] = zona_nello_steso(riq_a, regione, dpi, tex["steso"])
         modulo = (ax1 - ax0) * PT2MM
         r_max = float(p.fuori[:, 1].max())
         giri["anello"] = int(math.ceil(2 * math.pi * r_max / modulo))
         immagini["corpo"] = (tex["corpo"], riq_c)
-        immagini["anello"] = (an, riq_a)
         meta.append("tappo: gonna di %.1f mm dentro, alta %.1f; piano del corpo "
                     "incassato di %.1f mm, largo %.1f - dalla sezione montata in "
                     "miniatura, a 1:%.2f sui cerchi del corpo"
@@ -1964,13 +1953,9 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
                     "stampa dell'anello e' casuale, come sul nastro il motivo "
                     "si ripete e sul retro si interrompe"
                     % (modulo, (ay1 - ay0) * PT2MM, giri["anello"]))
-    A, zone = atlante(immagini, giri)
-    bianco = zone["bianco"]
-    ub, vb = bianco.uv(0.5, 0.5)
-
-    def tinta(_j, _s, teta):
-        return np.full(teta.shape, ub), np.full(teta.shape, vb)
-
+    # la texture e' lo steso di ogni foglio (`pack3d.steso`), e il rovescio
+    # bianco un colore pieno
+    tinta = TINTA
     M = Maglia()
     if c is not None:
         s, m = c.steso, c.montata
@@ -2043,8 +2028,15 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
         ax0, ay0, ax1, ay1 = p.anello
         _x, ry0, _x2, ry1 = p.righe
 
-        def anello(_j, sj, teta):
-            X = ax0 + (teta - math.pi) * r_rif / PT2MM
+        # L'anello sullo steso c'e' una volta, e attorno al tappo si ripete:
+        # il giro si fa a settori, uno per modulo, e il settore k riprende il
+        # modulo dall'inizio (`Maglia.giro`, `tagli`)
+        passo_a = (ax1 - ax0) * PT2MM / r_rif
+        tagli_a = [math.pi + k * passo_a for k in range(1, giri["anello"])
+                   if k * passo_a < 2 * math.pi - 1e-6]
+
+        def anello(_j, sj, teta, k=0):
+            X = ax0 + (teta - math.pi) * r_rif / PT2MM - k * (ax1 - ax0)
             if sj <= S_su:
                 Y = ay1 - sj / S_su * (ay1 - ay0)
             else:
@@ -2060,7 +2052,7 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
                          by + r * np.cos(teta) / PT2MM)
 
         primo = M.triangoli()
-        M.giro(fuori, anello, math.pi)
+        M.giro(fuori, anello, math.pi, tagli=tagli_a)
         M.giro(piano, corpo, 0.0)
         for nome in ("sotto", "dentro", "orlo"):
             M.giro(Q[nome], tinta, 0.0)
@@ -2075,7 +2067,8 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
     if carta is not None:
         meta.append("carta: %.2f mm - dichiarata" % t_carta)
     V, UV, T, parti = M.arrays()
-    return V, UV, T, A, parti, meta + avvisi
+    return V, UV, T, [stesi[n] for n, _a, _b in parti], parti, meta + avvisi, \
+        M.tinta
 
 
 # --------------------------------------------------------------------------- #
@@ -2166,7 +2159,8 @@ def riscontri_cono(k):
 
 def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
                     tex_max=8192, carta=None):
-    """`(V, UV, T, atlante, parti, meta)` del cono, del lid, o dei due.
+    """`(V, UV, T, stesi, parti, meta, tinta)` del cono, del lid, o dei due:
+    come `costruisci`.
 
     V in mm, asse su y, punta a y = 0, fronte verso +z. Il cono e il lid sono
     due nodi del GLB, e il lid si toglie. Le generatrici dello steso vanno
@@ -2181,6 +2175,7 @@ def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
         raise ValueError("cono: nessun PDF")
     meta, avvisi = [], []
     immagini = {}
+    stesi, zone = {}, {}
     k = d = None
     riq_s = riq_c = None
     if pdf_cono:
@@ -2201,17 +2196,19 @@ def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
         bx, by = d.centro
         R = (d.abbondanza or d.r_taglio + 1.0) / PT2MM
         riq_c = (bx - R, by - R, bx + R, by + R)
-    # il dpi che l'atlante terra' davvero sotto `tex_max`: lo steso sopra, il
-    # lid sotto
-    largo = max((r[2] - r[0]) for r in (riq_s, riq_c) if r is not None)
-    alto = sum((r[3] - r[1]) for r in (riq_s, riq_c) if r is not None)
-    dpi = min(dpi, tex_max * 72.0 / max(largo, alto))
+    # il dpi che ogni steso terra' davvero sotto `tex_max`
+    lato = max(max(r[2] - r[0], r[3] - r[1]) for r in (riq_s, riq_c)
+               if r is not None)
+    dpi = min(dpi, tex_max * 72.0 / lato)
     if k is not None:
         s = k.steso
         tex, avv = ritagli(pdf_cono, {"sleeve": riq_s}, dpi, riq_s,
                            lastre_extra)
         avvisi += ["cono: " + a for a in avv]
         immagini["sleeve"] = (tex["sleeve"], riq_s)
+        # lo steso del cono e' il riquadro del suo settore
+        stesi["cono"] = tex["sleeve"]
+        zone["sleeve"] = zona_nello_steso(riq_s, riq_s, dpi, tex["sleeve"])
         lato, nota_lato = lato_sopra(k, tex["sleeve"], riq_s)
         k.sopra(lato)
         meta.append("cono: alto %.1f mm, bocca %.1f, punta %.1f, apre %.1f "
@@ -2237,6 +2234,8 @@ def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
                            lastre_extra)
         avvisi += ["lid: " + a for a in avv]
         immagini["corpo"] = (tex["corpo"], riq_c)
+        stesi["lid"] = tex["corpo"]
+        zone["corpo"] = zona_nello_steso(riq_c, riq_c, dpi, tex["corpo"])
         altri = [r for r in d.raggi if r < d.r_taglio - 0.05]
         meta.append("lid: disco di %.1f mm al taglio%s%s"
                     % (2 * d.r_taglio,
@@ -2244,13 +2243,9 @@ def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
                        if d.abbondanza else "",
                        ", l'area di sicurezza a %.1f" % (2 * altri[0])
                        if altri else ""))
-    A, zone = atlante(immagini)
-    bianco = zone["bianco"]
-    ub, vb = bianco.uv(0.5, 0.5)
-
-    def tinta(_j, _s, teta):
-        return np.full(teta.shape, ub), np.full(teta.shape, vb)
-
+    # la texture e' lo steso di ogni foglio (`pack3d.steso`), e il rovescio
+    # bianco un colore pieno
+    tinta = TINTA
     M = Maglia()
     chiuso = k is not None and d is not None and k.risvolto > 0
     r_cima = None
@@ -2409,4 +2404,5 @@ def costruisci_cono(pdf_cono=None, pdf_lid=None, dpi=300, lastre_extra=(),
                 M.giro(Q[nome], tinta, 0.0)
         M.segna("lid", primo)
     V, UV, T, parti = M.arrays()
-    return V, UV, T, A, parti, meta + avvisi
+    return V, UV, T, [stesi[n] for n, _a, _b in parti], parti, meta + avvisi, \
+        M.tinta

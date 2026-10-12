@@ -1,12 +1,14 @@
 """La texture del modello, a parte dal GLB.
 
-E' l'immagine che il GLB usa come colore del pack, con le stesse UV: messa al
-posto della grafica del modello - come fa Glam Lab con le texture della sua
-sezione - ogni cosa torna al suo posto. Un modello ne ha una sola, anche
-l'astuccio, che ha le facce in un atlante (`exporters.atlante`). Il
-riempimento ne ha due, quella del vassoio e quella del pack: a parte si danno
-tutte e due, ma Glam, che mette una texture sola su tutto il modello, non
-saprebbe dove metterle (`per_glam`).
+E' l'immagine che il GLB usa come colore del pack, con le stesse UV, ed e'
+lo steso del PDF: la grafica pulita, nel verso del foglio, inquadrata sul DT
+(`pack3d.steso`). Ci si sovrappone il nuovo artwork di una variante e la si
+rimette sul modello - come fa Glam Lab con le texture della sua sezione - e
+ogni cosa torna al suo posto. Un modello ne ha una per foglio: una quasi
+sempre; due la coppa col tappo e il cono col lid, che vengono da due PDF, e
+il riempimento, il vassoio e il pack. A parte si danno tutte, ma Glam, che
+mette una texture sola su tutto il modello, la riceve solo se e' una
+(`per_glam`).
 
 Glam accetta immagini fino a 5000 px di lato (`LATO_GLAM`). Una texture piu'
 grande - un display in HD arriva a 8192 px - si riduce in proporzione: le UV

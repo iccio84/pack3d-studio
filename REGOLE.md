@@ -3644,36 +3644,26 @@ Sul parco: 29 casi identici al byte; cambia solo il caso nuovo, che adesso e'
 chiuso sopra e sotto, col logo dell'aletta dritto sul cielo e il fronte curvo
 con i biscotti davanti.
 
-### Una texture sola: l'atlante delle facce
+### La texture e' lo steso
 
-Ogni faccia si costruisce con la sua immagine - il riquadro del suo pannello,
-girato - ma nel GLB le immagini stanno **in una texture sola**, un atlante
-(`exporters.atlante`): ogni faccia nel suo riquadro, comprese le tinte piene
-dell'interno, del taglio e del solco, e le UV che puntano li'. Ogni faccia
-tiene il suo materiale, col suo nome; la texture e' la stessa per tutti.
+L'astuccio non ha piu' un'immagine per faccia: la sua texture e' lo steso del
+PDF, come per tutte le famiglie (*La texture e' lo steso*). Lo steso si
+ritaglia dallo stesso foglio da cui escono le facce (`texture_astuccio`,
+`steso`): il riquadro del DT con un millimetro attorno, pixel per pixel come
+le facce. Ogni faccia stampata ci arriva dal suo pannello (`steso.
+facce_sullo_steso`): la sua UV passa per il giro della sua immagine
+(`girate`), per il riquadro del pannello sul foglio e per il giro del foglio
+(`gradi`), e lo steso torna nel verso del PDF. Ogni faccia tiene il suo
+materiale, col suo nome; l'interno, il taglio e il solco sono colori pieni.
 
-- **Perche'**: la texture si da' a parte (*La texture a parte*), e un viewer
-  che la cambia - Glam Lab mette la texture scelta su tutti i materiali che
-  ne hanno una - deve ritrovare ogni faccia al suo posto. Con un'immagine per
-  faccia, in Glam, il fronte finiva su tutte le facce.
-- **I bordi**: fra un riquadro e l'altro 8 px del bordo della faccia ripetuto
-  (`MARGINE_ATLANTE`), e le UV cadono sui centri dei pixel di bordo, mezzo
-  pixel dentro il riquadro, come faceva il bordo bloccato della texture di una
-  faccia sola: i livelli ridotti della texture (mipmap) non prendono il
-  colore della faccia accanto.
-- **Il lato**: entro il massimo della qualita', e se le facce non ci stanno
-  si riducono tutte della stessa misura. In HD (8192 px) non succede: sugli
-  astucci del parco gli atlanti stanno fra 2174 e 4458 px di lato, e nessuna
-  faccia si riduce. In "web" (1700 px) e' l'astuccio intero a stare in 1700
-  px, non piu' ogni faccia: e' la qualita' leggera, e lo e' di piu'.
-- **Il rilievo** va in un secondo atlante, delle normali, con gli stessi
-  riquadri, piatto dove la faccia non ne ha.
-
-Provato nel viewer della pagina e nelle viste del controllo su KC T8, Self
-Love chiuso e aperto e T10 aperto, da vicino e alla misura di un telefono:
-l'astuccio esce come prima, con differenze solo sui contorni del disegno -
-il ricampionamento, meno dello 0,6% dei pixel - e nessun colore che sborda
-da una faccia all'altra.
+- **Il riscontro**: per ogni faccia, 400 pixel presi a caso devono essere
+  quelli dello steso nel suo telaio (`steso.riscontro`); se una faccia non
+  torna, il build lo scrive con «STESO». Sul parco tornano tutte.
+- **Il rilievo** e' una mappa delle normali sullo steso (`rilievo.
+  mappa_dello_steso`): si gira l'altezza, poi si fanno le normali, perche' i
+  vettori di una mappa girata starebbero nel telaio di prima.
+- **La risoluzione** e' quella delle facce: lo steso esce dallo stesso foglio
+  a 300 dpi, entro gli 8192 px di lato.
 
 ## Finestre e rilievi
 
@@ -3762,15 +3752,13 @@ Tiefpragung vanno in dentro.
   con una lastra di prova - un disco in rilievo e uno in incavo - in
   model-viewer e nel viewer della pagina, che con l'origine UV in alto gira
   il verde (`normalScale` (1, -1)), come fa GLTFLoader.
-- **Sugli astucci** la mappa e' una per faccia, fatta come la sua texture: il
-  riquadro del pannello, girato degli stessi gradi (`girate`); la normale si
-  calcola dopo il giro, sull'altezza gia' girata - girare una mappa delle
-  normali vorrebbe dire girarne anche i vettori. Nel GLB le mappe stanno in
-  un atlante delle normali, negli stessi riquadri dell'atlante delle texture
-  (*Astucci*, *Una texture sola*). Provato su una copia del KC
-  T8 con la tinta `Kinder Orange` rinominata `Embossing`: le lettere "inder"
-  spariscono dalla texture e restano in rilievo bianco, al loro posto, sul
-  fronte e sul cielo.
+- **Sugli astucci** la mappa e' una sola, sullo steso, come la texture
+  (*Astucci*, *La texture e' lo steso*): l'altezza si prende sul riquadro
+  dello steso, si gira nel verso del PDF e solo dopo si fanno le normali -
+  girare una mappa delle normali vorrebbe dire girarne anche i vettori
+  (`rilievo.mappa_dello_steso`). Provato su una copia del KC T8 con la tinta
+  `Kinder Orange` rinominata `Embossing`: le lettere "inder" spariscono dalla
+  texture e restano in rilievo bianco, al loro posto, sul fronte e sul cielo.
 - **Il controllo dell'AI non lo vede**: il suo rasterizzatore non legge le
   normali. Guarda la grafica, che e' quella di prima.
 
@@ -5333,32 +5321,63 @@ riquadro del controllo.
 - L'astuccio aperto dentro l'espositore.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
 
-## La texture a parte
+## La texture e' lo steso
 
-Oltre al GLB, ogni modello ha **la sua texture a parte**: l'immagine che il
-GLB usa come colore, con le stesse UV. Messa al posto della grafica del
-modello, ogni cosa torna al suo posto. La regola e' in `pack3d/texture.py` e,
-uguale, nella pagina (`textureDelGlb`).
+La texture di ogni modello e' **lo steso del PDF**: la grafica pulita - senza
+disegno tecnico, quote, legende, aree riservate, come la pulisce la pipeline -
+**nel verso in cui sta nel PDF**, **inquadrata sul DT**, a scala uniforme. Le
+UV del modello puntano li'. Chi vuole una variante prende la texture, ci
+sovrappone il nuovo artwork - stesso DT, stesso verso, stessa scala - e la
+rimette sul modello: ogni cosa torna al suo posto.
 
-- **Una per modello**: flowpack, pouch, coppa e cono, vassoio e display,
-  ballotin, scatola a punta, astuccio (che ha le facce nell'atlante, vedi
-  *Astucci*). Il **riempimento** ne ha due, il vassoio e il pack, coi nomi
-  delle mesh: `..._texture_vassoio.jpg`, `..._texture_flowpack.jpg`.
+Le famiglie lavorano ognuna nel suo telaio - il foglio girato sul verso della
+grafica (`artwork.pagina_girata`), il film coricato, con sotto le strisce delle
+tinte - e alla fine si riporta tutto allo steso (`pack3d/steso.py`), senza
+toccare la costruzione: le verifiche girano prima, sui telai di sempre.
+
+| famiglia | lo steso | cosa si fa alla fine |
+|---|---|---|
+| flowpack | il rettangolo del film | si gira indietro dei gradi del foglio, e dei 90 del film coricato; con lei la mappa del metallo |
+| pouch | il foglio della busta | niente: era gia' lo steso |
+| vassoio | il DT con un millimetro attorno, invece della pagina intera | via la coda delle tinte, ritaglio, giro indietro |
+| display con plancia | il riquadro della fustella | via la coda delle tinte, giro indietro |
+| ballotin, scatola a punta | il DT con un millimetro attorno | via le strisce del rovescio e del taglio |
+| astuccio | il DT con un millimetro attorno | lo steso al posto delle facce (*Astucci*, *La texture e' lo steso*) |
+| coppa, cono | uno per foglio: lo sleeve e il fondo, il tappo; il cono, il lid | il rovescio bianco e' un colore pieno; l'anello del tappo, che sullo steso c'e' una volta, attorno si ripete a settori, uno per modulo, e nessun triangolo ne scavalca il bordo |
+| riempimento | quello del vassoio e quello del pack | niente: sono i due modelli com'escono |
+
+- **Le tinte piene** - il rovescio, il taglio, il solco - non stanno nella
+  texture: sono materiali senza texture, col colore in `baseColorFactor`,
+  lineare come vuole glTF (`steso.lineare`). Il viewer della pagina e le viste
+  del controllo lo riportano in sRGB.
+- **Una texture per foglio**: una quasi sempre; due la coppa col tappo e il
+  cono col lid, che vengono da due PDF, e il riempimento.
+- **Il modello non cambia**: sul parco le viste del controllo sono quelle di
+  prima, a meno della compressione JPEG. Cambiano solo il file della texture e
+  le UV, insieme.
+
+### La texture a parte
+
+Oltre al GLB, la texture si da' **a parte**. La regola e' in
+`pack3d/texture.py` e, uguale, nella pagina (`textureDelGlb`): un file per
+immagine di colore, coi nomi delle mesh se sono piu' d'una
+(`..._texture_coppa.jpg`, `..._texture_tappo.jpg`).
+
 - **Al massimo 5000 px di lato** (`LATO_GLAM`), il limite di Glam Lab: una
-  texture piu' grande - un display in HD arriva a 8192 - si riduce in
+  texture piu' grande - un display in HD arriva a 7000 - si riduce in
   proporzione, e le UV, che sono frazioni dell'immagine, restano giuste.
   Sotto il limite esce coi byte del GLB, senza ricomprimerla.
 - **Solo il colore**: le mappe del metallo, della ruvidita' e del rilievo
   restano nel modello. Glam cambia solo il colore.
-- **Nella pagina** c'e' «Scarica texture» («Scarica le texture» per il
-  riempimento) accanto a «Scarica GLB»; a differenza di quello non svuota la
+- **Nella pagina** c'e' «Scarica texture» («Scarica le texture» se sono piu'
+  d'una) accanto a «Scarica GLB»; a differenza di quello non svuota la
   pagina.
 - **In Glam** va nella sezione texture del modello (GLAM.md, sezione 8): dalla
   pagina con `pack3d:texture`, dalla routine e dallo Space con
   `/api/import-texture`, dopo il modello. **Solo se e' una**: Glam mette la
-  texture scelta su tutti i materiali del modello, e due non saprebbe dove
-  metterle. Se Glam non la prende, il modello c'e' lo stesso: si scrive e si
-  va avanti.
+  texture scelta su tutti i materiali con una texture, e due non saprebbe
+  dove metterle. Se Glam non la prende, il modello c'e' lo stesso: si scrive
+  e si va avanti.
 
 ## Casi calibrati
 

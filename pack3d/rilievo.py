@@ -144,55 +144,31 @@ def _non_si_legge(quali):
             "senza" % ", ".join(sorted(quali)))
 
 
-def sulle_facce(pdf, panels, faces, girate=None, page_no=0, dpi=DPI):
-    """Il rilievo sulle facce di un astuccio: a ogni faccia esterna che ne ha,
-    la sua mappa delle normali in `f["normale"]`. La riga per chi guarda, o
-    None se il file non ha lastre di rilievo.
-
-    La mappa di una faccia e' fatta come la sua texture (`folding.
-    rasterize_panels` e `artwork.gira_sulla_grafica`): il riquadro del suo
-    pannello, girato degli stessi gradi (`girate`). La normale si calcola
-    dopo il giro, sull'altezza gia' girata: girare una mappa delle normali
-    vorrebbe dire girarne anche i vettori."""
-    from .artwork import GIRO_TEXTURE
+def mappa_dello_steso(pdf, riquadro, misura_tex, px_mm_tex, giro=None,
+                      page_no=0):
+    """`(mappa delle normali, riga)` per lo steso di un astuccio
+    (`pack3d.steso`): il `riquadro` del foglio di lavoro - in punti - reso a
+    `misura_tex` pixel, `px_mm_tex` per mm, e girato con la trasposizione
+    `giro` nel verso del PDF. Si gira l'ALTEZZA, poi si fanno le normali: i
+    vettori di una mappa girata starebbero nel telaio di prima. `(None,
+    None)` se il file non ha lastre di rilievo, o se non si leggono."""
     quali = lastre(pdf, page_no)
     if not quali:
-        return None
-    nomi = sorted({f["name"] for f in faces if f["name"] in panels})
-    if not nomi:
-        return None
-    x0 = min(panels[n].x0 for n in nomi)
-    y0 = min(panels[n].y0 for n in nomi)
-    x1 = max(panels[n].x1 for n in nomi)
-    y1 = max(panels[n].y1 for n in nomi)
-    s = dpi / 72.0
-    W, H = max(1, int(round((x1 - x0) * s))), max(1, int(round((y1 - y0) * s)))
+        return None, None
+    px_mm = min(float(px_mm_tex), DPI / 25.4)
+    k = px_mm / float(px_mm_tex)
+    W = max(1, int(round(misura_tex[0] * k)))
+    H = max(1, int(round(misura_tex[1] * k)))
     try:
-        h = altezze(pdf, quali, (x0, y0, x0 + W / s, y0 + H / s), (W, H),
-                    page_no, dpi=dpi)
+        h = altezze(pdf, quali, riquadro, (W, H), page_no, dpi=px_mm * 25.4)
     except Exception:                                   # noqa: BLE001
         h = None
     if h is None or not np.any(h):
-        return _non_si_legge(quali)
-    px_mm = dpi / 25.4
-    mappe = {}
-    for n in nomi:
-        p = panels[n]
-        a = h[int(round((p.y0 - y0) * s)):int(round((p.y1 - y0) * s)),
-              int(round((p.x0 - x0) * s)):int(round((p.x1 - x0) * s))]
-        if not a.size or not np.any(a):
-            continue
-        g = (girate or {}).get(n)
-        if g:
-            a = np.asarray(Image.fromarray(a.astype(np.float32))
-                           .transpose(GIRO_TEXTURE[g]), np.float32)
-        mappe[n] = normali(a, px_mm)
-    for f in faces:
-        if f["name"] in mappe:
-            f["normale"] = mappe[f["name"]]
-    if not mappe:
-        return None
-    return _riga(quali, h)
+        return None, _non_si_legge(quali)
+    if giro is not None:
+        h = np.asarray(Image.fromarray(h.astype(np.float32)).transpose(giro),
+                       np.float32)
+    return normali(h, px_mm), _riga(quali, h)
 
 
 def mappa_del_dt(pdf, riquadro, misura_tex, righe_dt, px_mm_tex, page_no=0):

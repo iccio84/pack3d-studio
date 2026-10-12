@@ -18,7 +18,10 @@ legge solo il pezzo (`sed -n 'A,Bp'`, o Read con offset e limit).
   fanno a mano (UVW contro il DT, fronte sul fronte, marchio dritto, facce
   dell'astuccio, testate del flowpack, vassoio, plancia).
 - `pack3d/exporters.py`: il GLB (`write_glb_mesh`; per l'astuccio
-  `write_glb`, con le facce in un atlante, `atlante`).
+  `write_glb`, con lo steso al posto delle immagini delle facce).
+- `pack3d/steso.py`: la texture e' lo steso del PDF. Le famiglie ci arrivano
+  alla fine della costruzione: giro indietro, ritaglio sul DT, strisce delle
+  tinte tolte; per l'astuccio il telaio di ogni faccia e il riscontro.
 - `pack3d/texture.py`: la texture a parte, dal GLB: quella che la pagina fa
   scaricare e che va nella sezione texture di Glam.
 - `pack3d/controllo.py`: il controllo dell'AI. **Non si cambia da soli**:

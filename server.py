@@ -41,6 +41,9 @@ from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
                     rilievo, strati, vassoio, verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
+# la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
+# piu' di un costruttore
+from pack3d import steso as lo_steso
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
 from pack3d.flowpack import Flowpack, fin_on_surface
@@ -550,11 +553,18 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
     esito = {}
+    # lo steso, la texture del modello: il DT con un millimetro attorno,
+    # dallo stesso foglio delle facce (`pack3d.steso`)
+    m_dt = 1.0 / PT2MM
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
                                               lastre_extra=lastre_extra,
                                               colata_riquadro=colata_riquadro,
                                               regione=d.bbox, esito=esito,
-                                              dieline=d)
+                                              dieline=d,
+                                              steso=(d.bbox[0] - m_dt,
+                                                     d.bbox[1] - m_dt,
+                                                     d.bbox[2] + m_dt,
+                                                     d.bbox[3] + m_dt))
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso,
                                 spessore=(folding.SPESSORE_CRT if carta is None
@@ -588,10 +598,6 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                            if apertura and not d.curva_mm else (False, None))
     incisa = (None if aperta or d.curva_mm or not incisioni else
               incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
-    # il rilievo dell'embossing, se il DT ne ha la lastra: una mappa delle
-    # normali per faccia, ritagliata e girata come la sua texture
-    riga_rilievo = rilievo_sicuro(rilievo.sulle_facce, pdf, d.panels, faces,
-                                  esito.get("girate"))
     # la pellicola sulla finestra del retro, se chi carica l'ha voluta: sulle
     # facce finite, girate e curvate come escono
     film, riga_film = None, None
@@ -602,9 +608,28 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                                        folding.PELLICOLA_FALDA)
         elif pellicola is False:
             riga_film = SENZA_PELLICOLA
-    exporters.write_glb(faces, out_glb, tex_max=tmax, pellicola=film)
+    # La texture e' lo steso del PDF (`pack3d.steso`): ogni faccia stampata
+    # ci arriva dal suo pannello, girato come la sua immagine, e lo steso
+    # torna nel verso del PDF. Il rilievo dell'embossing, se il DT ne ha la
+    # lastra, e' una mappa delle normali sullo steso.
+    tela, box = esito["steso"]
+    scala = esito["scala"]
+    op = lo_steso.facce_sullo_steso(faces, d.panels, esito.get("girate"), scala,
+                                 box, gradi)
+    normale, riga_rilievo = rilievo_sicuro(
+        rilievo.mappa_dello_steso, pdf, tuple(c / scala for c in box),
+        tela.size, scala / PT2MM, op, coppia=True)
+    tela = lo_steso.gira(tela, op)
+    storte = lo_steso.riscontro(faces, tela)
+    exporters.write_glb(faces, out_glb, tex_max=tmax, pellicola=film,
+                        steso=(tela, normale))
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    if storte:
+        meta.append("STESO: la grafica di %s non torna con lo steso (%s): la "
+                    "texture non e' quella delle facce" % (
+                        ", ".join(n for n, _q in storte),
+                        ", ".join("%.0f%%" % (100 * q) for _n, q in storte)))
     if riga_film:
         meta.append(riga_film)
     if riga_rilievo:
@@ -630,6 +655,12 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
         meta.insert(0, pagine)
     return (meta + avvisi_tex + verifiche + ([riscontro] if riscontro else [])
             + [w for w in dl.check(d)])
+
+
+# Le tinte delle strisce sotto lo steso, coi nomi dei loro materiali: sul
+# modello diventano colori pieni (`steso.senza_strisce`)
+TINTE_VASSOIO = {vassoio.INTERNO: "interno", vassoio.TAGLIO: "taglio"}
+TINTE_BALLOTIN = {ballotin.INTERNO: "interno", ballotin.TAGLIO: "taglio"}
 
 
 def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
@@ -708,9 +739,19 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     # e un blocco unico, senza feritoie fra le pareti e sul fondo
     verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
     riscontro = quotature.riscontro_vassoio(pdf, v, d)
+    # La texture e' lo steso del PDF (`pack3d.steso`): senza la coda delle
+    # tinte, che diventano colori pieni, sul riquadro del DT con un
+    # millimetro attorno invece che sulla pagina, nel verso del PDF
+    tela, UV, tinte = lo_steso.senza_strisce(tex["steso"].height, steso, UV, T,
+                                             TINTE_VASSOIO)
+    s_px, m_dt = dpi_tex / 72.0, 1.0 / PT2MM
+    tela, UV = lo_steso.ritaglia(
+        ((d.bbox[0] - m_dt) * s_px, (d.bbox[1] - m_dt) * s_px,
+         (d.bbox[2] + m_dt) * s_px, (d.bbox[3] + m_dt) * s_px), tela, UV)
+    tela, UV = lo_steso.nel_verso_del_pdf(gradi, tela, UV)
     # un blocco unico: un nodo solo, col suo nome
-    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax,
-                             parti=[("vassoio", 0, len(T))])
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
+                             parti=[("vassoio", 0, len(T))], tinte=tinte)
     meta = ["vassoio espositore",
             "base %.1f x %.1f mm, pareti %s mm"
             % (v.fondo_w, v.fondo_h,
@@ -767,9 +808,14 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     # nel GLB, sugli stessi vertici e la stessa texture. La plancia e' stesa
     # per ultima, quindi i suoi triangoli stanno in fondo.
     inizio = min(a for k, (a, _b) in parti.items() if k.startswith("plancia"))
-    exporters.write_glb_mesh(V, UV, T, steso, out_glb, tex_max=tmax,
+    # la texture e' lo steso del PDF, come nel vassoio: il riquadro e' gia'
+    # quello della fustella
+    tela, UV, tinte = lo_steso.senza_strisce(tex["steso"].height, steso, UV, T,
+                                             TINTE_VASSOIO)
+    tela, UV = lo_steso.nel_verso_del_pdf(gradi, tela, UV)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
                              parti=[("display", 0, inizio),
-                                    ("plancia", inizio, len(T))])
+                                    ("plancia", inizio, len(T))], tinte=tinte)
     meta = plancia.dichiara(p) + [
         "%d vertici sui tratti della fustella, cartoncino %.1f mm"
         % (len(V), vassoio.SPESSORE)]
@@ -1014,15 +1060,16 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
     """La coppa di carta col tappo, o il cono col lid, da uno o due PDF: vedi
     `pack3d.coppa`.
 
-    Una texture sola, un atlante con i ritagli dei due fogli; due nodi nel
-    GLB, il contenitore e la chiusura, perche' la chiusura si toglie.
+    La texture di ogni pezzo e' lo steso del suo foglio (`pack3d.steso`),
+    e il rovescio bianco un colore pieno; due nodi nel GLB, il contenitore e
+    la chiusura, perche' la chiusura si toglie.
     """
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
     pezzi = _pezzi_tondi(pdfs, dichiarato)
     if _cono(pezzi):
         cono, lid = pezzi.get("cono"), pezzi.get("lid")
-        V, UV, T, A, parti, meta = cp.costruisci_cono(
+        V, UV, T, A, parti, meta, bianchi = cp.costruisci_cono(
             cono, lid, dpi=dpi, lastre_extra=lastre_extra, tex_max=tmax,
             carta=carta)
         titolo = ("cono col lid" if cono and lid
@@ -1032,7 +1079,7 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
         nodi = "il cono e il lid sono due nodi del GLB"
     else:
         sleeve, tappo = pezzi.get("coppa"), pezzi.get("tappo")
-        V, UV, T, A, parti, meta = cp.costruisci(sleeve, tappo, dpi=dpi,
+        V, UV, T, A, parti, meta, bianchi = cp.costruisci(sleeve, tappo, dpi=dpi,
                                                  lastre_extra=lastre_extra,
                                                  tex_max=tmax, carta=carta)
         titolo = ("coppa col tappo" if sleeve and tappo
@@ -1040,7 +1087,10 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
                        "chiuderla" if sleeve
                   else "solo il tappo: carica anche il PDF dello sleeve")
         nodi = "la coppa e il tappo sono due nodi del GLB"
-    exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti)
+    tinte = lo_steso.Tinte(np.where(bianchi, 0, -1).astype(np.int32),
+                           [("rovescio", cp.BIANCO)])
+    exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti,
+                             tinte=tinte)
     if dichiarato == "carton":
         titolo = _in_pezzi(dichiarato, pdfs, titolo)
     return [titolo] + meta + ["%d vertici, %d triangoli; %s"
@@ -1465,8 +1515,12 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
                                      ballotin.PELLICOLA_MARGINE))
     elif pellicola is False and b.finestre:
         avvisi.append(SENZA_PELLICOLA)
+    # la texture e' lo steso del PDF (`pack3d.steso`): le strisce del
+    # rovescio e del taglio diventano colori pieni
+    tela, UV, tinte, normale = lo_steso.senza_strisce(
+        tex.height, tela, UV, T, TINTE_BALLOTIN, normale)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
-                             normale=normale, pellicola=film)
+                             normale=normale, pellicola=film, tinte=tinte)
     return ballotin.dichiara(b) + avvisi
 
 
@@ -1517,7 +1571,9 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
     tela = ballotin.con_interno(tex)
     V, UV, T = punta.maglia(p, origine, scala / PT2MM, tela.size,
                             spessore=carta)
-    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax)
+    tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
+                                             TINTE_BALLOTIN)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax, tinte=tinte)
     return punta.dichiara(p) + avvisi
 
 
@@ -1547,6 +1603,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     conti = {}
     giro = None
     verso_fronte = 0
+    # di quanti gradi orari il foglio di lavoro e' girato rispetto al PDF:
+    # la texture ci torna alla fine (`pack3d.steso`)
+    gradi = 0
     note_mat = []
     if case:
         # anche qui le lastre dell'agente: un caso calibrato elenca a mano
@@ -1971,6 +2030,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             "si legga orizzontale e dritto%s" % (
                 marchio, ": il pack sta in piedi, con le pinne in alto e in "
                 "basso" if marchio in (90, 270) else ""))
+    # La texture e' lo steso del PDF (`pack3d.steso`): il film nel verso in
+    # cui sta sul foglio. Il film coricato si e' girato di 90 gradi orari
+    # (ROTATE_270), e il foglio di lavoro di `gradi`: tornano indietro tutti
+    # e due, con le UV e la mappa del metallo.
+    colore, UVm, mr = lo_steso.nel_verso_del_pdf(
+        gradi + (90 if fp.ruotato else 0), colore, UVm, mr)
     exporters.write_glb_mesh(Vm, UVm, Tm, colore, out_glb, tex_max=tmax, mr=mr)
 
     base = fin_open / max(int(teeth), 1)

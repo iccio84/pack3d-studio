@@ -102,8 +102,13 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso_<codice> --solo <nome> | tail -3
 
-   e guarda `/tmp/caso_<codice>/<nome>_viste.png` accanto al PDF. Niente
-   parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
+   e guarda `/tmp/caso_<codice>/<nome>_viste.png` accanto al PDF. La
+   texture deve essere lo steso del PDF, dritta (REGOLE.md, *La texture e'
+   lo steso*):
+
+       python3 prove/parco.py stesi ../pack3d-casi /tmp/caso_<codice> --solo <nome>
+
+   Niente parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
    regola in REGOLE.md - il caso, la causa, la regola, con i numeri - nella
    sezione della famiglia, leggendo solo le righe intorno (`grep -n`). Poi
    *Quando si unisce nel ramo della settimana*.

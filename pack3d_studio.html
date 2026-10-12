@@ -761,7 +761,14 @@ function buildScene(g){
           metalnessMap: mr, roughnessMap: mr, envMapIntensity: 1.0});
         group.userData.pbr = true;
       } else {
-        mat = new THREE.MeshPhongMaterial({color:0xffffff, shininess:38,
+        // Un materiale senza texture e' un colore pieno - il rovescio del
+        // cartoncino, il taglio (pack3d/steso.py): glTF lo scrive lineare, e
+        // il viewer, che i pixel delle texture li mostra come sono, lo
+        // riporta in sRGB.
+        const f = !texIdx && pbr && pbr.baseColorFactor;
+        const colore = f ? new THREE.Color(f[0], f[1], f[2]).convertLinearToSRGB()
+                         : new THREE.Color(0xffffff);
+        mat = new THREE.MeshPhongMaterial({color: colore, shininess:38,
                                           specular:0x4a4a4a, side:THREE.FrontSide});
       }
       if (texIdx) mat.map = immagine(g.json.textures[texIdx.index].source);
@@ -2856,11 +2863,13 @@ document.getElementById('go').onclick = async () => {
 };
 /* --------------------------- la texture a parte --------------------------- */
 // La texture del modello e' l'immagine che il GLB usa come colore, con le
-// stesse UV: messa al posto della grafica, ogni cosa torna al suo posto. La
+// stesse UV, ed e' lo steso del PDF: la grafica pulita, nel verso del foglio,
+// inquadrata sul DT (pack3d/steso.py). Chi fa una variante ci sovrappone il
+// nuovo artwork, e rimessa sul modello ogni cosa torna al suo posto. La
 // regola e' quella di pack3d/texture.py: una texture per immagine, col nome
 // della mesh che la usa, e oltre LATO_GLAM px di lato ridotta in proporzione,
-// perche' Glam Lab non ne prende di piu' grandi. Un modello ne ha una -
-// l'astuccio ha le facce in un atlante - il riempimento due, vassoio e pack.
+// perche' Glam Lab non ne prende di piu' grandi. Un modello ne ha una per
+// foglio: una quasi sempre, due coppa e cono col loro tappo e il riempimento.
 // Si scaricano col tasto; a Glam, che ospita la pagina, va con
 // pack3d:texture (GLAM.md, sezione 8), e solo se e' una: Glam la mette su
 // tutti i materiali del modello. `glb` e' la misura in byte del GLB, per
