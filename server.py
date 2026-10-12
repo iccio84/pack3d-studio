@@ -2622,6 +2622,29 @@ class Handler(BaseHTTPRequestHandler):
                                    "fra poco")
         return self._send(200, json.dumps(esito, ensure_ascii=False))
 
+    # La routine ha finito un caso e chiede se ce n'e' un altro libero: se si',
+    # lo Space avvia una sessione nuova per lui (`coda.prossimo`). Senza
+    # token: lo Space guarda la coda da se', al massimo ogni quindici secondi,
+    # e non avvia due volte lo stesso caso in dieci minuti.
+    def _prossimo(self):
+        corpo, errore = self._json_corpo()
+        if errore:
+            return self._send(*errore)
+        cod = str(corpo.get("codice") or "").strip().lower()
+        try:
+            esito = coda.prossimo(cod)
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        except coda.Troppe as e:
+            return self._send(429, str(e))
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except (OSError, ValueError) as e:
+            print("prossimo caso dopo %s non cercato: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps(esito, ensure_ascii=False))
+
     # La voce di chi ha caricato il PDF, dopo che il caso e' entrato in coda
     # (`coda.aggiungi`): una nota dalla pagina, o la risposta a una domanda
     # della routine, da Glam Lab. Corpi JSON, non PDF; la foto e' un data URL.
@@ -2765,6 +2788,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._caso()
         if self.path.startswith("/api/avviso"):
             return self._avviso()
+        if self.path.startswith("/api/prossimo"):
+            return self._prossimo()
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:

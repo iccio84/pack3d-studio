@@ -2099,6 +2099,22 @@ alla pagina, `?caso=<codice>`, che apre la finestra dei casi su quel caso.
 L'email sta in `contatti/<codice>.json`, fuori dalla cartella del caso e mai
 nella issue: e' un dato personale, e la routine non la apre.
 
+**Un caso per sessione, poi il prossimo.** Ogni passo di una sessione
+rilegge tutto quello che c'e' prima: due casi nella stessa sessione costano
+piu' di due sessioni. La routine lavora un caso e si ferma; `consegna` (o
+`prove/parco.py prossimo`, se il giro finisce in un altro modo) chiede allo
+Space `POST /api/prossimo`, e lo Space, che ha il trigger della routine,
+avvia una sessione nuova se in coda c'e' un altro caso libero
+(`coda.prossimo`). Senza token: lo Space guarda la coda da se', rilancia solo
+se il caso appena finito non ha piu' il lucchetto e salta i casi entrati o
+avviati negli ultimi dieci minuti, che hanno gia' la loro sessione: cosi' le
+sessioni sono al massimo una per caso libero, chiunque chiami. Guarda la coda
+al massimo ogni quindici secondi, per il token di GitHub; due sessioni che
+finiscono insieme si sentono dire 429, e `parco.py` riprova dopo venti
+secondi. Due sessioni partite insieme
+possono puntare allo stesso caso: quella che trova il lucchetto prende il
+caso libero dopo.
+
 ### Chi lavora la coda, e il parco che la protegge
 
 Una sessione automatica di Claude Code guarda la coda e, se c'e' un caso

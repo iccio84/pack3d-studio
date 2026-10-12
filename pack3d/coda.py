@@ -265,8 +265,12 @@ def avvia_routine(cod, issue_url, perche=None):
         print("coda: routine non avviata per il caso %s (%s)" % (cod, e), file=sys.stderr)
         return None
     sessione = risposta.get("claude_code_session_url") if isinstance(risposta, dict) else None
+    _AVVIATE[cod] = time.time()
     print("coda: routine avviata per il caso %s: %s" % (cod, sessione or "?"), file=sys.stderr)
     return sessione
+
+
+_AVVIATE = {}           # codice -> quando lo Space ha avviato la routine per lui
 
 
 def metti(blocchi, nomi, verdetto, viste=None, contesto=None, aspetta=False,
@@ -1191,3 +1195,75 @@ def avvisa(cod, pagina):
           % ("modello da approvare" if da_approvare else "domanda", cod, inviate,
              len(elenco)), file=sys.stderr)
     return {"ok": True, "inviate": inviate, "destinatari": len(elenco)}
+
+
+# La routine lavora un caso per giro, ognuno in una sessione nuova: costa meno
+# di una sessione che ne fa due di fila, perche' ogni passo rilegge tutto
+# quello che c'e' prima. Finito un caso, la routine chiede allo Space di
+# avviare un'altra sessione se in coda c'e' ancora un caso libero (`prossimo`,
+# da `prove/parco.py consegna` e `prossimo`): cosi' un caso rimasto senza
+# sessione non aspetta il giro del giorno dopo, e quel giro, che ne prende uno
+# solo, non lascia indietro gli altri.
+NON_LIBERO = ("da-guardare", "da-approvare", "da-rilasciare", "in-lavorazione")
+APPENA_MINUTI = 10      # un caso piu' giovane ha gia' la sua sessione in partenza
+PROSSIMO_OGNI = 15      # secondi fra due sguardi alla coda: il token di GitHub
+_PROSSIMO = {"quando": 0.0}
+_TITOLO_RE = re.compile(r"^Caso nuovo ([0-9a-f]{10}):")
+
+
+def _etichette(issue):
+    return {str((e or {}).get("name")) for e in issue.get("labels") or []
+            if isinstance(e, dict)}
+
+
+def prossimo(cod):
+    """La routine ha finito il caso `cod`: se in coda c'e' un altro caso
+    libero, avvia una sessione nuova della routine per lui.
+
+    Senza token, come `avvisa`: dice solo di guardare la coda. Lo Space avvia
+    la routine soltanto se il caso `cod` e' in coda e nessuno ci lavora piu',
+    e se c'e' un caso libero che non sia appena entrato o appena stato avviato
+    (APPENA_MINUTI: quello ha gia' la sua sessione); cosi' le sessioni sono al
+    massimo una per caso libero, chiunque chiami. Guarda la coda al massimo
+    una volta ogni PROSSIMO_OGNI secondi, per il token di GitHub."""
+    if not CODICE_RE.match(cod or ""):
+        raise Assente("codice del caso non valido")
+    if not pronta():
+        raise RuntimeError("la coda dei casi non e' configurata")
+    if not routine_configurata():
+        return {"ok": True, "avviata": False,
+                "perche": "la routine non e' configurata nello Space"}
+    adesso = time.time()
+    with _VOCI_LOCK:
+        if adesso - _PROSSIMO["quando"] < PROSSIMO_OGNI:
+            raise Troppe("la coda e' stata guardata da pochi secondi: riprova fra "
+                         "%d secondi" % PROSSIMO_OGNI)
+        _PROSSIMO["quando"] = adesso
+    finito = _issue_del_caso(cod, fresca=True)
+    if finito is None:
+        raise Assente("il caso %s non e' nella coda" % cod)
+    if finito.get("state") == "open" and "in-lavorazione" in _etichette(finito):
+        return {"ok": True, "avviata": False,
+                "perche": "il caso %s e' ancora in lavorazione" % cod}
+    aperte = _richiesta("GET", "/repos/%s/issues?state=open&per_page=100" % _repo(),
+                        timeout=30)
+    liberi = []
+    for i in aperte if isinstance(aperte, list) else []:
+        if not isinstance(i, dict) or i.get("pull_request"):
+            continue
+        m = _TITOLO_RE.match(str(i.get("title", "")))
+        if not m or m.group(1) == cod or _etichette(i) & set(NON_LIBERO):
+            continue
+        eta = _ore_da(i.get("created_at"))
+        if eta is not None and eta * 60 < APPENA_MINUTI:
+            continue
+        if adesso - _AVVIATE.get(m.group(1), 0) < APPENA_MINUTI * 60:
+            continue
+        liberi.append((int(i.get("number") or 0), m.group(1), i.get("html_url", "")))
+    if not liberi:
+        return {"ok": True, "avviata": False, "perche": "nessun altro caso libero in coda"}
+    _n, dopo, url = min(liberi)
+    avvia_routine(dopo, url, perche="Finito un caso: il prossimo libero in coda e' %s: %s")
+    partita = _AVVIATE.get(dopo, 0) >= adesso
+    return {"ok": True, "avviata": partita, "caso": dopo,
+            "perche": None if partita else "la routine non e' partita: vedi il log dello Space"}
