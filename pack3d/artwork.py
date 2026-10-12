@@ -1259,7 +1259,7 @@ def avviso_fuori_dt(conti):
 
 def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
                      nero_deciso=None, colata_riquadro=None, regione=None,
-                     esito=None, dieline=None):
+                     esito=None, dieline=None, steso=None):
     """Le texture di un astuccio, pulite e girate sul verso della grafica.
 
     L'unico punto in cui i tre passaggi si applicano, cosi' non possono piu'
@@ -1275,6 +1275,11 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     atteso di ogni faccia (`verso_atteso`) e, se tutte e due le fasce alte
     portano i fianchi, qui si sceglie la coppia STAMPATA (`scegli_fianchi`):
     `panels` e `dieline.fianchi_su` si aggiornano sul posto.
+
+    `steso`, se c'e', e' il riquadro del DT in punti: dallo stesso foglio
+    delle facce se ne ritaglia anche lo steso intero, che finisce in
+    `esito["steso"]` col suo riquadro in pixel, e in `esito["scala"]` i pixel
+    per punto. E' la texture del modello: vedi `pack3d.steso`.
 
     Restituisce `(texture, avvisi)`, con gli avvisi gia' scritti come vanno
     mostrati a chi guarda il modello.
@@ -1295,10 +1300,19 @@ def texture_astuccio(pdf, panels, dpi, page_no=0, clean=True, lastre_extra=(),
     alt = dict(dieline.fianchi_alt) if dieline is not None else {}
     da_rendere = dict(panels)
     da_rendere.update({k + "~": p for k, p in alt.items()})
+    if steso is not None:
+        from .dieline import Panel
+        da_rendere["\0steso"] = Panel(*steso, "steso")
     tex = folding.rasterize_panels(pulito, da_rendere, dpi=dpi, page_no=page_no,
                                    clean=clean, note=avvisi,
                                    nero_deciso=nero_deciso,
                                    colata_riquadro=colata_riquadro)
+    if steso is not None:
+        tela = tex.pop("\0steso")
+        if esito is not None:
+            s = dpi / 72.0
+            esito["steso"] = (tela, tuple(round(c * s) for c in steso))
+            esito["scala"] = s
     if alt:
         scelta = scegli_fianchi(tex, panels, dieline,
                                 {k: tex.pop(k + "~") for k in alt})

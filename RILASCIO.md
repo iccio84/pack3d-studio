@@ -27,6 +27,7 @@ mano. Si fa **prima** di guardare la coda.
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_prima --codice /tmp/prima > /tmp/prima.log 2>&1
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_dopo --codice /tmp/dopo > /tmp/dopo.log 2>&1
        python3 prove/parco.py confronta /tmp/parco_prima /tmp/parco_dopo
+       python3 prove/parco.py stesi ../pack3d-casi /tmp/parco_dopo
 
    e guarda **tutte** le immagini affiancate dei casi cambiati, una per una,
    leggendo il `come_deve_venire` di ognuno.
@@ -36,6 +37,7 @@ mano. Si fa **prima** di guardare la coda.
    - ogni altro caso del parco e' **identico al byte**, oppure cambia e il
      cambio e' un **miglioramento evidente**, spiegato caso per caso nella PR;
    - nessun caso del parco che prima si costruiva adesso fallisce;
+   - `stesi` non trova texture girate: ognuna e' lo steso del suo PDF;
    - `python3 -m py_compile` passa sui file Python cambiati.
 
    Se un caso si e' rotto, trova quale correzione della settimana l'ha rotto

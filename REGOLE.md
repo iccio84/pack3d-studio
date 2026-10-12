@@ -3644,6 +3644,27 @@ Sul parco: 29 casi identici al byte; cambia solo il caso nuovo, che adesso e'
 chiuso sopra e sotto, col logo dell'aletta dritto sul cielo e il fronte curvo
 con i biscotti davanti.
 
+### La texture e' lo steso
+
+L'astuccio non ha piu' un'immagine per faccia: la sua texture e' lo steso del
+PDF, come per tutte le famiglie (*La texture e' lo steso*). Lo steso si
+ritaglia dallo stesso foglio da cui escono le facce (`texture_astuccio`,
+`steso`): il riquadro del DT con un millimetro attorno, pixel per pixel come
+le facce. Ogni faccia stampata ci arriva dal suo pannello (`steso.
+facce_sullo_steso`): la sua UV passa per il giro della sua immagine
+(`girate`), per il riquadro del pannello sul foglio e per il giro del foglio
+(`gradi`), e lo steso torna nel verso del PDF. Ogni faccia tiene il suo
+materiale, col suo nome; l'interno, il taglio e il solco sono colori pieni.
+
+- **Il riscontro**: per ogni faccia, 400 pixel presi a caso devono essere
+  quelli dello steso nel suo telaio (`steso.riscontro`); se una faccia non
+  torna, il build lo scrive con «STESO». Sul parco tornano tutte.
+- **Il rilievo** e' una mappa delle normali sullo steso (`rilievo.
+  mappa_dello_steso`): si gira l'altezza, poi si fanno le normali, perche' i
+  vettori di una mappa girata starebbero nel telaio di prima.
+- **La risoluzione** e' quella delle facce: lo steso esce dallo stesso foglio
+  a 300 dpi, entro gli 8192 px di lato.
+
 ## Finestre e rilievi
 
 Due cose che il PDF dice solo in parte, e che sul modello si vedono: la
@@ -3731,13 +3752,13 @@ Tiefpragung vanno in dentro.
   con una lastra di prova - un disco in rilievo e uno in incavo - in
   model-viewer e nel viewer della pagina, che con l'origine UV in alto gira
   il verde (`normalScale` (1, -1)), come fa GLTFLoader.
-- **Sugli astucci** la mappa e' una per faccia, fatta come la sua texture: il
-  riquadro del pannello, girato degli stessi gradi (`girate`); la normale si
-  calcola dopo il giro, sull'altezza gia' girata - girare una mappa delle
-  normali vorrebbe dire girarne anche i vettori. Provato su una copia del KC
-  T8 con la tinta `Kinder Orange` rinominata `Embossing`: le lettere "inder"
-  spariscono dalla texture e restano in rilievo bianco, al loro posto, sul
-  fronte e sul cielo.
+- **Sugli astucci** la mappa e' una sola, sullo steso, come la texture
+  (*Astucci*, *La texture e' lo steso*): l'altezza si prende sul riquadro
+  dello steso, si gira nel verso del PDF e solo dopo si fanno le normali -
+  girare una mappa delle normali vorrebbe dire girarne anche i vettori
+  (`rilievo.mappa_dello_steso`). Provato su una copia del KC T8 con la tinta
+  `Kinder Orange` rinominata `Embossing`: le lettere "inder" spariscono dalla
+  texture e restano in rilievo bianco, al loro posto, sul fronte e sul cielo.
 - **Il controllo dell'AI non lo vede**: il suo rasterizzatore non legge le
   normali. Guarda la grafica, che e' quella di prima.
 
@@ -5299,6 +5320,69 @@ riquadro del controllo.
 - Le CU che non sono flowpack ne' astucci: pouch, coppe, scatole in piu' pezzi.
 - L'astuccio aperto dentro l'espositore.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
+
+## La texture e' lo steso
+
+La texture di ogni modello e' **lo steso del PDF**: la grafica pulita - senza
+disegno tecnico, quote, legende, aree riservate, come la pulisce la pipeline -
+**nel verso in cui sta nel PDF**, **inquadrata sul DT**, a scala uniforme. Le
+UV del modello puntano li'. Chi vuole una variante prende la texture, ci
+sovrappone il nuovo artwork - stesso DT, stesso verso, stessa scala - e la
+rimette sul modello: ogni cosa torna al suo posto.
+
+Le famiglie lavorano ognuna nel suo telaio - il foglio girato sul verso della
+grafica (`artwork.pagina_girata`), il film coricato, con sotto le strisce delle
+tinte - e alla fine si riporta tutto allo steso (`pack3d/steso.py`), senza
+toccare la costruzione: le verifiche girano prima, sui telai di sempre.
+
+| famiglia | lo steso | cosa si fa alla fine |
+|---|---|---|
+| flowpack | il rettangolo del film | si gira indietro dei gradi del foglio, e dei 90 del film coricato; con lei la mappa del metallo |
+| pouch | il foglio della busta | niente: era gia' lo steso |
+| vassoio | il DT con un millimetro attorno, invece della pagina intera | via la coda delle tinte, ritaglio, giro indietro |
+| display con plancia | il DT con un millimetro attorno, anche oltre i pezzi della maglia | via la coda delle tinte, le UV portate sul DT (`steso.allarga`), giro indietro |
+| ballotin, scatola a punta | il DT con un millimetro attorno | via le strisce del rovescio e del taglio |
+| astuccio | il DT con un millimetro attorno | lo steso al posto delle facce (*Astucci*, *La texture e' lo steso*) |
+| coppa, cono | uno per foglio: lo sleeve e il fondo, il tappo; il cono, il lid | il foglio che `coppa.orienta` aveva girato sulla tavola torna nel verso del suo PDF; il rovescio bianco e' un colore pieno; l'anello del tappo, che sullo steso c'e' una volta, attorno si ripete a settori, uno per modulo, e nessun triangolo ne scavalca il bordo |
+| riempimento | quello del vassoio e quello del pack | niente: sono i due modelli com'escono |
+
+- **Le tinte piene** - il rovescio, il taglio, il solco - non stanno nella
+  texture: sono materiali senza texture, col colore in `baseColorFactor`,
+  lineare come vuole glTF (`steso.lineare`). Il viewer della pagina e le viste
+  del controllo lo riportano in sRGB.
+- **Una texture per foglio**: una quasi sempre; due la coppa col tappo e il
+  cono col lid, che vengono da due PDF, e il riempimento.
+- **Il modello non cambia**: sul parco le viste del controllo sono quelle di
+  prima, a meno della compressione JPEG. Cambiano solo il file della texture e
+  le UV, insieme.
+- **Si controlla** con `prove/parco.py stesi`: ogni texture si cerca sulla
+  pagina del suo PDF, pulita come la pulisce la costruzione, girata di 0, 90,
+  180 e 270 gradi e a scale diverse, e deve combaciare dritta. Un film quasi
+  simmetrico pareggia dritto e capovolto, e lo strumento lo dice «incerta»:
+  si guarda a occhio.
+
+### La texture a parte
+
+Oltre al GLB, la texture si da' **a parte**. La regola e' in
+`pack3d/texture.py` e, uguale, nella pagina (`textureDelGlb`): un file per
+immagine di colore, coi nomi delle mesh se sono piu' d'una
+(`..._texture_coppa.jpg`, `..._texture_tappo.jpg`).
+
+- **Al massimo 5000 px di lato** (`LATO_GLAM`), il limite di Glam Lab: una
+  texture piu' grande - un display in HD arriva a 7000 - si riduce in
+  proporzione, e le UV, che sono frazioni dell'immagine, restano giuste.
+  Sotto il limite esce coi byte del GLB, senza ricomprimerla.
+- **Solo il colore**: le mappe del metallo, della ruvidita' e del rilievo
+  restano nel modello. Glam cambia solo il colore.
+- **Nella pagina** c'e' «Scarica texture» («Scarica le texture» se sono piu'
+  d'una) accanto a «Scarica GLB»; a differenza di quello non svuota la
+  pagina.
+- **In Glam** va nella sezione texture del modello (GLAM.md, sezione 8): dalla
+  pagina con `pack3d:texture`, dalla routine e dallo Space con
+  `/api/import-texture`, dopo il modello. **Solo se e' una**: Glam mette la
+  texture scelta su tutti i materiali con una texture, e due non saprebbe
+  dove metterle. Se Glam non la prende, il modello c'e' lo stesso: si scrive
+  e si va avanti.
 
 ## Casi calibrati
 

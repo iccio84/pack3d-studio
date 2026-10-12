@@ -132,8 +132,12 @@ def leggi_glb(sorgente):
         bct = pbr.get("baseColorTexture")
         if bct is not None:
             return immagine(bct["index"])
-        f = pbr.get("baseColorFactor", (1.0, 1.0, 1.0, 1.0))
-        return np.array([[[int(255 * c) for c in f[:3]]]], np.uint8)
+        # il colore pieno e' lineare, come vuole glTF: torna in sRGB, come
+        # i pixel di una texture (`steso.lineare` fa il contrario)
+        f = np.clip(np.asarray(pbr.get("baseColorFactor", (1.0, 1.0, 1.0, 1.0))[:3],
+                               float), 0.0, 1.0)
+        s = np.where(f <= 0.0031308, f * 12.92, 1.055 * f ** (1 / 2.4) - 0.055)
+        return np.array([[[int(round(255 * c)) for c in s]]], np.uint8)
 
     def metallo(materiale):
         """La mappa metallo/ruvidita', se il materiale ne ha una."""

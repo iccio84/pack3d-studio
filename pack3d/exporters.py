@@ -95,11 +95,21 @@ def write_obj(faces, outdir, basename="model", tex_quality=92):
 # glTF binario (GLB) monofile
 # --------------------------------------------------------------------------- #
 def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
-              pellicola=None):
+              pellicola=None, steso=None):
     """unit_scale: le quote sono in mm, glTF lavora in metri. `pellicola`,
     se c'e', e' `(V, T)` in mm: la pellicola trasparente delle finestre, un
     nodo a parte col suo materiale (`PELLICOLA`). Una faccia con la chiave
-    `normale` porta la mappa delle normali del suo rilievo."""
+    `normale` porta la mappa delle normali del suo rilievo.
+
+    Con `steso` - `(tela, normale o None)`, lo steso del PDF (`pack3d.steso`)
+    - la texture e' quella sola: ogni faccia stampata ci arriva con la sua
+    `f["telaio"]`, l'affine dalle UV della sua immagine a quelle dello steso,
+    e le facce di un colore solo (interno, taglio, solco) hanno un materiale
+    di colore pieno, senza texture. Ogni faccia tiene il suo materiale, col
+    suo nome."""
+    if steso is not None:
+        return _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max,
+                                pellicola, *steso)
     buf = bytearray()
     views, accessors, images, textures, materials, prims = [], [], [], [], [], []
 
@@ -158,7 +168,7 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
             },
         })
         if normale is not None:
-            # il rilievo della faccia (`rilievo.sulle_facce`), in PNG
+            # il rilievo della faccia, in PNG
             bio = io.BytesIO()
             normale.convert("RGB").save(bio, "PNG", optimize=True)
             images.append({"bufferView": add_view(bio.getvalue()),
@@ -226,9 +236,150 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
     return path
 
 
+def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
+                     tela, normale):
+    """`write_glb` con lo steso: vedi la sua documentazione."""
+    from PIL import Image
+    from .folding import TAGLIO
+    from .steso import applica, lineare, uniforme
+    buf = bytearray()
+    views, accessors, prims, materials = [], [], [], []
+
+    def add_view(data, target=None):
+        while len(buf) % 4:
+            buf.append(0)
+        off = len(buf)
+        buf.extend(data)
+        v = {"buffer": 0, "byteOffset": off, "byteLength": len(data)}
+        if target:
+            v["target"] = target
+        views.append(v)
+        return len(views) - 1
+
+    def primitiva(pos, nrm, uv, idx, materiale):
+        pos = np.asarray(pos, np.float32)
+        accessors.append({"bufferView": add_view(pos.tobytes(), 34962),
+                          "componentType": 5126, "count": len(pos),
+                          "type": "VEC3", "min": pos.min(0).tolist(),
+                          "max": pos.max(0).tolist()})
+        a_pos = len(accessors) - 1
+        accessors.append({"bufferView": add_view(np.asarray(nrm, np.float32)
+                                                 .tobytes(), 34962),
+                          "componentType": 5126, "count": len(pos),
+                          "type": "VEC3"})
+        a_nrm = len(accessors) - 1
+        accessors.append({"bufferView": add_view(np.asarray(uv, np.float32)
+                                                 .tobytes(), 34962),
+                          "componentType": 5126, "count": len(pos),
+                          "type": "VEC2"})
+        a_uv = len(accessors) - 1
+        grandi = len(pos) > 65535
+        ix = np.asarray(idx, np.uint32 if grandi else np.uint16).reshape(-1)
+        accessors.append({"bufferView": add_view(ix.tobytes(), 34963),
+                          "componentType": 5125 if grandi else 5123,
+                          "count": len(ix), "type": "SCALAR"})
+        prims.append({"attributes": {"POSITION": a_pos, "NORMAL": a_nrm,
+                                     "TEXCOORD_0": a_uv},
+                      "indices": len(accessors) - 1, "material": materiale})
+
+    def materiale(nome, tinta):
+        if tinta is None:
+            m = {"name": nome, "pbrMetallicRoughness": {
+                "baseColorTexture": {"index": 0},
+                "metallicFactor": 0.0, "roughnessFactor": 0.85}}
+            if normale is not None:
+                m["normalTexture"] = {"index": 1}
+        else:
+            m = {"name": nome, "pbrMetallicRoughness": {
+                "baseColorFactor": lineare(tinta) + [1.0],
+                "metallicFactor": 0.0, "roughnessFactor": 0.85}}
+        materials.append(m)
+        return len(materials) - 1
+
+    m_solco = None
+    for f in faces:
+        tinta = uniforme(f["tex"])
+        if tinta is None and f.get("telaio") is None:
+            raise ValueError("faccia %r: stampata ma senza il suo posto sullo "
+                             "steso" % f["name"])
+        m = materiale(f["name"], tinta)
+
+        def uv(UV):
+            return (np.zeros((len(UV), 2), np.float32) if tinta is not None
+                    else applica(f["telaio"], UV))
+        if f.get("maglia"):
+            sup, inc = f["maglia"]
+            if sup is not None:
+                V, N, UV, T = sup
+                primitiva(np.asarray(V) * unit_scale, N, uv(UV), T, m)
+            if inc is not None:
+                if m_solco is None:
+                    m_solco = materiale("solco", TAGLIO)
+                V, N, UV, T = inc
+                primitiva(np.asarray(V) * unit_scale, N,
+                          np.zeros((len(UV), 2), np.float32), T, m_solco)
+            continue
+        quad = np.array(f["quad"], np.float32) * unit_scale
+        nrm = np.tile(_normal(f["quad"]).astype(np.float32), (4, 1))
+        primitiva(quad, nrm, uv([[0, 0], [1, 0], [1, 1], [0, 1]]),
+                  np.array([0, 2, 1, 0, 3, 2], np.uint16), m)
+
+    im = tela
+    if max(im.size) > tex_max:
+        r = tex_max / max(im.size)
+        im = im.resize((max(1, int(im.width * r)), max(1, int(im.height * r))),
+                       Image.LANCZOS)
+    bio = io.BytesIO()
+    im.convert("RGB").save(bio, "JPEG", quality=tex_quality, subsampling=0)
+    images = [{"bufferView": add_view(bio.getvalue()), "mimeType": "image/jpeg"}]
+    textures = [{"source": 0, "sampler": 0}]
+    if normale is not None:
+        bio = io.BytesIO()
+        normale.convert("RGB").save(bio, "PNG", optimize=True)
+        images.append({"bufferView": add_view(bio.getvalue()),
+                       "mimeType": "image/png"})
+        textures.append({"source": 1, "sampler": 0})
+
+    nodi = [{"mesh": 0, "name": "packaging"}]
+    mesh = [{"name": "packaging", "primitives": prims}]
+    if pellicola is not None:
+        nodi.append({"mesh": 1, "name": "pellicola"})
+        mesh.append(_pellicola(pellicola, unit_scale, add_view, accessors,
+                               materials))
+    gltf = {
+        "asset": {"version": "2.0", "generator": "pack3d"},
+        "scene": 0,
+        "scenes": [{"nodes": list(range(len(nodi)))}],
+        "nodes": nodi,
+        "meshes": mesh,
+        "accessors": accessors,
+        "bufferViews": views,
+        "buffers": [{"byteLength": len(buf)}],
+        "images": images,
+        "samplers": [{"magFilter": 9729, "minFilter": 9987,
+                      "wrapS": 33071, "wrapT": 33071}],
+        "textures": textures,
+        "materials": materials,
+    }
+    js = json.dumps(gltf, separators=(",", ":")).encode()
+    js += b" " * ((4 - len(js) % 4) % 4)
+    bin_ = bytes(buf) + b"\0" * ((4 - len(buf) % 4) % 4)
+    total = 12 + 8 + len(js) + 8 + len(bin_)
+    with open(path, "wb") as fh:
+        fh.write(b"glTF" + struct.pack("<II", 2, total))
+        fh.write(struct.pack("<I", len(js)) + b"JSON" + js)
+        fh.write(struct.pack("<I", len(bin_)) + b"BIN\0" + bin_)
+    return path
+
+
 # --------------------------------------------------------------------------- #
 # export di mesh triangolari (superfici curve: flowpack, doypack, ...)
 # --------------------------------------------------------------------------- #
+def _lineare(rgb):
+    from .steso import lineare
+    return lineare(rgb)
+
+
 def _normals(V, tris):
     N = np.zeros_like(V)
     a, b, c = V[tris[:, 0]], V[tris[:, 1]], V[tris[:, 2]]
@@ -263,7 +414,7 @@ def write_obj_mesh(V, UV, tris, tex, outdir, basename="model", tex_quality=92):
 
 def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
                    tex_quality=88, tex_max=2048, parti=None, mr=None,
-                   normale=None, pellicola=None):
+                   normale=None, pellicola=None, tinte=None):
     """Una maglia sola con la sua texture, in GLB.
 
     `parti`, se c'e', e' `[(nome, primo, ultimo)]` sui triangoli: ognuna
@@ -282,6 +433,14 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
     `normale`, se c'e', e' la mappa delle normali del rilievo (`rilievo.py`)
     sulla stessa texture, anche a una risoluzione sua: va in PNG, perche' e'
     un dato e non un colore. `pellicola` e' quella di `write_glb`.
+
+    `tinte`, se c'e' (`steso.Tinte`), dice i triangoli di colore pieno - il
+    rovescio del cartoncino, il taglio: vanno in primitive loro, con un
+    materiale senza texture, e la texture resta lo steso e basta.
+
+    `tex` puo' essere una lista, una texture per ognuna delle `parti`: la
+    coppa e il tappo vengono da due PDF, e ognuno ha il suo steso. Allora
+    `mr` e `normale` non ci sono.
     """
     buf = bytearray()
     views, accessors = [], []
@@ -313,28 +472,46 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
                       "componentType": 5126, "count": len(uv), "type": "VEC2"})
     tri = np.asarray(tris, np.uint32).reshape(-1, 3)
     pezzi = parti or [("flowpack", 0, len(tri))]
+    quale = (np.asarray(tinte.quale) if tinte is not None
+             else np.full(len(tri), -1, np.int32))
+    # per ogni pezzo, le sue primitive: la sua texture (il materiale della
+    # sua tela) e una per tinta (dopo i materiali delle tele), solo quelle
+    # che ha
+    n_tele = len(tex) if isinstance(tex, (list, tuple)) else 1
     a_idx = []
-    for _nome, t0, t1 in pezzi:
-        ix = tri[t0:t1].ravel()
-        a_idx.append(len(accessors))
-        accessors.append({"bufferView": add_view(ix.tobytes(), 34963),
-                          "componentType": 5125, "count": len(ix),
-                          "type": "SCALAR"})
+    for p_i, (_nome, t0, t1) in enumerate(pezzi):
+        prim = []
+        for k in [-1] + sorted(set(quale[t0:t1].tolist()) - {-1}):
+            ix = tri[t0:t1][quale[t0:t1] == k].ravel()
+            if not len(ix):
+                continue
+            prim.append((len(accessors),
+                         (p_i if n_tele > 1 else 0) if k < 0 else n_tele + k))
+            accessors.append({"bufferView": add_view(ix.tobytes(), 34963),
+                              "componentType": 5125, "count": len(ix),
+                              "type": "SCALAR"})
+        a_idx.append(prim)
 
-    im = tex
-    if max(im.size) > tex_max:
-        r = tex_max / max(im.size)
-        im = im.resize((int(im.width * r), int(im.height * r)))
-    bio = io.BytesIO()
-    im.convert("RGB").save(bio, "JPEG", quality=tex_quality, subsampling=0)
-    iv = add_view(bio.getvalue())
-    immagini = [{"bufferView": iv, "mimeType": "image/jpeg"}]
-    trame = [{"source": 0, "sampler": 0}]
+    tele = list(tex) if isinstance(tex, (list, tuple)) else [tex]
+    immagini, trame = [], []
+    for im in tele:
+        if max(im.size) > tex_max:
+            r = tex_max / max(im.size)
+            im = im.resize((int(im.width * r), int(im.height * r)))
+        bio = io.BytesIO()
+        im.convert("RGB").save(bio, "JPEG", quality=tex_quality, subsampling=0)
+        iv = add_view(bio.getvalue())
+        immagini.append({"bufferView": iv, "mimeType": "image/jpeg"})
+        trame.append({"source": len(immagini) - 1, "sampler": 0})
     materiale = {"name": "film", "pbrMetallicRoughness": {
         "baseColorTexture": {"index": 0},
         "metallicFactor": 0.0, "roughnessFactor": 0.42}}
     if mr is not None:
         from PIL import Image
+        im = tele[0]
+        if max(im.size) > tex_max:
+            r = tex_max / max(im.size)
+            im = im.resize((int(im.width * r), int(im.height * r)))
         m = mr if mr.size == im.size else mr.resize(im.size, Image.BILINEAR)
         bio = io.BytesIO()
         m.convert("RGB").save(bio, "PNG", optimize=True)
@@ -357,9 +534,21 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
             for k, (nome, _t0, _t1) in enumerate(pezzi)]
     mesh = [{"name": nome, "primitives": [{
         "attributes": {"POSITION": a_pos, "NORMAL": a_nrm, "TEXCOORD_0": a_uv},
-        "indices": a_idx[k], "material": 0}]}
+        "indices": ia, "material": m} for ia, m in a_idx[k]]}
         for k, (nome, _t0, _t1) in enumerate(pezzi)]
     materiali = [materiale]
+    for k in range(1, n_tele):
+        # la tela di un'altra parte: lo stesso materiale, sulla sua texture
+        materiali.append({"name": pezzi[k][0], "pbrMetallicRoughness": {
+            "baseColorTexture": {"index": k},
+            "metallicFactor": 0.0, "roughnessFactor": 0.42}})
+    for nome, rgb in (tinte.colori if tinte is not None else []):
+        # il colore pieno nei valori lineari di glTF, ruvido come il resto
+        materiali.append({"name": nome, "pbrMetallicRoughness": {
+            "baseColorFactor": _lineare(rgb) + [1.0],
+            "metallicFactor": 0.0,
+            "roughnessFactor": materiale["pbrMetallicRoughness"].get(
+                "roughnessFactor", 0.42) if mr is None else 0.42}})
     if pellicola is not None:
         nodi.append({"mesh": len(mesh), "name": "pellicola"})
         mesh.append(_pellicola(pellicola, unit_scale, add_view, accessors,

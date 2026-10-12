@@ -6,6 +6,7 @@ e' pubblico. Qui c'e' solo lo strumento.
 
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
+    python3 prove/parco.py stesi CASI USCITA [--solo a,b]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
@@ -25,6 +26,15 @@ costruzione e le quattro viste (`pack3d.vista`).
 `confronta` dice quali modelli sono cambiati fra due costruzioni, con gli
 avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
 Le immagini finiscono in DIR, di serie DOPO/confronto.
+
+`stesi` controlla che la texture di ogni modello sia lo steso del suo PDF
+(REGOLE.md, *La texture e' lo steso*): cerca ogni texture sulla prima pagina
+del PDF senza i livelli tecnici e senza le lastre che coprono la grafica,
+girata di 0, 90, 180 o 270 gradi e a scale
+diverse, e dice dove combacia meglio. Deve combaciare dritta, a scala
+uniforme. Esce con 1 se una texture combacia nettamente meglio girata; una
+"incerta" (un pack quasi simmetrico pareggia dritto e capovolto) o una che non
+si ritrova sulla pagina va guardata a occhio, ma non conta come errore.
 
 `spazio` prova un caso sullo Space vero, dopo una pubblicazione: aspetta che
 /api/ping dica la versione di questo clone (`pack3d/versione.py`), cioe' che
@@ -500,6 +510,55 @@ def glam(args):
     print("in Glam: \"%s\" fra \"%s\" (id %s)%s" % (
         risposta.get("name", nome), risposta.get("category", args.categoria),
         risposta.get("id", "?"),
+        ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
+    _texture_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"))
+
+
+def _texture_in_glam(url, glb, nome, categoria, codice):
+    """La texture del modello appena mandato, nella sezione texture di Glam,
+    legata a quel modello (GLAM.md, sezione 8): `pack3d.texture`. Il
+    modello in Glam c'e' gia': se la texture non passa lo si dice, e il
+    comando finisce bene lo stesso."""
+    from pack3d import texture
+    try:
+        t = texture.per_glam(glb)
+    except Exception as e:      # noqa: BLE001 - il modello e' gia' in Glam
+        print("texture: non si legge dal GLB (%s): in Glam va solo il modello" % e)
+        return
+    if t is None:
+        print("texture: il modello ne ha piu' d'una (un riempimento), e Glam ne "
+              "mette una sola su tutto il modello: in Glam va solo il modello")
+        return
+    file = texture.nomi_file(nome, [t])[0]
+    intestazioni = {"Content-Type": t["mime"],
+                    "X-Model-Name": quote(nome, safe=_URI),
+                    "X-Model-Category": quote(categoria, safe=_URI),
+                    "X-Texture-Name": quote(file, safe=_URI),
+                    "User-Agent": "pack3d-studio"}
+    if codice:
+        intestazioni["X-Pack3d-Codice"] = codice
+    req = urllib.request.Request(
+        url.rstrip("/") + "/api/import-texture", data=t["dati"], method="POST",
+        headers=intestazioni)
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            risposta = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        testo = e.read().decode("utf-8", "replace")[:300]
+        if e.code == 401:
+            print("Glam rifiuta il token della texture (401): e' lo stesso di "
+                  "/api/import-model, PACK3D_IMPORT_TOKEN")
+        elif not _glam_assente(e.code, testo):
+            print("Glam non ha preso la texture (HTTP %d): %s - il modello c'e'. "
+                  "Se /api/import-texture non esiste, Glam non conosce ancora le "
+                  "texture: GLAM.md, sezione 8" % (e.code, testo))
+        return
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        _glam_irraggiungibile(e)
+        return
+    print("in Glam anche la texture \"%s\", %d x %d px%s%s" % (
+        file, t["lato"][0], t["lato"][1],
+        " (ridotta a %d px, il massimo di Glam)" % texture.LATO_GLAM if t["ridotta"] else "",
         ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
 
 
@@ -1187,6 +1246,123 @@ def approvato(args):
         cod, "in Glam" if in_glam else "Glam non l'ha preso", n))
 
 
+# `stesi`: una texture si cerca sulla pagina senza i livelli tecnici
+# (`strati.senza_tecnici`: il DT sopra la grafica pesava piu' della grafica) e
+# senza le coperture (`artwork.senza_coperture`),
+# resa perche' la texture ci stia su almeno STESI_PX pixel - fra 30 e 72 dpi -
+# girata di 0, 90, 180 e 270 gradi e a scale fra 100 e 400 dpi. Il verso dritto
+# vince se e' il migliore a meno di STESI_PARI; un altro vince se lo stacca di
+# STESI_MARGINE; nel mezzo e' incerta, da guardare. Sotto STESI_SOGLIA la
+# texture sulla pagina non si ritrova. Un pack quasi simmetrico - il film di
+# un flowpack piccolo, bianco e azzurro sopra e sotto - pareggia dritto e
+# capovolto: e' giusto che lo dica, e non che scelga.
+STESI_PX = 300
+STESI_SOGLIA = 0.3
+STESI_PARI = 0.02
+STESI_MARGINE = 0.1
+
+
+def _correlazione(P, t):
+    """La correlazione normalizzata di `t` su `P` (grigi, `t` piu' piccolo):
+    `(massimo, y, x)`."""
+    import numpy as np
+    H, W = P.shape
+    h, w = t.shape
+    tz = t - t.mean()
+    nt = np.sqrt((tz ** 2).sum())
+    if h > H or w > W or nt < 1e-6:
+        return -1.0, 0, 0
+    F = (H + h, W + w)
+    num = np.fft.irfft2(np.fft.rfft2(P, F) * np.fft.rfft2(tz[::-1, ::-1], F),
+                        F)[h - 1:H, w - 1:W]
+
+    def finestra(A):
+        S = np.cumsum(np.cumsum(np.pad(A, ((1, 0), (1, 0))), 0), 1)
+        return S[h:, w:] - S[:-h, w:] - S[h:, :-w] + S[:-h, :-w]
+    s1, s2 = finestra(P), finestra(P ** 2)
+    var = s2 - s1 ** 2 / (h * w)
+    c = num / (np.sqrt(np.maximum(var, 1e-9)) * nt)
+    c[var < 1e-3 * h * w] = -1
+    k = np.unravel_index(np.argmax(c), c.shape)
+    return float(c[k]), int(k[0]), int(k[1])
+
+
+def stesi(args):
+    """Ogni texture contro la pagina del suo PDF: dritta, a scala uniforme."""
+    import io
+    import numpy as np
+    import pypdfium2 as pdfium
+    from PIL import Image
+    from pack3d import artwork, strati, texture
+    girate = 0
+    for caso in _casi(args.casi, args.solo):
+        try:
+            with open(os.path.join(args.uscita, caso["nome"] + ".glb"), "rb") as fh:
+                glb = fh.read()
+        except OSError:
+            continue
+        # la pagina come la vede chi apre il file - col suo /Rotate, che
+        # `pagina_unica` cuoce e la copia senza livelli perderebbe - senza i
+        # livelli tecnici e senza le lastre che coprono la grafica, come la
+        # pulisce la costruzione (`artwork.senza_coperture`: la vernice del
+        # Nutella Donut, resa, copre tutto il foglio), resa a una risoluzione
+        # per texture
+        puliti = []
+        for f in caso["file"]:
+            una, _n = artwork.pagina_unica(os.path.join(args.casi, "parco", "pdf", f))
+            puliti.append(artwork.senza_coperture(strati.senza_tecnici(una)[0])[0])
+        rese = {}
+
+        def pagina(i, dpi):
+            if (i, dpi) not in rese:
+                doc = pdfium.PdfDocument(puliti[i])
+                rese[(i, dpi)] = np.asarray(doc[0].render(scale=dpi / 72.0)
+                                            .to_pil().convert("L"), float)
+                doc.close()
+            return rese[(i, dpi)]
+        for t in texture.texture(glb, 100000):
+            im = Image.open(io.BytesIO(t["dati"])).convert("L")
+            if max(im.size) < 64:
+                print("%-30s %-12s %5d x %-5d  troppo piccola per cercarla"
+                      % (caso["nome"], t["nome"], im.width, im.height))
+                continue
+            R = float(round(min(72.0, max(30.0, STESI_PX * 300.0 / max(im.size)))))
+            per_giro = {}
+            for k in range(4):
+                g = im.rotate(90 * k, expand=True)
+                for dpi in np.geomspace(100, 400, 32):
+                    w = max(1, round(g.width * R / dpi))
+                    h = max(1, round(g.height * R / dpi))
+                    a = np.asarray(g.resize((w, h), Image.BILINEAR), float)
+                    for i in range(len(puliti)):
+                        c = _correlazione(pagina(i, R), a)[0]
+                        if c > per_giro.get(90 * k, (-1.0,))[0]:
+                            per_giro[90 * k] = (c, dpi, i)
+            if 0 not in per_giro:
+                # tutta di un colore: non c'e' niente da ritrovare
+                print("%-30s %-12s %5d x %-5d  di un colore solo, non si cerca"
+                      % (caso["nome"], t["nome"], im.width, im.height))
+                continue
+            giro = max(per_giro, key=lambda k: per_giro[k][0])
+            c, dpi, i = per_giro[giro]
+            dritta, dpi0, i0 = per_giro[0]
+            if c < STESI_SOGLIA:
+                esito = "non si ritrova sulla pagina"
+            elif dritta >= c - STESI_PARI:
+                esito, c, dpi, i = "dritta", dritta, dpi0, i0
+            elif c - dritta >= STESI_MARGINE:
+                esito = "GIRATA di %d gradi" % giro
+                girate += 1
+            else:
+                esito = ("incerta, da guardare: girata di %d gradi %.2f, dritta "
+                         "%.2f" % (giro, c, dritta))
+            print("%-30s %-12s %5d x %-5d  %s (pdf %d, %.0f dpi, correlazione %.2f)"
+                  % (caso["nome"], t["nome"], im.width, im.height, esito, i + 1,
+                     dpi, c))
+    if girate:
+        raise SystemExit(1)
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cosa", required=True)
@@ -1203,6 +1379,13 @@ def main():
     k.add_argument("dopo")
     k.add_argument("--immagini", help="dove salvare le viste affiancate")
     k.set_defaults(fai=confronta)
+    t = sub.add_parser("stesi", help="controlla che ogni texture sia lo steso "
+                                     "del suo PDF, dritta")
+    t.add_argument("casi", help="clone del repository privato dei casi")
+    t.add_argument("uscita", help="la cartella di una costruzione del parco")
+    t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                   help="solo questi casi, separati da virgole")
+    t.set_defaults(fai=stesi)
     s = sub.add_parser("spazio", help="prova un caso sullo Space vero, "
                                       "appena ripartito col codice di qui")
     s.add_argument("url", help="per esempio https://iccio-maurizio.hf.space")

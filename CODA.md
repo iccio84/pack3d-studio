@@ -102,8 +102,13 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso_<codice> --solo <nome> | tail -3
 
-   e guarda `/tmp/caso_<codice>/<nome>_viste.png` accanto al PDF. Niente
-   parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
+   e guarda `/tmp/caso_<codice>/<nome>_viste.png` accanto al PDF. La
+   texture deve essere lo steso del PDF, dritta (REGOLE.md, *La texture e'
+   lo steso*):
+
+       python3 prove/parco.py stesi ../pack3d-casi /tmp/caso_<codice> --solo <nome>
+
+   Niente parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
    regola in REGOLE.md - il caso, la causa, la regola, con i numeri - nella
    sezione della famiglia, leggendo solo le righe intorno (`grep -n`). Poi
    *Quando si unisce nel ramo della settimana*.
@@ -172,7 +177,7 @@ approvato**» o «**Modello NON approvato**» - e in `stato.json`, e toglie
 `da-approvare`.
 
 - **Approvato**: lo Space, se ha il token di Glam, manda da solo il modello
-  in Glam, mette il caso risolto e la issue `da-rilasciare`, con un commento
+  in Glam, con la sua texture (GLAM.md, sezione 8), mette il caso risolto e la issue `da-rilasciare`, con un commento
   «**In Glam**»; la routine non parte nemmeno. Se non ci riesce rilancia la
   routine: il caso e' libero, e `prepara` vede che e' approvato e fa da solo
   quello che fa

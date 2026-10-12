@@ -18,7 +18,7 @@ import json
 import os
 
 from . import dieline as dl
-from . import artwork, folding, exporters, studio, knowledge, quote, verifica
+from . import artwork, folding, exporters, studio, knowledge, quote, steso, verifica
 from .camera import preset_camera
 
 
@@ -31,9 +31,9 @@ def build(args):
         # nel verso della grafica, come il server: vedi
         # `artwork.astuccio_sulla_grafica`. Da qui in avanti `pdf` e' la
         # copia girata, se il foglio andava girato.
-        pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(args.pdf)
+        pdf, d, gradi, giro = artwork.astuccio_sulla_grafica(args.pdf)
     else:
-        pdf = args.pdf
+        pdf, gradi = args.pdf, 0
         d = dl.analyze(pdf, kind=args.kind)
     if not d.panels:
         raise SystemExit(f"tipologia '{d.kind}' non ancora supportata dal solutore")
@@ -50,8 +50,13 @@ def build(args):
     if args.dpi:
         dpi = args.dpi
     esito = {}
-    tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
-                                              dieline=d, esito=esito)
+    # lo steso, la texture del GLB: il DT con un millimetro attorno, dallo
+    # stesso foglio delle facce, come il server (`pack3d.steso`)
+    m_dt = 1.0 / dl.PT2MM
+    tex, avvisi_tex = artwork.texture_astuccio(
+        pdf, d.panels, dpi, dieline=d, esito=esito,
+        steso=(d.bbox[0] - m_dt, d.bbox[1] - m_dt, d.bbox[2] + m_dt,
+               d.bbox[3] + m_dt))
     for m in avvisi_tex:
         print("  avviso   :", m)
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
@@ -122,8 +127,11 @@ def build(args):
 
     objdir = os.path.join(args.out, "obj")
     obj = exporters.write_obj(piane, objdir, basename=base)
+    tela, box = esito["steso"]
+    op = steso.facce_sullo_steso(faces, d.panels, esito.get("girate"),
+                                 esito["scala"], box, gradi)
     glb = exporters.write_glb(faces, os.path.join(args.out, f"{base}.glb"),
-                              tex_max=tmax)
+                              tex_max=tmax, steso=(steso.gira(tela, op), None))
     print("obj         :", obj)
     print("glb         :", glb)
 

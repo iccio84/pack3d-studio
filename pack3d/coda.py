@@ -728,6 +728,35 @@ def glam_configurato():
     return bool(os.environ.get("PACK3D_IMPORT_TOKEN", "").strip())
 
 
+def _texture_in_glam(cod, glb, nome):
+    """La texture del modello appena mandato, nella sezione texture di Glam
+    (GLAM.md, sezione 8; `pack3d.texture`). Il modello in Glam c'e' gia':
+    se la texture non passa, lo dice il log e basta."""
+    from urllib.parse import quote
+    from . import texture
+    try:
+        t = texture.per_glam(glb)
+        if t is None:
+            print("coda: caso %s, il modello ha piu' texture (un riempimento): in Glam "
+                  "va solo il modello" % cod, file=sys.stderr)
+            return
+        req = urllib.request.Request(
+            GLAM_URL + "/api/import-texture", data=t["dati"], method="POST",
+            headers={"Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
+                     "Content-Type": t["mime"],
+                     "X-Model-Name": quote(nome, safe=_URI),
+                     "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
+                     "X-Texture-Name": quote(texture.nomi_file(nome, [t])[0], safe=_URI),
+                     "X-Pack3d-Codice": cod,
+                     "User-Agent": "pack3d-studio"})
+        with urllib.request.urlopen(req, timeout=120) as r:
+            r.read()
+        print("coda: caso %s, in Glam anche la texture" % cod, file=sys.stderr)
+    except Exception as e:      # noqa: BLE001 - dopo, il caso va segnato risolto
+        print("coda: caso %s, la texture non e' andata in Glam (%s): il modello c'e'"
+              % (cod, e), file=sys.stderr)
+
+
 def _in_glam(cod, issue, cartella, nome):
     """Nel suo thread: il modello approvato in Glam, il caso risolto, la issue
     `da-rilasciare`. Se Glam non lo prende, rilancia la routine."""
@@ -759,6 +788,7 @@ def _in_glam(cod, issue, cartella, nome):
                       "Il caso %s: chi l'ha caricato ha APPROVATO il modello corretto, e "
                       "lo Space non e' riuscito a mandarlo in Glam: %s")
         return
+    _texture_in_glam(cod, glb, nome)
     try:
         ora = datetime.datetime.now(datetime.timezone.utc)
         percorso = cartella + "/stato.json"
