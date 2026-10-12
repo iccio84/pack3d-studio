@@ -298,7 +298,10 @@ def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
 
     m_solco = None
     for f in faces:
-        tinta = uniforme(f["tex"])
+        # sullo steso ogni faccia che ci ha il suo posto, anche se e' di un
+        # colore solo (`steso.facce_sullo_steso`); le altre - l'interno, il
+        # taglio - sono di colore pieno
+        tinta = uniforme(f["tex"]) if f.get("telaio") is None else None
         if tinta is None and f.get("telaio") is None:
             raise ValueError("faccia %r: stampata ma senza il suo posto sullo "
                              "steso" % f["name"])

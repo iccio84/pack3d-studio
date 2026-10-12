@@ -737,7 +737,7 @@ def _texture_in_glam(cod, glb, nome):
     try:
         t = texture.per_glam(glb)
         if t is None:
-            print("coda: caso %s, il modello ha piu' texture (un riempimento): in Glam "
+            print("coda: caso %s, il modello ha piu' texture (coppa col tappo, cono col lid, riempimento): in Glam "
                   "va solo il modello" % cod, file=sys.stderr)
             return
         req = urllib.request.Request(
@@ -754,6 +754,35 @@ def _texture_in_glam(cod, glb, nome):
         print("coda: caso %s, in Glam anche la texture" % cod, file=sys.stderr)
     except Exception as e:      # noqa: BLE001 - dopo, il caso va segnato risolto
         print("coda: caso %s, la texture non e' andata in Glam (%s): il modello c'e'"
+              % (cod, e), file=sys.stderr)
+
+
+def _template_in_glam(cod, glb, nome):
+    """Il template PSD del modello appena mandato, per «Scarica Template» di
+    Glam (GLAM.md, sezione 9; `pack3d.template`). Come la texture: se non
+    passa, lo dice il log e basta."""
+    from urllib.parse import quote
+    from . import template
+    try:
+        t = template.template(glb)
+        if t is None:
+            print("coda: caso %s, il modello ha piu' texture (coppa col tappo, cono col lid, riempimento): in "
+                  "Glam va senza template" % cod, file=sys.stderr)
+            return
+        req = urllib.request.Request(
+            GLAM_URL + "/api/import-template", data=t["dati"], method="POST",
+            headers={"Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
+                     "Content-Type": template.MIME,
+                     "X-Model-Name": quote(nome, safe=_URI),
+                     "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
+                     "X-Template-Name": quote(template.nome_file(nome), safe=_URI),
+                     "X-Pack3d-Codice": cod,
+                     "User-Agent": "pack3d-studio"})
+        with urllib.request.urlopen(req, timeout=300) as r:
+            r.read()
+        print("coda: caso %s, in Glam anche il template" % cod, file=sys.stderr)
+    except Exception as e:      # noqa: BLE001 - dopo, il caso va segnato risolto
+        print("coda: caso %s, il template non e' andato in Glam (%s): il modello c'e'"
               % (cod, e), file=sys.stderr)
 
 
@@ -789,6 +818,7 @@ def _in_glam(cod, issue, cartella, nome):
                       "lo Space non e' riuscito a mandarlo in Glam: %s")
         return
     _texture_in_glam(cod, glb, nome)
+    _template_in_glam(cod, glb, nome)
     try:
         ora = datetime.datetime.now(datetime.timezone.utc)
         percorso = cartella + "/stato.json"

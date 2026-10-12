@@ -5384,6 +5384,36 @@ immagine di colore, coi nomi delle mesh se sono piu' d'una
   dove metterle. Se Glam non la prende, il modello c'e' lo stesso: si scrive
   e si va avanti.
 
+### Il template PSD
+
+Per «Scarica Template» di Glam ogni modello con una texture sola ha anche il
+suo **template**: un PSD fatto dal GLB (`pack3d/template.py`), con la
+struttura del template ufficiale del Nutella 750 g. Sotto, il gruppo «La tua
+grafica» con la texture, cioe' lo steso; sopra, le «Guide UV»: tutti gli
+spigoli della mappatura e la scacchiera A0-J9 (nascosti), l'area che il
+modello non prende velata di nero al 60%, i contorni in magenta e i nomi
+delle facce di un astuccio.
+
+- **I contorni sono quelli che servono a chi disegna**: il bordo di quello
+  che il modello prende - il DT, le finestre, i solchi - preso dalla
+  maschera dei triangoli e non dagli spigoli, perche' una triangolazione con
+  le giunte a T (la plancia di un display, dal bordo ondulato) ha spigoli
+  liberi anche in mezzo a una faccia; e le pieghe, dove i piani girano di
+  piu' di 20 gradi, se fanno una linea lunga almeno il 3% del template. Due
+  pannelli separati dallo spessore del cartone, nello steso di un display,
+  sono attaccati dalla loro piega. La zigrinatura della saldatura di un
+  flowpack, fatta di pieghe corte che cambiano verso a ogni dente, non c'e'.
+- **Ogni faccia stampata e' sullo steso**, anche quella di un colore solo -
+  il fondo tutto rosso di un astuccio: in Glam la texture di una variante
+  deve arrivare anche li', e il template ne disegna il contorno. Restano di
+  colore pieno solo l'interno, il taglio, il rovescio e la pellicola.
+- **Al massimo 45 MB**: lo storage di Glam non prende file oltre i 50. Un
+  template piu' grande si rifa' piu' piccolo; le UV sono frazioni, e torna.
+- **In Glam** arriva come la texture (GLAM.md, sezione 9): dalla pagina con
+  `pack3d:template` (lo Space lo fa con `/api/template`), dalla routine e
+  dallo Space con `/api/import-template`. Se non passa, modello e texture ci
+  sono lo stesso.
+
 ## Casi calibrati
 
 Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel

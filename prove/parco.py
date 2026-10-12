@@ -512,6 +512,58 @@ def glam(args):
         risposta.get("id", "?"),
         ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
     _texture_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"))
+    _template_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"))
+
+
+def _template_in_glam(url, glb, nome, categoria, codice):
+    """Il template PSD del modello appena mandato, per «Scarica Template» di
+    Glam (GLAM.md, sezione 9): `pack3d.template`. Come la texture: il
+    modello in Glam c'e' gia', e se il template non passa lo si dice e
+    basta."""
+    try:
+        from pack3d import template
+        t = template.template(glb)
+    except ImportError as e:
+        print("template: manca %s (pip install -q -r requirements.txt): in Glam "
+              "va senza template" % e.name)
+        return
+    except Exception as e:      # noqa: BLE001 - il modello e' gia' in Glam
+        print("template: non si fa dal GLB (%s): in Glam va senza template" % e)
+        return
+    if t is None:
+        print("template: il modello ha piu' texture (coppa col tappo, cono col lid, riempimento): in Glam va "
+              "senza template")
+        return
+    file = template.nome_file(nome)
+    intestazioni = {"Content-Type": template.MIME,
+                    "X-Model-Name": quote(nome, safe=_URI),
+                    "X-Model-Category": quote(categoria, safe=_URI),
+                    "X-Template-Name": quote(file, safe=_URI),
+                    "User-Agent": "pack3d-studio"}
+    if codice:
+        intestazioni["X-Pack3d-Codice"] = codice
+    req = urllib.request.Request(
+        url.rstrip("/") + "/api/import-template", data=t["dati"], method="POST",
+        headers=intestazioni)
+    try:
+        with urllib.request.urlopen(req, timeout=300) as r:
+            risposta = json.loads(r.read().decode("utf-8") or "{}")
+    except urllib.error.HTTPError as e:
+        testo = e.read().decode("utf-8", "replace")[:300]
+        if e.code == 401:
+            print("Glam rifiuta il token del template (401): e' lo stesso di "
+                  "/api/import-model, PACK3D_IMPORT_TOKEN")
+        elif not _glam_assente(e.code, testo):
+            print("Glam non ha preso il template (HTTP %d): %s - il modello c'e'. "
+                  "Se /api/import-template non esiste, Glam non conosce ancora i "
+                  "template: GLAM.md, sezione 9" % (e.code, testo))
+        return
+    except (urllib.error.URLError, OSError, ValueError) as e:
+        _glam_irraggiungibile(e)
+        return
+    print("in Glam anche il template \"%s\", %d x %d px, %.1f MB%s" % (
+        file, t["lato"][0], t["lato"][1], len(t["dati"]) / 1e6,
+        ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
 
 
 def _texture_in_glam(url, glb, nome, categoria, codice):
@@ -526,7 +578,7 @@ def _texture_in_glam(url, glb, nome, categoria, codice):
         print("texture: non si legge dal GLB (%s): in Glam va solo il modello" % e)
         return
     if t is None:
-        print("texture: il modello ne ha piu' d'una (un riempimento), e Glam ne "
+        print("texture: il modello ne ha piu' d'una (coppa col tappo, cono col lid, riempimento), e Glam ne "
               "mette una sola su tutto il modello: in Glam va solo il modello")
         return
     file = texture.nomi_file(nome, [t])[0]
