@@ -627,11 +627,19 @@ DA_APPROVARE_IN_GLAM = ("in-lavorazione", "Il modello corretto è pronto: guarda
 
 
 def _caso_in_coda(casi, cod):
-    """(cartella del caso nel repository privato, il suo verdetto.json)."""
+    """(cartella del caso nel repository privato, il suo verdetto.json).
+
+    La piu' recente: lo stesso PDF ricaricato un altro giorno apre un caso
+    nuovo in una cartella nuova, `<data>_<codice>`, e lo Space legge stato e
+    modello da quella della issue aperta (`coda._storia`). Lo Space non apre
+    una seconda issue finche' la prima e' aperta, quindi la cartella piu'
+    recente e' sempre quella del caso in corso. Prendendo la prima, la
+    routine scriveva il modello da approvare nella cartella di un caso
+    eliminato giorni prima, e chi l'aveva caricato non lo vedeva."""
     if not cod or len(cod) != 10 or any(c not in "0123456789abcdef" for c in cod):
         raise SystemExit("il codice di un caso e' di 10 cifre esadecimali: %r" % cod)
     radice = os.path.join(casi, "casi")
-    for d in sorted(os.listdir(radice) if os.path.isdir(radice) else []):
+    for d in sorted(os.listdir(radice) if os.path.isdir(radice) else [], reverse=True):
         if d.endswith("_" + cod):
             try:
                 with open(os.path.join(radice, d, "verdetto.json"), encoding="utf-8") as fh:
