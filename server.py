@@ -342,16 +342,23 @@ def avviso_pagine(pdf):
 # saperlo, una riga che segue la fustella sembra disegno tecnico rimasto. Non
 # cambia cosa e' un difetto: gli dice cosa sono quelle righe.
 INCISA = "apertura a strappo incisa nel modello"
+# Lo stesso per la linguetta di chiusura sul bordo libero di una faccia
+# (`incisioni.chiusura`).
+CHIUSURA = "linguetta di chiusura incisa nel modello"
 
 
 def nota_incisioni(meta):
     """La riga "da sapere" per il controllo, se il modello ha i solchi."""
-    if not any(str(m).startswith(INCISA) for m in meta or ()):
+    righe = [str(m) for m in meta or ()]
+    quali = [q for q, c in (("dell'apertura a strappo", INCISA),
+                            ("della linguetta di chiusura", CHIUSURA))
+             if any(c in r for r in righe)]
+    if not quali:
         return None
-    return ("le righe sottili color cartone sulle facce sono i tagli "
-            "dell'apertura a strappo, incisi nel cartone come solchi, come si "
-            "vedono sulla scatola vera chiusa: non sono disegno tecnico "
-            "rimasto stampato, e la grafica sotto e' intera.")
+    return ("le righe sottili color cartone sulle facce sono i tagli %s, "
+            "incisi nel cartone come solchi, come si vedono sulla scatola "
+            "vera chiusa: non sono disegno tecnico rimasto stampato, e la "
+            "grafica sotto e' intera." % " e ".join(quali))
 
 
 def nota_materiali(meta):
@@ -388,18 +395,31 @@ def incidi_apertura(pdf, d, faces, girate, spessore):
     try:
         nomi = [f["name"] for f in faces if f["name"] in d.panels]
         tg = incisioni.tagli(pdf, d.panels, nomi)
-        if not tg:
+        # la linguetta di chiusura sul bordo libero di una faccia
+        ch = incisioni.chiusura(pdf, d.panels, nomi)
+        if not tg and not ch:
             return None
-        n = incisioni.incidi(faces, tg, d.panels, girate, spessore)
+        tutti = {n: tg.get(n, []) + ch.get(n, []) for n in set(tg) | set(ch)}
+        n = incisioni.incidi(faces, tutti, d.panels, girate, spessore)
     except Exception as e:                        # noqa: BLE001
         traceback.print_exc()
         for f in faces:
             f.pop("maglia", None)
-        return ("apertura a strappo riconosciuta ma non incisa (%s): "
+        return ("tagli della fustella riconosciuti ma non incisi (%s): "
                 "l'astuccio esce chiuso e liscio" % type(e).__name__)
-    return ("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - la "
-            "grafica resta intera, il taglio dal rovescio non si vede da fuori"
-            % (INCISA, n, ", ".join(sorted(tg)), incisioni.LARGHEZZA))
+    righe = []
+    if tg:
+        righe.append("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - "
+                     "la grafica resta intera, il taglio dal rovescio non si "
+                     "vede da fuori" % (INCISA, sum(map(len, tg.values())),
+                                        ", ".join(sorted(tg)),
+                                        incisioni.LARGHEZZA))
+    if ch:
+        righe.append("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - "
+                     "la grafica resta intera" % (
+                         CHIUSURA, sum(map(len, ch.values())),
+                         ", ".join(sorted(ch)), incisioni.LARGHEZZA))
+    return "; ".join(righe)
 
 
 # L'astuccio con l'apertura a strappo APERTA: vedi `pack3d.apertura`. I nomi
@@ -621,12 +641,21 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     normale, riga_rilievo = rilievo_sicuro(
         rilievo.mappa_dello_steso, pdf, tuple(c / scala for c in box),
         tela.size, scala / PT2MM, op, coppia=True)
+    # la lamina, se il DT ne ha la lastra - o la legenda la dice su una
+    # tinta piatta: metallo dove c'e', cartoncino attorno (`pack3d.lamina`)
+    righe_lamina = []
+    mr = lamina_della_tela(pdf, tuple(c / scala for c in box), tela.size,
+                           tela.size, scala / PT2MM, "astuccio", righe_lamina,
+                           carta=RUVIDITA_CARTA, legenda=sorgente)
+    if mr is not None:
+        mr = lo_steso.gira(mr, op)
     tela = lo_steso.gira(tela, op)
     storte = lo_steso.riscontro(faces, tela)
     exporters.write_glb(faces, out_glb, tex_max=tmax, pellicola=film,
-                        steso=(tela, normale))
+                        steso=(tela, normale, mr))
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    meta += righe_lamina
     if storte:
         meta.append("STESO: la grafica di %s non torna con lo steso (%s): la "
                     "texture non e' quella delle facce" % (
@@ -2393,10 +2422,12 @@ def rilievo_sicuro(fa, *args, coppia=False, **kw):
 # la ruvidita' della carta di un GLB a una maglia (`exporters.write_glb_mesh`):
 # fuori dalla lamina la mappa la tiene com'era
 RUVIDITA_MAGLIA = 0.42
+# e quella del cartoncino dell'astuccio (`exporters._write_glb_steso`)
+RUVIDITA_CARTA = 0.85
 
 
 def lamina_della_tela(pdf, riquadro, misura_tex, misura_tela, px_mm, nome,
-                      avvisi):
+                      avvisi, carta=RUVIDITA_MAGLIA, legenda=None):
     """La mappa metallo/ruvidita' della lamina sulla `tela` (la texture del
     `riquadro`, `misura_tex` pixel, con sotto le strisce fino a
     `misura_tela`), o None. Come il rilievo, la lamina non deve mai fermare
@@ -2404,8 +2435,8 @@ def lamina_della_tela(pdf, riquadro, misura_tex, misura_tela, px_mm, nome,
     lo dice."""
     from PIL import Image
     try:
-        mr, riga = lamina.mappa(pdf, riquadro, misura_tex, px_mm,
-                                RUVIDITA_MAGLIA)
+        mr, riga = lamina.mappa(pdf, riquadro, misura_tex, px_mm, carta,
+                                legenda=legenda)
     except Exception as e:                          # noqa: BLE001
         traceback.print_exc()
         mr, riga = None, ("lamina: la lastra c'e' ma la mappa non si e' "
@@ -2415,7 +2446,7 @@ def lamina_della_tela(pdf, riquadro, misura_tex, misura_tela, px_mm, nome,
     if mr is None:
         return None
     k = mr.width / float(misura_tex[0])
-    fondo = (255, round(RUVIDITA_MAGLIA * 255), 0)
+    fondo = (255, round(carta * 255), 0)
     tutta = Image.new("RGB", (max(1, round(misura_tela[0] * k)),
                               max(1, round(misura_tela[1] * k))), fondo)
     tutta.paste(mr, (0, 0))

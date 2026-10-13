@@ -4210,8 +4210,57 @@ lastra sul riquadro del DT (`techink.mappe_lastre`, 150 dpi al piu'), cosi'
 il campione della legenda fuori dal DT non conta; sotto lo 0,2% non c'e'
 metallo. Sul Darkchoc il foil e' il 38,4% del coperchio: la cornice, le
 falde e le scritte arancio. Un "Silver" o un PANTONE 877 C sono inchiostri
-metallici stampati, non una lamina, e qui non si trattano; per ora la
-lamina si fa sulla scatola a prisma.
+metallici stampati, non una lamina, e qui non si trattano. La lamina si fa
+sulla scatola a prisma e sull'astuccio.
+
+### La lamina che dice solo la legenda
+
+Il caso: un astuccio di cioccolatini da 16, respinto da chi l'aveva caricato perche'
+il foil oro della legenda - "Coldfoil Gold ... KURZ 220" - sul
+modello era giallo piatto. Qui nessuna lastra si chiama come una lamina: il
+foil e' una tinta piatta qualsiasi, `PANTONE 113 C`, e il nome sta solo nella
+voce della legenda, accanto al suo campione. E l'astuccio non aveva la
+lamina per niente: la faceva solo il prisma.
+
+Le regole:
+
+- se nessuna lastra si chiama come una lamina, `lamina.lastre` legge la
+  legenda come le aree riservate (`techink.aree_riservate` con `cerca`): la
+  voce che dice foil, Folie, lamina, hot stamping, stampa a caldo, e la
+  lastra piena del campione DAVANTI alla voce (solo quello, non quello che
+  c'e' sotto la scritta). La resa costa solo se nel testo della pagina c'e'
+  una di quelle parole;
+- un campione puo' essere una cornice bianca col colore dentro (36 punti di
+  quadro, 21 di colore): conta il pieno che ci sta dentro, se copre almeno
+  un quarto della cornice;
+- a pari stacco dalla voce vince il campione che copre di piu' la sua riga:
+  una voce su due righe toccava anche il campione della voce sopra (TEXT
+  Area, `PANTONE 1595 C`);
+- l'astuccio ha la sua mappa metallo/ruvidita' sullo steso
+  (`exporters._write_glb_steso`, terzo elemento di `steso`), girata come la
+  texture, col cartoncino a ruvidita' 0,85 attorno.
+
+Su quell'astuccio il foil e' l'1,5% dello steso: le scritte oro di fronte,
+fianchi, cielo e fondo. Le due correzioni della legenda trovano anche, da
+sole, le quattro aree riservate del file (`COVERED`, `TEXT`, `Bar Code`,
+`Best Before`), che prima andavano dichiarate a mano.
+
+### La linguetta di chiusura si incide
+
+Lo stesso caso: il fondo e' la falda di chiusura, e il suo bordo libero ha
+due tacche e fra loro la linguetta che si infila nella fessura dell'altra
+falda. La faccia e' il rettangolo pieno del pannello, e il taglio - 47 mm di
+catena su 34 di bordo, che entra di 6,6 mm - spariva: "manca la linguetta di
+chiusura".
+
+La regola (`incisioni.chiusura`): un tratto della fustella che parte da un
+lato LIBERO della faccia - non una piega con un'altra faccia -, entra almeno
+2 mm (`LINGUETTA_MIN`) e torna sullo stesso lato e' il taglio di una
+chiusura, e sul cartone chiuso si vede: si incide come i tagli
+dell'apertura a strappo (stesso solco, 0,35 x 0,22 mm), e la riga per il
+controllo dice che quelle righe sono la linguetta. I lati obliqui della
+falda vanno da un lato a un altro, e il filo dei fianchi corre a 0,3 mm dal
+bordo: restano come sono.
 
 ## Flowpack
 

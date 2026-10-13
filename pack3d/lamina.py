@@ -36,6 +36,10 @@ from . import techink
 # Kaltfolie), lamina, stampa a caldo, hot stamping. "Foil" senza spazi
 # dentro un nome solo (`ColdFoilCopper`) vale: si cerca la parola dentro.
 _LAMINA = re.compile(r"foil|folie|lamina|hot\s*stamp|stampa\s*a\s*caldo")
+# La stessa parola in una voce della legenda, e le parole del prefiltro (il
+# testo della pagina in minuscolo).
+_VOCE = re.compile(r"(?i)\S*(?:foil|folie|lamina|hot\s*stamp|stampa\s*a\s*caldo)\S*.*")
+_PAROLE = ("foil", "folie", "lamina", "stamp", "caldo")
 
 DPI = 150.0
 PIENO = 0.25              # quota d'inchiostro per dire che la lastra c'e'
@@ -48,9 +52,18 @@ def e_lamina(nome):
     return bool(_LAMINA.search(techink._norm(nome)))
 
 
-def lastre(pdf, page_no=0):
+def lastre(pdf, page_no=0, legenda=None):
     """I nomi delle lastre di lamina della pagina, ordinati: vuoto se non ce
-    n'e'. Costa la lettura delle risorse della pagina, non una resa."""
+    n'e'. Costa la lettura delle risorse della pagina, non una resa.
+
+    Se nessuna lastra si chiama come una lamina, si guarda la legenda di
+    `legenda` (il file con la legenda, di solito il foglio prima della
+    pulizia; senza, `pdf`): su un astuccio da 16 il foil oro e' una tinta
+    piatta qualsiasi, `PANTONE 113 C`, e la lamina la dice solo la voce
+    "Coldfoil Gold ... KURZ 220" accanto al suo campione giallo. Si
+    legge come le aree riservate (`techink.aree_riservate`), dal campione
+    davanti alla voce; la resa costa solo se nel testo c'e' una parola della
+    lamina."""
     import pypdf
     try:
         pagina = pypdf.PdfReader(pdf).pages[page_no]
@@ -58,6 +71,13 @@ def lastre(pdf, page_no=0):
             pagina, prova=e_lamina).values())
     except Exception:                                   # noqa: BLE001
         return []
+    if not nomi:
+        try:
+            nomi = set(techink.aree_riservate(
+                legenda or pdf, page_no, cerca=_VOCE, parola=_PAROLE,
+                solo_campione=True))
+        except Exception:                               # noqa: BLE001
+            nomi = set()
     return sorted(nomi)
 
 
@@ -86,14 +106,15 @@ def copertura(pdf, quali, riquadro, misura, page_no=0, dpi=DPI):
     return c
 
 
-def mappa(pdf, riquadro, misura_tex, px_mm_tex, carta, page_no=0):
+def mappa(pdf, riquadro, misura_tex, px_mm_tex, carta, page_no=0,
+          legenda=None):
     """`(mappa metallo/ruvidita', riga)` per una texture fatta dal `riquadro`
     del foglio - in punti, telaio di misura - di `misura_tex` pixel,
     `px_mm_tex` per mm. Fuori dalla lamina la ruvidita' e' `carta`, quella
     che il materiale avrebbe senza mappa. `(None, None)` se il file non ha
     lastre di lamina; `(None, riga)` se ce l'ha ma non si legge, o copre
     troppo poco."""
-    quali = lastre(pdf, page_no)
+    quali = lastre(pdf, page_no, legenda)
     if not quali:
         return None, None
     px_mm = min(float(px_mm_tex), DPI / 25.4)
