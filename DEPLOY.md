@@ -283,6 +283,33 @@ Aspetta fino a due minuti, e se non risponde lascia un bottone **Riprova**
 invece di obbligare a ricaricare.
 
 
+## I permessi della routine
+
+La routine lavora in modalita' auto, e il controllo automatico dei permessi
+le blocca l'unione delle sue PR («Merge Without Review»). Le regole che glielo
+permettono non stanno nel repository: `.claude/settings.json` lo legge solo
+una sessione con un repository solo, e la routine ne ha due (questo e
+`pack3d-casi`). Stanno nello **script di configurazione dell'ambiente cloud**
+(su Claude: menu dell'ambiente nella barra del titolo -> Modifica), che le
+scrive nelle impostazioni dell'utente prima che la sessione parta:
+
+    mkdir -p ~/.claude
+    [ -f ~/.claude/settings.json ] || cat > ~/.claude/settings.json <<'FINE'
+    {
+      "permissions": {
+        "allow": [
+          "Bash(gh api -X POST repos/iccio84/pack3d-studio/pulls *)",
+          "Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)"
+        ]
+      }
+    }
+    FINE
+
+La prima apre le PR, la seconda le unisce: anche il rilascio della settimana
+verso `main`, che aggiorna lo Space. Chi vuole approvare i rilasci a mano
+toglie la seconda. `.claude/settings.json` nei due repository resta per le
+sessioni con un repository solo.
+
 ## Aggiornare dopo una nuova regola
 
 Quando la pipeline cambia, sostituisci i file modificati (di solito qualcosa
