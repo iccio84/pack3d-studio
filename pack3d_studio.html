@@ -270,6 +270,15 @@
   #nota-esito:empty{display:none}
   #nota-esito.ok{color:var(--foreground);font-weight:600}
   #nota-esito.err{color:var(--destructive)}
+  /* finche' il caso aspetta Invia, la nota sta nel modulo e parte con lui:
+     chiusa dietro un link, perche' il modulo resti basso e Invia in vista */
+  #invio #nota{width:auto;margin-top:0}
+  #invio #nota label[for=nota-testo]{font-size:12px}
+  #nota.chiusa > :not(#nota-apri){display:none}
+  #nota:not(.chiusa) #nota-apri{display:none}
+  #nota #nota-apri{align-self:flex-start;margin:0;padding:0;border:none;background:none;box-shadow:none;
+    font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--primary);
+    text-decoration:underline;text-underline-offset:2px}
   #status.dubbio{color:var(--warning);letter-spacing:.02em;text-transform:none;
                  font-size:12px;font-weight:400}
 
@@ -470,6 +479,8 @@
       <div id="invio-esito" class="esito" role="status"></div>
     </div>
     <div id="nota" hidden>
+      <button id="nota-apri" type="button">Aggiungi una nota o una foto per chi lo corregge
+        (facoltativa)</button>
       <label for="nota-testo">Vuoi dirci com'&egrave; fatto o come si monta il pack?
         Aiuta chi lo corregge. Facoltativo.</label>
       <textarea id="nota-testo" rows="3" maxlength="2000"
@@ -1391,7 +1402,7 @@ function nomeInGlam(){
   return glbName.replace(/\.glb$/i, '').slice(0, 120) || 'Pack';
 }
 
-function mostraCaso(v, blob){
+function mostraCaso(v, blob, tieniNota){
   respinto = blob;
   togliModello();
   document.getElementById('empty').style.display = 'none';
@@ -1422,9 +1433,9 @@ function mostraCaso(v, blob){
     + (v.in_coda ? ' \u2014 \u00e8 in coda per la correzione.'
        : v.in_attesa ? ''
        : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
-  mostraNota(v);
   casoEl.classList.add('on');
   mostraInvio(v);
+  mostraNota(v, tieniNota);
   avvisaGlam(v);
 }
 
@@ -1497,7 +1508,7 @@ function mostraInvio(v){
     else if (!invioEmail.value) invioEmail.value = leggi(RICORDA_EMAIL, '') || '';
     esitoInvio('');
     if (casoEl.classList.contains('on'))
-      casoEl.insertBefore(invioEl, document.getElementById('nota'));
+      casoEl.insertBefore(invioEl, document.getElementById('caso-mostra'));
     else
       document.getElementById('ai').insertBefore(invioEl, document.getElementById('ai-righe'));
   }
@@ -1529,9 +1540,19 @@ invioSi.addEventListener('click', async () => {
     esitoInvio('L’email non sembra giusta: correggila o lasciala vuota.', 'err');
     return;
   }
-  invioSi.disabled = invioNo.disabled = invioEmail.disabled = true;
+  // la nota, se c'e', parte col caso: la foto si prepara prima, cosi' una foto
+  // che non si apre ferma l'invio invece di arrivare a meta'
+  const conNota = !notaEl.hidden && notaEl.parentNode === invioEl;
+  const testo = conNota ? notaTesto.value.trim() : '';
+  const file = conNota ? notaFoto.files[0] : null;
+  const blocca = si => {
+    invioSi.disabled = invioNo.disabled = invioEmail.disabled = notaTesto.disabled = si;
+  };
+  blocca(true);
   esitoInvio('Invio del caso…');
+  let foto = null;
   try{
+    if (file) foto = await fotoRidotta(file);
     const r = await fetch(url('/api/caso'), {method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({codice: v.codice, azione: 'invia', email})});
@@ -1540,36 +1561,69 @@ invioSi.addEventListener('click', async () => {
       if (t.charAt(0) === '<') t = '';
       throw new Error(t || ('HTTP ' + r.status));
     }
-    if (email) scrivi(RICORDA_EMAIL, email);
-    v.in_attesa = false; v.in_coda = true;
-    casoInAttesa = null;
-    invioEl.hidden = true;
-    aggiungiCaso(v, nomeInGlam());
-    notifica('«' + nomeInGlam() + '»: caso inviato. Lo segui nella finestra dei casi'
-             + (email ? ', e ti scriviamo se ci serve un’informazione.' : '.'), v.codice);
-    // adesso il riquadro dice dove arrivera' il modello e lascia scrivere la nota
-    if (casoEl.classList.contains('on')) mostraCaso(v, respinto);
-    else if (v.esito === 'dubbio') mostraVerifica(v);
-    else {
-      verificaEl.textContent = 'Caso inviato (codice ' + v.codice + '): quando sarà corretto,'
-        + ' troverai il modello giusto in Glam Lab, cartella «' + GLAM_CARTELLA + '». ' + STIMA;
-      verificaEl.classList.add('on');
-      aggiornaAI();
-      avvisaGlam(v);
-    }
   }catch(err){
-    invioSi.disabled = invioNo.disabled = invioEmail.disabled = false;
+    blocca(false);
     esitoInvio('Caso non inviato: ' + testoErrore(err), 'err');
+    return;
+  }
+  if (email) scrivi(RICORDA_EMAIL, email);
+  v.in_attesa = false; v.in_coda = true;
+  casoInAttesa = null;
+  invioEl.hidden = true;
+  aggiungiCaso(v, nomeInGlam());
+  notifica('«' + nomeInGlam() + '»: caso inviato. Lo segui nella finestra dei casi'
+           + (email ? ', e ti scriviamo se ci serve un’informazione.' : '.'), v.codice);
+  if (casoEl.classList.contains('on')){
+    // senza un modello da tenere, partiti il caso e la nota non resta niente
+    // da fare. Se la nota non arriva il caso e' partito lo stesso: il riquadro
+    // la tiene, col suo tasto per riprovare.
+    if (testo || foto){
+      try{
+        await mandaNota(v.codice, testo, foto);
+      }catch(err){
+        mostraCaso(v, respinto, true);
+        esitoNota('Il caso è inviato, la nota no: ' + testoErrore(err), 'err');
+        return;
+      }
+    }
+    avvisaGlam(v);
+    casoFinito(v);
+  }
+  else if (v.esito === 'dubbio') mostraVerifica(v);
+  else {
+    verificaEl.textContent = 'Caso inviato (codice ' + v.codice + '): quando sarà corretto,'
+      + ' troverai il modello giusto in Glam Lab, cartella «' + GLAM_CARTELLA + '». ' + STIMA;
+    verificaEl.classList.add('on');
+    aggiornaAI();
+    avvisaGlam(v);
   }
 });
+
+/** Il caso e' partito e un modello da tenere non c'e': il lavoro e' finito, e
+ *  si deve vedere. La pagina torna all'inizio e, dentro Glam Lab, chiede alla
+ *  finestra che la ospita di chiudersi (pack3d:chiudi, vedi GLAM.md); fuori
+ *  da Glam apre la finestra dei casi, dove quello appena mandato si segue. Col
+ *  modello in vista - un dubbio, o un respinto mostrato lo stesso - la pagina
+ *  resta: il modello si puo' ancora scaricare, e Glam salvarlo. */
+function casoFinito(v){
+  const nome = nomeInGlam();
+  annulla();
+  setStatus('Caso inviato · lo segui nella finestra dei casi', '');
+  const inGlam = aGlam({type: 'pack3d:chiudi', codice: v.codice, titolo: 'Caso inviato',
+    testo: '«' + nome + '»: quando sarà corretto, lo trovi in «Costruisci modello 3D'
+      + ' da PDF», cartella «' + GLAM_CARTELLA + '». ' + STIMA});
+  if (!inGlam) apriFinestra(casiEl, casiBtn, true);
+}
 
 invioNo.addEventListener('click', () => {
   const v = casoInAttesa;
   scartaInAttesa();
   if (!v) return;
-  if (casoEl.classList.contains('on'))
+  if (casoEl.classList.contains('on')){
+    mostraNota(null);
     document.getElementById('caso-codice').textContent =
       'Caso cancellato: non lo mandiamo a nessuno. (Codice ' + v.codice + ')';
+  }
   else {
     verificaEl.textContent = 'Caso non inviato: il modello resta com’è, e nessuno lo riguarda.';
     verificaEl.classList.add('on');
@@ -2205,16 +2259,30 @@ function esitoNota(testo, cls){
   notaEsito.className = cls || '';
 }
 
-function mostraNota(v){
-  notaCodice = v && v.in_coda && v.codice ? v.codice : null;
+/** La nota nel riquadro del caso. Finche' il caso aspetta Invia sta nel modulo
+ *  d'invio e parte con lui; col caso gia' in coda sta da sola, col suo tasto.
+ *  `tieni` lascia quello che c'era scritto. */
+function mostraNota(v, tieni){
+  const insieme = !!(v && v.in_attesa && v.codice && casoEl.classList.contains('on'));
+  notaCodice = v && v.codice && (v.in_coda || insieme) ? v.codice : null;
   notaEl.hidden = !notaCodice;
-  notaTesto.value = '';
+  notaEl.classList.toggle('chiusa', insieme && !tieni);
+  notaInvia.hidden = insieme;
+  if (insieme) invioEl.insertBefore(notaEl, invioEl.querySelector(':scope > .azioni'));
+  else casoEl.insertBefore(notaEl, document.getElementById('caso-mostra'));
   notaTesto.disabled = false;
+  notaInvia.disabled = false;
+  if (tieni) return;
+  notaTesto.value = '';
   notaFoto.value = '';
   document.getElementById('nota-foto-nome').textContent = '';
-  notaInvia.disabled = false;
   esitoNota('');
 }
+
+document.getElementById('nota-apri').addEventListener('click', () => {
+  notaEl.classList.remove('chiusa');
+  notaTesto.focus();
+});
 
 notaFoto.addEventListener('change', () => {
   const f = notaFoto.files[0];
@@ -2244,29 +2312,36 @@ async function fotoRidotta(file){
   }
 }
 
+/** Manda la nota di un caso in coda; un errore lo lancia. */
+async function mandaNota(codice, testo, foto){
+  const r = await fetch(url('/api/nota'), {method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({codice, nota: testo, foto})});
+  if (!r.ok){
+    let t = (await r.text()).slice(0, 200).trim();
+    if (t.charAt(0) === '<') t = '';
+    throw new Error(t || ('HTTP ' + r.status));
+  }
+}
+
+// La nota da sola, col suo tasto, resta solo quando e' partito il caso e lei
+// no: arrivata lei, il lavoro e' finito come per un caso senza nota.
 notaInvia.addEventListener('click', async () => {
   if (!notaCodice) return;
+  const codice = notaCodice;
   const testo = notaTesto.value.trim();
   const file = notaFoto.files[0];
   if (!testo && !file){ esitoNota('Scrivi qualcosa o aggiungi una foto.', 'err'); return; }
   notaInvia.disabled = true;
   esitoNota('Invio della nota\u2026');
   try{
-    const foto = file ? await fotoRidotta(file) : null;
-    const r = await fetch(url('/api/nota'), {method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({codice: notaCodice, nota: testo, foto})});
-    if (!r.ok){
-      let t = (await r.text()).slice(0, 200).trim();
-      if (t.charAt(0) === '<') t = '';
-      throw new Error(t || ('HTTP ' + r.status));
-    }
-    notaTesto.disabled = true;
-    esitoNota('Grazie: la nota \u00e8 arrivata a chi corregge il caso.', 'ok');
+    await mandaNota(codice, testo, file ? await fotoRidotta(file) : null);
   }catch(err){
     notaInvia.disabled = false;
     esitoNota('Nota non inviata: ' + testoErrore(err), 'err');
+    return;
   }
+  casoFinito({codice});
 });
 
 document.getElementById('caso-mostra').onclick = async () => {
