@@ -4262,6 +4262,28 @@ controllo dice che quelle righe sono la linguetta. I lati obliqui della
 falda vanno da un lato a un altro, e il filo dei fianchi corre a 0,3 mm dal
 bordo: restano come sono.
 
+### Il fondo a sormonto si ritaglia, sopra la falda
+
+Lo stesso caso, respinto di nuovo: "la linguetta non e' incisa ma
+fustellata/tagliata, cosi' come i bordi smussati; il lato della linguetta
+deve andare sopra l'altro lato e non intersecarsi". La colonna e' falda -
+RETRO - CIELO - FRONTE - FONDO: il fondo (41,0 mm) chiude sul retro
+sormontando dall'esterno la falda del retro (41,2 mm, con la fessura a 9 mm
+dalla piega), e il suo bordo libero ha gli angoli smussati e due tacche a
+mezzaluna che entrano 7,1 mm. Il modello aveva il fondo pieno col solco e
+nessuna falda.
+
+La regola (`pack3d/sormonto.py`): astuccio chiuso col fondo dopo il fronte e
+il retro prima, una falda sopra il retro lunga almeno meta' del fondo, e il
+contorno di taglio del fondo - la catena della fustella attorno al pannello,
+dalla piega col fronte alla piega - che entra dal bordo libero almeno 2 mm
+(`SAGOMA_MIN`) lontano dai fianchi. Allora il fondo si ritaglia su quel
+contorno (smussi e tacche sono vuoti, con la costa del cartoncino) e non si
+incide; la falda va sotto di lui, a uno spessore, al posto della sua faccia
+interna, stampata col riquadro alto quanto il fondo sopra il retro, nello
+stesso verso: dalle tacche e dagli smussi si vede lei. Nel parco lo fa solo
+questo astuccio; gli altri restano identici (la regola non scatta).
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due

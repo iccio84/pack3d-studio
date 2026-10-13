@@ -45,6 +45,7 @@ from pack3d import quote as quotature
 # piu' di un costruttore
 from pack3d import atlante
 from pack3d import steso as lo_steso
+from pack3d import sormonto as lo_sormonto
 from pack3d import template as il_template
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
@@ -384,7 +385,7 @@ FRONTE_CURVO = ("fronte curvo: le alette di cielo e fondo sono piu' lunghe "
                 "fondo sono a D")
 
 
-def incidi_apertura(pdf, d, faces, girate, spessore):
+def incidi_apertura(pdf, d, faces, girate, spessore, sagomate=()):
     """I tagli dell'apertura a strappo incisi nelle facce. La riga per chi
     guarda il modello, o None se l'astuccio non ha un'apertura.
 
@@ -397,6 +398,9 @@ def incidi_apertura(pdf, d, faces, girate, spessore):
         tg = incisioni.tagli(pdf, d.panels, nomi)
         # la linguetta di chiusura sul bordo libero di una faccia
         ch = incisioni.chiusura(pdf, d.panels, nomi)
+        # ... se la faccia non e' ritagliata sul suo contorno (`pack3d.sormonto`):
+        # li' la linguetta e' tagliata, non incisa
+        ch = {k: v for k, v in ch.items() if k not in sagomate}
         if not tg and not ch:
             return None
         tutti = {n: tg.get(n, []) + ch.get(n, []) for n in set(tg) | set(ch)}
@@ -595,6 +599,27 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels, d.curva_mm)
+    # il fondo col bordo sagomato che chiude sopra la falda del retro: la
+    # falda sotto di lui, il fondo ritagliato piu' avanti, sulle facce finite
+    # (`pack3d.sormonto`). Non sul fronte curvo, come i tagli.
+    sormonto, pannelli = None, dict(d.panels)
+    if not d.curva_mm:
+        try:
+            sormonto = lo_sormonto.trova(pdf, d)
+            if sormonto:
+                tela0, box0 = esito["steso"]
+                pf = lo_sormonto.falda(faces, sormonto,
+                                       folding.SPESSORE_CRT if carta is None else carta,
+                                       tela0, box0, esito["scala"],
+                                       esito.get("girate"))
+                if pf is None:
+                    sormonto = None
+                else:
+                    pannelli["falda"] = pf
+        except Exception:                         # noqa: BLE001
+            traceback.print_exc()
+            sormonto = None
+            faces = [f for f in faces if f["name"] not in ("falda", "falda interno")]
     # il fronte curvo, se la fustella lo dice: vedi `dieline._fronte_curvo`
     if d.curva_mm:
         folding.curva_fronte(faces, d.dims_mm, d.curva_mm,
@@ -619,7 +644,20 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                                          spessore, apertura)
                            if apertura and not d.curva_mm else (False, None))
     incisa = (None if aperta or d.curva_mm or not incisioni else
-              incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
+              incidi_apertura(pdf, d, faces, esito.get("girate"), spessore,
+                              sagomate=("bottom",) if sormonto else ()))
+    riga_sormonto = None
+    if sormonto:
+        try:
+            if lo_sormonto.ritaglia(faces, sormonto, d.panels,
+                                    esito.get("girate"), spessore):
+                riga_sormonto = (
+                    "chiusura a sormonto: il fondo e' ritagliato sul contorno "
+                    "della fustella (linguetta e smussi del bordo libero, che "
+                    "entra %.1f mm) e chiude sopra la falda del retro, che si "
+                    "vede dalle tacche" % sormonto["entra_mm"])
+        except Exception:                         # noqa: BLE001
+            traceback.print_exc()
     # la pellicola sulla finestra del retro, se chi carica l'ha voluta: sulle
     # facce finite, girate e curvate come escono
     film, riga_film = None, None
@@ -636,7 +674,10 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # lastra, e' una mappa delle normali sullo steso.
     tela, box = esito["steso"]
     scala = esito["scala"]
-    op = lo_steso.facce_sullo_steso(faces, d.panels, esito.get("girate"), scala,
+    girate_steso = dict(esito.get("girate") or {})
+    if "falda" in pannelli and "bottom" in girate_steso:
+        girate_steso["falda"] = girate_steso["bottom"]
+    op = lo_steso.facce_sullo_steso(faces, pannelli, girate_steso, scala,
                                  box, gradi)
     normale, riga_rilievo = rilievo_sicuro(
         rilievo.mappa_dello_steso, pdf, tuple(c / scala for c in box),
@@ -671,6 +712,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
         meta.append(riga_aperta)
     if incisa:
         meta.append(incisa)
+    if riga_sormonto:
+        meta.append(riga_sormonto)
     if carta is not None:
         meta.append("cartoncino: %.2f mm - dichiarato" % carta)
     if marchio:
