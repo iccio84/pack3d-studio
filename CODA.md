@@ -29,6 +29,49 @@ meccanici e letture che restavano li' fino alla fine. Per questo:
   correzione solo le viste nuove del caso. Ogni immagine guardata resta nella
   sessione fino alla fine.
 - **Un caso, poi basta.** Niente altri lavori nella sessione della routine.
+- **Risparmiare non e' lasciare.** Queste regole tolgono lo spreco, non il
+  lavoro: un caso che chiede un modulo nuovo costa di piu', e si fa (*Cosa
+  si risolve*).
+
+## Cosa si risolve
+
+**Si risolve ogni caso delle famiglie che lo strumento fa**, anche quando il
+codice quella forma non la conosce ancora. Le famiglie sono quelle della
+pagina: flowpack, pouch, cartotecnico, vassoio e display, riempimenti. Il
+**cartotecnico** e' ogni pack di cartoncino piegato da una fustella, di
+qualunque forma e in quanti pezzi: astucci, scatole a pianta esagonale o
+ottagonale, scatole a punta, ballotin, base e coperchio a calzare, coperchio
+a cerniera, cassetti con la fascia. Una forma nuova non e' una famiglia
+nuova: e' un **modulo nuovo dentro la famiglia**, come `pack3d/punta.py`
+per la scatola a punta o `pack3d/ballotin.py`. Il modulo:
+
+- riconosce la fustella con una regola generale - pannelli, pieghe, angoli
+  letti dal DT - mai col nome del file o con misure cucite su quel PDF;
+- si prova **dopo** i moduli che ci sono, quando hanno rifiutato la
+  fustella: i casi del parco non cambiano strada;
+- se il pack e' in piu' pezzi (un PDF per pezzo), si monta come la coppa e
+  il cono (`server._pezzi_tondi`): ogni PDF dice da se' che pezzo e', e
+  l'ordine in cui arrivano non conta;
+- ha la sua sezione in REGOLE.md e la sua riga in MAPPA.md.
+
+**Quanto e' grande la correzione non e' un motivo per lasciarla.** Un modulo
+di mille righe va bene, se serve: si fa nella sessione del caso, con le
+verifiche di sempre, e si unisce nel ramo della settimana come ogni
+correzione (*Quando si unisce nel ramo della settimana*); il parco intero e
+la prova sullo Space li fa il rilascio. Una scatola esagonale con base e
+coperchio a calzare e' rimasta due volte a mano perche' la sessione l'aveva
+presa per una famiglia nuova, «troppo grande per una correzione
+automatica»: era un cartotecnico.
+
+**Si lascia a mano solo una famiglia nuova**: un pack di un materiale o di
+una lavorazione che lo strumento non fa - bottiglie, flaconi, vasetti e
+barattoli, pack di plastica rigida o termoformata, blister, vaschette,
+lattine e scatole di latta, vetro, tubetti. Si riconosce perche' non ha ne'
+una fustella da piegare ne' un film da saldare: la forma non si legge da un
+disegno piano. Allora e' *Un caso che non si risolve*, e il messaggio a chi
+l'ha caricato dice che e' un tipo di pack che lo strumento non fa ancora.
+**Nel dubbio non e' una famiglia nuova**: se il PDF ha una fustella di
+cartoncino, e' un cartotecnico e si costruisce.
 
 ## Dove stanno le cose
 
@@ -221,13 +264,18 @@ fondato, guardando il foglio e i difetti:
   scrivi quale tipo andava dichiarato. Se l'errore non lo diceva chiaro,
   correggere il messaggio e' una correzione come le altre.
 - **Il tipo e' giusto e il codice non conosce quella fustella**: e' un caso
-  come gli altri, con una regola generale per quella famiglia.
+  come gli altri, con una regola generale per quella famiglia, anche quando
+  serve un modulo nuovo (*Cosa si risolve*).
 
 ## Un caso che non si risolve
 
-Commenta la issue con cosa hai capito e cosa manca, mettile `da-guardare`,
-togli `in-lavorazione` e lasciala aperta. Non si forza una correzione su un
-caso solo.
+Sono tre: una famiglia nuova (*Cosa si risolve*), un'informazione che ha
+solo chi ha il pack in mano, un errore che nessuna regola spiega. Commenta
+la issue con cosa hai capito e cosa manca, mettile `da-guardare`, togli
+`in-lavorazione` e lasciala aperta. Non si forza una correzione su un caso
+solo: forzare e' cucirla su quel PDF - misure, nomi, eccezioni. Una forma
+nuova costruita con regole lette dalla fustella non e' forzare, e non e' un
+caso che non si risolve.
 
 **Se manca un'informazione che ha chi ha il pack in mano** - come si monta,
 come sta un pezzo, quale lato e' il fronte - chiediglielo. Prima rileggi
