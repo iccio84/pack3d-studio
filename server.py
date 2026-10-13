@@ -43,6 +43,7 @@ from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
 from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
 # piu' di un costruttore
+from pack3d import atlante
 from pack3d import steso as lo_steso
 from pack3d import template as il_template
 from pack3d import flowpack as fpk
@@ -1065,6 +1066,9 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
         with open(gf, "rb") as fh:
             glb_f = fh.read()
     glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio)
+    # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
+    # il modello, e il template e' la sua tela (`pack3d.atlante`)
+    glb, _zone = atlante.unisci(glb)
     with open(out_glb, "wb") as fh:
         fh.write(glb)
     return (righe + ["vassoio: %s" % a for a in av_v]
@@ -1078,7 +1082,8 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
 
     La texture di ogni pezzo e' lo steso del suo foglio (`pack3d.steso`),
     e il rovescio bianco un colore pieno; due nodi nel GLB, il contenitore e
-    la chiusura, perche' la chiusura si toglie.
+    la chiusura, perche' la chiusura si toglie. I due stesi vanno in
+    un'immagine sola, l'atlante (`pack3d.atlante`).
     """
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
@@ -1116,6 +1121,7 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
                            [("rovescio", cp.BIANCO)])
     exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti,
                              tinte=tinte)
+    atlante.unisci_file(out_glb)
     if dichiarato == "carton":
         titolo = _in_pezzi(dichiarato, pdfs, titolo)
     return [titolo] + meta + ["%d vertici, %d triangoli; %s"

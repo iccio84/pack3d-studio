@@ -31,6 +31,7 @@ mappata sulle facce giuste.
 | `pack3d/riempimento.py` | il riempimento: il vassoio espositore pieno dei suoi flowpack, un GLB solo con il flowpack una volta e un nodo per pezzo |
 | `pack3d/steso.py` | la texture di ogni modello e' lo steso del PDF, pulito, nel verso del foglio e inquadrato sul DT: ci si sovrappone il nuovo artwork di una variante |
 | `pack3d/texture.py` | la texture a parte: l'immagine del colore del GLB, da scaricare dalla pagina e per la sezione texture di Glam Lab |
+| `pack3d/atlante.py` | i modelli di piu' fogli (coppa, cono, riempimento) con gli stesi dei loro PDF in un'immagine sola, una zona per pezzo: Glam e il template vogliono una texture |
 | `pack3d/template.py` | il template PSD del modello per «Scarica Template» di Glam Lab: la texture e le guide UV (contorni, pieghe, area non modificabile, nomi delle facce) a livelli |
 | `pack3d/rilievo.py` | l'embossing (o il debossing) dalla sua lastra: una mappa delle normali che mette in rilievo marchi e disegni sul modello |
 | `pack3d/coda.py` | i casi nuovi respinti dal controllo, in un repository privato, con le note e le risposte di chi li ha caricati |

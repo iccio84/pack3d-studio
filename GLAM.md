@@ -247,10 +247,12 @@ texture del modello** - il riquadro «Texture modello selezionato», la tabella
 
 Glam mette la texture scelta su tutti i materiali del modello che hanno un
 colore da immagine; il rovescio e il taglio del cartoncino sono colori pieni,
-senza texture, e restano come sono. Per questo la texture arriva solo per i
-modelli che ne hanno **una**, cioè quasi tutti. Ne hanno due la coppa col
-tappo e il cono col lid, che vengono da due PDF, e il riempimento (vassoio e
-pack): quelle si scaricano dalla pagina. Al massimo 5000 px per lato, il
+senza texture, e restano come sono. Per questo ogni modello ha **una**
+texture: anche quelli fatti di più fogli - la coppa col tappo, il cono col
+lid, il riempimento col vassoio e il pack - che hanno gli stesi dei loro PDF
+in un'immagine sola, l'atlante, una zona per pezzo (REGOLE.md, *La texture
+è lo steso*). La variante di un pezzo si fa sostituendo la sua zona. Al
+massimo 5000 px per lato, il
 limite di «Carica texture»: lo Space riduce in proporzione quelle più
 grandi.
 
@@ -319,9 +321,12 @@ del Nutella 750 g:
 | | Area non modificabile | nero al 60% dove il modello non prende la texture |
 | | Contorni | il bordo del DT, finestre e solchi, e le pieghe, in magenta |
 | | Nomi delle facce | FRONTE, RETRO, FIANCO SX, FIANCO DX, CIELO, FONDO sulle facce di un astuccio |
+| | Nomi dei pezzi | in un atlante, il nome di ogni pezzo nella sua zona: COPPA, TAPPO, CONO, LID, VASSOIO, FLOWPACK... |
 
 Il PSD è RGB a 8 bit, con la composizione salvata (i livelli accesi). Come
-la texture, c'è solo per i modelli che hanno **una** texture; al massimo
+la texture, c'è per tutti i modelli: in quelli di più fogli la texture è un
+atlante, e il template scrive il nome del pezzo su ogni zona (livello «Nomi
+dei pezzi»); al massimo
 45 MB: uno più grande lo Space lo rifà più piccolo, e le UV, che sono
 frazioni dell'immagine, restano giuste.
 
