@@ -12,7 +12,7 @@ legge solo il pezzo (`sed -n 'A,Bp'`, o Read con offset e limit).
   vassoio e display con plancia, cono, ballotin, film che si dichiara
   flowpack, astuccio. Un pack che esce della famiglia sbagliata si guarda qui.
 - `server.py`, `build_carton`, `build_vassoio`, `build_plancia`,
-  `build_coppa`, `build_pouch`, `build_ballotin`, `build_punta`,
+  `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
   `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/verifica.py`: le verifiche della costruzione, nell'ordine in cui si
   fanno a mano (UVW contro il DT, fronte sul fronte, marchio dritto, facce
@@ -39,6 +39,7 @@ legge solo il pezzo (`sed -n 'A,Bp'`, o Read con offset e limit).
 |---|---|
 | astuccio | `dieline.py` (fustella: `extract`, `solve_carton`), `folding.py` (piegatura, `build_faces`), `incisioni.py` (tagli dentro le facce), `apertura.py` (strappo aperto), `rilievo.py` (embossing) |
 | scatola a punta | `punta.py` |
+| scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `server.build_prisma` |
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
 | vassoio espositore | `vassoio.py` |
 | display con plancia | `plancia.py` |

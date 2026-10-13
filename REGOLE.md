@@ -4082,6 +4082,72 @@ cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
 ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
 colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
+## La scatola a prisma
+
+Una scatola di cartoncino con il fondo a poligono - esagono, ottagono,
+pentagono - e una parete dritta su ogni lato, chiusa da un coperchio fatto
+allo stesso modo che calza sopra. Ogni pezzo e' un PDF suo: si dichiara
+**Cartotecnico in 2 pezzi** (o in un pezzo solo, il fondo aperto); il codice
+sta in `pack3d/prisma.py`, il montaggio in `server.build_prisma`.
+
+Il primo caso e' arrivato dalla coda (8f67b58f3d) come costruzione ferma:
+«cartotecnico in 2 pezzi: per ora so montare lo sleeve e il tappo di una
+coppa, o il cono col suo lid». Era un esagono: il fondo con il piano da
+141,2 x 122,3 mm (70,6 di lato) e sei pareti da 46, il coperchio con il
+piano da 145,0 x 125,6 e sei pareti da 16, coi risvolti dentro. Prima la
+sessione l'aveva lasciato a mano, preso per una famiglia nuova: e' un
+cartotecnico.
+
+### La firma in fustella
+
+Si prova **solo dopo** che i pezzi tondi hanno rifiutato i PDF
+(`server._pezzi_prisma`, chiamato quando `_pezzi_tondi` alza l'errore), solo
+sul cartotecnico dichiarato in pezzi, e solo se **ogni** PDF si legge come
+un prisma; altrimenti resta l'errore di prima. La fustella si legge come
+quella del ballotin, a grafo (`ballotin.tratti_fustella`, `grafo`, `facce`):
+
+- il **piano** e' la faccia piu' grande; i suoi spigoli sono quelli
+  dell'inviluppo convesso, senza i vertici dove il contorno gira meno di 12
+  gradi (sul coperchio una tacca dava sette vertici a un esagono). Il piano
+  deve riempire almeno il 93% del suo inviluppo, avere da 5 a 12 lati (4 sono
+  l'astuccio e il vassoio) e nessun lato sotto i 15 mm;
+- su **ogni lato** c'e' una parete: una faccia attaccata appena fuori dal
+  lato, anche al 12% e all'88% della sua lunghezza. L'altezza e' quanto la
+  faccia si allunga lungo la perpendicolare, la mediana di tre misure al 30,
+  50 e 70% del lato; sotto i 5 mm non e' una parete;
+- dei **due pezzi** il coperchio e' quello col piano piu' largo (l'apotema
+  medio: 62,8 contro 61,1 mm), e deve avere gli stessi lati del fondo.
+
+### La vista di fuori, non quella di dentro
+
+Il PDF del fondo porta due disegni della fustella affiancati, OUTSIDE e
+INSIDE, lunghi quasi uguali (2059 e 1690 mm di tratti), e il piu' lungo era
+quello di DENTRO: col pezzo connesso piu' lungo, come fa il ballotin, le
+pareti uscivano viola pieno e il piano specchiato. Quando un secondo disegno
+e' lungo almeno l'80% del primo si tiene quello con piu' grafica sotto
+(`prisma._dettaglio`: la media del gradiente della pagina a 30 dpi
+nell'ingombro): 31,7 la vista di fuori, 11,2 quella di dentro.
+
+### Il montaggio e il verso
+
+Ogni parete si alza di 90 gradi sul suo lato; linguette e risvolti stanno
+dentro e non si portano. Il fondo ha il piano a Y = 0 e le pareti in su; il
+coperchio sta capovolto sopra, col piano a filo delle pareti del fondo piu'
+lo spessore della carta e le pareti in giu'.
+
+- Il piano del **coperchio** si guarda dall'alto, e lo steso cosi' com'e' sul
+  foglio e' gia' la vista dall'alto col fronte in basso: (X, Z) = (x, y).
+- Il **fondo** si guarda da sotto: il foglio si specchia in y e poi si gira,
+  fra le rotazioni che portano i suoi lati su quelli del coperchio, su
+  quella che mette davanti la parete piu' in basso sul foglio. E' una
+  rotazione, non un altro specchio: la stampa delle pareti resta leggibile,
+  dritta e non specchiata.
+
+La texture di ogni pezzo e' il suo DT intero, come per il ballotin, con sotto
+le strisce del rovescio e del taglio; il bordo libero di ogni parete prende
+la costa. Due nodi nel GLB, `fondo` e `coperchio`, e i due stesi
+nell'atlante.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due

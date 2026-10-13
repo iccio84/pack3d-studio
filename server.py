@@ -37,7 +37,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
-                    folding, exporters, materiali, nero, plancia, pouch,
+                    prisma, folding, exporters, materiali, nero, plancia, pouch,
                     rilievo, strati, vassoio, verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
@@ -889,6 +889,22 @@ def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
     return trovati
 
 
+def _pezzi_prisma(pdfs, dichiarato):
+    """`(fondo, coperchio)` della scatola a prisma, o None: si prova quando i
+    pezzi tondi hanno rifiutato i PDF, e solo sul cartotecnico dichiarato in
+    pezzi. Ogni PDF dice da se' che pezzo e' (`prisma.pezzi`): l'ordine in
+    cui arrivano non conta."""
+    if dichiarato != "carton":
+        return None
+    letti = []
+    for pdf in pdfs:
+        p = prisma.riconosci(artwork.pagina_unica(pdf)[0])
+        if p is None:
+            return None
+        letti.append(p)
+    return prisma.pezzi(letti)
+
+
 def _cono(pezzi):
     return "cono" in pezzi or "lid" in pezzi
 
@@ -903,7 +919,17 @@ def analisi_coppa(pdfs, dichiarato="coppa"):
     """L'analisi della coppa o del cono: le misure, senza texture. Vedi
     `pack3d.coppa`."""
     from pack3d import coppa as cp
-    pezzi = _pezzi_tondi(pdfs, dichiarato)
+    try:
+        pezzi = _pezzi_tondi(pdfs, dichiarato)
+    except ValueError:
+        pr = _pezzi_prisma(pdfs, dichiarato)
+        if pr is None:
+            raise
+        meta = prisma.dichiara(*pr)
+        meta.insert(0, _in_pezzi(dichiarato, pdfs, "il fondo e il coperchio "
+                                 "di una scatola a prisma" if pr[1] is not None
+                                 else "il fondo di una scatola a prisma"))
+        return dict(kind="coppa", title="Scatola a prisma", meta=meta)
     if _cono(pezzi):
         return _analisi_cono(pezzi, pdfs, dichiarato)
     sleeve, tappo = pezzi.get("coppa"), pezzi.get("tappo")
@@ -1088,7 +1114,14 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
     giri = {}
-    pezzi = _pezzi_tondi(pdfs, dichiarato, giri)
+    try:
+        pezzi = _pezzi_tondi(pdfs, dichiarato, giri)
+    except ValueError:
+        pr = _pezzi_prisma(pdfs, dichiarato)
+        if pr is None:
+            raise
+        return build_prisma(pdfs, pr, out_glb, quality, lastre_extra,
+                            dichiarato, carta)
     if _cono(pezzi):
         cono, lid = pezzi.get("cono"), pezzi.get("lid")
         V, UV, T, A, parti, meta, bianchi = cp.costruisci_cono(
@@ -1553,6 +1586,98 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
                              normale=normale, pellicola=film, tinte=tinte)
     return ballotin.dichiara(b) + avvisi
+
+
+def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
+                 dichiarato="carton", carta=None):
+    """La scatola a prisma, il fondo poligonale con le pareti e il coperchio
+    a calzare: vedi `pack3d.prisma`.
+
+    Come la scatola a punta, pezzo per pezzo: la texture e' il DT intero,
+    pulito, e ogni faccia prende la grafica dal suo posto sul foglio, con
+    sotto le strisce del rovescio. Due nodi nel GLB, il fondo e il
+    coperchio, e i due stesi in un'immagine sola (`pack3d.atlante`)."""
+    dpi, tmax = risoluzione(quality)
+    fondo, coperchio = pezzi
+    M_fondo, M_cop = prisma.assetti(fondo, coperchio)
+    sp = folding.SPESSORE_CRT if carta is None else carta
+    per_pdf = {}
+    for pdf in pdfs:
+        pagina, n_pagine = artwork.pagina_unica(pdf)
+        p = prisma.riconosci(pagina)
+        for q in (fondo, coperchio):
+            if q is not None and p is not None and np.allclose(p.piano, q.piano) \
+                    and q.regione == p.regione and id(q) not in per_pdf:
+                per_pdf[id(q)] = (pagina, n_pagine)
+                break
+    avvisi, V, UV, T, A, parti, quali = [], [], [], [], [], [], []
+    colori = []
+    for nome, pr, M, quota, cop in (
+            ("fondo", fondo, M_fondo, 0.0, False),
+            ("coperchio", coperchio, M_cop, fondo.altezza + sp, True)):
+        if pr is None:
+            continue
+        pdf, n_pagine = per_pdf[id(pr)]
+        conti = {}
+        clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                                regione=pr.regione, conti=conti)
+        deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+        pagine = avviso_pagine(n_pagine)
+        if pagine:
+            avvisi.append(pagine)
+        fuori = artwork.avviso_fuori_dt(conti)
+        if fuori:
+            avvisi.append(fuori)
+        avvisi.extend(artwork.avvisi_gda(conti))
+        rgb = avviso_quadricromia(clean, regione=pr.regione)
+        if rgb:
+            avvisi.append(rgb)
+        if lastre:
+            avvisi.append("%s: lastre tecniche e coperture tolte per nome: %s"
+                          % (nome, ", ".join(lastre)))
+        m = 1.0 / PT2MM
+        x0, y0, x1, y1 = pr.regione
+        x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+        lato_pt = max(x1 - x0, y1 - y0)
+        dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+        tex = folding.rasterize_panels(
+            clean, {"dt": Panel(x0, y0, x1, y1, "dt")}, dpi=dpi_tex, inset_px=0,
+            clean=True, note=avvisi, nero_deciso=deciso_nero)["dt"]
+        scala = dpi_tex / 72.0
+        origine = (round(x0 * scala) / scala * PT2MM,
+                   round(y0 * scala) / scala * PT2MM)
+        tela = ballotin.con_interno(tex)
+        v, uv, t = prisma.maglia(pr, M, origine, scala / PT2MM, tela.size,
+                                 coperchio=cop, quota=quota, spessore=carta)
+        tela, uv, tinte = lo_steso.senza_strisce(tex.height, tela, uv, t,
+                                                 TINTE_BALLOTIN)
+        # le tinte dei due pezzi in una lista sola
+        mappa = []
+        for nome_t, c in tinte.colori:
+            if (nome_t, c) not in colori:
+                colori.append((nome_t, c))
+            mappa.append(colori.index((nome_t, c)))
+        quali.append(np.array([mappa[q] if q >= 0 else -1
+                               for q in tinte.quale], np.int32))
+        primo = len(T)
+        T.extend((np.asarray(t) + len(V)).tolist())
+        V.extend(np.asarray(v).tolist())
+        UV.extend(np.asarray(uv).tolist())
+        A.append(tela)
+        parti.append((nome, primo, len(T)))
+    V = np.asarray(V, np.float32)
+    UV = np.asarray(UV, np.float32)
+    T = np.asarray(T, np.int64)
+    tinte = lo_steso.Tinte(np.concatenate(quali), colori)
+    exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti,
+                             tinte=tinte)
+    atlante.unisci_file(out_glb)
+    titolo = _in_pezzi(dichiarato, pdfs, "scatola a prisma col coperchio"
+                       if coperchio is not None else
+                       "scatola a prisma senza coperchio")
+    return ([titolo] + prisma.dichiara(fondo, coperchio) + avvisi
+            + ["%d vertici, %d triangoli; il fondo e il coperchio sono due "
+               "nodi del GLB" % (len(V), len(T))])
 
 
 def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
