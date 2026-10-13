@@ -3,7 +3,8 @@
 Queste sono le istruzioni per la sessione di Claude Code che prende i casi
 nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
 rilascio della settimana sta in RILASCIO.md, la mappa del codice in MAPPA.md,
-il perche' delle regole del codice in REGOLE.md.
+il perche' delle regole del codice in REGOLE.md, la ricetta per una forma
+nuova in FORME.md.
 
 ## Prima di tutto: risparmiare
 
@@ -53,6 +54,9 @@ per la scatola a punta o `pack3d/ballotin.py`. Il modulo:
   il cono (`server._pezzi_tondi`): ogni PDF dice da se' che pezzo e', e
   l'ordine in cui arrivano non conta;
 - ha la sua sezione in REGOLE.md e la sua riga in MAPPA.md.
+
+**La ricetta e' in FORME.md**: capire la forma, dove entra, il modulo, la
+costruzione, le prove, le regole. Seguila dall'inizio.
 
 **Quanto e' grande la correzione non e' un motivo per lasciarla.** Un modulo
 di mille righe va bene, se serve: si fa nella sessione del caso, con le
