@@ -77,6 +77,15 @@ Lovable: il caso inviato chiude la finestra*.
   ascolta ancora `pack3d:chiudi`; da sola apre anche la sua finestra dei
   casi, con quello appena mandato.
 
+**Anche l'approvazione chiude la finestra.** Quando chi ha caricato il caso
+preme **Approva** o manda il **Non approvo** col motivo, dalla finestra dei
+casi della pagina, e lo Space l'ha preso, la pagina manda lo stesso
+messaggio: titolo «Modello approvato» («lo trovi in "Costruisci modello 3D
+da PDF", cartella "Casi risolti"») o «Modello non approvato» («abbiamo
+ricevuto cosa non va, e il caso è ripartito»). Qui non c'è un
+`pack3d:caso` prima. Fuori da Glam resta la finestra dei casi, che dice lo
+stato nuovo.
+
 ## 2. Lo stato e le domande: dalla routine a Glam
 
 `POST /api/pack3d-case`, con la stessa autorizzazione di `/api/import-model`
@@ -538,9 +547,9 @@ Ogni modello costruito da PDF deve avere anche il suo template, scaricabile con 
 Da incollare dopo i testi qui sopra. Non servono segreti nuovi.
 
 ```text
-Quando chi ha caricato un PDF manda un caso nuovo dalla pagina dello Space ("Invia il caso"), il dialog di "Costruisci modello 3D da PDF" deve chiudersi da solo, così si vede che il lavoro è finito. Il contratto completo è in GLAM.md, sezione 1, del repository iccio84/pack3d-studio.
+Quando chi ha caricato un PDF manda un caso nuovo dalla pagina dello Space ("Invia il caso"), o approva o non approva il modello corretto dalla finestra dei casi, il dialog di "Costruisci modello 3D da PDF" deve chiudersi da solo, così si vede che il lavoro è finito. Il contratto completo è in GLAM.md, sezione 1, del repository iccio84/pack3d-studio.
 
-1. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già "pack3d:caso" dall'iframe, ascolta anche { type: "pack3d:chiudi", codice, titolo, testo }, con lo stesso controllo: e.origin === window.location.origin ed e.source uguale alla contentWindow dell'iframe. Arriva subito dopo il "pack3d:caso" dello stesso caso: il caso registralo come fai già, senza aspettare che la registrazione finisca per chiudere.
+1. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già "pack3d:caso" dall'iframe, ascolta anche { type: "pack3d:chiudi", codice, titolo, testo }, con lo stesso controllo: e.origin === window.location.origin ed e.source uguale alla contentWindow dell'iframe. Arriva in due momenti: subito dopo il "pack3d:caso" di un caso appena mandato (il caso registralo come fai già, senza aspettare che la registrazione finisca per chiudere), o da solo, dopo un'approvazione o un rifiuto del modello. Trattalo allo stesso modo in tutti e due.
 
 2. Quando arriva, chiudi il dialog come fai dopo aver salvato un modello, e mostra un toast di successo con titolo (testo semplice, al massimo 120 caratteri; "Caso inviato" se manca) e, come descrizione, testo (testo semplice, al massimo 300 caratteri). Mostrali come testo, mai come HTML.
 

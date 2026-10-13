@@ -1163,6 +1163,12 @@ def stato_caso(cod):
         elif st == "non-approvato":
             # il no col motivo: la routine riprende il caso
             st = "in-coda"
+        if st == "in-coda" and "in-lavorazione" in etichette:
+            # la routine l'ha gia' ripreso: lo dice il lucchetto sulla issue.
+            # Lo stato scritto puo' essere ancora quello di chi ha risposto o
+            # non ha approvato, e la pagina diceva «in coda» a un caso a cui
+            # una sessione stava lavorando
+            st = "in-lavorazione"
     elif "eliminato" in etichette:
         st = "eliminato"
     elif st not in ("risolto", "non-risolto"):

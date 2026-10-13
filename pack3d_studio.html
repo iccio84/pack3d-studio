@@ -1875,6 +1875,20 @@ function tastoGuarda(c){
   return bt;
 }
 
+/** Approvato o no, quello che toccava a chi ha mandato il caso e' fatto, e si
+ *  deve vedere come dopo l'invio del caso: dentro Glam Lab la finestra che
+ *  ospita la pagina si chiude, con un messaggio (pack3d:chiudi, vedi
+ *  GLAM.md). Fuori da Glam resta la finestra dei casi, che dice lo stato. */
+function decisioneInviata(c, approvato){
+  aGlam({type: 'pack3d:chiudi', codice: c.codice,
+    titolo: approvato ? 'Modello approvato' : 'Modello non approvato',
+    testo: approvato
+      ? '\u00ab' + c.nome + '\u00bb: lo trovi in \u00abCostruisci modello 3D da PDF\u00bb, cartella \u00ab'
+        + GLAM_CARTELLA + '\u00bb.'
+      : '\u00ab' + c.nome + '\u00bb: abbiamo ricevuto cosa non va, e il caso \u00e8 ripartito. '
+        + 'Il modello nuovo lo approvi nella finestra dei casi.'});
+}
+
 /** Il modello corretto aspetta chi ha mandato il caso: lo guarda, e lo
  *  approva - finisce nei Casi risolti - o dice cosa non va, con le foto. */
 function moduloApprova(c){
@@ -1949,6 +1963,7 @@ function moduloApprova(c){
       c.chiave = c.stato;
       salvaCasi();
       disegnaCasi();
+      decisioneInviata(c, approvato);
     }catch(err){
       si.disabled = no.disabled = invia.disabled = false;
       es.textContent = 'Non inviato: ' + testoErrore(err);

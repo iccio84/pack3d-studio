@@ -2282,7 +2282,15 @@ del caso arriva a lui (GLAM.md):
   riquadro restava aperto, cambiato di poco, e non si capiva che era finita.
   Se la descrizione non arriva, la pagina resta con lei per riprovare:
   chiudere l'avrebbe persa senza dirlo. Col modello in vista - un dubbio, o un
-  respinto mostrato lo stesso - resta aperta: il modello si salva ancora.
+  respinto mostrato lo stesso - resta aperta: il modello si salva ancora. Lo
+  stesso dopo **Approva** o **Non approvo** nella finestra dei casi: presa la
+  decisione, dentro Glam il dialog si chiude con «Modello approvato» o
+  «Modello non approvato».
+- **In coda o in lavorazione.** Dopo un «Non approvo», o la risposta a una
+  domanda, l'ultimo stato scritto e' quello di chi l'ha mandato, e la pagina
+  diceva «in coda» anche quando una sessione stava gia' lavorando al caso.
+  Il lucchetto `in-lavorazione` sulla issue vale piu' di lui
+  (`coda.stato_caso`): col lucchetto il caso e' «in lavorazione».
 - **Lo stato e le domande in Glam.** La pagina dice a Glam il codice del caso
   (`pack3d:caso`), e Glam lo lega all'utente. La routine gli dice a che punto
   e' - in lavorazione, una domanda, risolto, non risolto - con
