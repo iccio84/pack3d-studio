@@ -2276,6 +2276,14 @@ del caso arriva a lui (GLAM.md):
   abbia bisogno di chiedere: la routine i commenti li legge all'inizio e prima
   di fare una domanda. La foto la pagina la rimpicciolisce a 1600 px: quella
   di un telefono pesava dieci volte tanto.
+- **La issue appena aperta si cerca anche per numero.** La descrizione parte
+  appena la issue del caso c'e', e l'elenco delle issue aperte di GitHub, un
+  attimo dopo l'apertura, puo' non averla ancora: la nota tornava «il caso non
+  e' in coda, o e' gia' chiuso» a un caso appena entrato, e la descrizione si
+  perdeva. Lo Space ricorda le issue che ha aperto (dieci minuti) e, se
+  l'elenco non le ha, le legge per numero; per la nota, l'approvazione e lo
+  stato che vede la pagina. Prima la descrizione arrivava a mano, decine di
+  secondi dopo, e il ritardo non si vedeva.
 - **Finito si vede.** Mandato il caso, se non c'e' un modello da tenere, la
   pagina torna all'inizio e dentro Glam chiede di chiudere il dialog
   (`pack3d:chiudi`), che si chiude con un toast «Caso inviato». Prima il
