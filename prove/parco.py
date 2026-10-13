@@ -977,6 +977,24 @@ def _sessione():
     return "https://claude.ai/code/" + s.replace("cse_", "session_", 1) if s else ""
 
 
+def _lucchetto_mio(repo, n):
+    """True se l'ultimo lucchetto messo sulla issue e' di questa sessione.
+
+    Una sessione che rilancia `prepara` dopo un errore (un pacchetto che
+    mancava, il registro da riallineare) ritrova il suo lucchetto: non e' di
+    un'altra sessione ne' di una morta, e non va «ripreso» con un commento."""
+    import re
+    sessione = _sessione()
+    if not sessione:
+        return False
+    for c in reversed(_gh("GET", "repos/%s/issues/%d/comments?per_page=100" % (repo, n)) or []):
+        m = re.search(r"In lavorazione in questa sessione: (https://claude\.ai/code/[A-Za-z0-9_]+)",
+                      str(c.get("body") or ""))
+        if m:
+            return m.group(1) == sessione
+    return False
+
+
 def _aggiorna_registro(casi):
     _git(casi, "pull", "-q", "--rebase", "--autostash", "origin", "main")
 
@@ -1129,17 +1147,22 @@ def prepara(args):
     fermi = [e for e in etichette if e in FERMI]
     if fermi:
         raise SystemExit("il caso %s non e' libero: ha %s (CODA.md)" % (cod, ", ".join(fermi)))
-    if "in-lavorazione" in etichette and not args.riprendi:
+    mio = "in-lavorazione" in etichette and _lucchetto_mio(args.repo, n)
+    if "in-lavorazione" in etichette and not (args.riprendi or mio):
         raise SystemExit("il caso %s ha gia' il lucchetto in-lavorazione. Se l'ha preso "
                          "un'altra sessione da poco, prendi il caso libero successivo "
                          "(o hai finito); se e' di una sessione morta (piu' di sei ore, "
                          "negli eventi della issue) usa --riprendi" % cod)
-    _metti(args.repo, n, "in-lavorazione")
-    sessione = _sessione()
-    _commenta(args.repo, n, "%s%s." % ("Ripreso: il lucchetto era di una sessione ferma da "
-                                       "piu' di sei ore. In lavorazione" if args.riprendi
-                                       else "In lavorazione",
-                                       " in questa sessione: " + sessione if sessione else ""))
+    if mio:
+        print("il lucchetto del caso %s e' gia' di questa sessione: riparto" % cod)
+    else:
+        _metti(args.repo, n, "in-lavorazione")
+        sessione = _sessione()
+        _commenta(args.repo, n, "%s%s." % ("Ripreso: il lucchetto era di una sessione ferma "
+                                           "da piu' di sei ore. In lavorazione"
+                                           if args.riprendi and "in-lavorazione" in etichette
+                                           else "In lavorazione",
+                                           " in questa sessione: " + sessione if sessione else ""))
     uscita = args.uscita or "/tmp/caso_" + cod
     os.makedirs(uscita, exist_ok=True)
     rumore = io.StringIO()
