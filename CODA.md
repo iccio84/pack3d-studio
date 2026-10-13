@@ -124,7 +124,8 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    del repository, non dalla ricerca di GitHub. Nessuna: hai finito, senza
    commit ne' commenti. Il giro di sicurezza quasi sempre finisce qui.
 2. **Prepara i repository**: aggiornati, il codice su un ramo che parte da
-   `origin/coda-settimana` (se il ramo non c'e', crealo da `main`), le
+   `origin/coda-settimana` (se il ramo non c'e', parti da `main`: crearlo
+   dalla sessione non si puo', vedi *Quando si unisce*), le
    dipendenze solo se mancano (`pip install -q -r requirements.txt`). Nel
    registro i commit vanno su `main`.
 3. **Un caso per giro**, il piu' vecchio libero:
@@ -211,7 +212,29 @@ tutte**:
 Allora: commit, push, PR **verso `coda-settimana`** (mai verso `main`),
 unione con merge commit. Se il ramo nel frattempo e' andato avanti, porta
 dentro `origin/coda-settimana`, ricostruisci il caso e riprova. Poi
-`consegna`.
+`consegna`. Nella sessione non c'e' `gh pr`: la PR si apre e si unisce con
+`gh api`, cosi' (passano dal proxy di una sessione cloud). Prima prendi il
+nome del ramo (`git branch --show-current`) e la sua testa intera (`git
+rev-parse HEAD`), poi i comandi **cosi' come sono scritti**, su una riga e
+coi valori al posto dei segnaposto: `.claude/settings.json` li permette
+esattamente in questa forma, e una forma diversa la ferma il controllo dei
+permessi della sessione, come e' gia' successo.
+
+    git push -u origin HEAD
+    gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana -f head=<ramo> -f title="..." -f body="..." --jq .number
+    gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge -f merge_method=merge -f sha=<sha>
+
+In bozza: `-F draft=true` in fondo al primo. `sha` e' la testa del tuo ramo,
+intera: se nel frattempo e' cambiata, GitHub rifiuta l'unione invece di
+unire altro.
+
+**Un ramo nuovo la sessione non lo crea**: il proxy lo impedisce, e si
+spinge solo il ramo della sessione. `coda-settimana` c'e'; se manca, non
+provare a crearlo: PR in bozza verso `main` e scrivilo nel commento.
+
+Se la PR non si apre o non si unisce, nel commento della issue scrivi il
+comando e l'errore **esatti**, non solo che non si e' potuto: chi riprende
+il caso deve sapere cosa sistemare.
 
 Se anche **una sola** cosa e' falsa o dubbia, **non si unisce**: PR in bozza,
 commento sulla issue con la diagnosi, etichetta `da-guardare` al posto di
