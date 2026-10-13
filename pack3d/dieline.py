@@ -83,16 +83,20 @@ class Dieline:
                 lo, hi = min(lo, a), max(hi, b)
         return (lo, hi) if hi > lo else (self.bbox[0], self.bbox[2])
 
-    def rows_in_col(self, x0, x1, cover=0.8):
-        """Cordonature orizzontali che attraversano davvero la colonna."""
-        need = (x1 - x0) * cover
+    def rows_in_col(self, x0, x1, cover=0.8, bordo=0.5):
+        """Cordonature orizzontali che attraversano davvero la colonna.
+
+        Il bordo libero del disegno (la prima e l'ultima riga del riquadro)
+        basta che la copra per `bordo`: e' il bordo di una falda di chiusura,
+        interrotto dalla linguetta e dagli angoli arrotondati."""
         out = []
         for y in self.ys:
             span = 0.0
             for cy, a, b in self.hsegs:
                 if abs(cy - y) < 2.5:
                     span += max(0.0, min(b, x1) - max(a, x0))
-            if span >= need:
+            libero = min(abs(y - self.bbox[1]), abs(y - self.bbox[3])) < 2.5
+            if span >= (x1 - x0) * (bordo if libero else cover):
                 out.append(y)
         return out
 
@@ -169,14 +173,23 @@ def scarta_resa():
     _RESA.clear()
 
 
+# Pendenza fino alla quale un tratto conta come dritto: tan 3 gradi.
+QUASI_DRITTO = 0.05
+
+
 def _segments(page):
     """Segmenti H/V stroked della pagina: (orient, coord, a, b, stile)."""
     segs = []
 
     def add(x0, y0, x1, y1, style):
-        if abs(x1 - x0) < 0.7 and abs(y1 - y0) > 1.0:
+        # Quasi dritto conta come dritto: i lati di una falda di chiusura si
+        # stringono di un grado o due verso la punta, perche' entri senza
+        # strisciare (`QUASI_DRITTO`). Scartati, la falda restava fuori dal
+        # disegno e la scatola senza fondo.
+        dx, dy = abs(x1 - x0), abs(y1 - y0)
+        if dy > 1.0 and (dx < 0.7 or dx <= QUASI_DRITTO * dy):
             segs.append(("V", (x0 + x1) / 2, min(y0, y1), max(y0, y1), style))
-        elif abs(y1 - y0) < 0.7 and abs(x1 - x0) > 1.0:
+        elif dx > 1.0 and (dy < 0.7 or dy <= QUASI_DRITTO * dx):
             segs.append(("H", (y0 + y1) / 2, min(x0, x1), max(x0, x1), style))
 
     def style_of(o):
