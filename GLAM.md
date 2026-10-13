@@ -47,6 +47,35 @@ Glam aggiunge `casi=1` all'indirizzo dell'iframe. Per la pagina è il segnale
 che Glam sa mostrare i casi: solo allora, nel riquadro del caso, promette che
 le domande arriveranno «qui in Glam Lab, fra i tuoi casi in correzione».
 
+### Il caso inviato chiude la finestra
+
+Mandato il caso, chi l'ha caricato deve vedere che il suo lavoro è finito.
+Se nella pagina non c'è un modello da tenere (il controllo l'ha respinto, o
+la costruzione si è fermata), subito dopo `pack3d:caso` la pagina manda:
+
+```js
+{ type: "pack3d:chiudi",
+  codice: "b312f1e238",                 // lo stesso di pack3d:caso
+  titolo: "Caso inviato",
+  testo: "«NOME_DEL_PDF»: quando sarà corretto, lo trovi in «Costruisci modello 3D da PDF», cartella «Casi risolti». Di solito arriva entro un’ora." }
+```
+
+Glam chiude il dialog di «Costruisci modello 3D da PDF», come dopo aver
+salvato un modello, e mostra un toast con titolo e testo. Vedi *Il testo per
+Lovable: il caso inviato chiude la finestra*.
+
+- **La nota** per chi corregge (com'è fatto il pack, come si monta, una foto)
+  sta nel modulo d'invio, chiusa dietro un link, e parte con il caso: dopo,
+  la pagina non c'è più. Se la nota non arriva il caso è partito lo stesso:
+  la pagina resta aperta con la nota e il suo tasto per riprovare, e
+  `pack3d:chiudi` parte quando arriva lei.
+- **Con un modello in vista** - un dubbio del controllo, o un respinto
+  mostrato lo stesso - `pack3d:chiudi` non parte: il modello si può ancora
+  salvare in Glam, e il salvataggio chiude il dialog come sempre.
+- **La pagina torna all'inizio** in ogni caso, anche dentro un Glam che non
+  ascolta ancora `pack3d:chiudi`; da sola apre anche la sua finestra dei
+  casi, con quello appena mandato.
+
 ## 2. Lo stato e le domande: dalla routine a Glam
 
 `POST /api/pack3d-case`, con la stessa autorizzazione di `/api/import-model`
@@ -137,6 +166,8 @@ fra i commenti.
 
 - Sul tasto "Costruisci modello 3D da PDF", un **numero** quando un suo caso
   aspetta una risposta.
+- Quando manda un caso, il dialog si chiude da solo con un toast «Caso
+  inviato» che dice dove arriverà il modello (sezione 1).
 - **L'elenco dei casi sta in un posto solo: la finestra «Casi» della pagina
   dello Space**, dentro la sezione. Per ognuno il nome, lo stato a parole
   sue, quando è cambiato, il messaggio e, se c'è una domanda, il modulo per
@@ -499,4 +530,18 @@ Ogni modello costruito da PDF deve avere anche il suo template, scaricabile con 
 2. Nuovo endpoint server POST /api/import-template, autorizzato esattamente come /api/import-model (Bearer PACK3D_IMPORT_TOKEN). Il corpo sono i byte del PSD: Content-Type image/vnd.adobe.photoshop, al massimo 50 MB, e deve cominciare con i quattro byte "8BPS". Intestazioni: X-Model-Name e X-Model-Category (decodeURIComponent, come in /api/import-model), X-Template-Name (decodeURIComponent, al massimo 160 caratteri, finisce in .psd) e X-Pack3d-Codice facoltativa. I destinatari sono quelli di /api/import-texture. Per ciascuno trova il suo modello con quel nome e quella categoria (il più recente) e salva il PSD come fa "Carica Template": bucket "templates", registrato per il model_key "up_" + id del modello, al posto del template che aveva. Risposte come /api/import-texture: 200 {"ok": true, "utenti": N}; 400 col motivo; 401 token sbagliato; 404 se nessun destinatario ha il modello.
 
 3. "Scarica Template" scarica il template del modello selezionato col suo nome di file. Tutto il resto resta com'è: il template del Nutella 750 g, "Carica Template" per chi carica a mano, la texture e il suo "Carica texture".
+```
+
+### Il testo per Lovable: il caso inviato chiude la finestra
+
+Da incollare dopo i testi qui sopra. Non servono segreti nuovi.
+
+```text
+Quando chi ha caricato un PDF manda un caso nuovo dalla pagina dello Space ("Invia il caso"), il dialog di "Costruisci modello 3D da PDF" deve chiudersi da solo, così si vede che il lavoro è finito. Il contratto completo è in GLAM.md, sezione 1, del repository iccio84/pack3d-studio.
+
+1. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già "pack3d:caso" dall'iframe, ascolta anche { type: "pack3d:chiudi", codice, titolo, testo }, con lo stesso controllo: e.origin === window.location.origin ed e.source uguale alla contentWindow dell'iframe. Arriva subito dopo il "pack3d:caso" dello stesso caso: il caso registralo come fai già, senza aspettare che la registrazione finisca per chiudere.
+
+2. Quando arriva, chiudi il dialog come fai dopo aver salvato un modello, e mostra un toast di successo con titolo (testo semplice, al massimo 120 caratteri; "Caso inviato" se manca) e, come descrizione, testo (testo semplice, al massimo 300 caratteri). Mostrali come testo, mai come HTML.
+
+3. Tutto il resto resta com'è: "pack3d:caso", "pack3d:built" e il salvataggio del modello con texture e template, i casi, le notifiche e il badge.
 ```
