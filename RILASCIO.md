@@ -73,9 +73,18 @@ mano. Si fa **prima** di guardare la coda.
 
    Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
    casi della settimana e dei casi cambiati, commit e push.
-7. **Riallinea il ramo**: se `coda-settimana` e' ancora allo SHA del punto 2,
-   portalo allo SHA di `main` (aggiorna il riferimento del ramo, senza
-   forzare: e' un avanzamento); se intanto e' andato avanti, unisci `main`
-   dentro `coda-settimana` (l'API "merges" di GitHub). Mai forzare.
+7. **Riallinea il ramo**: porta `main` dentro `coda-settimana` con una PR,
+   come una correzione (CODA.md, *Quando si unisce nel ramo della
+   settimana*):
+
+       gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana \
+           -f head=main -f title="Riallinea coda-settimana a main" -f body="..." --jq .number
+       gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge \
+           -f merge_method=merge -f sha="$(git rev-parse origin/main)"
+
+   Se `coda-settimana` contiene gia' `main` (`git merge-base --is-ancestor
+   origin/main origin/coda-settimana`) non serve niente. Mai forzare.
+   L'aggiornamento diretto del riferimento del ramo e l'API "merges" di
+   GitHub, da una sessione cloud, il proxy non li permette.
 
 Poi torna al giro (CODA.md): se c'e' un caso libero, lavoralo.
