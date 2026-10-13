@@ -260,25 +260,25 @@
   #nota textarea:focus{outline:none;border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
   #nota .azioni{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   #nota .azioni button{margin-top:0}
-  #nota .bottone{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  #nota-foto-box{display:flex;gap:10px;align-items:center;min-width:0;flex:0 1 auto}
+  #nota-foto-box .bottone{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
     padding:10px 16px;border-radius:var(--radius);border:1px solid var(--border);
     background:var(--background);color:var(--muted-foreground);cursor:pointer}
-  #nota .bottone:hover{border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
+  #nota-foto-box .bottone:hover{border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
   #nota-foto-nome{font-size:12px;color:var(--muted-foreground);flex:1;min-width:0;
     overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #nota-esito{font-size:12px;color:var(--muted-foreground)}
   #nota-esito:empty{display:none}
   #nota-esito.ok{color:var(--foreground);font-weight:600}
   #nota-esito.err{color:var(--destructive)}
-  /* finche' il caso aspetta Invia, la nota sta nel modulo e parte con lui:
-     chiusa dietro un link, perche' il modulo resti basso e Invia in vista */
-  #invio #nota{width:auto;margin-top:0}
+  /* finche' il caso aspetta Invia, la descrizione sta nel modulo e parte
+     con lui: senza, il caso non parte */
+  #invio #nota{width:auto;margin-top:0;gap:6px}
   #invio #nota label[for=nota-testo]{font-size:12px}
-  #nota.chiusa > :not(#nota-apri){display:none}
-  #nota:not(.chiusa) #nota-apri{display:none}
-  #nota #nota-apri{align-self:flex-start;margin:0;padding:0;border:none;background:none;box-shadow:none;
-    font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--primary);
-    text-decoration:underline;text-underline-offset:2px}
+  #invio #nota textarea{min-height:0}
+  /* nel modulo la foto sta sulla riga dei tasti, e la riga della nota se ne va */
+  #invio #nota > .azioni{display:none}
+  #nota #nota-testo[aria-invalid=true]{border-color:var(--destructive)}
   #status.dubbio{color:var(--warning);letter-spacing:.02em;text-transform:none;
                  font-size:12px;font-weight:400}
 
@@ -468,8 +468,7 @@
     <div class="codice" id="caso-codice"></div>
     <div id="invio" hidden>
       <p class="invio-testo" id="invio-testo">Lo mandiamo a chi corregge il codice?</p>
-      <label for="invio-email">La tua email, se vuoi saperlo quando ti facciamo una domanda
-        sul pack (facoltativa)</label>
+      <label for="invio-email">La tua email, per le domande sul pack (facoltativa)</label>
       <input id="invio-email" type="email" autocomplete="email" maxlength="254"
              placeholder="nome@azienda.it">
       <div class="azioni">
@@ -479,16 +478,15 @@
       <div id="invio-esito" class="esito" role="status"></div>
     </div>
     <div id="nota" hidden>
-      <button id="nota-apri" type="button">Aggiungi una nota o una foto per chi lo corregge
-        (facoltativa)</button>
-      <label for="nota-testo">Vuoi dirci com'&egrave; fatto o come si monta il pack?
-        Aiuta chi lo corregge. Facoltativo.</label>
-      <textarea id="nota-testo" rows="3" maxlength="2000"
-        placeholder="Per esempio: il coperchio si alza sul retro e fa da cartello"></textarea>
+      <label for="nota-testo">Descrivi il pack per chi lo corregge (obbligatoria)</label>
+      <textarea id="nota-testo" rows="2" maxlength="2000" aria-describedby="invio-esito nota-esito"
+        placeholder="Com'&egrave; fatto, come si monta, cosa non torna nel modello. Per esempio: scatola esagonale, base e coperchio a calzare"></textarea>
       <div class="azioni">
-        <label class="bottone" for="nota-foto">Aggiungi una foto</label>
-        <input type="file" id="nota-foto" accept="image/*" hidden>
-        <span id="nota-foto-nome"></span>
+        <span id="nota-foto-box">
+          <label class="bottone" for="nota-foto">Foto (facoltativa)</label>
+          <input type="file" id="nota-foto" accept="image/*" hidden>
+          <span id="nota-foto-nome"></span>
+        </span>
         <button id="nota-invia" type="button" class="primary">Invia la nota</button>
       </div>
       <div id="nota-esito" role="status"></div>
@@ -1434,8 +1432,10 @@ function mostraCaso(v, blob, tieniNota){
        : v.in_attesa ? ''
        : ' \u2014 manda il PDF a chi gestisce il servizio citando questo codice.');
   casoEl.classList.add('on');
+  // in attesa la descrizione sta nel modulo d'invio; in coda resta da sola
+  // solo se e' da riprovare
   mostraInvio(v);
-  mostraNota(v, tieniNota);
+  if (!casoInAttesa) mostraNota(v, tieniNota);
   avvisaGlam(v);
 }
 
@@ -1467,7 +1467,7 @@ function nascondiCaso(tieni){
   aggiornaAI();
   if (!casoEl.classList.contains('on')) return;
   casoEl.classList.remove('on');
-  mostraNota(null);
+  if (!tieni) mostraNota(null);
   respinto = null;
   // il riquadro stava al posto del modello: se un modello non c'e', torna l'invito
   if (!model) document.getElementById('empty').style.display = '';
@@ -1494,14 +1494,16 @@ function esitoInvio(testo, cls){
 }
 
 /** Il modulo sta nel riquadro del caso quando il riquadro e' acceso, se no
- *  sotto il visore, nel riquadro dell'AI: mai sopra il modello. */
-function mostraInvio(v){
+ *  sotto il visore, nel riquadro dell'AI: mai sopra il modello. Dentro c'e'
+ *  la descrizione del pack, obbligatoria. `tieni` lascia quello che c'era
+ *  scritto. */
+function mostraInvio(v, tieni){
   casoInAttesa = v && v.in_attesa && v.codice ? v : null;
   invioEl.hidden = !casoInAttesa;
   if (casoInAttesa){
     document.getElementById('invio-testo').textContent = v.esito === 'dubbio'
       ? 'Lo mandiamo a chi lo controlla e, se serve, corregge il codice?'
-      : 'Lo mandiamo a chi corregge il codice? Quando il modello giusto è pronto, arriva in Glam Lab.';
+      : 'Lo mandiamo a chi corregge il codice?';
     invioSi.disabled = invioNo.disabled = invioEmail.disabled = false;
     invioEmail.hidden = invioEl.querySelector('label[for=invio-email]').hidden = !emailAttiva;
     if (!emailAttiva) invioEmail.value = '';
@@ -1511,6 +1513,7 @@ function mostraInvio(v){
       casoEl.insertBefore(invioEl, document.getElementById('caso-mostra'));
     else
       document.getElementById('ai').insertBefore(invioEl, document.getElementById('ai-righe'));
+    mostraNota(v, tieni);
   }
   aggiornaAI();
 }
@@ -1540,11 +1543,21 @@ invioSi.addEventListener('click', async () => {
     esitoInvio('L’email non sembra giusta: correggila o lasciala vuota.', 'err');
     return;
   }
-  // la nota, se c'e', parte col caso: la foto si prepara prima, cosi' una foto
-  // che non si apre ferma l'invio invece di arrivare a meta'
-  const conNota = !notaEl.hidden && notaEl.parentNode === invioEl;
-  const testo = conNota ? notaTesto.value.trim() : '';
-  const file = conNota ? notaFoto.files[0] : null;
+  // la descrizione e' obbligatoria e parte col caso; la foto si prepara
+  // prima, cosi' una foto che non si apre ferma l'invio invece di arrivare a
+  // meta'
+  const testo = notaTesto.value.trim();
+  const file = notaFoto.files[0];
+  const corta = testo.length < DESCRIZIONE_MIN;
+  notaTesto.setAttribute('aria-invalid', String(corta));
+  if (corta){
+    // sotto il campo, non sotto i tasti: nel dialog di Glam si vede
+    esitoNota('Prima di mandarlo descrivi il pack: com’è fatto, come si monta, cosa non torna'
+              + ' nel modello. Serve a chi lo corregge.', 'err');
+    notaTesto.focus();
+    return;
+  }
+  esitoNota('');
   const blocca = si => {
     invioSi.disabled = invioNo.disabled = invioEmail.disabled = notaTesto.disabled = si;
   };
@@ -1573,21 +1586,19 @@ invioSi.addEventListener('click', async () => {
   aggiungiCaso(v, nomeInGlam());
   notifica('«' + nomeInGlam() + '»: caso inviato. Lo segui nella finestra dei casi'
            + (email ? ', e ti scriviamo se ci serve un’informazione.' : '.'), v.codice);
+  // Se la descrizione non arriva il caso e' partito lo stesso: resta lei,
+  // con quello che c'era scritto e il suo tasto per riprovare.
+  let erroreNota = null;
+  try{
+    await mandaNota(v.codice, testo, foto);
+  }catch(err){
+    erroreNota = testoErrore(err);
+  }
   if (casoEl.classList.contains('on')){
-    // senza un modello da tenere, partiti il caso e la nota non resta niente
-    // da fare. Se la nota non arriva il caso e' partito lo stesso: il riquadro
-    // la tiene, col suo tasto per riprovare.
-    if (testo || foto){
-      try{
-        await mandaNota(v.codice, testo, foto);
-      }catch(err){
-        mostraCaso(v, respinto, true);
-        esitoNota('Il caso è inviato, la nota no: ' + testoErrore(err), 'err');
-        return;
-      }
-    }
-    avvisaGlam(v);
-    casoFinito(v);
+    // senza un modello da tenere, partiti il caso e la descrizione non resta
+    // niente da fare
+    if (!erroreNota){ avvisaGlam(v); casoFinito(v); return; }
+    mostraCaso(v, respinto, true);
   }
   else if (v.esito === 'dubbio') mostraVerifica(v);
   else {
@@ -1596,6 +1607,10 @@ invioSi.addEventListener('click', async () => {
     verificaEl.classList.add('on');
     aggiornaAI();
     avvisaGlam(v);
+  }
+  if (erroreNota){
+    mostraNota(v, true);
+    esitoNota('Il caso è inviato, la descrizione no: ' + erroreNota, 'err');
   }
 });
 
@@ -2253,23 +2268,34 @@ const notaFoto = document.getElementById('nota-foto');
 const notaInvia = document.getElementById('nota-invia');
 const notaEsito = document.getElementById('nota-esito');
 let notaCodice = null;
+// la descrizione piu' corta che dice qualcosa del pack: «scatola esagonale»
+const DESCRIZIONE_MIN = 10;
 
 function esitoNota(testo, cls){
   notaEsito.textContent = testo;
   notaEsito.className = cls || '';
 }
 
-/** La nota nel riquadro del caso. Finche' il caso aspetta Invia sta nel modulo
- *  d'invio e parte con lui; col caso gia' in coda sta da sola, col suo tasto.
- *  `tieni` lascia quello che c'era scritto. */
+/** La descrizione del pack. Finche' il caso aspetta Invia sta nel modulo
+ *  d'invio, obbligatoria, e parte con lui; col caso gia' in coda resta da
+ *  sola, col suo tasto, solo se non e' arrivata. `tieni` lascia quello che
+ *  c'era scritto. */
 function mostraNota(v, tieni){
-  const insieme = !!(v && v.in_attesa && v.codice && casoEl.classList.contains('on'));
+  const insieme = !!(v && v.in_attesa && v.codice);
   notaCodice = v && v.codice && (v.in_coda || insieme) ? v.codice : null;
   notaEl.hidden = !notaCodice;
-  notaEl.classList.toggle('chiusa', insieme && !tieni);
   notaInvia.hidden = insieme;
-  if (insieme) invioEl.insertBefore(notaEl, invioEl.querySelector(':scope > .azioni'));
-  else casoEl.insertBefore(notaEl, document.getElementById('caso-mostra'));
+  notaTesto.required = insieme;
+  notaTesto.setAttribute('aria-invalid', 'false');
+  const fotoBox = document.getElementById('nota-foto-box');
+  if (insieme){
+    const azioni = invioEl.querySelector(':scope > .azioni');
+    invioEl.insertBefore(notaEl, azioni);
+    azioni.insertBefore(fotoBox, azioni.firstChild);
+  } else {
+    invioEl.parentNode.insertBefore(notaEl, invioEl.nextSibling);
+    notaEl.querySelector('.azioni').insertBefore(fotoBox, notaInvia);
+  }
   notaTesto.disabled = false;
   notaInvia.disabled = false;
   if (tieni) return;
@@ -2279,9 +2305,12 @@ function mostraNota(v, tieni){
   esitoNota('');
 }
 
-document.getElementById('nota-apri').addEventListener('click', () => {
-  notaEl.classList.remove('chiusa');
-  notaTesto.focus();
+notaTesto.addEventListener('input', () => {
+  if (notaTesto.getAttribute('aria-invalid') === 'true'
+      && notaTesto.value.trim().length >= DESCRIZIONE_MIN){
+    notaTesto.setAttribute('aria-invalid', 'false');
+    esitoNota('');
+  }
 });
 
 notaFoto.addEventListener('change', () => {
@@ -2324,31 +2353,34 @@ async function mandaNota(codice, testo, foto){
   }
 }
 
-// La nota da sola, col suo tasto, resta solo quando e' partito il caso e lei
-// no: arrivata lei, il lavoro e' finito come per un caso senza nota.
+// La descrizione da sola, col suo tasto, resta solo quando e' partito il caso
+// e lei no: arrivata lei, il lavoro e' finito.
 notaInvia.addEventListener('click', async () => {
   if (!notaCodice) return;
   const codice = notaCodice;
   const testo = notaTesto.value.trim();
   const file = notaFoto.files[0];
-  if (!testo && !file){ esitoNota('Scrivi qualcosa o aggiungi una foto.', 'err'); return; }
+  if (testo.length < DESCRIZIONE_MIN){ esitoNota('Descrivi il pack prima di mandarla.', 'err'); return; }
   notaInvia.disabled = true;
   esitoNota('Invio della nota\u2026');
   try{
     await mandaNota(codice, testo, file ? await fotoRidotta(file) : null);
   }catch(err){
     notaInvia.disabled = false;
-    esitoNota('Nota non inviata: ' + testoErrore(err), 'err');
+    esitoNota('Descrizione non inviata: ' + testoErrore(err), 'err');
     return;
   }
-  casoFinito({codice});
+  if (casoEl.classList.contains('on')){ casoFinito({codice}); return; }
+  notaTesto.disabled = true;
+  notaInvia.hidden = true;
+  esitoNota('Grazie: la descrizione \u00e8 arrivata a chi corregge il caso.', 'ok');
 });
 
 document.getElementById('caso-mostra').onclick = async () => {
   if (!respinto) return;
   const blob = respinto;
   nascondiCaso(true);
-  if (casoInAttesa) mostraInvio(casoInAttesa);
+  if (casoInAttesa) mostraInvio(casoInAttesa, true);
   glbBlob = blob;
   show(await blob.arrayBuffer());
   setFase('pronto');

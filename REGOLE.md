@@ -2266,19 +2266,22 @@ del caso arriva a lui (GLAM.md):
   entro un'ora», e lo dice il banner del dubbio: e' quello che prende un caso
   che la routine risolve da sola (con le verifiche della settimana a parte, e'
   anche meno).
-- **La nota.** Nel modulo d'invio, chiuso dietro un link perche' «Invia il
-  caso» resti in vista, c'e' un campo facoltativo - com'e' fatto, come si
-  monta il pack - con una foto. Parte subito dopo il caso, e arriva sulla
-  issue (`/api/nota`, col solo codice del caso) prima che la routine abbia
-  bisogno di chiedere: la routine i commenti li legge all'inizio e prima di
-  fare una domanda. La foto la pagina la rimpicciolisce a 1600 px: quella di
-  un telefono pesava dieci volte tanto.
+- **La descrizione.** Nel modulo d'invio c'e' la descrizione del pack -
+  com'e' fatto, come si monta, cosa non torna nel modello - **obbligatoria**
+  (almeno 10 caratteri: «scatola esagonale»), con una foto facoltativa sulla
+  riga dei tasti. Senza, «Invia il caso» non parte e lo dice sotto il campo.
+  Era facoltativa, e i casi arrivavano senza: la routine doveva capire tutto
+  dal disegno, o chiedere e aspettare. Parte subito dopo il caso, e arriva
+  sulla issue (`/api/nota`, col solo codice del caso) prima che la routine
+  abbia bisogno di chiedere: la routine i commenti li legge all'inizio e prima
+  di fare una domanda. La foto la pagina la rimpicciolisce a 1600 px: quella
+  di un telefono pesava dieci volte tanto.
 - **Finito si vede.** Mandato il caso, se non c'e' un modello da tenere, la
   pagina torna all'inizio e dentro Glam chiede di chiudere il dialog
   (`pack3d:chiudi`), che si chiude con un toast «Caso inviato». Prima il
   riquadro restava aperto, cambiato di poco, e non si capiva che era finita.
-  Se la nota non arriva, la pagina resta con lei per riprovare: chiudere
-  l'avrebbe persa senza dirlo. Col modello in vista - un dubbio, o un
+  Se la descrizione non arriva, la pagina resta con lei per riprovare:
+  chiudere l'avrebbe persa senza dirlo. Col modello in vista - un dubbio, o un
   respinto mostrato lo stesso - resta aperta: il modello si salva ancora.
 - **Lo stato e le domande in Glam.** La pagina dice a Glam il codice del caso
   (`pack3d:caso`), e Glam lo lega all'utente. La routine gli dice a che punto

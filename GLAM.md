@@ -64,11 +64,12 @@ Glam chiude il dialog di «Costruisci modello 3D da PDF», come dopo aver
 salvato un modello, e mostra un toast con titolo e testo. Vedi *Il testo per
 Lovable: il caso inviato chiude la finestra*.
 
-- **La nota** per chi corregge (com'è fatto il pack, come si monta, una foto)
-  sta nel modulo d'invio, chiusa dietro un link, e parte con il caso: dopo,
-  la pagina non c'è più. Se la nota non arriva il caso è partito lo stesso:
-  la pagina resta aperta con la nota e il suo tasto per riprovare, e
-  `pack3d:chiudi` parte quando arriva lei.
+- **La descrizione** del pack per chi corregge (com'è fatto, come si monta,
+  cosa non torna) sta nel modulo d'invio ed è **obbligatoria**, con una
+  foto facoltativa: senza descrizione «Invia il caso» non parte. Parte con
+  il caso: dopo, la pagina non c'è più. Se la descrizione non arriva il caso
+  è partito lo stesso: la pagina resta aperta con lei e il suo tasto per
+  riprovare, e `pack3d:chiudi` parte quando arriva lei.
 - **Con un modello in vista** - un dubbio del controllo, o un respinto
   mostrato lo stesso - `pack3d:chiudi` non parte: il modello si può ancora
   salvare in Glam, e il salvataggio chiude il dialog come sempre.
