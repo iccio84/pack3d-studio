@@ -4147,6 +4147,26 @@ e' lungo almeno l'80% del primo si tiene quello con piu' grafica sotto
 (`prisma._dettaglio`: la media del gradiente della pagina a 30 dpi
 nell'ingombro): 31,7 la vista di fuori, 11,2 quella di dentro.
 
+**Vale anche per l'astuccio** (`dieline._largest_cluster`, `ALTRA_VISTA`).
+Un astuccio con OUTSIDE e INSIDE affiancate: i contorni delle zone segnaposto
+della vista di dentro sono tracciati con la penna della fustella e la
+allungavano (1781 mm contro 1493, l'84%). Vinceva la vista di dentro, quei
+contorni diventavano pieghe (una larghezza vera di 143 divisa in 24,5 + 94 +
+24,7) e la grafica era bianca. Fra i gruppi lunghi almeno l'80% del primo si
+tiene quello con piu' colori distinti nella pagina a 50 dpi (`_colori`, come
+`tools.dt_della_tavola`): 104-153 la vista di fuori, 34-41 quella di dentro.
+Il gradiente medio di prisma qui non separa (9,55 contro 9,22).
+
+**La falda di chiusura e' il fondo, e i suoi lati non sono dritti.** Nello
+stesso astuccio la falda in fondo al fronte si stringe di circa 2 gradi verso
+la linguetta (138,1 -> 139,4 su 36 mm), e `_segments` buttava i tratti non
+orizzontali o verticali entro 0,7 pt: il bordo libero restava un pezzo
+staccato e la scatola usciva senza fondo. Un tratto conta H o V anche quando
+devia meno di 3 gradi (`QUASI_DRITTO = 0.05`, la tangente). E il bordo libero,
+interrotto da linguetta e angoli tondi, copre il 60% della colonna: la prima e
+l'ultima riga del riquadro bastano col 50% (`rows_in_col`, `bordo`), le altre
+restano all'80%. Sette astucci del parco escono identici (md5).
+
 ### Il montaggio e il verso
 
 Ogni parete si alza di 90 gradi sul suo lato; linguette e risvolti stanno
