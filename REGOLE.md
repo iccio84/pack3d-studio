@@ -2561,7 +2561,10 @@ build lo scrive, invece di consegnare un modello piu' grande del pack.
 ### Una texture sola, e uno specchio solo
 
 Lo steso intero e' **una** texture, con in fondo due righe di colore piatto per
-l'interno e per il taglio; le UV sono la posizione nel piano. La piega sposta i
+l'interno e per il taglio; le UV sono la posizione nel piano. Le due righe
+servono alla costruzione: nel GLB finale il vassoio ha come texture il DT con
+un millimetro attorno, e l'interno e il taglio sono colori pieni (*La texture
+e' lo steso*). La piega sposta i
 vertici e la grafica se li porta dietro, quindi non c'e' nessun ritaglio da
 ruotare pannello per pannello.
 
@@ -2833,7 +2836,9 @@ pezzo piu' vicino, cosi' due pezzi che si toccano non lasciano fessure
 Lo steso e' uno, come nel vassoio, ma si rende sul riquadro della fustella e
 non sulla pagina intera: la pagina del Tronky e' 940 x 800 mm e la fustella
 515 x 486, e con lo stesso lato massimo la texture tiene quasi il doppio dei
-punti per millimetro.
+punti per millimetro. Nel GLB finale lo steso e' il DT intero con un
+millimetro attorno, anche oltre i pezzi della maglia (*La texture e' lo
+steso*).
 
 ### La plancia e' un elemento a se'
 
@@ -4908,7 +4913,8 @@ esce la coppa aperta, col tappo solo il tappo, e il primo cartellino lo dice.
 Nella home non c'e' un pulsante della coppa: era un secondo modo di dire la
 stessa cosa. L'API accetta ancora `coppa` come tipologia.
 La costruzione e' `pack3d/coppa.py`; nel GLB la coppa e il tappo sono **due
-nodi**, e il tappo si toglie.
+nodi**, e il tappo si toglie. La texture e' una: l'atlante coi due stesi, una
+zona per foglio (*La texture e' lo steso*).
 
 Ogni PDF ha due disegni che dicono due cose diverse, e servono tutti e due:
 
@@ -5043,7 +5049,8 @@ Il cono gelato - il Camy Apolo T1 Macaron - e' un cartotecnico in **due
 pezzi**: lo steso del cono e il lid, il disco che lo chiude, ognuno nel suo
 PDF. Si dichiara come la coppa, e la costruzione e' in `pack3d/coppa.py`
 (`leggi_cono`, `leggi_disco`, `costruisci_cono`); nel GLB il cono e il lid
-sono due nodi. Il DT del cono sta sulla lastra **TROQUEL**, che e' la
+sono due nodi, con una texture sola: l'atlante coi due stesi (*La texture e'
+lo steso*). Il DT del cono sta sulla lastra **TROQUEL**, che e' la
 fustella in spagnolo: senza quel nome in `techink` il DT finiva nella
 grafica.
 
@@ -5295,7 +5302,9 @@ Il corpo non si tocca: e' quello che si vede.
 
 Il GLB e' il vassoio com'e', con dentro il flowpack **una volta sola** come
 maglia e un nodo per pezzo, ognuno con la sua rotazione e traslazione. La
-texture del flowpack c'e' una volta: con 40 pezzi il KMS pesa 9,8 MB.
+texture del flowpack c'e' una volta: con 40 pezzi il KMS pesa 9,8 MB. Le
+texture del vassoio e del pack vanno poi in un'immagine sola, l'atlante, una
+zona per pezzo (*La texture e' lo steso*): Glam e il template ne vogliono una.
 
 **Il viewer della pagina deve seguire i nodi.** Il suo lettore GLB metteva in
 scena ogni mesh una volta, e dei nodi non sapeva niente: di un riempimento
@@ -5400,8 +5409,9 @@ immagine di colore, coi nomi delle mesh se sono piu' d'una
 ### Il template PSD
 
 Per «Scarica Template» di Glam ogni modello - con una texture sola, e coi
-modelli di piu' fogli in atlante sono tutti - ha anche il suo **template**: un PSD fatto dal GLB (`pack3d/template.py`), con la
-struttura del template ufficiale del Nutella 750 g. Sotto, il gruppo «La tua
+modelli di piu' fogli in atlante sono tutti - ha anche il suo **template**:
+un PSD fatto dal GLB (`pack3d/template.py`), con la struttura del template
+ufficiale del Nutella 750 g. Sotto, il gruppo «La tua
 grafica» con la texture, cioe' lo steso; sopra, le «Guide UV»: tutti gli
 spigoli della mappatura e la scacchiera A0-J9 (nascosti), l'area che il
 modello non prende velata di nero al 60%, i contorni in magenta, i nomi
