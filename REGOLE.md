@@ -4148,6 +4148,32 @@ le strisce del rovescio e del taglio; il bordo libero di ogni parete prende
 la costa. Due nodi nel GLB, `fondo` e `coperchio`, e i due stesi
 nell'atlante.
 
+### La lamina e' metallo
+
+Il caso: la scatola esagonale del Kusschen Darkchoc, approvata nella forma e
+respinta da chi l'aveva caricata perche' la cornice del coperchio, che la
+legenda dice `cold foil copper Kurz 404`, sul modello era arancio piatto. Il
+PDF del coperchio ha una tinta piatta `..._ColdFoilCopper_Kurz404`, con
+un'alternativa arancio che finge il rame: nessuna regola la riconosceva, ne'
+per toglierla ne' per farla metallo, e pdfium la rendeva come un inchiostro
+qualsiasi.
+
+La regola (`pack3d/lamina.py`): una lastra che si chiama come una lamina -
+foil (anche dentro una parola sola, `ColdFoilCopper`), Folie, lamina, hot
+stamping, stampa a caldo - e' un film metallico sul cartoncino. Il colore
+resta quello della texture, l'alternativa scelta dal grafico e gli inchiostri
+sopra; quello che cambia e' il materiale: dove c'e' la lastra (piena dal 25%
+d'inchiostro) e' metallo, ruvidita' 0,22, e attorno resta carta con la
+ruvidita' di prima (0,42). Sul GLB e' la `metallicRoughnessTexture` di glTF,
+in PNG, una per pezzo, che l'atlante unisce come il colore
+(`exporters.write_glb_mesh` con `mr` in lista). La maschera viene dalla
+lastra sul riquadro del DT (`techink.mappe_lastre`, 150 dpi al piu'), cosi'
+il campione della legenda fuori dal DT non conta; sotto lo 0,2% non c'e'
+metallo. Sul Darkchoc il foil e' il 38,4% del coperchio: la cornice, le
+falde e le scritte arancio. Un "Silver" o un PANTONE 877 C sono inchiostri
+metallici stampati, non una lamina, e qui non si trattano; per ora la
+lamina si fa sulla scatola a prisma.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due

@@ -38,7 +38,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
                     prisma, folding, exporters, materiali, nero, plancia, pouch,
-                    rilievo, strati, vassoio, verifica, versione)
+                    lamina, rilievo, strati, vassoio, verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
@@ -1611,7 +1611,7 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
                 per_pdf[id(q)] = (pagina, n_pagine)
                 break
     avvisi, V, UV, T, A, parti, quali = [], [], [], [], [], [], []
-    colori = []
+    colori, MR = [], []
     for nome, pr, M, quota, cop in (
             ("fondo", fondo, M_fondo, 0.0, False),
             ("coperchio", coperchio, M_cop, fondo.altezza + sp, True)):
@@ -1649,8 +1649,13 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
         tela = ballotin.con_interno(tex)
         v, uv, t = prisma.maglia(pr, M, origine, scala / PT2MM, tela.size,
                                  coperchio=cop, quota=quota, spessore=carta)
-        tela, uv, tinte = lo_steso.senza_strisce(tex.height, tela, uv, t,
-                                                 TINTE_BALLOTIN)
+        # la lamina, se il DT ne ha la lastra: metallo sulla texture, carta
+        # attorno, e sotto le strisce niente metallo (`pack3d.lamina`)
+        mr = lamina_della_tela(pdf, (x0, y0, x1, y1), tex.size, tela.size,
+                               scala / PT2MM, nome, avvisi)
+        tela, uv, tinte, mr = lo_steso.senza_strisce(tex.height, tela, uv, t,
+                                                     TINTE_BALLOTIN, mr)
+        MR.append(mr)
         # le tinte dei due pezzi in una lista sola
         mappa = []
         for nome_t, c in tinte.colori:
@@ -1670,7 +1675,8 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
     T = np.asarray(T, np.int64)
     tinte = lo_steso.Tinte(np.concatenate(quali), colori)
     exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti,
-                             tinte=tinte)
+                             tinte=tinte,
+                             mr=MR if any(m is not None for m in MR) else None)
     atlante.unisci_file(out_glb)
     titolo = _in_pezzi(dichiarato, pdfs, "scatola a prisma col coperchio"
                        if coperchio is not None else
@@ -2382,6 +2388,38 @@ def rilievo_sicuro(fa, *args, coppia=False, **kw):
         riga = ("rilievo: la lastra c'e' ma la mappa non si e' fatta (%s), il "
                 "modello esce senza" % e)
         return (None, riga) if coppia else riga
+
+
+# la ruvidita' della carta di un GLB a una maglia (`exporters.write_glb_mesh`):
+# fuori dalla lamina la mappa la tiene com'era
+RUVIDITA_MAGLIA = 0.42
+
+
+def lamina_della_tela(pdf, riquadro, misura_tex, misura_tela, px_mm, nome,
+                      avvisi):
+    """La mappa metallo/ruvidita' della lamina sulla `tela` (la texture del
+    `riquadro`, `misura_tex` pixel, con sotto le strisce fino a
+    `misura_tela`), o None. Come il rilievo, la lamina non deve mai fermare
+    una costruzione: se leggerla si rompe il modello esce senza, e la riga
+    lo dice."""
+    from PIL import Image
+    try:
+        mr, riga = lamina.mappa(pdf, riquadro, misura_tex, px_mm,
+                                RUVIDITA_MAGLIA)
+    except Exception as e:                          # noqa: BLE001
+        traceback.print_exc()
+        mr, riga = None, ("lamina: la lastra c'e' ma la mappa non si e' "
+                          "fatta (%s), il modello esce senza metallo" % e)
+    if riga:
+        avvisi.append("%s: %s" % (nome, riga))
+    if mr is None:
+        return None
+    k = mr.width / float(misura_tex[0])
+    fondo = (255, round(RUVIDITA_MAGLIA * 255), 0)
+    tutta = Image.new("RGB", (max(1, round(misura_tela[0] * k)),
+                              max(1, round(misura_tela[1] * k))), fondo)
+    tutta.paste(mr, (0, 0))
+    return tutta
 
 
 def pellicola_sicura(fa, *args, **kw):
