@@ -213,16 +213,20 @@ Allora: commit, push, PR **verso `coda-settimana`** (mai verso `main`),
 unione con merge commit. Se il ramo nel frattempo e' andato avanti, porta
 dentro `origin/coda-settimana`, ricostruisci il caso e riprova. Poi
 `consegna`. Nella sessione non c'e' `gh pr`: la PR si apre e si unisce con
-`gh api`, cosi' (passano dal proxy di una sessione cloud):
+`gh api`, cosi' (passano dal proxy di una sessione cloud). Prima prendi il
+nome del ramo (`git branch --show-current`) e la sua testa intera (`git
+rev-parse HEAD`), poi i comandi **cosi' come sono scritti**, su una riga e
+coi valori al posto dei segnaposto: `.claude/settings.json` li permette
+esattamente in questa forma, e una forma diversa la ferma il controllo dei
+permessi della sessione, come e' gia' successo.
 
     git push -u origin HEAD
-    gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana \
-        -f head="$(git branch --show-current)" -f title="..." -f body="..." --jq .number
-    gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge \
-        -f merge_method=merge -f sha="$(git rev-parse HEAD)"
+    gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana -f head=<ramo> -f title="..." -f body="..." --jq .number
+    gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge -f merge_method=merge -f sha=<sha>
 
-In bozza: `-F draft=true` nel primo. `sha` e' la testa del tuo ramo, intera:
-se nel frattempo e' cambiata, GitHub rifiuta l'unione invece di unire altro.
+In bozza: `-F draft=true` in fondo al primo. `sha` e' la testa del tuo ramo,
+intera: se nel frattempo e' cambiata, GitHub rifiuta l'unione invece di
+unire altro.
 
 **Un ramo nuovo la sessione non lo crea**: il proxy lo impedisce, e si
 spinge solo il ramo della sessione. `coda-settimana` c'e'; se manca, non

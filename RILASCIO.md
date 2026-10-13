@@ -77,10 +77,8 @@ mano. Si fa **prima** di guardare la coda.
    come una correzione (CODA.md, *Quando si unisce nel ramo della
    settimana*):
 
-       gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana \
-           -f head=main -f title="Riallinea coda-settimana a main" -f body="..." --jq .number
-       gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge \
-           -f merge_method=merge -f sha="$(git rev-parse origin/main)"
+       gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana -f head=main -f title="Riallinea coda-settimana a main" -f body="..." --jq .number
+       gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge -f merge_method=merge -f sha=<sha di origin/main>
 
    Se `coda-settimana` contiene gia' `main` (`git merge-base --is-ancestor
    origin/main origin/coda-settimana`) non serve niente. Mai forzare.
