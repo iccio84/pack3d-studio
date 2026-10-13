@@ -229,8 +229,8 @@ Lovable sono in **GLAM.md**; qui il collegamento.
   /api/elimina`, dopo aver controllato chi e' collegato: un admin tutti, l'account
   design i suoi, il guest nessuno (GLAM.md, sezione 7). Lo Space chiude la
   issue con l'etichetta `eliminato`.
-- La **nota** che l'utente puo' lasciare nella pagina, che parte con il
-  caso quando lo manda, va allo Space (`POST /api/nota`) senza token: porta solo il
+- La **descrizione** del pack, obbligatoria nella pagina per mandare un
+  caso, parte con lui e va allo Space (`POST /api/nota`) senza token: porta solo il
   codice del caso, che conosce chi l'ha caricato, e lo Space la accetta
   solo per un caso in coda, al massimo otto voci per caso e sessanta
   all'ora. Anche lei finisce sulla issue, con l'eventuale foto nella
