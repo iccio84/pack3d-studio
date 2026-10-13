@@ -100,7 +100,9 @@ def trova(pdf, d, page_no=0):
     tol = 1.0 * MM
     if not (r.y1 <= f.y0 + tol and b.y0 >= f.y1 - tol):
         return None
-    tratti = incisioni._segmenti(incisioni._tratti_tecnici(pdf, page_no))
+    # le mezzelune e gli smussi sono curve: si leggono sulla curva, non
+    # sui punti di controllo
+    tratti = incisioni._segmenti(incisioni._tratti_tecnici(pdf, page_no, curve=True))
     if not tratti:
         return None
     contorno = _contorno(tratti, b)

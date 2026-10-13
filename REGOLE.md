@@ -4284,6 +4284,14 @@ interna, stampata col riquadro alto quanto il fondo sopra il retro, nello
 stesso verso: dalle tacche e dagli smussi si vede lei. Nel parco lo fa solo
 questo astuccio; gli altri restano identici (la regola non scatta).
 
+Il contorno si legge **sulla curva**: le mezzelune e gli smussi sono tratti
+di Bezier, e la lettura dei tracciati ne teneva i tre punti - due di
+controllo e l'arrivo - come vertici. I punti di controllo non stanno sulla
+curva, e il ritaglio usciva a zig-zag: una tacca di 7 mm erano 5 punti.
+`tracciati._cammina(curve=True)` campiona la cubica ogni 0,85 pt (0,3 mm);
+la tacca diventa un arco di una ventina di punti, lo smusso di 18. La
+lettura di sempre, per pieghe e bordi dritti, resta senza `curve`.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due

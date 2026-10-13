@@ -75,9 +75,11 @@ SVOLTA = 60.0
 LINGUETTA_MIN = 2.0
 
 
-def _tratti_tecnici(pdf, page_no=0):
+def _tratti_tecnici(pdf, page_no=0, curve=False):
     """I sottopercorsi della penna del disegno tecnico: liste di punti, in
-    punti PDF col telaio della MediaBox (y dall'alto), come `tracciati`."""
+    punti PDF col telaio della MediaBox (y dall'alto), come `tracciati`. Con
+    `curve` i tratti di Bezier sono campionati sulla curva
+    (`tracciati._cammina`)."""
     import pypdfium2 as pdfium
     from . import dieline, tracciati
 
@@ -89,7 +91,7 @@ def _tratti_tecnici(pdf, page_no=0):
     try:
         page = doc[page_no]
         pieni, tratti = [], []
-        tracciati._cammina(page, pieni, tratti)
+        tracciati._cammina(page, pieni, tratti, curve=curve)
     finally:
         doc.close()
     out = []

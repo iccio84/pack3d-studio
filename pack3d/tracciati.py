@@ -25,12 +25,14 @@ Qui i colori servono solo come chiavi, per dire "questo pieno e' della
 stessa tinta di quel tratto": finche' penne, tavolozza e riempimenti
 vengono letti tutti dalla stessa parte, il confronto resta valido.
 """
+import math
 import ctypes
 
 import pypdfium2 as pdfium
 import pypdfium2.raw as raw
 
 _MOVE = raw.FPDF_SEGMENT_MOVETO
+_BEZIER = raw.FPDF_SEGMENT_BEZIERTO
 
 # pt: sotto questa soglia il tratto e' disegno tecnico, non grafica
 FILO = 0.8
@@ -262,12 +264,31 @@ def _discendi(contenitore, quanti, prendi, m, visita):
             visita(o, t, m)
 
 
+# Il passo con cui si campiona un tratto di Bezier, in punti PDF (0,3 mm).
+PASSO_CURVA = 0.85
+
+
+def _bezier(p0, p1, p2, p3):
+    """I punti della cubica da p0 (escluso) a p3 (compreso), uno ogni
+    PASSO_CURVA circa: la lunghezza della spezzata di controllo la maggiora."""
+    lung = sum(math.hypot(v[0] - u[0], v[1] - u[1])
+               for u, v in ((p0, p1), (p1, p2), (p2, p3)))
+    n = max(1, int(math.ceil(lung / PASSO_CURVA)))
+    out = []
+    for i in range(1, n + 1):
+        t = i / n
+        k0, k1, k2, k3 = (1 - t) ** 3, 3 * t * (1 - t) ** 2, 3 * t * t * (1 - t), t ** 3
+        out.append((k0 * p0[0] + k1 * p1[0] + k2 * p2[0] + k3 * p3[0],
+                    k0 * p0[1] + k1 * p1[1] + k2 * p2[1] + k3 * p3[1]))
+    return out
+
+
 def _pagina(page, visita):
     _discendi(page.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject,
               _telaio(page), visita)
 
 
-def _cammina(page, pieni, tratti, tavolozza=None):
+def _cammina(page, pieni, tratti, tavolozza=None, curve=False):
     """Una passata sola sulla pagina, tenendo il minimo indispensabile.
 
     Misurato su Colazione: la pagina ha 32.757 percorsi e 408.341 punti, e
@@ -287,6 +308,13 @@ def _cammina(page, pieni, tratti, tavolozza=None):
 
     Il disegno tecnico e la grafica non vengono toccati: il PDF si legge e
     basta. Quello che cambia e' solo cosa ci teniamo in mano.
+
+    Con `curve` i tratti di Bezier si campionano sulla curva, uno ogni
+    `PASSO_CURVA` punti; senza, restano i loro tre punti - i due di controllo
+    e l'arrivo - come fossero vertici, e a chi cerca solo pieghe e bordi
+    dritti basta cosi'. Il contorno di una mezzaluna o di uno smusso, invece,
+    passerebbe per i punti di controllo, che sulla curva non stanno: una
+    spezzata a zig-zag (`pack3d.sormonto`).
     """
     def visita(o, t, m):
         if t != raw.FPDF_PAGEOBJ_PATH:
@@ -309,6 +337,8 @@ def _cammina(page, pieni, tratti, tavolozza=None):
         a, b, c, d, e, f = _componi(m, _matrice(o))
         buf, troppo = [], False
         x, y = ctypes.c_float(), ctypes.c_float()
+
+        bez = []
 
         def chiudi(sp):
             if not sp:
@@ -333,7 +363,15 @@ def _cammina(page, pieni, tratti, tavolozza=None):
                 continue
             raw.FPDFPathSegment_GetPoint(seg, ctypes.byref(x), ctypes.byref(y))
             px, py = x.value, y.value
-            buf.append((a * px + c * py + e, b * px + d * py + f))
+            q = (a * px + c * py + e, b * px + d * py + f)
+            if curve and tipo == _BEZIER and buf:
+                bez.append(q)
+                if len(bez) == 3:
+                    buf.extend(_bezier(buf[-1], *bez))
+                    bez.clear()
+                continue
+            bez.clear()
+            buf.append(q)
             if not stroke and len(buf) > 5:
                 # senza tratto e con piu' di cinque punti non puo' essere
                 # un rettangolo: si butta senza leggere il resto
