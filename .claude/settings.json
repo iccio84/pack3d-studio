@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh api -X POST repos/iccio84/pack3d-studio/pulls *)",
+      "Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)"
+    ]
+  }
+}
