@@ -190,6 +190,11 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 - Se `prepara` trova il lucchetto messo **da poco** - un'altra sessione,
   partita insieme a te, l'ha preso un attimo prima - prendi il caso libero
   successivo; se non ce n'e', hai finito.
+- Se `prepara` si e' fermato a meta' per un errore tuo (un pacchetto che
+  mancava, il registro da riallineare), sistemalo e rilancialo **uguale**,
+  senza `--riprendi`: il lucchetto e' gia' tuo, `prepara` lo riconosce dal
+  commento con la tua sessione e riparte senza scrivere niente. `--riprendi`
+  e' solo per il lucchetto di un'altra sessione, morta.
 - Una issue chiusa con `eliminato` l'ha tolta dalla coda chi poteva farlo,
   dall'app: non si riapre e non si lavora. Se la trovi chiusa mentre ci
   lavori, fermati: niente PR, niente stato a Glam, scrivilo nel riassunto.

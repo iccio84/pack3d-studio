@@ -214,6 +214,8 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     except (OSError, ValueError) as e:
         print("coda: issue del caso %s non aperta (%s)" % (cod, e), file=sys.stderr)
         return
+    if isinstance(issue, dict) and isinstance(issue.get("number"), int):
+        _APERTE_QUI[cod] = (issue["number"], time.time(), issue)
     # lo stesso PDF, ricaricato dopo che il suo caso e' stato chiuso o
     # eliminato: con gli elenchi di prima la pagina vedrebbe quello vecchio
     _dimentica("aperte", "chiuse")
@@ -410,6 +412,13 @@ _VOCI_LOCK = threading.Lock()
 # I casi che questo processo sta ancora caricando, ognuno col suo segnale: la
 # issue si apre dopo i PDF, e una nota scritta subito arriva prima di lei.
 _IN_VOLO = {}
+# Le issue che questo processo ha appena aperto: codice -> (numero, quando, la
+# issue come l'ha data GitHub). Subito dopo l'apertura l'elenco delle aperte
+# puo' non averla ancora, e la descrizione mandata col caso - che parte appena
+# la issue c'e' - non la trovava: «il caso non e' in coda». Per dieci minuti
+# la si cerca anche per numero.
+_APERTE_QUI = {}
+APERTE_QUI_S = 600
 
 
 class Troppe(Exception):
@@ -484,6 +493,28 @@ def fotos_da_testo(valore):
     return [f for f in (foto_da_testo(v) for v in elenco) if f]
 
 
+def _cartella(issue):
+    """La cartella dei file del caso, dal corpo della sua issue, o None."""
+    m = re.search(r"File: \[`(casi/[^`]+)`\]", str(issue.get("body") or ""))
+    return m.group(1) if m else None
+
+
+def _appena_aperta(cod):
+    """La issue che questo processo ha aperto per il caso da poco (APERTE_QUI_S),
+    letta per numero, o None. Se GitHub per numero non la da' ancora, quella
+    che ha risposto all'apertura."""
+    v = _APERTE_QUI.get(cod)
+    if not v or time.time() - v[1] > APERTE_QUI_S:
+        return None
+    try:
+        issue = _richiesta("GET", "/repos/%s/issues/%d" % (_repo(), v[0]), timeout=30)
+    except urllib.error.HTTPError as e:
+        if e.code != 404:
+            raise
+        issue = v[2]
+    return issue if isinstance(issue, dict) else None
+
+
 def trova(cod):
     """(issue aperta del caso, cartella dei suoi file), o (None, None)."""
     repo = os.environ["PACK3D_CODA_REPO"].strip().strip("/")
@@ -493,8 +524,10 @@ def trova(cod):
         if not isinstance(i, dict) or i.get("pull_request"):
             continue
         if str(i.get("title", "")).startswith("Caso nuovo %s:" % cod):
-            m = re.search(r"File: \[`(casi/[^`]+)`\]", str(i.get("body") or ""))
-            return i, (m.group(1) if m else None)
+            return i, _cartella(i)
+    issue = _appena_aperta(cod)
+    if issue is not None and issue.get("state") == "open":
+        return issue, _cartella(issue)
     return None, None
 
 
@@ -1093,15 +1126,15 @@ def _issue_del_caso(cod, fresca=False):
             if (isinstance(i, dict) and not i.get("pull_request")
                     and str(i.get("title", "")).startswith("Caso nuovo %s:" % cod)):
                 return i
-    return None
+    return _appena_aperta(cod)
 
 
 def _storia(issue, fresca=False):
     """La storia degli stati del caso, da `stato.json` (lista, anche vuota)."""
-    m = re.search(r"File: \[`(casi/[^`]+)`\]", str(issue.get("body") or ""))
-    if not m:
+    cartella = _cartella(issue)
+    if not cartella:
         return []
-    percorso = m.group(1) + "/stato.json"
+    percorso = cartella + "/stato.json"
     if fresca:
         _dimentica("stato:" + percorso)
     dati = _in_cache("stato:" + percorso, 20, lambda: _leggi_json(percorso)[0])
