@@ -23,8 +23,10 @@ retro. Montato:
   una contro l'altra, rigata dalle ganasce e con gli angoli tagliati a 45
   gradi; il resto della fascia e' rifilato. La saldatura e' larga quanto il
   tubo (i fianchi si ripiegano dentro), non di piu': nessun piede che sporge.
-  Sopra, il tubo si schiaccia a poco a poco, per mezzo diametro: di fronte
-  non cambia, di lato si assottiglia fino alla saldatura.
+  Sopra, di lato, il tubo e' schiacciato e si apre in linea retta - un
+  cuneo - dalla saldatura fino all'orlo, dove e' tondo (`tondezza`): di
+  lato il profilo e' una retta sola, di fronte il cono; nessuna curva che
+  si gonfi.
 
 Il fronte e' il mezzo della parte che si vede, fra la pattina e l'altro lato.
 La texture e' il DT intero, come per la scatola a punta: ogni punto della
@@ -59,8 +61,6 @@ SALDATURA = 0.12
 # della fascia fuori dalla stampa massima, la parte che resta a vista sotto
 # la grafica: la saldatura (il resto e' rifilato)
 SALDATA = 1.0 / 3.0
-# sopra la saldatura il tubo si schiaccia: per tanti diametri del fondo
-PIZZICO = 1.0
 # gli angoli tagliati della saldatura, a 45 gradi: il lato del triangolo, in
 # parte della larghezza (al massimo SMUSSO_MAX dell'altezza della saldatura)
 SMUSSO = 0.2
@@ -420,12 +420,12 @@ def dichiara(p):
                 "" if p.pattina_letta else " (non scritta sul DT: valore d'uso)"),
              "saldatura da %.1f mm subito sotto la grafica%s: piatta, larga "
              "quanto il tubo, rigata e con gli angoli tagliati; sopra il tubo "
-             "si schiaccia per %.1f mm; il resto della fascia (%.1f mm) "
+             "e' schiacciato e si apre in linea retta fino all'orlo, dove e' "
+             "tondo (di lato un cuneo dritto); il resto della fascia (%.1f mm) "
              "rifilato"
              % (p.saldatura * SALDATA,
                 " (la stampa massima)" if p.saldatura_letta
                 else " (stimata: il DT non disegna la stampa massima)",
-                PIZZICO * p.giro(p.R_base) / math.pi,
                 p.saldatura * (1.0 - SALDATA)),
              "aperto in cima, l'orlo arrotolato in fuori a sezione tonda, "
              "bianco: un tubetto da %.2f mm di diametro%s"
@@ -450,6 +450,29 @@ def tela(tex):
     return t
 
 
+def tondezza(p, spessore):
+    """La funzione u -> quanto e' tondo il tubo, da 0 (piatto) a 1 (tondo), a
+    u mm sul foglio dal fondo rifilato (`Tubo.R_base`). Piatto nella
+    saldatura; sopra, di lato, lo spessore cresce in linea retta dalla
+    saldatura (uno spessore di carta) fino all'orlo, dove e' il raggio del
+    tubo: un cuneo, e di lato il profilo e' una retta sola. Lo usa anche il
+    gelato, che dentro la bocca si schiaccia come la parete."""
+    base = p.R_base
+    sal = p.R_fondo + p.saldatura - base
+    lungo = p.R_cima - base - sal
+    r_cima = p.giro(p.R_cima) / (2.0 * math.pi)
+
+    def q(u):
+        if u < sal:
+            return 0.0
+        if lungo <= 0 or u >= sal + lungo:
+            return 1.0
+        r = p.giro(base + u) / (2.0 * math.pi)
+        b = spessore + (r_cima - spessore) * (u - sal) / lungo
+        return min(1.0, max(0.0, b / r))
+    return q
+
+
 def _liscio(t):
     t = min(1.0, max(0.0, t))
     return t * t * (3.0 - 2.0 * t)
@@ -470,7 +493,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     span = p.a_des - p.a_sin
     base = p.R_base
     sal = p.R_fondo + p.saldatura - base     # la saldatura a vista
-    pizzico = PIZZICO * p.giro(base) / math.pi
+    _tondo = tondezza(p, sp)
     smusso = min(SMUSSO * p.giro(base) / math.pi, SMUSSO_MAX * sal)
     R_cima = p.R_cima
 
@@ -494,8 +517,9 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             return (x, Y, zc)
         # schiacciato: la larghezza resta quella del tubo, lo spessore va a
         # zero - le due pareti una contro l'altra, ognuna col suo spessore.
-        # Tondo sopra `sal + pizzico`, piatto sotto `sal` (la stampa massima)
-        tondo = _liscio((u - sal) / pizzico) if pizzico > 0 else float(u >= sal)
+        # Piatto sotto `sal` (la stampa massima); sopra, di lato, un cuneo
+        # dritto fino all'orlo (`tondezza`)
+        tondo = _tondo(u)
         verso = max(-1.0, min(1.0, math.cos(th) / SPIGOLO))
         z = zc * tondo + verso * (0.0 if dentro else sp) * (1.0 - tondo)
         if u < sal:
@@ -510,9 +534,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
 
     rhos = np.linspace(base, R_cima, PASSI_ALTO + 1)
     if sal > 0:
-        extra = np.r_[np.linspace(base, base + sal,
-                                  int(4 * sal / RIGHE_PASSO) + 2),
-                      np.linspace(base + sal, base + sal + pizzico, 25)]
+        extra = np.linspace(base, base + sal, int(4 * sal / RIGHE_PASSO) + 2)
         rhos = np.unique(np.r_[rhos, extra])
     V, UV, T = [], [], []
 

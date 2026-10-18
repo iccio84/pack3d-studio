@@ -3,9 +3,10 @@ Il gelato del tubo a cono: il ghiacciolo che esce dalla bocca, aggiunto al
 GLB del tubo (`server.build_tubo` con l'opzione «con il gelato»).
 
 Il ghiaccio e' aderente al tubo: dentro la bocca ha il raggio di dentro
-della parete (`STACCO` in meno), sopra esce dritto, largo quanto la bocca,
-per `SPORGE` volte il suo diametro; l'orlo a tubetto resta tutto a vista. La
-cima e' appena bombata, col bordo tondo e qualche irregolarita'.
+della parete (`STACCO` in meno) e si schiaccia come lei; sopra esce dritto,
+largo quanto la bocca, per `SPORGE` volte il suo diametro; l'orlo a tubetto
+resta tutto a vista. La cima e' appena bombata, col bordo tondo e qualche
+irregolarita'.
 
 Il ghiaccio non ha una texture del colore. Glam mette la texture del pack su
 tutti i materiali che hanno un colore da immagine (GLAM.md, sezione 8), e la
@@ -200,7 +201,14 @@ def maglia(p, spessore, quale):
     stirato = P0 * np.array([1.0, 0.25, 1.0])
     spost = ((0.025 * _fbm(P0, 6.0, 2, 1) + 0.02 * _fbm(stirato, 3.0, 2, 5))
              * (0.4 + 0.6 * alto) + 0.22 * _fbm(P0, 6.0, 2, 3) * in_cima)
-    V = (P0 + N0 * spost[:, None]).reshape(NV, NT + 1, 3)
+    V = P0 + N0 * spost[:, None]
+    # dentro la bocca la parete e' un poco schiacciata (`tubo.tondezza`): il
+    # ghiaccio la segue, se no di davanti e di dietro uscirebbe dalla carta
+    from .tubo import tondezza
+    q = tondezza(p, spessore)
+    dentro = V[:, 1] < fo.Yc
+    V[dentro, 2] *= np.array([q(y / fo.cosf) for y in V[dentro, 1]])
+    V = V.reshape(NV, NT + 1, 3)
     V[:, -1] = V[:, 0]
     V = V.reshape(-1, 3)
     UV = np.stack(np.meshgrid(th / (2 * math.pi), tt), -1).reshape(-1, 2)

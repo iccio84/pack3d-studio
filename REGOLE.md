@@ -4160,10 +4160,21 @@ giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
   fianchi ripiegati dentro. Non si appiattisce a perimetro costante (due
   pareti larghe C/2, 1,57 volte il diametro): faceva un piede che sporgeva
   dal tubo, con un gradino, e le foto di chi l'ha caricato non ce l'hanno.
-  Sopra la saldatura il tubo si **schiaccia a poco a poco**, per un diametro
-  del fondo (`PIZZICO`, 18,3 mm sul caso, smoothstep): di fronte non cambia,
-  di lato si assottiglia fino alla saldatura. Con 3 mm di raccordo, come
-  prima, di lato il tubo finiva in un ago. La saldatura e' rigata dalle
+  Sopra la saldatura, di lato, il tubo e' **schiacciato e si apre in linea
+  retta fino all'orlo** (`tubo.tondezza`): lo spessore cresce dritto - un
+  cuneo - da uno spessore di carta alla saldatura fino al diametro del tubo
+  all'orlo, l'unico punto dove e' tondo. Di lato il profilo e' una retta
+  sola, di fronte il cono: nessuna curva, nessuna pancia. Di fronte non
+  cambia. Prima: con 3 mm di raccordo il tubo finiva in un ago; con un
+  diametro del fondo (18,3 mm) e la S dello smoothstep tornava tondo di
+  colpo, gonfio sopra la saldatura; con una curva che rallenta sempre
+  (1 - (1-t)^2) sui sei decimi della lunghezza faceva una pancia lunga
+  («dalla saldatura deve salire ancora un po' schiacciato e poi dritto fino
+  al risvolto, senza bombature»); col cuneo fino al 35% della lunghezza e
+  poi il cono, «tra prima e adesso non vedo differenza». Fra quattro prove
+  messe a confronto (il cuneo fino a un terzo, a meta', a due terzi e fino
+  all'orlo) chi ha caricato il caso ha scelto il cuneo fino all'orlo. Il
+  gelato si schiaccia come la parete. La saldatura e' rigata dalle
   ganasce (righe orizzontali, passo 0,8 mm, 0,08 mm di fondo) e ha gli
   angoli tagliati a 45 gradi: ai fianchi il fondo sale di un triangolo di
   lato 0,2 volte la larghezza (3,7 mm sul caso; al massimo 0,8 volte
@@ -4207,7 +4218,9 @@ piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
 29 mm contro 18) che spuntava con un gradino da 3 mm di raccordo, e di lato
 il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
 saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
-l'orlo bianco, poi a tubetto, poi piu' sottile. Alto 179,3 mm alla cima
+l'orlo bianco, poi a tubetto, poi piu' sottile; dopo l'approvazione, il
+tubo schiacciato a cuneo fino all'orlo, al posto del rigonfiamento sopra
+la saldatura. Alto 179,3 mm alla cima
 dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
 (alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
 restano quelle del DT al vero.
@@ -4222,7 +4235,7 @@ aggiunto al GLB del tubo come mesh e materiale a parte; il tubo resta
 identico al byte.
 
 - La **forma**: il ghiaccio e' aderente al tubo - dentro la bocca il raggio
-  di dentro della parete meno 0,06 mm, sopra esce dritto, largo quanto la
+  di dentro della parete meno 0,06 mm, schiacciato come lei, sopra esce dritto, largo quanto la
   bocca, per 0,7 volte il suo diametro (24,5 mm sul caso 84c854d6a5) -, la
   cima appena bombata (0,4 mm) col bordo tondo (1,6 mm) e qualche
   irregolarita'. L'orlo a tubetto resta tutto a vista. Continuando la
