@@ -10,13 +10,15 @@ retro. Montato:
 
 - in cima il tubo e' tondo, con la circonferenza dell'arco grande meno la
   pattina;
-- la bocca e' rimboccata in fuori (`RISVOLTO`): da fuori, sotto il bordo,
-  si vede una fascia bianca, il rovescio del cartoncino;
+- la bocca e' rimboccata in fuori: da fuori, sotto il bordo, si vede una
+  fascia bianca, il rovescio del cartoncino, alta quanto la fascia che il DT
+  lascia in cima fuori dalla stampa massima (`RISVOLTO` se non la disegna);
 - sul fondo la fascia che il DT lascia fuori dalla stampa massima, a
-  tratteggio, e' quella che si deforma: in basso un terzo e' la saldatura,
-  schiacciata piatta, le due pareti una contro l'altra, rigata dalle ganasce
-  e con gli angoli tagliati; sopra il tubo torna tondo, e alla stampa massima
-  lo e' gia'.
+  tratteggio: la saldatura comincia dove finisce la grafica, e ne resta a
+  vista solo un terzo, sotto la stampa massima - corta, schiacciata piatta,
+  le due pareti una contro l'altra, rigata dalle ganasce e con gli angoli
+  tagliati; il resto della fascia e' rifilato. Alla stampa massima il tubo e'
+  ancora tondo.
 
 Il fronte e' il mezzo della parte che si vede, fra la pattina e l'altro lato.
 La texture e' il DT intero, come per la scatola a punta: ogni punto della
@@ -48,17 +50,21 @@ PATTINA = 8.0
 PARALLELO = math.radians(1.5)
 # la saldatura, se il DT non disegna la stampa massima: una parte del lato
 SALDATURA = 0.12
-# della fascia fuori dalla stampa massima, la parte saldata piatta (il resto
-# torna tondo)
-PIATTA = 1.0 / 3.0
+# della fascia fuori dalla stampa massima, la parte che resta a vista sotto
+# la grafica: la saldatura (il resto e' rifilato)
+SALDATA = 1.0 / 3.0
+# della saldatura, la parte schiacciata piatta (sopra si raccorda al tondo)
+PIATTA = 0.6
 # gli angoli tagliati della saldatura: il lato del triangolo, in parte
 # dell'altezza della saldatura
 SMUSSO = 0.6
 # le righe delle ganasce sulla saldatura: passo e profondita', mm
 RIGHE_PASSO = 1.2
 RIGHE_FONDE = 0.15
-# la bocca rimboccata in fuori: la fascia bianca che si vede, mm
-RISVOLTO = 6.0
+# la bocca rimboccata in fuori: la fascia bianca che si vede, mm, se il DT
+# non disegna la stampa massima in cima
+RISVOLTO = 3.0
+RISVOLTO_MAX = 10.0     # mm: un arco piu' in basso non e' quello della bocca
 PASSI_GIRO = 72
 PASSI_ALTO = 60
 
@@ -74,12 +80,30 @@ class Tubo:
     pattina: float          # mm
     pattina_a_sinistra: bool
     saldatura: float        # mm lungo il lato, dal fondo
+    risvolto: float = RISVOLTO      # mm, la bocca rimboccata
     pattina_letta: bool = False
     saldatura_letta: bool = False
+    risvolto_letto: bool = False
 
     @property
     def lato(self):
         return self.R_bocca - self.R_fondo
+
+    @property
+    def R_base(self):
+        """Il raggio dell'arco dove il tubo finisce in basso: la saldatura
+        sotto la stampa massima, il resto della fascia rifilato."""
+        return self.R_fondo + self.saldatura * (1.0 - SALDATA)
+
+    @property
+    def R_cima(self):
+        """Il raggio dell'arco della piega della bocca."""
+        return self.R_bocca - self.risvolto
+
+    @property
+    def alto(self):
+        """L'altezza del tubo montato, dal fondo saldato alla piega."""
+        return (self.R_cima - self.R_base) * math.sqrt(max(0.0, 1.0 - self.k ** 2))
 
     def giro(self, rho):
         """La circonferenza del tubo all'altezza dell'arco di raggio rho."""
@@ -249,6 +273,7 @@ def riconosci(pdf, page_no=0):
     pattina, letta = _pattina_scritta(pdf, page_no)
     sin_dentro, sal = _stampa_massima(per_stile, stile, c, Rp, Rg, a_m,
                                       a_sin, a_des)
+    risvolto = _risvolto(per_stile, stile, c, Rg, Rg * (a_des - a_sin))
     saldatura = sal if sal is not None else SALDATURA * lato
     # il DT: il settore, con la freccia della bocca
     aa = np.linspace(a_sin + a_m, a_des + a_m, 64)
@@ -261,8 +286,33 @@ def riconosci(pdf, page_no=0):
                 a_sin=float(a_sin + a_m), a_des=float(a_des + a_m),
                 pattina=pattina,
                 pattina_a_sinistra=sin_dentro if sin_dentro is not None else True,
-                saldatura=float(saldatura), pattina_letta=letta,
-                saldatura_letta=sal is not None)
+                saldatura=float(saldatura),
+                risvolto=risvolto if risvolto is not None else RISVOLTO,
+                pattina_letta=letta, saldatura_letta=sal is not None,
+                risvolto_letto=risvolto is not None)
+
+
+def _risvolto(per_stile, stile_dt, c, Rg, giro_bocca):
+    """La fascia in cima fuori dalla stampa massima, in mm: l'arco di un
+    altro stile concentrico alla bocca e poco sotto. E' quella che si
+    rimbocca in fuori. None se il DT non la disegna."""
+    migliore = None
+    for stile, tratti in per_stile.items():
+        if stile == stile_dt:
+            continue
+        for P in tratti:
+            P = np.asarray(P, float)
+            if len(P) < 3 or _lunghezza(P) < 0.15 * giro_bocca:
+                continue
+            if _freccia(P) < FRECCIA_MIN:
+                continue
+            cc, r = _cerchio(P)
+            if np.linalg.norm(cc - c) > CONCENTRICI:
+                continue
+            d = Rg - r
+            if 0.5 <= d <= RISVOLTO_MAX and (migliore is None or d < migliore):
+                migliore = d
+    return float(migliore) if migliore is not None else None
 
 
 def _pattina_scritta(pdf, page_no):
@@ -334,23 +384,26 @@ def _stampa_massima(per_stile, stile_dt, c, Rp, Rg, a_m, a_sin, a_des):
 
 def dichiara(p):
     """Le righe che la pagina mostra prima di costruire."""
-    alto = p.altezza - RISVOLTO * math.sqrt(max(0.0, 1.0 - p.k ** 2))
     righe = ["tubo a cono: alto %.1f mm, bocca %.1f mm, fondo %.1f mm di "
-             "diametro" % (alto, p.giro(p.R_bocca - RISVOLTO) / math.pi,
-                           p.d_fondo),
+             "diametro" % (p.alto, p.giro(p.R_cima) / math.pi,
+                           p.giro(p.R_base) / math.pi),
              "steso a settore di corona: lati da %.1f mm, archi da %.1f e "
              "%.1f mm" % (p.lato, p.R_bocca * (p.a_des - p.a_sin),
                            p.R_fondo * (p.a_des - p.a_sin)),
              "pattina da %.1f mm sul lato %s del foglio, sul retro%s"
              % (p.pattina, "sinistro" if p.pattina_a_sinistra else "destro",
                 "" if p.pattina_letta else " (non scritta sul DT: valore d'uso)"),
-             "fondo saldato piatto per %.1f mm, rigato e con gli angoli "
-             "tagliati; tondo di nuovo a %.1f mm dal fondo%s"
-             % (p.saldatura * PIATTA, p.saldatura,
+             "saldatura da %.1f mm sotto la grafica%s, piatta per %.1f mm, "
+             "rigata e con gli angoli tagliati; il resto della fascia (%.1f "
+             "mm) rifilato"
+             % (p.saldatura * SALDATA,
                 " (la stampa massima)" if p.saldatura_letta
-                else " (stimato: il DT non lo disegna)"),
+                else " (stimata: il DT non disegna la stampa massima)",
+                p.saldatura * SALDATA * PIATTA,
+                p.saldatura * (1.0 - SALDATA)),
              "aperto in cima, la bocca rimboccata in fuori: fascia bianca "
-             "da %.1f mm (valore d'uso)" % RISVOLTO]
+             "da %.1f mm%s" % (p.risvolto, " (la stampa massima in cima)"
+                               if p.risvolto_letto else " (valore d'uso)")]
     return righe
 
 
@@ -371,10 +424,12 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     ox, oy = origine_mm
     cx, cy = p.centro
     span = p.a_des - p.a_sin
-    sal = p.saldatura
+    base = p.R_base
+    sal = p.R_fondo + p.saldatura - base     # la saldatura a vista
     piatta = sal * PIATTA
     smusso = piatta * SMUSSO
-    R_cima = p.R_bocca - RISVOLTO
+    R_cima = p.R_cima
+    risvolto = p.risvolto
 
     def uv(sx, sy):
         return ((sx - ox) * px_mm / Wt, (sy - oy) * px_mm / Ht)
@@ -387,7 +442,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         dal mezzo del fronte (positivo verso destra); `oltre` lo porta fuori
         dal tubo di tanti mm (il risvolto)."""
         C = p.giro(rho)
-        u = rho - p.R_fondo
+        u = rho - base
         Y = u * math.sqrt(max(0.0, 1.0 - p.k ** 2))
         r = C / (2.0 * math.pi) - (sp if dentro else 0.0) + oltre
         th = 2.0 * math.pi * s / C
@@ -401,7 +456,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             zf = -(0.0 if dentro else sp)
         if piatta <= 0:
             return (xc, Y, zc)
-        # piatto fino a `piatta`, poi tondo di nuovo alla stampa massima
+        # piatto fino a `piatta`, poi tondo di nuovo alla stampa massima (`sal`)
         w = 1.0 - _liscio((u - piatta) / (sal - piatta))
         if u < piatta:
             # le righe delle ganasce, le due pareti insieme
@@ -413,11 +468,11 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
                 Y = e + Y * (1.0 - e / piatta)
         return ((1 - w) * xc + w * xf, Y, (1 - w) * zc + w * zf)
 
-    rhos = np.linspace(p.R_fondo, R_cima, PASSI_ALTO + 1)
+    rhos = np.linspace(base, R_cima, PASSI_ALTO + 1)
     if sal > 0:
-        extra = np.r_[np.linspace(p.R_fondo, p.R_fondo + piatta,
+        extra = np.r_[np.linspace(base, base + piatta,
                                   int(4 * piatta / RIGHE_PASSO) + 2),
-                      np.linspace(p.R_fondo + piatta, p.R_fondo + sal, 25)]
+                      np.linspace(base + piatta, base + sal, 25)]
         rhos = np.unique(np.r_[rhos, extra])
     V, UV, T = [], [], []
 
@@ -482,13 +537,13 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         striscia(1.0, 1.0 + fp, False, 1, oltre=1, raggio=sp / 2.0)
     # il risvolto: la cima del foglio rimboccata in fuori sul tubo, col
     # rovescio bianco a vista, uno spessore fuori dalla parete
-    giu = np.linspace(R_cima - RISVOLTO, R_cima, 7)
+    giu = np.linspace(R_cima - risvolto, R_cima, 7)
     striscia(0.0, 1.0, False, 1, uv_fisso=uv_interno, righe=giu, fuori=sp)
     # le coste, fra il fuori e il dentro: il fondo, il bordo del risvolto, e
     # la piega in cima, bianca anche lei
     for rho, a, b_, uvc, su in (
-            (p.R_fondo, (False, 0.0), (True, 0.0), uv_taglio, False),
-            (R_cima - RISVOLTO, (False, sp), (False, 0.0), uv_taglio, False),
+            (base, (False, 0.0), (True, 0.0), uv_taglio, False),
+            (R_cima - risvolto, (False, sp), (False, 0.0), uv_taglio, False),
             (R_cima, (False, sp), (True, 0.0), uv_interno, True)):
         b = len(V)
         C = p.giro(rho)
