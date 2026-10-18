@@ -23,8 +23,9 @@ retro. Montato:
   una contro l'altra, rigata dalle ganasce e con gli angoli tagliati a 45
   gradi; il resto della fascia e' rifilato. La saldatura e' larga quanto il
   tubo (i fianchi si ripiegano dentro), non di piu': nessun piede che sporge.
-  Sopra, il tubo si schiaccia a poco a poco, per mezzo diametro: di fronte
-  non cambia, di lato si assottiglia fino alla saldatura.
+  Sopra, il tubo e' schiacciato e torna tondo a poco a poco, per i sei
+  decimi della sua lunghezza (`PIZZICO`): di fronte non cambia, di lato si
+  assottiglia in modo uniforme fino alla saldatura, senza rigonfiamenti.
 
 Il fronte e' il mezzo della parte che si vede, fra la pattina e l'altro lato.
 La texture e' il DT intero, come per la scatola a punta: ogni punto della
@@ -59,8 +60,9 @@ SALDATURA = 0.12
 # della fascia fuori dalla stampa massima, la parte che resta a vista sotto
 # la grafica: la saldatura (il resto e' rifilato)
 SALDATA = 1.0 / 3.0
-# sopra la saldatura il tubo si schiaccia: per tanti diametri del fondo
-PIZZICO = 1.0
+# sopra la saldatura il tubo e' schiacciato e torna tondo a poco a poco:
+# per questa parte del tubo, dalla saldatura alla bocca
+PIZZICO = 0.6
 # gli angoli tagliati della saldatura, a 45 gradi: il lato del triangolo, in
 # parte della larghezza (al massimo SMUSSO_MAX dell'altezza della saldatura)
 SMUSSO = 0.2
@@ -420,12 +422,13 @@ def dichiara(p):
                 "" if p.pattina_letta else " (non scritta sul DT: valore d'uso)"),
              "saldatura da %.1f mm subito sotto la grafica%s: piatta, larga "
              "quanto il tubo, rigata e con gli angoli tagliati; sopra il tubo "
-             "si schiaccia per %.1f mm; il resto della fascia (%.1f mm) "
-             "rifilato"
+             "e' schiacciato e torna tondo a poco a poco in %.1f mm; il resto "
+             "della fascia (%.1f mm) rifilato"
              % (p.saldatura * SALDATA,
                 " (la stampa massima)" if p.saldatura_letta
                 else " (stimata: il DT non disegna la stampa massima)",
-                PIZZICO * p.giro(p.R_base) / math.pi,
+                PIZZICO * (p.R_cima - p.R_base - p.saldatura * SALDATA)
+                * math.sqrt(max(0.0, 1.0 - p.k ** 2)),
                 p.saldatura * (1.0 - SALDATA)),
              "aperto in cima, l'orlo arrotolato in fuori a sezione tonda, "
              "bianco: un tubetto da %.2f mm di diametro%s"
@@ -470,7 +473,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     span = p.a_des - p.a_sin
     base = p.R_base
     sal = p.R_fondo + p.saldatura - base     # la saldatura a vista
-    pizzico = PIZZICO * p.giro(base) / math.pi
+    pizzico = PIZZICO * (p.R_cima - base - sal)
     smusso = min(SMUSSO * p.giro(base) / math.pi, SMUSSO_MAX * sal)
     R_cima = p.R_cima
 
@@ -494,8 +497,12 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             return (x, Y, zc)
         # schiacciato: la larghezza resta quella del tubo, lo spessore va a
         # zero - le due pareti una contro l'altra, ognuna col suo spessore.
-        # Tondo sopra `sal + pizzico`, piatto sotto `sal` (la stampa massima)
-        tondo = _liscio((u - sal) / pizzico) if pizzico > 0 else float(u >= sal)
+        # Piatto sotto `sal` (la stampa massima), tondo sopra `sal + pizzico`;
+        # in mezzo lo spessore cresce con una curva che rallenta sempre
+        # (1 - (1-t)^2): nessun flesso, nessun rigonfiamento, e in cima si
+        # raccorda al cono
+        t = min(1.0, max(0.0, (u - sal) / pizzico)) if pizzico > 0 else float(u >= sal)
+        tondo = 1.0 - (1.0 - t) ** 2
         verso = max(-1.0, min(1.0, math.cos(th) / SPIGOLO))
         z = zc * tondo + verso * (0.0 if dentro else sp) * (1.0 - tondo)
         if u < sal:
@@ -512,7 +519,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     if sal > 0:
         extra = np.r_[np.linspace(base, base + sal,
                                   int(4 * sal / RIGHE_PASSO) + 2),
-                      np.linspace(base + sal, base + sal + pizzico, 25)]
+                      np.linspace(base + sal, base + sal + pizzico, 60)]
         rhos = np.unique(np.r_[rhos, extra])
     V, UV, T = [], [], []
 
