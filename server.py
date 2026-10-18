@@ -37,8 +37,9 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
-                    prisma, folding, exporters, materiali, nero, plancia, pouch,
-                    lamina, rilievo, strati, tubo, vassoio, verifica, versione)
+                    prisma, folding, exporters, gelato, materiali, nero, plancia,
+                    pouch, lamina, rilievo, strati, tubo, vassoio, verifica,
+                    versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
@@ -360,6 +361,17 @@ def nota_incisioni(meta):
             "incisi nel cartone come solchi, come si vedono sulla scatola "
             "vera chiusa: non sono disegno tecnico rimasto stampato, e la "
             "grafica sotto e' intera." % " e ".join(quali))
+
+
+def nota_gelato(meta):
+    """La riga "da sapere" per il controllo, se il tubo ha il gelato."""
+    riga = next((str(m) for m in meta or () if str(m).startswith(GELATO)), None)
+    if riga is None:
+        return None
+    return ("il tubo e' mostrato col ghiacciolo che esce dalla bocca, come l'ha "
+            "chiesto chi l'ha caricato (%s). Il ghiaccio colorato in cima non e' "
+            "nel PDF e non e' un difetto: la grafica va confrontata sul tubo, "
+            "sotto l'orlo." % riga)
 
 
 def nota_materiali(meta):
@@ -1813,10 +1825,15 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
     return punta.dichiara(p) + avvisi
 
 
+# l'inizio della riga che dice il gelato (`gelato.aggiungi`), anche al controllo
+GELATO = "con il gelato ("
+
+
 def build_tubo(pdf, out_glb, quality="hd", lastre_extra=(),
-               colata_riquadro=None, carta=None):
+               colata_riquadro=None, carta=None, gelato_gusto=None):
     """Il tubo a cono: lo steso a settore di corona arrotolato, aperto in
-    cima, col fondo saldato piatto. Vedi `pack3d.tubo`.
+    cima, col fondo saldato piatto. Vedi `pack3d.tubo`. Con `gelato_gusto`,
+    il ghiacciolo che esce dalla bocca (`pack3d.gelato`).
 
     Come la scatola a punta: la texture e' il DT intero, pulito, e ogni punto
     della maglia prende la grafica dal suo posto sul foglio; sotto, le
@@ -1863,7 +1880,11 @@ def build_tubo(pdf, out_glb, quality="hd", lastre_extra=(),
     tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
                                              TINTE_TUBO)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax, tinte=tinte)
-    return tubo.dichiara(p) + avvisi
+    righe = tubo.dichiara(p)
+    if gelato_gusto:
+        sp = folding.SPESSORE_CRT if carta is None else carta
+        righe.append(gelato.aggiungi(out_glb, p, sp, gelato_gusto))
+    return righe + avvisi
 
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
@@ -2473,7 +2494,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
                 "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "incisioni", "cu")
+                "quanti", "incisioni", "cu", "gelato")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2840,7 +2861,8 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                     rgb = avviso_quadricromia(pdf, regione=tb.regione)
                     if rgb:
                         meta.insert(0, rgb)
-                    return dict(kind="tubo", title="Tubo a cono", meta=meta)
+                    return dict(kind="tubo", title="Tubo a cono", meta=meta,
+                                gusti=list(gelato.GUSTI))
                 # Un disco da solo non dice di essere un lid (`coppa.orienta`):
                 # se c'e', l'errore dell'astuccio resta, ma prima viene il
                 # consiglio, che l'interfaccia mostra solo i primi 200 caratteri
@@ -3402,6 +3424,7 @@ class Handler(BaseHTTPRequestHandler):
                     gradi_aperta = apertura_gradi(opts.get("apertura"))
                     con_pellicola = pellicola_scelta(opts.get("pellicola"))
                     con_incisioni = incisioni_scelte(opts.get("incisioni"))
+                    con_gelato = gelato.gusto(opts.get("gelato"))
                     quanti = quanti_pezzi(opts.get("quanti"))
                     cu = cu_riempimento(opts.get("cu"))
                 except ValueError as e:
@@ -3565,7 +3588,8 @@ class Handler(BaseHTTPRequestHandler):
                         elif info["kind"] == "tubo":
                             def costruisci(lastre, uscita):
                                 return build_tubo(pdf, uscita, q, lastre,
-                                                  col_riq, carta=carta)
+                                                  col_riq, carta=carta,
+                                                  gelato_gusto=con_gelato)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
@@ -3660,7 +3684,7 @@ class Handler(BaseHTTPRequestHandler):
                                    opzioni={k: opts[k] for k in OPZIONI_CASO
                                             if k in opts})
                         nota = (nota_apertura(meta) or nota_incisioni(meta)
-                                or nota_materiali(meta))
+                                or nota_materiali(meta) or nota_gelato(meta))
                         if nota:
                             ctx["nota"] = nota
                         verdetto = controllo.giudica(quadro, ctx)

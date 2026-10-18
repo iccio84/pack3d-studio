@@ -4212,6 +4212,53 @@ dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
 (alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
 restano quelle del DT al vero.
 
+### Il gelato
+
+Il tubo si mostra vuoto o **con il gelato**: dopo la lettura la pagina
+chiede «vuoto o con il gelato che esce dalla bocca?», con un tasto per gusto
+(lime, limone, arancia, fragola, cola), e la scelta costruisce subito
+(opzione `gelato` di /api/build, in `OPZIONI_CASO`). E' `pack3d/gelato.py`,
+aggiunto al GLB del tubo come mesh e materiale a parte; il tubo resta
+identico al byte.
+
+- La **forma**: il ghiaccio e' aderente al tubo - dentro la bocca il raggio
+  di dentro della parete meno 0,06 mm, sopra esce dritto, largo quanto la
+  bocca, per 0,7 volte il suo diametro (24,5 mm sul caso 84c854d6a5) -, la
+  cima appena bombata (0,4 mm) col bordo tondo (1,6 mm) e qualche
+  irregolarita'. L'orlo a tubetto resta tutto a vista. Continuando la
+  conicita' del tubo, in cima il ghiaccio arrivava a 38 mm, copriva meta'
+  dell'orlo e sembrava piu' largo del calippo; staccato dalle pareti di
+  mezzo millimetro, fra ghiaccio e orlo restava una fessura scura.
+- **Niente texture del colore** sul ghiaccio. Glam mette la texture del pack
+  su tutti i materiali con un colore da immagine (GLAM.md, sezione 8), e la
+  texture a parte e il template PSD contano le immagini del colore
+  (`pack3d.texture`): con una sua texture il modello ne avrebbe avute due,
+  la pagina non avrebbe mandato a Glam ne' texture ne' template, e Glam ci
+  avrebbe stampato sopra l'artwork. Il colore e' pieno (`baseColorFactor`,
+  il chiaro del gusto) con le macchie e l'ombra della bocca nei colori dei
+  vertici (COLOR_0); il dettaglio sta nelle normali (la grana satinata dei
+  fianchi, le scaglie di cristallo in cima), nella ruvidita' col bagnato
+  (che fa anche da clearcoat: tutto lucido, le scaglie di piu') e
+  nell'emissione (il sorbetto lascia passare un poco di luce, le scaglie
+  brillano).
+- Il **lime** e' misurato sulla foto del caso: giallo-verde, il rosso quasi
+  quanto il verde e poco blu (180, 200, 40 circa in sRGB). Il primo, piu'
+  verde e piu' chiaro, sembrava pistacchio.
+- La **traslucenza vera** (KHR_materials_transmission) e' stata provata e
+  tolta: attraverso il ghiaccio si rifrangeva l'interno bianco del tubo,
+  una striscia chiara sopra l'orlo.
+- Le mappe sono 1024 x 512 px (`LATO`), 0,1 mm per pixel sul giro: a 2048
+  la differenza non si vede nemmeno da vicino, e costavano 47 secondi
+  invece di 2. Il rumore e' una funzione del punto 3D di ogni texel: niente
+  cuciture, niente stiramenti al polo della cima, e lo stesso PDF da' lo
+  stesso GLB.
+- Il controllo dell'AI lo sa (`server.nota_gelato`): il ghiaccio non e' nel
+  PDF e non e' un difetto. Nelle sue viste il ghiaccio e' del colore pieno.
+- Il viewer della pagina legge i colori dei vertici, il clearcoat e
+  l'emissione, che e' in sRGB e va letta lineare; per un colore pieno non
+  metallico l'ambiente riflesso e' a 0,35 (la luce ambiente del viewer e'
+  gia' forte, e lo bruciava di giallo).
+
 ### Cosa manca
 
 - Quanto della fascia fuori stampa resta a vista come saldatura (un terzo)
