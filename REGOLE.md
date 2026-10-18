@@ -4138,8 +4138,9 @@ quello dentro: la coppia di lati piu' stretta.
 
 Con Phi l'angolo del settore, p la pattina e rho il raggio sul foglio, il
 giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
-(rho - R_fondo) sqrt(1 - (Phi / 2 pi)^2). Sul 84c854d6a5: lati 197 mm,
-archi 122,6 e 60,6, alto 196,8, bocca 36,5, fondo 16,8.
+(rho - R_base) sqrt(1 - (Phi / 2 pi)^2), dal fondo rifilato (sotto). Sul
+84c854d6a5: lati 197 mm, archi 122,6 e 60,6; montato alto 178,4, bocca
+36,2, fondo 18,3.
 
 - La **pattina** la scrive il cartiglio («Pattina 8 mm»), se il testo si
   legge; se no 8 mm. Sta dal lato dove la stampa massima e' piu' lontana dal
@@ -4148,17 +4149,50 @@ archi 122,6 e 60,6, alto 196,8, bocca 36,5, fondo 16,8.
 - Il **fronte** e' il mezzo della parte che si vede; la destra del foglio,
   guardando dal centro verso la bocca, e' la destra del pack: la stampa e'
   fuori, niente specchiatura.
-- Il **fondo**: la fascia della saldatura e' quella fra il fondo e la fine
-  delle linee della stampa massima (rette di un altro stile parallele ai
-  lati), 23,8 mm sul caso; se il DT non le disegna, il 12% del lato. Li' il
-  giro e' due pareti piatte larghe C/2, una contro l'altra a uno spessore;
-  sopra, in un'altra fascia alta uguale, il tubo torna tondo (smoothstep).
-- La bocca e il fondo hanno la costa; dentro, il rovescio.
+- Il **fondo**: la fascia fuori dalla stampa massima e' quella fra il fondo
+  e la fine delle linee della stampa massima (rette di un altro stile
+  parallele ai lati), 23,8 mm sul caso; se il DT non le disegna, il 12% del
+  lato. La saldatura **comincia dove finisce la grafica**: a vista resta
+  solo il terzo della fascia subito sotto la stampa massima (`SALDATA`, 7,9
+  mm sul caso), il resto (15,9 mm) e' rifilato e il tubo finisce li'
+  (`Tubo.R_base`). Della saldatura i 6 decimi in basso (`PIATTA`, 4,8 mm)
+  sono schiacciati piatti, il giro due pareti larghe C/2 una contro l'altra
+  a uno spessore; sopra il tubo torna tondo (smoothstep) e alla stampa
+  massima lo e' gia', cosi' la grafica "essenziale" non si deforma. La
+  saldatura e' rigata dalle ganasce (righe orizzontali, passo 1,2 mm, 0,15
+  mm di fondo, che si spengono verso l'alto) e ha gli angoli tagliati: ai
+  fianchi il fondo sale di un triangolo a 45 gradi di lato 0,6 volte la
+  parte piatta.
+- La **bocca** e' rimboccata in fuori: la cima del foglio si piega sul tubo
+  e da fuori si vede, sotto il bordo, una fascia bianca, il rovescio; il
+  tubo e' piu' basso di tanto. La fascia e' quella che il DT lascia in cima
+  fuori dalla stampa massima: l'arco di un altro stile concentrico alla
+  bocca, entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco
+  rosso a 387,6 mm contro il taglio a 390,1). Se il DT non lo disegna, 3 mm
+  (`RISVOLTO`, valore d'uso).
+- Il tubo e' **carta**, come il cono: lo spessore 3 (0,7 mm) fa un bordo e
+  un risvolto da scatola. Chi lo carica sceglie lo spessore 1.
+- Il fondo, il bordo del risvolto e la piega in cima hanno la costa; dentro,
+  il rovescio.
+
+Il caso 84c854d6a5 e' stato respinto la prima volta proprio qui: la
+saldatura piatta lunga quanto tutta la fascia fuori stampa, piu' un raccordo
+alto uguale (47,6 mm su 196,8), e la bocca tagliata netta. Chi l'ha caricato:
+"un risvolto bianco nella parte superiore", "in basso la saldatura e' molto
+piu' piccola ed ha i lati tagliati".
+
+La seconda volta (saldatura piatta 7,9 mm piu' un raccordo fino alla stampa
+massima, 23,8 mm sotto la grafica; risvolto 6 mm; spessore 3, alto 191 mm):
+"il risvolto e' troppo grande (guarda il dt), usa un cartoncino piu'
+sottile, il calippo e' troppo alto: fare partire la saldatura appena finisce
+la grafica". Da qui la fascia rifilata, il risvolto letto dal DT e lo
+spessore 1: alto 178,4 mm, fondo 18,3 mm.
 
 ### Cosa manca
 
-- Il raccordo fra il fondo piatto e il tubo tondo e' una stima (una fascia
-  alta come la saldatura): il DT non lo disegna.
+- Quanto della fascia fuori stampa resta a vista come saldatura (un terzo)
+  e' un valore d'uso: il DT non lo disegna. Il risvolto e' un valore d'uso
+  solo se il DT non disegna la stampa massima in cima.
 - Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
   secondo pezzo come il lid del cono.
 
