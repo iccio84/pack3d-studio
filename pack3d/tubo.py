@@ -23,9 +23,11 @@ retro. Montato:
   una contro l'altra, rigata dalle ganasce e con gli angoli tagliati a 45
   gradi; il resto della fascia e' rifilato. La saldatura e' larga quanto il
   tubo (i fianchi si ripiegano dentro), non di piu': nessun piede che sporge.
-  Sopra, il tubo e' schiacciato e torna tondo a poco a poco, per i sei
-  decimi della sua lunghezza (`PIZZICO`): di fronte non cambia, di lato si
-  assottiglia in modo uniforme fino alla saldatura, senza rigonfiamenti.
+  Sopra, di lato, il tubo e' ancora schiacciato: lo spessore cresce in linea
+  retta, un cuneo, fino a raggiungere il cono a un terzo abbondante della
+  lunghezza (`PIZZICO`); poi il cono dritto fino all'orlo. Di fronte non
+  cambia. Nessuna curva che si gonfi: il raccordo fra cuneo e cono sta sotto
+  tutti e due.
 
 Il fronte e' il mezzo della parte che si vede, fra la pattina e l'altro lato.
 La texture e' il DT intero, come per la scatola a punta: ogni punto della
@@ -60,9 +62,12 @@ SALDATURA = 0.12
 # della fascia fuori dalla stampa massima, la parte che resta a vista sotto
 # la grafica: la saldatura (il resto e' rifilato)
 SALDATA = 1.0 / 3.0
-# sopra la saldatura il tubo e' schiacciato e torna tondo a poco a poco:
-# per questa parte del tubo, dalla saldatura alla bocca
-PIZZICO = 0.6
+# sopra la saldatura il tubo e' schiacciato: di lato lo spessore cresce in
+# linea retta (un cuneo) fino a raggiungere il cono, a questa parte del tubo
+# dalla saldatura alla bocca; poi il cono dritto fino all'orlo
+PIZZICO = 0.35
+# mm: il raccordo fra il cuneo e il cono, sotto tutte e due (niente pancia)
+RACCORDO_CUNEO = 4.0
 # gli angoli tagliati della saldatura, a 45 gradi: il lato del triangolo, in
 # parte della larghezza (al massimo SMUSSO_MAX dell'altezza della saldatura)
 SMUSSO = 0.2
@@ -422,8 +427,8 @@ def dichiara(p):
                 "" if p.pattina_letta else " (non scritta sul DT: valore d'uso)"),
              "saldatura da %.1f mm subito sotto la grafica%s: piatta, larga "
              "quanto il tubo, rigata e con gli angoli tagliati; sopra il tubo "
-             "e' schiacciato e torna tondo a poco a poco in %.1f mm; il resto "
-             "della fascia (%.1f mm) rifilato"
+             "e' schiacciato, di lato un cuneo dritto per %.1f mm, poi il cono "
+             "dritto fino all'orlo; il resto della fascia (%.1f mm) rifilato"
              % (p.saldatura * SALDATA,
                 " (la stampa massima)" if p.saldatura_letta
                 else " (stimata: il DT non disegna la stampa massima)",
@@ -483,6 +488,22 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     def foglio(rho, a):
         return cx + rho * math.cos(a), cy + rho * math.sin(a)
 
+    r_cono = lambda u: p.giro(base + u) / (2.0 * math.pi)     # noqa: E731
+    pendenza = (r_cono(sal + pizzico) - sp) / pizzico if pizzico > 0 else 0.0
+
+    def _tondo(u):
+        """Quanto e' tondo il tubo a u dal fondo: 0 piatto, 1 tondo."""
+        if u < sal:
+            return 0.0
+        if pizzico <= 0:
+            return 1.0
+        r = r_cono(u)
+        cuneo = sp + pendenza * (u - sal)
+        k = RACCORDO_CUNEO
+        h = min(1.0, max(0.0, 0.5 + 0.5 * (r - cuneo) / k))
+        b = r * (1 - h) + cuneo * h - k * h * (1 - h)
+        return min(1.0, max(0.0, b / r))
+
     def punto(rho, s, dentro, oltre=0.0):
         """Il punto del tubo all'altezza dell'arco rho, a s mm lungo il giro
         dal mezzo del fronte (positivo verso destra); `oltre` lo porta fuori
@@ -497,12 +518,11 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             return (x, Y, zc)
         # schiacciato: la larghezza resta quella del tubo, lo spessore va a
         # zero - le due pareti una contro l'altra, ognuna col suo spessore.
-        # Piatto sotto `sal` (la stampa massima), tondo sopra `sal + pizzico`;
-        # in mezzo lo spessore cresce con una curva che rallenta sempre
-        # (1 - (1-t)^2): nessun flesso, nessun rigonfiamento, e in cima si
-        # raccorda al cono
-        t = min(1.0, max(0.0, (u - sal) / pizzico)) if pizzico > 0 else float(u >= sal)
-        tondo = 1.0 - (1.0 - t) ** 2
+        # Piatto sotto `sal` (la stampa massima); sopra, di lato, lo spessore
+        # e' il minore fra il cuneo (una retta dalla saldatura al cono, a
+        # `pizzico`) e il cono, col raccordo `RACCORDO_CUNEO` che sta sotto
+        # tutti e due: nessuna curva che si gonfia
+        tondo = _tondo(u)
         verso = max(-1.0, min(1.0, math.cos(th) / SPIGOLO))
         z = zc * tondo + verso * (0.0 if dentro else sp) * (1.0 - tondo)
         if u < sal:
