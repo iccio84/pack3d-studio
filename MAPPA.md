@@ -41,7 +41,7 @@ forma che il codice non conosce ancora, la ricetta e' in FORME.md.
 |---|---|
 | astuccio | `dieline.py` (fustella: `extract`, `solve_carton`), `folding.py` (piegatura, `build_faces`), `incisioni.py` (tagli dentro le facce), `apertura.py` (strappo aperto), `rilievo.py` (embossing), `lamina.py` (foil: metallo sulla scatola a prisma) |
 | scatola a punta | `punta.py` |
-| tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `server.build_tubo` |
+| tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `server.build_tubo`; `gelato.py` (il ghiacciolo che esce dalla bocca, a scelta) |
 | scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `server.build_prisma` |
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
 | vassoio espositore | `vassoio.py` |

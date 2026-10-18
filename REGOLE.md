@@ -4155,24 +4155,38 @@ giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
   lato. La saldatura **comincia dove finisce la grafica**: a vista resta
   solo il terzo della fascia subito sotto la stampa massima (`SALDATA`, 7,9
   mm sul caso), il resto (15,9 mm) e' rifilato e il tubo finisce li'
-  (`Tubo.R_base`). Della saldatura i 6 decimi in basso (`PIATTA`, 4,8 mm)
-  sono schiacciati piatti, il giro due pareti larghe C/2 una contro l'altra
-  a uno spessore; sopra il tubo torna tondo (smoothstep) e alla stampa
-  massima lo e' gia', cosi' la grafica "essenziale" non si deforma. La
-  saldatura e' rigata dalle ganasce (righe orizzontali, passo 1,2 mm, 0,15
-  mm di fondo, che si spengono verso l'alto) e ha gli angoli tagliati: ai
-  fianchi il fondo sale di un triangolo a 45 gradi di lato 0,6 volte la
-  parte piatta.
-- La **bocca** e' rimboccata in fuori: la cima del foglio si piega sul tubo
-  e da fuori si vede, sotto il bordo, una fascia bianca, il rovescio; il
-  tubo e' piu' basso di tanto. La fascia e' quella che il DT lascia in cima
-  fuori dalla stampa massima: l'arco di un altro stile concentrico alla
-  bocca, entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco
-  rosso a 387,6 mm contro il taglio a 390,1). Se il DT non lo disegna, 3 mm
-  (`RISVOLTO`, valore d'uso).
+  (`Tubo.R_base`). La saldatura e' **tutta piatta** e **larga quanto il
+  tubo**: le due pareti una contro l'altra, ognuna col suo spessore, i
+  fianchi ripiegati dentro. Non si appiattisce a perimetro costante (due
+  pareti larghe C/2, 1,57 volte il diametro): faceva un piede che sporgeva
+  dal tubo, con un gradino, e le foto di chi l'ha caricato non ce l'hanno.
+  Sopra la saldatura il tubo si **schiaccia a poco a poco**, per un diametro
+  del fondo (`PIZZICO`, 18,3 mm sul caso, smoothstep): di fronte non cambia,
+  di lato si assottiglia fino alla saldatura. Con 3 mm di raccordo, come
+  prima, di lato il tubo finiva in un ago. La saldatura e' rigata dalle
+  ganasce (righe orizzontali, passo 0,8 mm, 0,08 mm di fondo) e ha gli
+  angoli tagliati a 45 gradi: ai fianchi il fondo sale di un triangolo di
+  lato 0,2 volte la larghezza (3,7 mm sul caso; al massimo 0,8 volte
+  l'altezza della saldatura).
+- La **bocca** ha l'**orlo arrotolato a sezione tonda**: un tubetto tutto
+  attorno, come l'orlo di un vasetto (chiesto cosi' da chi ha caricato il
+  caso: «il risvolto a sezione tubolare, stile Nutella pot»). La parete
+  finisce alla stampa massima in cima; la carta sale, gira in fuori e torna
+  alla parete, e il tubetto e' centrato li', mezzo sopra e mezzo sotto. Il
+  **diametro** e' 0,7 volte (`ORLO`) la fascia che il DT lascia in cima fuori
+  dalla stampa massima: l'arco di un altro stile concentrico alla bocca,
+  entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco rosso a
+  387,6 mm contro il taglio a 390,1), quindi 1,77 mm. Alto quanto la fascia
+  era troppo grosso: «un po' piu' piccolo». Se il DT non disegna la fascia,
+  3 mm (`RISVOLTO`, valore d'uso). Arrotolato in fuori, da fuori si
+  vede il rovescio: **bianco carta** in piena luce (`folding.INTERNO`, la
+  tinta "rovescio"), non il rovescio in ombra dell'interno
+  (`ballotin.INTERNO`, scurito per le scatole chiuse), che lo faceva grigio.
+  Arrotolare 2,5 mm di carta darebbe un tubetto di 0,8 mm: il diametro e'
+  quello che si vede, non la carta che serve a farlo.
 - Il tubo e' **carta**, come il cono: lo spessore 3 (0,7 mm) fa un bordo e
   un risvolto da scatola. Chi lo carica sceglie lo spessore 1.
-- Il fondo, il bordo del risvolto e la piega in cima hanno la costa; dentro,
+- Il fondo e la cima della parete, dentro l'orlo, hanno la costa; dentro,
   il rovescio.
 
 Il caso 84c854d6a5 e' stato respinto la prima volta proprio qui: la
@@ -4188,10 +4202,67 @@ sottile, il calippo e' troppo alto: fare partire la saldatura appena finisce
 la grafica". Da qui la fascia rifilata, il risvolto letto dal DT e lo
 spessore 1: alto 178,4 mm, fondo 18,3 mm.
 
+La terza versione, ripresa a mano: le misure giuste, ma il fondo era un
+piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
+29 mm contro 18) che spuntava con un gradino da 3 mm di raccordo, e di lato
+il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
+saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
+l'orlo bianco, poi a tubetto, poi piu' sottile. Alto 179,3 mm alla cima
+dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
+(alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
+restano quelle del DT al vero.
+
+### Il gelato
+
+Il tubo si mostra vuoto o **con il gelato**: dopo la lettura la pagina
+chiede «vuoto o con il gelato che esce dalla bocca?», con un tasto per gusto
+(lime, limone, arancia, fragola, cola), e la scelta costruisce subito
+(opzione `gelato` di /api/build, in `OPZIONI_CASO`). E' `pack3d/gelato.py`,
+aggiunto al GLB del tubo come mesh e materiale a parte; il tubo resta
+identico al byte.
+
+- La **forma**: il ghiaccio e' aderente al tubo - dentro la bocca il raggio
+  di dentro della parete meno 0,06 mm, sopra esce dritto, largo quanto la
+  bocca, per 0,7 volte il suo diametro (24,5 mm sul caso 84c854d6a5) -, la
+  cima appena bombata (0,4 mm) col bordo tondo (1,6 mm) e qualche
+  irregolarita'. L'orlo a tubetto resta tutto a vista. Continuando la
+  conicita' del tubo, in cima il ghiaccio arrivava a 38 mm, copriva meta'
+  dell'orlo e sembrava piu' largo del calippo; staccato dalle pareti di
+  mezzo millimetro, fra ghiaccio e orlo restava una fessura scura.
+- **Niente texture del colore** sul ghiaccio. Glam mette la texture del pack
+  su tutti i materiali con un colore da immagine (GLAM.md, sezione 8), e la
+  texture a parte e il template PSD contano le immagini del colore
+  (`pack3d.texture`): con una sua texture il modello ne avrebbe avute due,
+  la pagina non avrebbe mandato a Glam ne' texture ne' template, e Glam ci
+  avrebbe stampato sopra l'artwork. Il colore e' pieno (`baseColorFactor`,
+  il chiaro del gusto) con le macchie e l'ombra della bocca nei colori dei
+  vertici (COLOR_0); il dettaglio sta nelle normali (la grana satinata dei
+  fianchi, le scaglie di cristallo in cima), nella ruvidita' col bagnato
+  (che fa anche da clearcoat: tutto lucido, le scaglie di piu') e
+  nell'emissione (il sorbetto lascia passare un poco di luce, le scaglie
+  brillano).
+- Il **lime** e' misurato sulla foto del caso: giallo-verde, il rosso quasi
+  quanto il verde e poco blu (180, 200, 40 circa in sRGB). Il primo, piu'
+  verde e piu' chiaro, sembrava pistacchio.
+- La **traslucenza vera** (KHR_materials_transmission) e' stata provata e
+  tolta: attraverso il ghiaccio si rifrangeva l'interno bianco del tubo,
+  una striscia chiara sopra l'orlo.
+- Le mappe sono 1024 x 512 px (`LATO`), 0,1 mm per pixel sul giro: a 2048
+  la differenza non si vede nemmeno da vicino, e costavano 47 secondi
+  invece di 2. Il rumore e' una funzione del punto 3D di ogni texel: niente
+  cuciture, niente stiramenti al polo della cima, e lo stesso PDF da' lo
+  stesso GLB.
+- Il controllo dell'AI lo sa (`server.nota_gelato`): il ghiaccio non e' nel
+  PDF e non e' un difetto. Nelle sue viste il ghiaccio e' del colore pieno.
+- Il viewer della pagina legge i colori dei vertici, il clearcoat e
+  l'emissione, che e' in sRGB e va letta lineare; per un colore pieno non
+  metallico l'ambiente riflesso e' a 0,35 (la luce ambiente del viewer e'
+  gia' forte, e lo bruciava di giallo).
+
 ### Cosa manca
 
 - Quanto della fascia fuori stampa resta a vista come saldatura (un terzo)
-  e' un valore d'uso: il DT non lo disegna. Il risvolto e' un valore d'uso
+  e' un valore d'uso: il DT non lo disegna. Il diametro dell'orlo e' un valore d'uso
   solo se il DT non disegna la stampa massima in cima.
 - Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
   secondo pezzo come il lid del cono.
