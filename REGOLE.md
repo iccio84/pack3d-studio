@@ -4160,15 +4160,19 @@ giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
   fianchi ripiegati dentro. Non si appiattisce a perimetro costante (due
   pareti larghe C/2, 1,57 volte il diametro): faceva un piede che sporgeva
   dal tubo, con un gradino, e le foto di chi l'ha caricato non ce l'hanno.
-  Sopra la saldatura il tubo e' **schiacciato e torna tondo a poco a poco**,
-  per i sei decimi della sua lunghezza (`PIZZICO`: 102,3 mm sul caso), come
-  un tubo vero schiacciato in fondo: di fronte non cambia, di lato si
-  assottiglia in modo uniforme fino alla saldatura. Lo spessore cresce con
-  1 - (1-t)^2, una curva che rallenta sempre: nessun flesso, e in cima si
-  raccorda al cono. Con 3 mm di raccordo il tubo finiva in un ago; con un
+  Sopra la saldatura, di lato, il tubo e' **ancora schiacciato e poi
+  dritto**: lo spessore cresce in linea retta - un cuneo - dalla saldatura
+  fino a raggiungere il cono al 35% della lunghezza (`PIZZICO`: 59,7 mm sul
+  caso), poi e' il cono dritto fino all'orlo, come il tubo vero, dritto
+  quasi fino in fondo e schiacciato solo verso la saldatura. Lo spessore e'
+  il minore fra il cuneo e il cono, col raccordo (4 mm, `RACCORDO_CUNEO`)
+  che sta sotto tutti e due: nessuna curva che si gonfi. Di fronte non
+  cambia. Prima: con 3 mm di raccordo il tubo finiva in un ago; con un
   diametro del fondo (18,3 mm) e la S dello smoothstep tornava tondo di
-  colpo, e sopra la saldatura si gonfiava («troppo gonfio: il cono si deve
-  ingrandire in modo omogeneo, senza scalini o rigonfiamenti»). La saldatura e' rigata dalle
+  colpo, gonfio sopra la saldatura; con una curva che rallenta sempre
+  (1 - (1-t)^2) sui sei decimi della lunghezza faceva una pancia lunga
+  («dalla saldatura deve salire ancora un po' schiacciato e poi dritto fino
+  al risvolto, senza bombature»). La saldatura e' rigata dalle
   ganasce (righe orizzontali, passo 0,8 mm, 0,08 mm di fondo) e ha gli
   angoli tagliati a 45 gradi: ai fianchi il fondo sale di un triangolo di
   lato 0,2 volte la larghezza (3,7 mm sul caso; al massimo 0,8 volte
@@ -4213,8 +4217,8 @@ piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
 il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
 saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
 l'orlo bianco, poi a tubetto, poi piu' sottile; dopo l'approvazione, il
-tubo schiacciato per i sei decimi della lunghezza al posto del rigonfiamento
-sopra la saldatura. Alto 179,3 mm alla cima
+tubo schiacciato a cuneo e poi dritto, al posto del rigonfiamento sopra la
+saldatura. Alto 179,3 mm alla cima
 dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
 (alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
 restano quelle del DT al vero.
