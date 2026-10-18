@@ -83,16 +83,20 @@ class Dieline:
                 lo, hi = min(lo, a), max(hi, b)
         return (lo, hi) if hi > lo else (self.bbox[0], self.bbox[2])
 
-    def rows_in_col(self, x0, x1, cover=0.8):
-        """Cordonature orizzontali che attraversano davvero la colonna."""
-        need = (x1 - x0) * cover
+    def rows_in_col(self, x0, x1, cover=0.8, bordo=0.5):
+        """Cordonature orizzontali che attraversano davvero la colonna.
+
+        Il bordo libero del disegno (la prima e l'ultima riga del riquadro)
+        basta che la copra per `bordo`: e' il bordo di una falda di chiusura,
+        interrotto dalla linguetta e dagli angoli arrotondati."""
         out = []
         for y in self.ys:
             span = 0.0
             for cy, a, b in self.hsegs:
                 if abs(cy - y) < 2.5:
                     span += max(0.0, min(b, x1) - max(a, x0))
-            if span >= need:
+            libero = min(abs(y - self.bbox[1]), abs(y - self.bbox[3])) < 2.5
+            if span >= (x1 - x0) * (bordo if libero else cover):
                 out.append(y)
         return out
 
@@ -169,14 +173,23 @@ def scarta_resa():
     _RESA.clear()
 
 
+# Pendenza fino alla quale un tratto conta come dritto: tan 3 gradi.
+QUASI_DRITTO = 0.05
+
+
 def _segments(page):
     """Segmenti H/V stroked della pagina: (orient, coord, a, b, stile)."""
     segs = []
 
     def add(x0, y0, x1, y1, style):
-        if abs(x1 - x0) < 0.7 and abs(y1 - y0) > 1.0:
+        # Quasi dritto conta come dritto: i lati di una falda di chiusura si
+        # stringono di un grado o due verso la punta, perche' entri senza
+        # strisciare (`QUASI_DRITTO`). Scartati, la falda restava fuori dal
+        # disegno e la scatola senza fondo.
+        dx, dy = abs(x1 - x0), abs(y1 - y0)
+        if dy > 1.0 and (dx < 0.7 or dx <= QUASI_DRITTO * dy):
             segs.append(("V", (x0 + x1) / 2, min(y0, y1), max(y0, y1), style))
-        elif abs(y1 - y0) < 0.7 and abs(x1 - x0) > 1.0:
+        elif dx > 1.0 and (dy < 0.7 or dy <= QUASI_DRITTO * dx):
             segs.append(("H", (y0 + y1) / 2, min(x0, x1), max(x0, x1), style))
 
     def style_of(o):
@@ -274,13 +287,35 @@ def _gruppi(segs, gap=25.0):
     return list(groups.values())
 
 
-def _largest_cluster(segs, gap=25.0):
+# Un secondo disegno lungo almeno cosi' e' l'altra vista della stessa
+# fustella (OUTSIDE / INSIDE): come `prisma.DOPPIO`.
+ALTRA_VISTA = 0.8
+
+
+def _largest_cluster(segs, gap=25.0, dettaglio=None):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
-    cartigli, legende e disegni di riepilogo posti a lato della fustella."""
+    cartigli, legende e disegni di riepilogo posti a lato della fustella.
+
+    Con `dettaglio(riquadro) -> float`: se un altro gruppo e' lungo almeno
+    `ALTRA_VISTA` del piu' lungo, sono la vista di fuori e quella di dentro
+    affiancate, e si tiene quella con piu' grafica sotto. La vista di dentro
+    ha spesso PIU' tratti (i contorni delle zone segnaposto, nella stessa
+    penna) ed e' piu' lunga: per lunghezza vinceva lei."""
     if not segs:
         return segs
     groups = {id(g): g for g in _gruppi(segs, gap)}
-    main = max(groups.values(), key=lambda g: sum(x[0][3] - x[0][2] for x in g))
+
+    def lung(g):
+        return sum(x[0][3] - x[0][2] for x in g)
+
+    def riq(g):
+        return (min(b[0] for _, b in g), min(b[1] for _, b in g),
+                max(b[2] for _, b in g), max(b[3] for _, b in g))
+    main = max(groups.values(), key=lung)
+    if dettaglio is not None:
+        viste = [g for g in groups.values() if lung(g) >= ALTRA_VISTA * lung(main)]
+        if len(viste) > 1:
+            main = max(viste, key=lambda g: dettaglio(riq(g)))
     mx0 = min(b[0] for _, b in main); my0 = min(b[1] for _, b in main)
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)
 
@@ -403,13 +438,34 @@ def _outline_bbox(page, segs):
     return (min(xs), min(ys), max(xs), max(ys))
 
 
+def _colori(pdf_path, riq, page_no=0, dpi=50.0):
+    """Quanta grafica c'e' sotto un riquadro in punti: i colori distinti non
+    bianchi, contati come in `tools.dt_della_tavola`. Una vista di dentro o
+    una copia tecnica e' bianca con qualche campitura piatta."""
+    import numpy as np
+    try:
+        im = np.asarray(render_page(pdf_path, page_no, dpi / 72.0)
+                        .convert("RGB")).astype(np.int16)
+    except Exception:
+        return 0
+    s = dpi / 72.0
+    reg = im[max(0, int(riq[1] * s)):int(riq[3] * s) + 1,
+             max(0, int(riq[0] * s)):int(riq[2] * s) + 1]
+    m = reg.max(2) < 248 if reg.size else None
+    if m is None or not m.any():
+        return 0
+    q = reg[m] // 32
+    return int(len(np.unique(q[:, 0] * 1024 + q[:, 1] * 32 + q[:, 2])))
+
+
 def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     with pdfplumber.open(pdf_path) as pdf:
         page = pdf.pages[page_no]
         all_segs = _segments(page)
         pens = _technical_pens(all_segs, page.width, page.height)
         segs = [s for s in all_segs if s[4] in pens] or all_segs
-        segs = _largest_cluster(segs)
+        segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
+            pdf_path, r, page_no))
         # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
         # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
         # guardando solo quello che sta sulla fustella.

@@ -392,7 +392,7 @@
   #continua{width:100%;max-width:300px;margin:12px auto 0;display:block}
   #continua[hidden]{display:none}
 
-  #params .griglia, #passo .griglia, #strappo .griglia, #pellicola .griglia{display:grid;gap:14px;border:1px solid var(--border);
+  #params .griglia, #passo .griglia, #strappo .griglia, #pellicola .griglia, #gelato .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   .fld{display:flex;flex-direction:column;gap:7px}
@@ -409,10 +409,13 @@
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
   #go, #strappo-go{width:100%;max-width:300px;margin:12px auto 0;display:block}
-  #spessore, #strappo-scelta, #pellicola-scelta, #fustella-scelta, #cu-fustella{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore, #strappo-scelta, #pellicola-scelta, #gelato-scelta, #fustella-scelta, #cu-fustella{display:flex;gap:8px;flex-wrap:wrap}
+  #gelato-scelta .gusto::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;
+    margin-right:7px;vertical-align:-1px;background:var(--gusto);box-shadow:0 0 0 1px rgba(0,0,0,.15)}
   #cu-fustella button[aria-pressed="true"],
   #spessore button[aria-pressed="true"],
   #pellicola-scelta button[aria-pressed="true"],
+  #gelato-scelta button[aria-pressed="true"],
   #fustella-scelta button[aria-pressed="true"],
   #strappo-scelta button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
     background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
@@ -586,6 +589,18 @@
     </div>
   </div>
 
+  <div id="gelato" class="pannello">
+    <span class="tit">Il tubo lo vuoi vuoto o con il gelato che esce dalla bocca?</span>
+    <div class="griglia">
+    <div class="fld">
+      <div id="gelato-scelta" role="group" aria-label="Il gelato nel tubo">
+        <button type="button" data-g="" aria-pressed="false">Vuoto &middot; solo il tubo</button>
+      </div>
+      <p class="note">Con il gelato: il ghiacciolo esce dalla bocca, aderente al tubo, del gusto che scegli. Il tubo e la sua grafica sono gli stessi.</p>
+    </div>
+    </div>
+  </div>
+
   <div id="strappo" class="pannello">
     <span class="tit">L&rsquo;astuccio ha un&rsquo;apertura a strappo: come lo vuoi?</span>
     <div class="griglia">
@@ -745,6 +760,19 @@ function buildScene(g){
       if (prim.indices !== undefined)
         geo.setIndex(new THREE.BufferAttribute(readAccessor(g, prim.indices),1));
       if (prim.attributes.NORMAL === undefined) geo.computeVertexNormals();
+      // I colori dei vertici (il gelato del tubo, pack3d/gelato.py): glTF li
+      // scrive lineari, e qui si portano in sRGB come i colori pieni
+      if (prim.attributes.COLOR_0 !== undefined){
+        const lin = readAccessor(g, prim.attributes.COLOR_0);
+        const n = g.json.accessors[prim.attributes.COLOR_0].type === 'VEC4' ? 4 : 3;
+        const rgb = new Float32Array(lin.length / n * 3);
+        for (let k = 0, q = 0; k < lin.length; k += n, q += 3)
+          for (let c = 0; c < 3; c++){
+            const x = lin[k + c];
+            rgb[q + c] = x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055;
+          }
+        geo.setAttribute('color', new THREE.BufferAttribute(rgb, 3));
+      }
 
       const m = g.json.materials && g.json.materials[prim.material];
       const pbr = m && m.pbrMetallicRoughness;
@@ -765,9 +793,39 @@ function buildScene(g){
         // che senza il metallo e' nero. Gli altri modelli restano col Phong
         // di sempre.
         const mr = immagine(g.json.textures[mrIdx.index].source);
-        mat = new THREE.MeshStandardMaterial({color:0xffffff, side:THREE.FrontSide,
+        // Il gelato non ha texture del colore: un colore pieno (lineare,
+        // come gli altri si porta in sRGB), lo strato lucido del bagnato e
+        // il bagliore del sorbetto (pack3d/gelato.py)
+        const f = !texIdx && pbr.baseColorFactor;
+        const colore = f ? new THREE.Color(f[0], f[1], f[2]).convertLinearToSRGB()
+                         : new THREE.Color(0xffffff);
+        const est = (m.extensions || {});
+        const cc = est.KHR_materials_clearcoat;
+        const base = {color: colore, side:THREE.FrontSide,
           metalness: pbr.metallicFactor ?? 1, roughness: pbr.roughnessFactor ?? 1,
-          metalnessMap: mr, roughnessMap: mr, envMapIntensity: 1.0});
+          metalnessMap: mr, roughnessMap: mr, envMapIntensity: 1.0,
+          vertexColors: prim.attributes.COLOR_0 !== undefined};
+        if (cc){
+          mat = new THREE.MeshPhysicalMaterial(Object.assign(base, {
+            clearcoat: cc.clearcoatFactor ?? 0,
+            clearcoatRoughness: cc.clearcoatRoughnessFactor ?? 0}));
+          if (cc.clearcoatTexture)
+            mat.clearcoatMap = immagine(g.json.textures[cc.clearcoatTexture.index].source);
+        } else {
+          mat = new THREE.MeshStandardMaterial(base);
+        }
+        if (m.emissiveTexture){
+          // l'emissione e' luce: la mappa e' in sRGB, e va letta lineare
+          // (gli altri colori qui si mostrano come sono, e la faceva tre
+          // volte troppo forte)
+          const e = m.emissiveFactor || [1, 1, 1];
+          mat.emissive = new THREE.Color(e[0], e[1], e[2]);
+          mat.emissiveMap = immagine(g.json.textures[m.emissiveTexture.index].source);
+          mat.emissiveMap.encoding = THREE.sRGBEncoding;
+        }
+        // un colore pieno non metallico prende gia' la luce ambiente forte
+        // del viewer: l'ambiente riflesso, pieno, lo bruciava
+        if (f) mat.envMapIntensity = 0.35;
         group.userData.pbr = true;
       } else {
         // Un materiale senza texture e' un colore pieno - il rovescio del
@@ -1020,6 +1078,13 @@ let aperturaScelta = null, incisioniScelte = null;
 // non sempre: lo dice chi carica il PDF, ogni volta.
 const pellicolaEl = document.getElementById('pellicola');
 const pellicolaScelta = document.getElementById('pellicola-scelta');
+// Il gelato del tubo a cono: vuoto, o col ghiacciolo che esce dalla bocca,
+// del gusto scelto (`pack3d/gelato.py`). Lo dice chi carica il PDF.
+const gelatoEl = document.getElementById('gelato');
+const gelatoScelta = document.getElementById('gelato-scelta');
+// il colore del pallino di ogni gusto (sRGB), per riconoscerlo a occhio
+const GUSTI_COLORE = {lime: '#a6c21f', limone: '#efe06a', arancia: '#f08a2a',
+                      fragola: '#d42a3e', cola: '#5a2c16'};
 const dlBtn = document.getElementById('download');
 const annBtn = document.getElementById('annulla');
 // la texture a parte, vedi `preparaTexture`
@@ -2567,7 +2632,7 @@ async function riceviFile(lista){
     nascondiCaso();
     famiglieEl.classList.remove('on'); passoEl.classList.remove('on');
     params.classList.remove('on'); strappoEl.classList.remove('on');
-    pellicolaEl.classList.remove('on');
+    pellicolaEl.classList.remove('on'); gelatoEl.classList.remove('on');
     glbBlob = f; glbName = f.name;
     show(await f.arrayBuffer()); setFase('pronto'); setTitolo(f.name);
     setStatus('GLB caricato dal disco',''); setMeta([]);
@@ -2691,6 +2756,10 @@ async function procedi(kind, extra){
       chiediStrappo(c, opts, info);
       return;
     }
+    if (info.kind === 'tubo' && info.gusti && info.gusti.length){
+      chiediGelato(c, opts, info);
+      return;
+    }
     esitoFinale(await build(c.buf, pending.name, opts), info.title || 'Modello pronto');
   }catch(err){ fermato(err); }
 }
@@ -2707,7 +2776,7 @@ function fermato(err){
   }
   // si torna al passo: i PDF restano, e se ne puo' cambiare uno o riprovare
   params.classList.remove('on'); strappoEl.classList.remove('on');
-  pellicolaEl.classList.remove('on');
+  pellicolaEl.classList.remove('on'); gelatoEl.classList.remove('on');
   if (famiglia){ disegnaPasso(); passoEl.classList.add('on'); }
   const m = testoErrore(err);
   setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
@@ -2741,6 +2810,40 @@ async function pellicolaAvanti(p){
   pellicolaEl.classList.remove('on');
   const opts = Object.assign({}, s.opts, {pellicola: p});
   if (s.info.strappo){ chiediStrappo(s.c, opts, s.info); return; }
+  try{
+    esitoFinale(await build(s.c.buf, pending.name, opts), s.info.title || 'Modello pronto');
+  }catch(err){ fermato(err); }
+}
+
+/* ------------------------------- il gelato ------------------------------- */
+// Il tubo a cono si mostra vuoto o col ghiacciolo che esce dalla bocca: i
+// gusti li dice il server, un tasto per gusto col suo pallino di colore. La
+// scelta costruisce subito.
+function chiediGelato(c, opts, info){
+  pending.gelato = {c, opts, info};
+  gelatoScelta.querySelectorAll('button.gusto').forEach(b => b.remove());
+  for (const g of info.gusti){
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'gusto'; b.dataset.g = g;
+    b.setAttribute('aria-pressed', 'false');
+    b.style.setProperty('--gusto', GUSTI_COLORE[g] || '#999');
+    b.textContent = 'Con il gelato \u00b7 ' + g;
+    b.onclick = () => gelatoAvanti(g);
+    gelatoScelta.appendChild(b);
+  }
+  gelatoScelta.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', 'false'));
+  gelatoEl.classList.add('on');
+  setStatus('Tubo a cono: vuoto o con il gelato?','');
+}
+
+async function gelatoAvanti(g){
+  if (!pending || !pending.gelato) return;
+  const s = pending.gelato;
+  pending.gelato = null;
+  gelatoScelta.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.g === g)));
+  gelatoEl.classList.remove('on');
+  const opts = g ? Object.assign({}, s.opts, {gelato: g}) : s.opts;
   try{
     esitoFinale(await build(s.c.buf, pending.name, opts), s.info.title || 'Modello pronto');
   }catch(err){ fermato(err); }
@@ -2851,6 +2954,7 @@ function annulla(){
   params.classList.remove('on');
   strappoEl.classList.remove('on');
   pellicolaEl.classList.remove('on');
+  gelatoEl.classList.remove('on');
   setMeta([]); setTitolo('');
   nascondiCaso();
   togliModello();
@@ -2901,6 +3005,7 @@ fustellaScelta.querySelectorAll('button').forEach(b => {
 strappoGradi.oninput = mostraGradi;
 strappoGradi.onkeydown = e => { if (e.key === 'Enter') strappoAvanti(); };
 document.getElementById('strappo-go').onclick = strappoAvanti;
+gelatoScelta.querySelector('button[data-g=""]').onclick = () => gelatoAvanti('');
 pellicolaScelta.querySelectorAll('button').forEach(b => {
   b.onclick = () => pellicolaAvanti(Number(b.dataset.p));
 });

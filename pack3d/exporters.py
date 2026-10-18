@@ -101,7 +101,8 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
     nodo a parte col suo materiale (`PELLICOLA`). Una faccia con la chiave
     `normale` porta la mappa delle normali del suo rilievo.
 
-    Con `steso` - `(tela, normale o None)`, lo steso del PDF (`pack3d.steso`)
+    Con `steso` - `(tela, normale o None[, mappa metallo/ruvidita' della
+    lamina o None])`, lo steso del PDF (`pack3d.steso`)
     - la texture e' quella sola: ogni faccia stampata ci arriva con la sua
     `f["telaio"]`, l'affine dalle UV della sua immagine a quelle dello steso,
     e le facce di un colore solo (interno, taglio, solco) hanno un materiale
@@ -237,7 +238,7 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
 
 
 def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
-                     tela, normale):
+                     tela, normale, mr=None):
     """`write_glb` con lo steso: vedi la sua documentazione."""
     from PIL import Image
     from .folding import TAGLIO
@@ -289,6 +290,13 @@ def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
                 "metallicFactor": 0.0, "roughnessFactor": 0.85}}
             if normale is not None:
                 m["normalTexture"] = {"index": 1}
+            if mr is not None:
+                # la lamina (`lamina.py`): metallo e ruvidita' dalla mappa,
+                # inquadrata come lo steso
+                m["pbrMetallicRoughness"].update({
+                    "metallicRoughnessTexture": {
+                        "index": 2 if normale is not None else 1},
+                    "metallicFactor": 1.0, "roughnessFactor": 1.0})
         else:
             m = {"name": nome, "pbrMetallicRoughness": {
                 "baseColorFactor": lineare(tinta) + [1.0],
@@ -342,6 +350,12 @@ def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
         images.append({"bufferView": add_view(bio.getvalue()),
                        "mimeType": "image/png"})
         textures.append({"source": 1, "sampler": 0})
+    if mr is not None:
+        bio = io.BytesIO()
+        mr.convert("RGB").save(bio, "PNG", optimize=True)
+        images.append({"bufferView": add_view(bio.getvalue()),
+                       "mimeType": "image/png"})
+        textures.append({"source": len(images) - 1, "sampler": 0})
 
     nodi = [{"mesh": 0, "name": "packaging"}]
     mesh = [{"name": "packaging", "primitives": prims}]
@@ -443,8 +457,9 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
 
     `tex` puo' essere una lista, una texture per ognuna delle `parti`: la
     coppa e il tappo vengono da due PDF, e ognuno ha il suo steso. Allora
-    `mr` e `normale` non ci sono, e chi chiama poi unisce le texture in
-    un'immagine sola (`pack3d.atlante`).
+    `normale` non c'e', `mr` se c'e' e' una lista con una mappa (o None) per
+    tela, e chi chiama poi unisce le texture in un'immagine sola
+    (`pack3d.atlante`).
     """
     buf = bytearray()
     views, accessors = [], []
@@ -510,7 +525,8 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
     materiale = {"name": "film", "pbrMetallicRoughness": {
         "baseColorTexture": {"index": 0},
         "metallicFactor": 0.0, "roughnessFactor": 0.42}}
-    if mr is not None:
+    per_tela = isinstance(mr, (list, tuple))
+    if mr is not None and not per_tela:
         from PIL import Image
         im = tele[0]
         if max(im.size) > tex_max:
@@ -546,6 +562,20 @@ def write_glb_mesh(V, UV, tris, tex, path, unit_scale=0.001,
         materiali.append({"name": pezzi[k][0], "pbrMetallicRoughness": {
             "baseColorTexture": {"index": k},
             "metallicFactor": 0.0, "roughnessFactor": 0.42}})
+    if per_tela:
+        # una mappa metallo/ruvidita' per tela, dove c'e' (la lamina di un
+        # pezzo, `lamina.py`): l'atlante le unisce come il colore
+        for k, m in enumerate(mr):
+            if m is None:
+                continue
+            bio = io.BytesIO()
+            m.convert("RGB").save(bio, "PNG", optimize=True)
+            immagini.append({"bufferView": add_view(bio.getvalue()),
+                             "mimeType": "image/png"})
+            trame.append({"source": len(immagini) - 1, "sampler": 0})
+            materiali[k]["pbrMetallicRoughness"].update({
+                "metallicRoughnessTexture": {"index": len(trame) - 1},
+                "metallicFactor": 1.0, "roughnessFactor": 1.0})
     for nome, rgb in (tinte.colori if tinte is not None else []):
         # il colore pieno nei valori lineari di glTF, ruvido come il resto
         materiali.append({"name": nome, "pbrMetallicRoughness": {

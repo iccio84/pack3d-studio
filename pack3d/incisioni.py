@@ -69,11 +69,17 @@ PONTE = 2.5
 PONTI_MIN = 8
 PERFORATA_MIN = 80.0
 SVOLTA = 60.0
+# La linguetta di chiusura: il taglio del bordo libero di una faccia che
+# entra nella faccia - le due tacche e il lobo fra loro - almeno di tanti mm.
+# Meno e' il bordo stesso, appena storto (i lati obliqui di una falda).
+LINGUETTA_MIN = 2.0
 
 
-def _tratti_tecnici(pdf, page_no=0):
+def _tratti_tecnici(pdf, page_no=0, curve=False):
     """I sottopercorsi della penna del disegno tecnico: liste di punti, in
-    punti PDF col telaio della MediaBox (y dall'alto), come `tracciati`."""
+    punti PDF col telaio della MediaBox (y dall'alto), come `tracciati`. Con
+    `curve` i tratti di Bezier sono campionati sulla curva
+    (`tracciati._cammina`)."""
     import pypdfium2 as pdfium
     from . import dieline, tracciati
 
@@ -85,7 +91,7 @@ def _tratti_tecnici(pdf, page_no=0):
     try:
         page = doc[page_no]
         pieni, tratti = [], []
-        tracciati._cammina(page, pieni, tratti)
+        tracciati._cammina(page, pieni, tratti, curve=curve)
     finally:
         doc.close()
     out = []
@@ -414,6 +420,67 @@ def tagli(pdf, panels, facce, page_no=0):
         linee_f = [l for l in _catene(pezzi) if _lunghezza(l) * PT2MM >= CORTO]
         if linee_f:
             out[nome] = linee_f
+    return out
+
+
+def _lati_liberi(p, quadri, tol=1.0 * MM):
+    """I lati di `p` (indici come `_sul_lato`) che non toccano un altro
+    pannello: il bordo libero della faccia, non una piega."""
+    lati = (((p.x0, p.y0), (p.x1, p.y0)), ((p.x0, p.y1), (p.x1, p.y1)),
+            ((p.x0, p.y0), (p.x0, p.y1)), ((p.x1, p.y0), (p.x1, p.y1)))
+    liberi = set()
+    for k, (a, b) in enumerate(lati):
+        m = ((a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0)
+        if not any(q is not p and _sul_lato(m, [q], tol) for q in quadri):
+            liberi.add(k)
+    return liberi
+
+
+def chiusura(pdf, panels, facce, page_no=0):
+    """{faccia: [linea, ...]} la linguetta di chiusura da incidere, in punti.
+
+    Il caso: un astuccio di cioccolatini da 16 chiude il fondo con una falda il cui
+    bordo libero ha due tacche e, fra loro, la linguetta che si infila nella
+    fessura dell'altra falda. La faccia del modello e' il rettangolo pieno
+    del pannello, e quel taglio - una catena di 47 mm su 34 di bordo, che
+    entra nella faccia di 6,6 mm - spariva: chi l'aveva caricata ha respinto
+    il modello perche' la linguetta non c'era.
+
+    La regola: un tratto della fustella che parte da un lato LIBERO della
+    faccia (non una piega con un'altra faccia), entra nella faccia almeno di
+    `LINGUETTA_MIN` mm e torna sullo stesso lato e' il taglio di una
+    chiusura - tacca, linguetta - e sul cartone chiuso si vede: si incide
+    come i tagli dell'apertura. I lati obliqui di una falda partono da un
+    lato e arrivano su un altro, e il bordo appena storto non entra: restano
+    come sono.
+    """
+    tratti = _segmenti(_tratti_tecnici(pdf, page_no))
+    if not tratti:
+        return {}
+    quadri = list(panels.values())
+    out = {}
+    for nome in facce:
+        p = panels.get(nome)
+        if p is None:
+            continue
+        liberi = _lati_liberi(p, quadri)
+        if not liberi:
+            continue
+        pezzi = [d for s in tratti for d in [_dentro_pannello(s, p)] if d is not None]
+        scelte = []
+        for l in _catene(pezzi):
+            if _lunghezza(l) * PT2MM < CORTO:
+                continue
+            capi = [{k for _i, k in _sul_lato(q, [p], 1.0 * MM)} for q in (l[0], l[-1])]
+            comuni = capi[0] & capi[1] & liberi
+            for k in comuni:
+                fondo = max((abs(q[1] - (p.y0, p.y1)[k]) if k < 2 else
+                             abs(q[0] - (p.x0, p.x1)[k - 2])) for q in l)
+                if fondo * PT2MM >= LINGUETTA_MIN:
+                    scelte.append(l)
+                    break
+        if scelte:
+            out[nome] = scelte
     return out
 
 

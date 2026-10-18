@@ -4101,6 +4101,363 @@ cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
 ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
 colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
+## Il tubo a cono
+
+Uno sleeve di cartoncino arrotolato in un cono lungo e stretto, aperto in
+cima, col fondo schiacciato e saldato piatto: il tubo di un gelato da
+spremere. Un pezzo, cartotecnico (`pack3d/tubo.py`, `server.build_tubo`).
+E' nato dal caso 84c854d6a5: dichiarato cartotecnico in un pezzo, il solutore
+astuccio lo rifiutava («la sequenza delle fasce non e' ne' quella di un
+astuccio chiuso...», fasce 331, 15, 15, 24...), la scatola a punta e la coppa
+non lo prendevano, e il caso finiva in errore. Chi l'ha caricato: «la parte
+bassa e' saldata/incollata, poi sale e prende forma di un cono allungato;
+il PDF e' uno sleeve come il cono gelato».
+
+Si prova dopo l'astuccio, dopo la scatola a punta e dopo la coppa
+(`_analyze_pdf`): i casi che quelli prendono non cambiano strada.
+
+### La firma in fustella
+
+In uno stile di tratto (penna e colore) solo, tutte vere:
+
+- un centro, dagli archi curvi (freccia di almeno 0,8 mm);
+- due rette lunghe almeno 80 mm che puntano al centro entro 3 gradi - il
+  lato della pattina e' parallelo al raggio, scostato di qualche mm - coi
+  capi a due raggi uguali entro 6 mm: il fondo e la bocca;
+- un tratto curvo a ciascuno dei due raggi (la mediana dello scarto entro
+  3 mm): gli archi possono essere spezzati in piu' tratti;
+- l'arco del fondo lungo almeno 20 mm (due lati dello stesso fianco no);
+- il lato lungo almeno 1,2 volte il diametro della bocca: piu' tozzo e' una
+  coppa.
+
+Se i contorni sono due, uno dentro l'altro nella stessa penna - sul
+84c854d6a5 l'abbondanza di stampa a 2 mm fuori dal taglio - il taglio e'
+quello dentro: la coppia di lati piu' stretta.
+
+### Il solido
+
+Con Phi l'angolo del settore, p la pattina e rho il raggio sul foglio, il
+giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
+(rho - R_base) sqrt(1 - (Phi / 2 pi)^2), dal fondo rifilato (sotto). Sul
+84c854d6a5: lati 197 mm, archi 122,6 e 60,6; montato alto 178,4, bocca
+36,2, fondo 18,3.
+
+- La **pattina** la scrive il cartiglio («Pattina 8 mm»), se il testo si
+  legge; se no 8 mm. Sta dal lato dove la stampa massima e' piu' lontana dal
+  taglio (11 mm contro 4 sul caso), e va sotto l'altro bordo, sul retro,
+  mezzo spessore dentro.
+- Il **fronte** e' il mezzo della parte che si vede; la destra del foglio,
+  guardando dal centro verso la bocca, e' la destra del pack: la stampa e'
+  fuori, niente specchiatura.
+- Il **fondo**: la fascia fuori dalla stampa massima e' quella fra il fondo
+  e la fine delle linee della stampa massima (rette di un altro stile
+  parallele ai lati), 23,8 mm sul caso; se il DT non le disegna, il 12% del
+  lato. La saldatura **comincia dove finisce la grafica**: a vista resta
+  solo il terzo della fascia subito sotto la stampa massima (`SALDATA`, 7,9
+  mm sul caso), il resto (15,9 mm) e' rifilato e il tubo finisce li'
+  (`Tubo.R_base`). La saldatura e' **tutta piatta** e **larga quanto il
+  tubo**: le due pareti una contro l'altra, ognuna col suo spessore, i
+  fianchi ripiegati dentro. Non si appiattisce a perimetro costante (due
+  pareti larghe C/2, 1,57 volte il diametro): faceva un piede che sporgeva
+  dal tubo, con un gradino, e le foto di chi l'ha caricato non ce l'hanno.
+  Sopra la saldatura il tubo si **schiaccia a poco a poco**, per un diametro
+  del fondo (`PIZZICO`, 18,3 mm sul caso, smoothstep): di fronte non cambia,
+  di lato si assottiglia fino alla saldatura. Con 3 mm di raccordo, come
+  prima, di lato il tubo finiva in un ago. La saldatura e' rigata dalle
+  ganasce (righe orizzontali, passo 0,8 mm, 0,08 mm di fondo) e ha gli
+  angoli tagliati a 45 gradi: ai fianchi il fondo sale di un triangolo di
+  lato 0,2 volte la larghezza (3,7 mm sul caso; al massimo 0,8 volte
+  l'altezza della saldatura).
+- La **bocca** ha l'**orlo arrotolato a sezione tonda**: un tubetto tutto
+  attorno, come l'orlo di un vasetto (chiesto cosi' da chi ha caricato il
+  caso: «il risvolto a sezione tubolare, stile Nutella pot»). La parete
+  finisce alla stampa massima in cima; la carta sale, gira in fuori e torna
+  alla parete, e il tubetto e' centrato li', mezzo sopra e mezzo sotto. Il
+  **diametro** e' 0,7 volte (`ORLO`) la fascia che il DT lascia in cima fuori
+  dalla stampa massima: l'arco di un altro stile concentrico alla bocca,
+  entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco rosso a
+  387,6 mm contro il taglio a 390,1), quindi 1,77 mm. Alto quanto la fascia
+  era troppo grosso: «un po' piu' piccolo». Se il DT non disegna la fascia,
+  3 mm (`RISVOLTO`, valore d'uso). Arrotolato in fuori, da fuori si
+  vede il rovescio: **bianco carta** in piena luce (`folding.INTERNO`, la
+  tinta "rovescio"), non il rovescio in ombra dell'interno
+  (`ballotin.INTERNO`, scurito per le scatole chiuse), che lo faceva grigio.
+  Arrotolare 2,5 mm di carta darebbe un tubetto di 0,8 mm: il diametro e'
+  quello che si vede, non la carta che serve a farlo.
+- Il tubo e' **carta**, come il cono: lo spessore 3 (0,7 mm) fa un bordo e
+  un risvolto da scatola. Chi lo carica sceglie lo spessore 1.
+- Il fondo e la cima della parete, dentro l'orlo, hanno la costa; dentro,
+  il rovescio.
+
+Il caso 84c854d6a5 e' stato respinto la prima volta proprio qui: la
+saldatura piatta lunga quanto tutta la fascia fuori stampa, piu' un raccordo
+alto uguale (47,6 mm su 196,8), e la bocca tagliata netta. Chi l'ha caricato:
+"un risvolto bianco nella parte superiore", "in basso la saldatura e' molto
+piu' piccola ed ha i lati tagliati".
+
+La seconda volta (saldatura piatta 7,9 mm piu' un raccordo fino alla stampa
+massima, 23,8 mm sotto la grafica; risvolto 6 mm; spessore 3, alto 191 mm):
+"il risvolto e' troppo grande (guarda il dt), usa un cartoncino piu'
+sottile, il calippo e' troppo alto: fare partire la saldatura appena finisce
+la grafica". Da qui la fascia rifilata, il risvolto letto dal DT e lo
+spessore 1: alto 178,4 mm, fondo 18,3 mm.
+
+La terza versione, ripresa a mano: le misure giuste, ma il fondo era un
+piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
+29 mm contro 18) che spuntava con un gradino da 3 mm di raccordo, e di lato
+il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
+saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
+l'orlo bianco, poi a tubetto, poi piu' sottile. Alto 179,3 mm alla cima
+dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
+(alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
+restano quelle del DT al vero.
+
+### Il gelato
+
+Il tubo si mostra vuoto o **con il gelato**: dopo la lettura la pagina
+chiede «vuoto o con il gelato che esce dalla bocca?», con un tasto per gusto
+(lime, limone, arancia, fragola, cola), e la scelta costruisce subito
+(opzione `gelato` di /api/build, in `OPZIONI_CASO`). E' `pack3d/gelato.py`,
+aggiunto al GLB del tubo come mesh e materiale a parte; il tubo resta
+identico al byte.
+
+- La **forma**: il ghiaccio e' aderente al tubo - dentro la bocca il raggio
+  di dentro della parete meno 0,06 mm, sopra esce dritto, largo quanto la
+  bocca, per 0,7 volte il suo diametro (24,5 mm sul caso 84c854d6a5) -, la
+  cima appena bombata (0,4 mm) col bordo tondo (1,6 mm) e qualche
+  irregolarita'. L'orlo a tubetto resta tutto a vista. Continuando la
+  conicita' del tubo, in cima il ghiaccio arrivava a 38 mm, copriva meta'
+  dell'orlo e sembrava piu' largo del calippo; staccato dalle pareti di
+  mezzo millimetro, fra ghiaccio e orlo restava una fessura scura.
+- **Niente texture del colore** sul ghiaccio. Glam mette la texture del pack
+  su tutti i materiali con un colore da immagine (GLAM.md, sezione 8), e la
+  texture a parte e il template PSD contano le immagini del colore
+  (`pack3d.texture`): con una sua texture il modello ne avrebbe avute due,
+  la pagina non avrebbe mandato a Glam ne' texture ne' template, e Glam ci
+  avrebbe stampato sopra l'artwork. Il colore e' pieno (`baseColorFactor`,
+  il chiaro del gusto) con le macchie e l'ombra della bocca nei colori dei
+  vertici (COLOR_0); il dettaglio sta nelle normali (la grana satinata dei
+  fianchi, le scaglie di cristallo in cima), nella ruvidita' col bagnato
+  (che fa anche da clearcoat: tutto lucido, le scaglie di piu') e
+  nell'emissione (il sorbetto lascia passare un poco di luce, le scaglie
+  brillano).
+- Il **lime** e' misurato sulla foto del caso: giallo-verde, il rosso quasi
+  quanto il verde e poco blu (180, 200, 40 circa in sRGB). Il primo, piu'
+  verde e piu' chiaro, sembrava pistacchio.
+- La **traslucenza vera** (KHR_materials_transmission) e' stata provata e
+  tolta: attraverso il ghiaccio si rifrangeva l'interno bianco del tubo,
+  una striscia chiara sopra l'orlo.
+- Le mappe sono 1024 x 512 px (`LATO`), 0,1 mm per pixel sul giro: a 2048
+  la differenza non si vede nemmeno da vicino, e costavano 47 secondi
+  invece di 2. Il rumore e' una funzione del punto 3D di ogni texel: niente
+  cuciture, niente stiramenti al polo della cima, e lo stesso PDF da' lo
+  stesso GLB.
+- Il controllo dell'AI lo sa (`server.nota_gelato`): il ghiaccio non e' nel
+  PDF e non e' un difetto. Nelle sue viste il ghiaccio e' del colore pieno.
+- Il viewer della pagina legge i colori dei vertici, il clearcoat e
+  l'emissione, che e' in sRGB e va letta lineare; per un colore pieno non
+  metallico l'ambiente riflesso e' a 0,35 (la luce ambiente del viewer e'
+  gia' forte, e lo bruciava di giallo).
+
+### Cosa manca
+
+- Quanto della fascia fuori stampa resta a vista come saldatura (un terzo)
+  e' un valore d'uso: il DT non lo disegna. Il diametro dell'orlo e' un valore d'uso
+  solo se il DT non disegna la stampa massima in cima.
+- Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
+  secondo pezzo come il lid del cono.
+
+## La scatola a prisma
+
+Una scatola di cartoncino con il fondo a poligono - esagono, ottagono,
+pentagono - e una parete dritta su ogni lato, chiusa da un coperchio fatto
+allo stesso modo che calza sopra. Ogni pezzo e' un PDF suo: si dichiara
+**Cartotecnico in 2 pezzi** (o in un pezzo solo, il fondo aperto); il codice
+sta in `pack3d/prisma.py`, il montaggio in `server.build_prisma`.
+
+Il primo caso e' arrivato dalla coda (8f67b58f3d) come costruzione ferma:
+«cartotecnico in 2 pezzi: per ora so montare lo sleeve e il tappo di una
+coppa, o il cono col suo lid». Era un esagono: il fondo con il piano da
+141,2 x 122,3 mm (70,6 di lato) e sei pareti da 46, il coperchio con il
+piano da 145,0 x 125,6 e sei pareti da 16, coi risvolti dentro. Prima la
+sessione l'aveva lasciato a mano, preso per una famiglia nuova: e' un
+cartotecnico.
+
+### La firma in fustella
+
+Si prova **solo dopo** che i pezzi tondi hanno rifiutato i PDF
+(`server._pezzi_prisma`, chiamato quando `_pezzi_tondi` alza l'errore), solo
+sul cartotecnico dichiarato in pezzi, e solo se **ogni** PDF si legge come
+un prisma; altrimenti resta l'errore di prima. La fustella si legge come
+quella del ballotin, a grafo (`ballotin.tratti_fustella`, `grafo`, `facce`):
+
+- il **piano** e' la faccia piu' grande; i suoi spigoli sono quelli
+  dell'inviluppo convesso, senza i vertici dove il contorno gira meno di 12
+  gradi (sul coperchio una tacca dava sette vertici a un esagono). Il piano
+  deve riempire almeno il 93% del suo inviluppo, avere da 5 a 12 lati (4 sono
+  l'astuccio e il vassoio) e nessun lato sotto i 15 mm;
+- su **ogni lato** c'e' una parete: una faccia attaccata appena fuori dal
+  lato, anche al 12% e all'88% della sua lunghezza. L'altezza e' quanto la
+  faccia si allunga lungo la perpendicolare, la mediana di tre misure al 30,
+  50 e 70% del lato; sotto i 5 mm non e' una parete;
+- dei **due pezzi** il coperchio e' quello col piano piu' largo (l'apotema
+  medio: 62,8 contro 61,1 mm), e deve avere gli stessi lati del fondo.
+
+### La vista di fuori, non quella di dentro
+
+Il PDF del fondo porta due disegni della fustella affiancati, OUTSIDE e
+INSIDE, lunghi quasi uguali (2059 e 1690 mm di tratti), e il piu' lungo era
+quello di DENTRO: col pezzo connesso piu' lungo, come fa il ballotin, le
+pareti uscivano viola pieno e il piano specchiato. Quando un secondo disegno
+e' lungo almeno l'80% del primo si tiene quello con piu' grafica sotto
+(`prisma._dettaglio`: la media del gradiente della pagina a 30 dpi
+nell'ingombro): 31,7 la vista di fuori, 11,2 quella di dentro.
+
+**Vale anche per l'astuccio** (`dieline._largest_cluster`, `ALTRA_VISTA`).
+Un astuccio con OUTSIDE e INSIDE affiancate: i contorni delle zone segnaposto
+della vista di dentro sono tracciati con la penna della fustella e la
+allungavano (1781 mm contro 1493, l'84%). Vinceva la vista di dentro, quei
+contorni diventavano pieghe (una larghezza vera di 143 divisa in 24,5 + 94 +
+24,7) e la grafica era bianca. Fra i gruppi lunghi almeno l'80% del primo si
+tiene quello con piu' colori distinti nella pagina a 50 dpi (`_colori`, come
+`tools.dt_della_tavola`): 104-153 la vista di fuori, 34-41 quella di dentro.
+Il gradiente medio di prisma qui non separa (9,55 contro 9,22).
+
+**La falda di chiusura e' il fondo, e i suoi lati non sono dritti.** Nello
+stesso astuccio la falda in fondo al fronte si stringe di circa 2 gradi verso
+la linguetta (138,1 -> 139,4 su 36 mm), e `_segments` buttava i tratti non
+orizzontali o verticali entro 0,7 pt: il bordo libero restava un pezzo
+staccato e la scatola usciva senza fondo. Un tratto conta H o V anche quando
+devia meno di 3 gradi (`QUASI_DRITTO = 0.05`, la tangente). E il bordo libero,
+interrotto da linguetta e angoli tondi, copre il 60% della colonna: la prima e
+l'ultima riga del riquadro bastano col 50% (`rows_in_col`, `bordo`), le altre
+restano all'80%. Sette astucci del parco escono identici (md5).
+
+### Il montaggio e il verso
+
+Ogni parete si alza di 90 gradi sul suo lato; linguette e risvolti stanno
+dentro e non si portano. Il fondo ha il piano a Y = 0 e le pareti in su; il
+coperchio sta capovolto sopra, col piano a filo delle pareti del fondo piu'
+lo spessore della carta e le pareti in giu'.
+
+- Il piano del **coperchio** si guarda dall'alto, e lo steso cosi' com'e' sul
+  foglio e' gia' la vista dall'alto col fronte in basso: (X, Z) = (x, y).
+- Il **fondo** si guarda da sotto: il foglio si specchia in y e poi si gira,
+  fra le rotazioni che portano i suoi lati su quelli del coperchio, su
+  quella che mette davanti la parete piu' in basso sul foglio. E' una
+  rotazione, non un altro specchio: la stampa delle pareti resta leggibile,
+  dritta e non specchiata.
+
+La texture di ogni pezzo e' il suo DT intero, come per il ballotin, con sotto
+le strisce del rovescio e del taglio; il bordo libero di ogni parete prende
+la costa. Due nodi nel GLB, `fondo` e `coperchio`, e i due stesi
+nell'atlante.
+
+### La lamina e' metallo
+
+Il caso: la scatola esagonale del Kusschen Darkchoc, approvata nella forma e
+respinta da chi l'aveva caricata perche' la cornice del coperchio, che la
+legenda dice `cold foil copper Kurz 404`, sul modello era arancio piatto. Il
+PDF del coperchio ha una tinta piatta `..._ColdFoilCopper_Kurz404`, con
+un'alternativa arancio che finge il rame: nessuna regola la riconosceva, ne'
+per toglierla ne' per farla metallo, e pdfium la rendeva come un inchiostro
+qualsiasi.
+
+La regola (`pack3d/lamina.py`): una lastra che si chiama come una lamina -
+foil (anche dentro una parola sola, `ColdFoilCopper`), Folie, lamina, hot
+stamping, stampa a caldo - e' un film metallico sul cartoncino. Il colore
+resta quello della texture, l'alternativa scelta dal grafico e gli inchiostri
+sopra; quello che cambia e' il materiale: dove c'e' la lastra (piena dal 25%
+d'inchiostro) e' metallo, ruvidita' 0,22, e attorno resta carta con la
+ruvidita' di prima (0,42). Sul GLB e' la `metallicRoughnessTexture` di glTF,
+in PNG, una per pezzo, che l'atlante unisce come il colore
+(`exporters.write_glb_mesh` con `mr` in lista). La maschera viene dalla
+lastra sul riquadro del DT (`techink.mappe_lastre`, 150 dpi al piu'), cosi'
+il campione della legenda fuori dal DT non conta; sotto lo 0,2% non c'e'
+metallo. Sul Darkchoc il foil e' il 38,4% del coperchio: la cornice, le
+falde e le scritte arancio. Un "Silver" o un PANTONE 877 C sono inchiostri
+metallici stampati, non una lamina, e qui non si trattano. La lamina si fa
+sulla scatola a prisma e sull'astuccio.
+
+### La lamina che dice solo la legenda
+
+Il caso: un astuccio di cioccolatini da 16, respinto da chi l'aveva caricato perche'
+il foil oro della legenda - "Coldfoil Gold ... KURZ 220" - sul
+modello era giallo piatto. Qui nessuna lastra si chiama come una lamina: il
+foil e' una tinta piatta qualsiasi, `PANTONE 113 C`, e il nome sta solo nella
+voce della legenda, accanto al suo campione. E l'astuccio non aveva la
+lamina per niente: la faceva solo il prisma.
+
+Le regole:
+
+- se nessuna lastra si chiama come una lamina, `lamina.lastre` legge la
+  legenda come le aree riservate (`techink.aree_riservate` con `cerca`): la
+  voce che dice foil, Folie, lamina, hot stamping, stampa a caldo, e la
+  lastra piena del campione DAVANTI alla voce (solo quello, non quello che
+  c'e' sotto la scritta). La resa costa solo se nel testo della pagina c'e'
+  una di quelle parole;
+- un campione puo' essere una cornice bianca col colore dentro (36 punti di
+  quadro, 21 di colore): conta il pieno che ci sta dentro, se copre almeno
+  un quarto della cornice;
+- a pari stacco dalla voce vince il campione che copre di piu' la sua riga:
+  una voce su due righe toccava anche il campione della voce sopra (TEXT
+  Area, `PANTONE 1595 C`);
+- l'astuccio ha la sua mappa metallo/ruvidita' sullo steso
+  (`exporters._write_glb_steso`, terzo elemento di `steso`), girata come la
+  texture, col cartoncino a ruvidita' 0,85 attorno.
+
+Su quell'astuccio il foil e' l'1,5% dello steso: le scritte oro di fronte,
+fianchi, cielo e fondo. Le due correzioni della legenda trovano anche, da
+sole, le quattro aree riservate del file (`COVERED`, `TEXT`, `Bar Code`,
+`Best Before`), che prima andavano dichiarate a mano.
+
+### La linguetta di chiusura si incide
+
+Lo stesso caso: il fondo e' la falda di chiusura, e il suo bordo libero ha
+due tacche e fra loro la linguetta che si infila nella fessura dell'altra
+falda. La faccia e' il rettangolo pieno del pannello, e il taglio - 47 mm di
+catena su 34 di bordo, che entra di 6,6 mm - spariva: "manca la linguetta di
+chiusura".
+
+La regola (`incisioni.chiusura`): un tratto della fustella che parte da un
+lato LIBERO della faccia - non una piega con un'altra faccia -, entra almeno
+2 mm (`LINGUETTA_MIN`) e torna sullo stesso lato e' il taglio di una
+chiusura, e sul cartone chiuso si vede: si incide come i tagli
+dell'apertura a strappo (stesso solco, 0,35 x 0,22 mm), e la riga per il
+controllo dice che quelle righe sono la linguetta. I lati obliqui della
+falda vanno da un lato a un altro, e il filo dei fianchi corre a 0,3 mm dal
+bordo: restano come sono.
+
+### Il fondo a sormonto si ritaglia, sopra la falda
+
+Lo stesso caso, respinto di nuovo: "la linguetta non e' incisa ma
+fustellata/tagliata, cosi' come i bordi smussati; il lato della linguetta
+deve andare sopra l'altro lato e non intersecarsi". La colonna e' falda -
+RETRO - CIELO - FRONTE - FONDO: il fondo (41,0 mm) chiude sul retro
+sormontando dall'esterno la falda del retro (41,2 mm, con la fessura a 9 mm
+dalla piega), e il suo bordo libero ha gli angoli smussati e due tacche a
+mezzaluna che entrano 7,1 mm. Il modello aveva il fondo pieno col solco e
+nessuna falda.
+
+La regola (`pack3d/sormonto.py`): astuccio chiuso col fondo dopo il fronte e
+il retro prima, una falda sopra il retro lunga almeno meta' del fondo, e il
+contorno di taglio del fondo - la catena della fustella attorno al pannello,
+dalla piega col fronte alla piega - che entra dal bordo libero almeno 2 mm
+(`SAGOMA_MIN`) lontano dai fianchi. Allora il fondo si ritaglia su quel
+contorno (smussi e tacche sono vuoti, con la costa del cartoncino) e non si
+incide; la falda va sotto di lui, a uno spessore, al posto della sua faccia
+interna, stampata col riquadro alto quanto il fondo sopra il retro, nello
+stesso verso: dalle tacche e dagli smussi si vede lei. Nel parco lo fa solo
+questo astuccio; gli altri restano identici (la regola non scatta).
+
+Il contorno si legge **sulla curva**: le mezzelune e gli smussi sono tratti
+di Bezier, e la lettura dei tracciati ne teneva i tre punti - due di
+controllo e l'arrivo - come vertici. I punti di controllo non stanno sulla
+curva, e il ritaglio usciva a zig-zag: una tacca di 7 mm erano 5 punti.
+`tracciati._cammina(curve=True)` campiona la cubica ogni 0,85 pt (0,3 mm);
+la tacca diventa un arco di una ventina di punti, lo smusso di 18. La
+lettura di sempre, per pieghe e bordi dritti, resta senza `curve`.
+
 ## Flowpack
 
 **Invariante strutturale.** Ogni flowpack e' composto **esclusivamente da due

@@ -37,14 +37,16 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
-                    folding, exporters, materiali, nero, plancia, pouch,
-                    rilievo, strati, vassoio, verifica, versione)
+                    prisma, folding, exporters, gelato, materiali, nero, plancia,
+                    pouch, lamina, rilievo, strati, tubo, vassoio, verifica,
+                    versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
 # piu' di un costruttore
 from pack3d import atlante
 from pack3d import steso as lo_steso
+from pack3d import sormonto as lo_sormonto
 from pack3d import template as il_template
 from pack3d import flowpack as fpk
 from pack3d.dieline import Panel, PT2MM
@@ -342,16 +344,34 @@ def avviso_pagine(pdf):
 # saperlo, una riga che segue la fustella sembra disegno tecnico rimasto. Non
 # cambia cosa e' un difetto: gli dice cosa sono quelle righe.
 INCISA = "apertura a strappo incisa nel modello"
+# Lo stesso per la linguetta di chiusura sul bordo libero di una faccia
+# (`incisioni.chiusura`).
+CHIUSURA = "linguetta di chiusura incisa nel modello"
 
 
 def nota_incisioni(meta):
     """La riga "da sapere" per il controllo, se il modello ha i solchi."""
-    if not any(str(m).startswith(INCISA) for m in meta or ()):
+    righe = [str(m) for m in meta or ()]
+    quali = [q for q, c in (("dell'apertura a strappo", INCISA),
+                            ("della linguetta di chiusura", CHIUSURA))
+             if any(c in r for r in righe)]
+    if not quali:
         return None
-    return ("le righe sottili color cartone sulle facce sono i tagli "
-            "dell'apertura a strappo, incisi nel cartone come solchi, come si "
-            "vedono sulla scatola vera chiusa: non sono disegno tecnico "
-            "rimasto stampato, e la grafica sotto e' intera.")
+    return ("le righe sottili color cartone sulle facce sono i tagli %s, "
+            "incisi nel cartone come solchi, come si vedono sulla scatola "
+            "vera chiusa: non sono disegno tecnico rimasto stampato, e la "
+            "grafica sotto e' intera." % " e ".join(quali))
+
+
+def nota_gelato(meta):
+    """La riga "da sapere" per il controllo, se il tubo ha il gelato."""
+    riga = next((str(m) for m in meta or () if str(m).startswith(GELATO)), None)
+    if riga is None:
+        return None
+    return ("il tubo e' mostrato col ghiacciolo che esce dalla bocca, come l'ha "
+            "chiesto chi l'ha caricato (%s). Il ghiaccio colorato in cima non e' "
+            "nel PDF e non e' un difetto: la grafica va confrontata sul tubo, "
+            "sotto l'orlo." % riga)
 
 
 def nota_materiali(meta):
@@ -377,7 +397,7 @@ FRONTE_CURVO = ("fronte curvo: le alette di cielo e fondo sono piu' lunghe "
                 "fondo sono a D")
 
 
-def incidi_apertura(pdf, d, faces, girate, spessore):
+def incidi_apertura(pdf, d, faces, girate, spessore, sagomate=()):
     """I tagli dell'apertura a strappo incisi nelle facce. La riga per chi
     guarda il modello, o None se l'astuccio non ha un'apertura.
 
@@ -388,18 +408,34 @@ def incidi_apertura(pdf, d, faces, girate, spessore):
     try:
         nomi = [f["name"] for f in faces if f["name"] in d.panels]
         tg = incisioni.tagli(pdf, d.panels, nomi)
-        if not tg:
+        # la linguetta di chiusura sul bordo libero di una faccia
+        ch = incisioni.chiusura(pdf, d.panels, nomi)
+        # ... se la faccia non e' ritagliata sul suo contorno (`pack3d.sormonto`):
+        # li' la linguetta e' tagliata, non incisa
+        ch = {k: v for k, v in ch.items() if k not in sagomate}
+        if not tg and not ch:
             return None
-        n = incisioni.incidi(faces, tg, d.panels, girate, spessore)
+        tutti = {n: tg.get(n, []) + ch.get(n, []) for n in set(tg) | set(ch)}
+        n = incisioni.incidi(faces, tutti, d.panels, girate, spessore)
     except Exception as e:                        # noqa: BLE001
         traceback.print_exc()
         for f in faces:
             f.pop("maglia", None)
-        return ("apertura a strappo riconosciuta ma non incisa (%s): "
+        return ("tagli della fustella riconosciuti ma non incisi (%s): "
                 "l'astuccio esce chiuso e liscio" % type(e).__name__)
-    return ("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - la "
-            "grafica resta intera, il taglio dal rovescio non si vede da fuori"
-            % (INCISA, n, ", ".join(sorted(tg)), incisioni.LARGHEZZA))
+    righe = []
+    if tg:
+        righe.append("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - "
+                     "la grafica resta intera, il taglio dal rovescio non si "
+                     "vede da fuori" % (INCISA, sum(map(len, tg.values())),
+                                        ", ".join(sorted(tg)),
+                                        incisioni.LARGHEZZA))
+    if ch:
+        righe.append("%s: %d tagli su %s, solchi di %.2f mm come sul cartone - "
+                     "la grafica resta intera" % (
+                         CHIUSURA, sum(map(len, ch.values())),
+                         ", ".join(sorted(ch)), incisioni.LARGHEZZA))
+    return "; ".join(righe)
 
 
 # L'astuccio con l'apertura a strappo APERTA: vedi `pack3d.apertura`. I nomi
@@ -575,6 +611,27 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels, d.curva_mm)
+    # il fondo col bordo sagomato che chiude sopra la falda del retro: la
+    # falda sotto di lui, il fondo ritagliato piu' avanti, sulle facce finite
+    # (`pack3d.sormonto`). Non sul fronte curvo, come i tagli.
+    sormonto, pannelli = None, dict(d.panels)
+    if not d.curva_mm:
+        try:
+            sormonto = lo_sormonto.trova(pdf, d)
+            if sormonto:
+                tela0, box0 = esito["steso"]
+                pf = lo_sormonto.falda(faces, sormonto,
+                                       folding.SPESSORE_CRT if carta is None else carta,
+                                       tela0, box0, esito["scala"],
+                                       esito.get("girate"))
+                if pf is None:
+                    sormonto = None
+                else:
+                    pannelli["falda"] = pf
+        except Exception:                         # noqa: BLE001
+            traceback.print_exc()
+            sormonto = None
+            faces = [f for f in faces if f["name"] not in ("falda", "falda interno")]
     # il fronte curvo, se la fustella lo dice: vedi `dieline._fronte_curvo`
     if d.curva_mm:
         folding.curva_fronte(faces, d.dims_mm, d.curva_mm,
@@ -599,7 +656,20 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                                          spessore, apertura)
                            if apertura and not d.curva_mm else (False, None))
     incisa = (None if aperta or d.curva_mm or not incisioni else
-              incidi_apertura(pdf, d, faces, esito.get("girate"), spessore))
+              incidi_apertura(pdf, d, faces, esito.get("girate"), spessore,
+                              sagomate=("bottom",) if sormonto else ()))
+    riga_sormonto = None
+    if sormonto:
+        try:
+            if lo_sormonto.ritaglia(faces, sormonto, d.panels,
+                                    esito.get("girate"), spessore):
+                riga_sormonto = (
+                    "chiusura a sormonto: il fondo e' ritagliato sul contorno "
+                    "della fustella (linguetta e smussi del bordo libero, che "
+                    "entra %.1f mm) e chiude sopra la falda del retro, che si "
+                    "vede dalle tacche" % sormonto["entra_mm"])
+        except Exception:                         # noqa: BLE001
+            traceback.print_exc()
     # la pellicola sulla finestra del retro, se chi carica l'ha voluta: sulle
     # facce finite, girate e curvate come escono
     film, riga_film = None, None
@@ -616,17 +686,29 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # lastra, e' una mappa delle normali sullo steso.
     tela, box = esito["steso"]
     scala = esito["scala"]
-    op = lo_steso.facce_sullo_steso(faces, d.panels, esito.get("girate"), scala,
+    girate_steso = dict(esito.get("girate") or {})
+    if "falda" in pannelli and "bottom" in girate_steso:
+        girate_steso["falda"] = girate_steso["bottom"]
+    op = lo_steso.facce_sullo_steso(faces, pannelli, girate_steso, scala,
                                  box, gradi)
     normale, riga_rilievo = rilievo_sicuro(
         rilievo.mappa_dello_steso, pdf, tuple(c / scala for c in box),
         tela.size, scala / PT2MM, op, coppia=True)
+    # la lamina, se il DT ne ha la lastra - o la legenda la dice su una
+    # tinta piatta: metallo dove c'e', cartoncino attorno (`pack3d.lamina`)
+    righe_lamina = []
+    mr = lamina_della_tela(pdf, tuple(c / scala for c in box), tela.size,
+                           tela.size, scala / PT2MM, "astuccio", righe_lamina,
+                           carta=RUVIDITA_CARTA, legenda=sorgente)
+    if mr is not None:
+        mr = lo_steso.gira(mr, op)
     tela = lo_steso.gira(tela, op)
     storte = lo_steso.riscontro(faces, tela)
     exporters.write_glb(faces, out_glb, tex_max=tmax, pellicola=film,
-                        steso=(tela, normale))
+                        steso=(tela, normale, mr))
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    meta += righe_lamina
     if storte:
         meta.append("STESO: la grafica di %s non torna con lo steso (%s): la "
                     "texture non e' quella delle facce" % (
@@ -642,6 +724,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
         meta.append(riga_aperta)
     if incisa:
         meta.append(incisa)
+    if riga_sormonto:
+        meta.append(riga_sormonto)
     if carta is not None:
         meta.append("cartoncino: %.2f mm - dichiarato" % carta)
     if marchio:
@@ -663,6 +747,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
 # modello diventano colori pieni (`steso.senza_strisce`)
 TINTE_VASSOIO = {vassoio.INTERNO: "interno", vassoio.TAGLIO: "taglio"}
 TINTE_BALLOTIN = {ballotin.INTERNO: "interno", ballotin.TAGLIO: "taglio"}
+# il tubo ha in piu' il rovescio in piena luce: la bocca rimboccata, fuori
+TINTE_TUBO = {**TINTE_BALLOTIN, folding.INTERNO: "rovescio"}
 
 
 def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
@@ -889,6 +975,22 @@ def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
     return trovati
 
 
+def _pezzi_prisma(pdfs, dichiarato):
+    """`(fondo, coperchio)` della scatola a prisma, o None: si prova quando i
+    pezzi tondi hanno rifiutato i PDF, e solo sul cartotecnico dichiarato in
+    pezzi. Ogni PDF dice da se' che pezzo e' (`prisma.pezzi`): l'ordine in
+    cui arrivano non conta."""
+    if dichiarato != "carton":
+        return None
+    letti = []
+    for pdf in pdfs:
+        p = prisma.riconosci(artwork.pagina_unica(pdf)[0])
+        if p is None:
+            return None
+        letti.append(p)
+    return prisma.pezzi(letti)
+
+
 def _cono(pezzi):
     return "cono" in pezzi or "lid" in pezzi
 
@@ -903,7 +1005,17 @@ def analisi_coppa(pdfs, dichiarato="coppa"):
     """L'analisi della coppa o del cono: le misure, senza texture. Vedi
     `pack3d.coppa`."""
     from pack3d import coppa as cp
-    pezzi = _pezzi_tondi(pdfs, dichiarato)
+    try:
+        pezzi = _pezzi_tondi(pdfs, dichiarato)
+    except ValueError:
+        pr = _pezzi_prisma(pdfs, dichiarato)
+        if pr is None:
+            raise
+        meta = prisma.dichiara(*pr)
+        meta.insert(0, _in_pezzi(dichiarato, pdfs, "il fondo e il coperchio "
+                                 "di una scatola a prisma" if pr[1] is not None
+                                 else "il fondo di una scatola a prisma"))
+        return dict(kind="coppa", title="Scatola a prisma", meta=meta)
     if _cono(pezzi):
         return _analisi_cono(pezzi, pdfs, dichiarato)
     sleeve, tappo = pezzi.get("coppa"), pezzi.get("tappo")
@@ -1088,7 +1200,14 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
     from pack3d import coppa as cp
     dpi, tmax = risoluzione(quality)
     giri = {}
-    pezzi = _pezzi_tondi(pdfs, dichiarato, giri)
+    try:
+        pezzi = _pezzi_tondi(pdfs, dichiarato, giri)
+    except ValueError:
+        pr = _pezzi_prisma(pdfs, dichiarato)
+        if pr is None:
+            raise
+        return build_prisma(pdfs, pr, out_glb, quality, lastre_extra,
+                            dichiarato, carta)
     if _cono(pezzi):
         cono, lid = pezzi.get("cono"), pezzi.get("lid")
         V, UV, T, A, parti, meta, bianchi = cp.costruisci_cono(
@@ -1555,6 +1674,104 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
     return ballotin.dichiara(b) + avvisi
 
 
+def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
+                 dichiarato="carton", carta=None):
+    """La scatola a prisma, il fondo poligonale con le pareti e il coperchio
+    a calzare: vedi `pack3d.prisma`.
+
+    Come la scatola a punta, pezzo per pezzo: la texture e' il DT intero,
+    pulito, e ogni faccia prende la grafica dal suo posto sul foglio, con
+    sotto le strisce del rovescio. Due nodi nel GLB, il fondo e il
+    coperchio, e i due stesi in un'immagine sola (`pack3d.atlante`)."""
+    dpi, tmax = risoluzione(quality)
+    fondo, coperchio = pezzi
+    M_fondo, M_cop = prisma.assetti(fondo, coperchio)
+    sp = folding.SPESSORE_CRT if carta is None else carta
+    per_pdf = {}
+    for pdf in pdfs:
+        pagina, n_pagine = artwork.pagina_unica(pdf)
+        p = prisma.riconosci(pagina)
+        for q in (fondo, coperchio):
+            if q is not None and p is not None and np.allclose(p.piano, q.piano) \
+                    and q.regione == p.regione and id(q) not in per_pdf:
+                per_pdf[id(q)] = (pagina, n_pagine)
+                break
+    avvisi, V, UV, T, A, parti, quali = [], [], [], [], [], [], []
+    colori, MR = [], []
+    for nome, pr, M, quota, cop in (
+            ("fondo", fondo, M_fondo, 0.0, False),
+            ("coperchio", coperchio, M_cop, fondo.altezza + sp, True)):
+        if pr is None:
+            continue
+        pdf, n_pagine = per_pdf[id(pr)]
+        conti = {}
+        clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                                regione=pr.regione, conti=conti)
+        deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+        pagine = avviso_pagine(n_pagine)
+        if pagine:
+            avvisi.append(pagine)
+        fuori = artwork.avviso_fuori_dt(conti)
+        if fuori:
+            avvisi.append(fuori)
+        avvisi.extend(artwork.avvisi_gda(conti))
+        rgb = avviso_quadricromia(clean, regione=pr.regione)
+        if rgb:
+            avvisi.append(rgb)
+        if lastre:
+            avvisi.append("%s: lastre tecniche e coperture tolte per nome: %s"
+                          % (nome, ", ".join(lastre)))
+        m = 1.0 / PT2MM
+        x0, y0, x1, y1 = pr.regione
+        x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+        lato_pt = max(x1 - x0, y1 - y0)
+        dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+        tex = folding.rasterize_panels(
+            clean, {"dt": Panel(x0, y0, x1, y1, "dt")}, dpi=dpi_tex, inset_px=0,
+            clean=True, note=avvisi, nero_deciso=deciso_nero)["dt"]
+        scala = dpi_tex / 72.0
+        origine = (round(x0 * scala) / scala * PT2MM,
+                   round(y0 * scala) / scala * PT2MM)
+        tela = ballotin.con_interno(tex)
+        v, uv, t = prisma.maglia(pr, M, origine, scala / PT2MM, tela.size,
+                                 coperchio=cop, quota=quota, spessore=carta)
+        # la lamina, se il DT ne ha la lastra: metallo sulla texture, carta
+        # attorno, e sotto le strisce niente metallo (`pack3d.lamina`)
+        mr = lamina_della_tela(pdf, (x0, y0, x1, y1), tex.size, tela.size,
+                               scala / PT2MM, nome, avvisi)
+        tela, uv, tinte, mr = lo_steso.senza_strisce(tex.height, tela, uv, t,
+                                                     TINTE_BALLOTIN, mr)
+        MR.append(mr)
+        # le tinte dei due pezzi in una lista sola
+        mappa = []
+        for nome_t, c in tinte.colori:
+            if (nome_t, c) not in colori:
+                colori.append((nome_t, c))
+            mappa.append(colori.index((nome_t, c)))
+        quali.append(np.array([mappa[q] if q >= 0 else -1
+                               for q in tinte.quale], np.int32))
+        primo = len(T)
+        T.extend((np.asarray(t) + len(V)).tolist())
+        V.extend(np.asarray(v).tolist())
+        UV.extend(np.asarray(uv).tolist())
+        A.append(tela)
+        parti.append((nome, primo, len(T)))
+    V = np.asarray(V, np.float32)
+    UV = np.asarray(UV, np.float32)
+    T = np.asarray(T, np.int64)
+    tinte = lo_steso.Tinte(np.concatenate(quali), colori)
+    exporters.write_glb_mesh(V, UV, T, A, out_glb, tex_max=tmax, parti=parti,
+                             tinte=tinte,
+                             mr=MR if any(m is not None for m in MR) else None)
+    atlante.unisci_file(out_glb)
+    titolo = _in_pezzi(dichiarato, pdfs, "scatola a prisma col coperchio"
+                       if coperchio is not None else
+                       "scatola a prisma senza coperchio")
+    return ([titolo] + prisma.dichiara(fondo, coperchio) + avvisi
+            + ["%d vertici, %d triangoli; il fondo e il coperchio sono due "
+               "nodi del GLB" % (len(V), len(T))])
+
+
 def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
                 colata_riquadro=None, carta=None):
     """La scatola a punta: fronte e retro chiusi in cima, fianchi a soffietto,
@@ -1606,6 +1823,68 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
                                              TINTE_BALLOTIN)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax, tinte=tinte)
     return punta.dichiara(p) + avvisi
+
+
+# l'inizio della riga che dice il gelato (`gelato.aggiungi`), anche al controllo
+GELATO = "con il gelato ("
+
+
+def build_tubo(pdf, out_glb, quality="hd", lastre_extra=(),
+               colata_riquadro=None, carta=None, gelato_gusto=None):
+    """Il tubo a cono: lo steso a settore di corona arrotolato, aperto in
+    cima, col fondo saldato piatto. Vedi `pack3d.tubo`. Con `gelato_gusto`,
+    il ghiacciolo che esce dalla bocca (`pack3d.gelato`).
+
+    Come la scatola a punta: la texture e' il DT intero, pulito, e ogni punto
+    della maglia prende la grafica dal suo posto sul foglio; sotto, le
+    strisce del rovescio."""
+    dpi, tmax = risoluzione(quality)
+    pdf, n_pagine = artwork.pagina_unica(pdf)
+    p = tubo.riconosci(pdf)
+    if p is None:
+        raise ValueError("tubo a cono: la fustella non si legge come un "
+                         "settore di corona (due archi e due lati verso il "
+                         "loro centro)")
+    conti = {}
+    clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                            regione=p.regione, conti=conti)
+    deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+    avvisi = []
+    pagine = avviso_pagine(n_pagine)
+    if pagine:
+        avvisi.append(pagine)
+    fuori = artwork.avviso_fuori_dt(conti)
+    if fuori:
+        avvisi.append(fuori)
+    avvisi.extend(artwork.avvisi_gda(conti))
+    rgb = avviso_quadricromia(clean, regione=p.regione)
+    if rgb:
+        avvisi.append(rgb)
+    if lastre:
+        avvisi.append("lastre tecniche e coperture tolte per nome: %s"
+                      % ", ".join(lastre))
+    m = 1.0 / PT2MM
+    x0, y0, x1, y1 = p.regione
+    x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+    lato_pt = max(x1 - x0, y1 - y0)
+    dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+    tex = folding.rasterize_panels(
+        clean, {"dt": Panel(x0, y0, x1, y1, "dt")}, dpi=dpi_tex, inset_px=0,
+        clean=True, note=avvisi, nero_deciso=deciso_nero,
+        colata_riquadro=colata_riquadro)["dt"]
+    scala = dpi_tex / 72.0
+    origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
+    tela = tubo.tela(tex)
+    V, UV, T = tubo.maglia(p, origine, scala / PT2MM, tela.size,
+                           spessore=carta)
+    tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
+                                             TINTE_TUBO)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax, tinte=tinte)
+    righe = tubo.dichiara(p)
+    if gelato_gusto:
+        sp = folding.SPESSORE_CRT if carta is None else carta
+        righe.append(gelato.aggiungi(out_glb, p, sp, gelato_gusto))
+    return righe + avvisi
 
 
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
@@ -2215,7 +2494,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
                 "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "incisioni", "cu")
+                "quanti", "incisioni", "cu", "gelato")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2257,6 +2536,40 @@ def rilievo_sicuro(fa, *args, coppia=False, **kw):
         riga = ("rilievo: la lastra c'e' ma la mappa non si e' fatta (%s), il "
                 "modello esce senza" % e)
         return (None, riga) if coppia else riga
+
+
+# la ruvidita' della carta di un GLB a una maglia (`exporters.write_glb_mesh`):
+# fuori dalla lamina la mappa la tiene com'era
+RUVIDITA_MAGLIA = 0.42
+# e quella del cartoncino dell'astuccio (`exporters._write_glb_steso`)
+RUVIDITA_CARTA = 0.85
+
+
+def lamina_della_tela(pdf, riquadro, misura_tex, misura_tela, px_mm, nome,
+                      avvisi, carta=RUVIDITA_MAGLIA, legenda=None):
+    """La mappa metallo/ruvidita' della lamina sulla `tela` (la texture del
+    `riquadro`, `misura_tex` pixel, con sotto le strisce fino a
+    `misura_tela`), o None. Come il rilievo, la lamina non deve mai fermare
+    una costruzione: se leggerla si rompe il modello esce senza, e la riga
+    lo dice."""
+    from PIL import Image
+    try:
+        mr, riga = lamina.mappa(pdf, riquadro, misura_tex, px_mm, carta,
+                                legenda=legenda)
+    except Exception as e:                          # noqa: BLE001
+        traceback.print_exc()
+        mr, riga = None, ("lamina: la lastra c'e' ma la mappa non si e' "
+                          "fatta (%s), il modello esce senza metallo" % e)
+    if riga:
+        avvisi.append("%s: %s" % (nome, riga))
+    if mr is None:
+        return None
+    k = mr.width / float(misura_tex[0])
+    fondo = (255, round(carta * 255), 0)
+    tutta = Image.new("RGB", (max(1, round(misura_tela[0] * k)),
+                              max(1, round(misura_tela[1] * k))), fondo)
+    tutta.paste(mr, (0, 0))
+    return tutta
 
 
 def pellicola_sicura(fa, *args, **kw):
@@ -2535,6 +2848,21 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                 from pack3d import coppa as cp
                 if cp.riconosci(pdf) is not None:
                     return analisi_coppa([pdf], "carton")
+                # Un tubo a cono, lo sleeve lungo e stretto col fondo saldato
+                # piatto: un settore di corona che la coppa non prende (non ha
+                # fondo ne' vista montata). Vedi `pack3d.tubo`.
+                try:
+                    tb = tubo.riconosci(pdf)
+                except Exception:
+                    traceback.print_exc()
+                    tb = None
+                if tb is not None:
+                    meta = tubo.dichiara(tb)
+                    rgb = avviso_quadricromia(pdf, regione=tb.regione)
+                    if rgb:
+                        meta.insert(0, rgb)
+                    return dict(kind="tubo", title="Tubo a cono", meta=meta,
+                                gusti=list(gelato.GUSTI))
                 # Un disco da solo non dice di essere un lid (`coppa.orienta`):
                 # se c'e', l'errore dell'astuccio resta, ma prima viene il
                 # consiglio, che l'interfaccia mostra solo i primi 200 caratteri
@@ -3096,6 +3424,7 @@ class Handler(BaseHTTPRequestHandler):
                     gradi_aperta = apertura_gradi(opts.get("apertura"))
                     con_pellicola = pellicola_scelta(opts.get("pellicola"))
                     con_incisioni = incisioni_scelte(opts.get("incisioni"))
+                    con_gelato = gelato.gusto(opts.get("gelato"))
                     quanti = quanti_pezzi(opts.get("quanti"))
                     cu = cu_riempimento(opts.get("cu"))
                 except ValueError as e:
@@ -3256,6 +3585,11 @@ class Handler(BaseHTTPRequestHandler):
                             def costruisci(lastre, uscita):
                                 return build_punta(pdf, uscita, q, lastre,
                                                    col_riq, carta=carta)
+                        elif info["kind"] == "tubo":
+                            def costruisci(lastre, uscita):
+                                return build_tubo(pdf, uscita, q, lastre,
+                                                  col_riq, carta=carta,
+                                                  gelato_gusto=con_gelato)
                         elif info["kind"] == "carton":
                             # build_carton i suoi avvisi li restituiva gia', ed
                             # era il chiamante a buttarli e poi a leggere una
@@ -3350,7 +3684,7 @@ class Handler(BaseHTTPRequestHandler):
                                    opzioni={k: opts[k] for k in OPZIONI_CASO
                                             if k in opts})
                         nota = (nota_apertura(meta) or nota_incisioni(meta)
-                                or nota_materiali(meta))
+                                or nota_materiali(meta) or nota_gelato(meta))
                         if nota:
                             ctx["nota"] = nota
                         verdetto = controllo.giudica(quadro, ctx)

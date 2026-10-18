@@ -658,7 +658,7 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None,
             shutil.rmtree(cartella, ignore_errors=True)
 
 
-def _forse_etichette(pdf, page_no=0):
+def _forse_etichette(pdf, page_no=0, parola="area"):
     """Vero se nel testo della pagina compare la parola `area`.
 
     Prefiltro, e costa quasi niente: da 0,01 a 0,15 secondi contro i 2,9 che
@@ -680,12 +680,14 @@ def _forse_etichette(pdf, page_no=0):
             testo = doc[page_no].get_textpage().get_text_range()
         finally:
             doc.close()
-        return "area" in (testo or "").lower()
+        testo = (testo or "").lower()
+        parole = (parola,) if isinstance(parola, str) else parola
+        return any(p in testo for p in parole)
     except Exception:
         return True   # nel dubbio si guarda davvero
 
 
-def _etichette(pdf, page_no=0):
+def _etichette(pdf, page_no=0, cerca=None):
     """[(x, y, dx, dy, corpo, lunghezza, etichetta)] delle aree riservate
     scritte sulla pagina.
 
@@ -705,6 +707,7 @@ def _etichette(pdf, page_no=0):
     """
     import math
     import pypdf
+    cerca = cerca or ETICHETTA_RISERVATA
     trovate = []
     precedente = [None]
 
@@ -724,11 +727,11 @@ def _etichette(pdf, page_no=0):
                                                      tc * b + td * d)
         riga = [x, y, ux / n, uy / n, corpo or 1.0,
                 LARGHEZZA_CARATTERE * (corpo or 1.0) * len(testo)]
-        m = ETICHETTA_RISERVATA.search(testo)
+        m = cerca.search(testo)
         if m is None and testo.upper() == "AREA" and precedente[0]:
             prima, dove = precedente[0]
             if abs(dove[0] - x) <= VICINO and abs(dove[1] - y) <= VICINO:
-                m = ETICHETTA_RISERVATA.search(prima + " " + testo)
+                m = cerca.search(prima + " " + testo)
                 if m:
                     riga = list(dove)
         if m:
@@ -802,7 +805,7 @@ def _campione(x, y, dx, dy, corpo, pieni):
     """
     vx, vy = -dy, dx               # verso l'alto della scritta
     lo, hi = CAMPIONE_CORPI
-    migliore, stacco_min = None, None
+    migliore, stacco_min, sopra_max = None, None, 0.0
     for x0, y0, x1, y1 in pieni:
         w, h = x1 - x0, y1 - y0
         if not (lo * corpo <= w <= hi * corpo and lo * corpo <= h <= hi * corpo):
@@ -815,14 +818,20 @@ def _campione(x, y, dx, dy, corpo, pieni):
         if not (-0.3 * corpo <= stacco <= CAMPIONE_STACCO * corpo):
             continue
         # sulla riga: il pieno copre almeno un terzo del corpo del testo
-        if min(u + mu, 0.8 * corpo) - max(u - mu, -0.2 * corpo) < 0.3 * corpo:
+        sopra = min(u + mu, 0.8 * corpo) - max(u - mu, -0.2 * corpo)
+        if sopra < 0.3 * corpo:
             continue
-        if stacco_min is None or stacco < stacco_min:
-            migliore, stacco_min = (x0, y0, x1, y1), stacco
+        # a pari stacco vince quello che copre di piu' la riga: su un
+        # astuccio da 16 i campioni sono in colonna, alti tre righe, e una voce
+        # su due righe tocca anche il campione della voce sopra
+        if (stacco_min is None or stacco < stacco_min - 0.1 * corpo
+                or (stacco <= stacco_min + 0.1 * corpo and sopra > sopra_max)):
+            migliore, stacco_min, sopra_max = (x0, y0, x1, y1), stacco, sopra
     return migliore
 
 
-def aree_riservate(pdf, page_no=0, dpi=36):
+def aree_riservate(pdf, page_no=0, dpi=36, cerca=None, parola="area",
+                   solo_campione=False):
     """`{nome della lastra: etichetta}` delle aree riservate del file.
 
     Si legge quello che il file scrive - `COVERED AREA`, `TEXT AREA`, `BEST
@@ -840,13 +849,18 @@ def aree_riservate(pdf, page_no=0, dpi=36):
     sotto l'etichetta ne' nel suo campione c'e' una lastra piena: in tutti
     quei casi non si e' imparato niente e non si tocca niente. Non costa
     nulla sui file senza etichette, che e' la maggioranza.
+
+    Con `cerca` (un'espressione) e `parola` (il prefiltro, minuscolo) si
+    leggono altre voci della legenda allo stesso modo - la lamina, in
+    `lamina.lastre`; con `solo_campione` conta solo il campione davanti alla
+    voce, non quello che c'e' sotto la scritta.
     """
     import shutil
 
-    if not shutil.which("gs") or not _forse_etichette(pdf, page_no):
+    if not shutil.which("gs") or not _forse_etichette(pdf, page_no, parola):
         return {}
     try:
-        etichette = _etichette(pdf, page_no)
+        etichette = _etichette(pdf, page_no, cerca)
     except Exception:
         return {}
     if not etichette:
@@ -894,13 +908,25 @@ def aree_riservate(pdf, page_no=0, dpi=36):
                 continue
             cx = x + dx * lung / 2.0 - dy * 0.35 * corpo
             cy = y + dy * lung / 2.0 + dx * 0.35 * corpo
-            nome = piena(cx - raggio, cy - raggio, cx + raggio, cy + raggio)
+            nome = (None if solo_campione else
+                    piena(cx - raggio, cy - raggio, cx + raggio, cy + raggio))
             if nome is None:
                 c = _campione(x, y, dx, dy, corpo, pieni)
                 if c is not None:
                     # un filo di margine: il bordo del campione e' mezzo pixel
-                    m = min(1.0, (c[2] - c[0]) / 4.0, (c[3] - c[1]) / 4.0)
-                    nome = piena(c[0] + m, c[1] + m, c[2] - m, c[3] - m)
+                    # e se il campione e' una cornice col colore dentro -
+                    # un astuccio da 16: quadro bianco da 36 punti, colore da
+                    # 21 - conta il pieno che ci sta dentro
+                    dentro = [c] + [q for q in pieni if q != c
+                                    and q[0] >= c[0] and q[1] >= c[1]
+                                    and q[2] <= c[2] and q[3] <= c[3]
+                                    and (q[2] - q[0]) * (q[3] - q[1])
+                                    >= 0.25 * (c[2] - c[0]) * (c[3] - c[1])]
+                    for q in dentro:
+                        m = min(1.0, (q[2] - q[0]) / 4.0, (q[3] - q[1]) / 4.0)
+                        nome = piena(q[0] + m, q[1] + m, q[2] - m, q[3] - m)
+                        if nome is not None:
+                            break
             if nome is not None:
                 fuori.setdefault(nome, etichetta)
         return fuori
