@@ -4173,11 +4173,12 @@ giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
   caso: «il risvolto a sezione tubolare, stile Nutella pot»). La parete
   finisce alla stampa massima in cima; la carta sale, gira in fuori e torna
   alla parete, e il tubetto e' centrato li', mezzo sopra e mezzo sotto. Il
-  **diametro** e' la fascia che il DT lascia in cima fuori dalla stampa
-  massima: l'arco di un altro stile concentrico alla bocca, entro 10 mm sotto
-  il taglio (`_risvolto`: 2,5 mm sul caso, l'arco rosso a 387,6 mm contro il
-  taglio a 390,1); da fuori l'orlo e' alto quanto la fascia. Se il DT non lo
-  disegna, 3 mm (`RISVOLTO`, valore d'uso). Arrotolato in fuori, da fuori si
+  **diametro** e' 0,7 volte (`ORLO`) la fascia che il DT lascia in cima fuori
+  dalla stampa massima: l'arco di un altro stile concentrico alla bocca,
+  entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco rosso a
+  387,6 mm contro il taglio a 390,1), quindi 1,77 mm. Alto quanto la fascia
+  era troppo grosso: «un po' piu' piccolo». Se il DT non disegna la fascia,
+  3 mm (`RISVOLTO`, valore d'uso). Arrotolato in fuori, da fuori si
   vede il rovescio: **bianco carta** in piena luce (`folding.INTERNO`, la
   tinta "rovescio"), non il rovescio in ombra dell'interno
   (`ballotin.INTERNO`, scurito per le scatole chiuse), che lo faceva grigio.
@@ -4206,7 +4207,8 @@ piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
 29 mm contro 18) che spuntava con un gradino da 3 mm di raccordo, e di lato
 il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
 saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
-l'orlo bianco, poi a tubetto. Alto 179,7 mm alla cima dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
+l'orlo bianco, poi a tubetto, poi piu' sottile. Alto 179,3 mm alla cima
+dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
 (alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
 restano quelle del DT al vero.
 

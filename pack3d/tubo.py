@@ -14,9 +14,9 @@ retro. Montato:
   tutto attorno, come l'orlo di un vasetto. La carta sale, gira in fuori e
   torna alla parete, e da fuori si vede il rovescio, bianco carta in piena
   luce (non il rovescio in ombra dell'interno). Il diametro del tubetto e'
-  la fascia che il DT lascia in cima fuori dalla stampa massima (`RISVOLTO`
-  se non la disegna): da fuori l'orlo e' alto quanto lei. La parete finisce
-  alla stampa massima, e il tubetto e' centrato li';
+  `ORLO` volte la fascia che il DT lascia in cima fuori dalla stampa massima
+  (`RISVOLTO` se non la disegna). La parete finisce alla stampa massima, e
+  il tubetto e' centrato li';
 - sul fondo la fascia che il DT lascia fuori dalla stampa massima, a
   tratteggio: la saldatura comincia dove finisce la grafica, e ne resta a
   vista solo un terzo, sotto la stampa massima - corta, piatta, le due pareti
@@ -75,6 +75,11 @@ SPIGOLO = 0.15
 # massima in cima
 RISVOLTO = 3.0
 RISVOLTO_MAX = 10.0     # mm: un arco piu' in basso non e' quello della bocca
+# il diametro del tubetto dell'orlo, in parte della fascia del DT fuori
+# dalla stampa massima in cima: un poco piu' sottile della fascia (chiesto da
+# chi ha caricato il caso 84c854d6a5, che a 1,0 lo voleva "un po' piu'
+# piccolo")
+ORLO = 0.7
 # i passi attorno alla sezione del tubetto dell'orlo
 PASSI_ORLO = 24
 PASSI_GIRO = 72
@@ -118,7 +123,12 @@ class Tubo:
         """L'altezza del tubo montato, dal fondo saldato alla cima dell'orlo
         (mezzo tubetto sopra la parete)."""
         return ((self.R_cima - self.R_base) * math.sqrt(max(0.0, 1.0 - self.k ** 2))
-                + self.risvolto / 2.0)
+                + self.orlo / 2.0)
+
+    @property
+    def orlo(self):
+        """Il diametro del tubetto dell'orlo, mm."""
+        return ORLO * self.risvolto
 
     def giro(self, rho):
         """La circonferenza del tubo all'altezza dell'arco di raggio rho."""
@@ -418,8 +428,9 @@ def dichiara(p):
                 PIZZICO * p.giro(p.R_base) / math.pi,
                 p.saldatura * (1.0 - SALDATA)),
              "aperto in cima, l'orlo arrotolato in fuori a sezione tonda, "
-             "bianco: un tubetto da %.1f mm di diametro%s"
-             % (p.risvolto, " (la fascia fuori dalla stampa massima in cima)"
+             "bianco: un tubetto da %.2f mm di diametro%s"
+             % (p.orlo, " (%d%% della fascia fuori dalla stampa massima in "
+                "cima, %.1f mm)" % (round(100 * ORLO), p.risvolto)
                 if p.risvolto_letto else " (valore d'uso)")]
     return righe
 
@@ -462,7 +473,6 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     pizzico = PIZZICO * p.giro(base) / math.pi
     smusso = min(SMUSSO * p.giro(base) / math.pi, SMUSSO_MAX * sal)
     R_cima = p.R_cima
-    risvolto = p.risvolto
 
     def uv(sx, sy):
         return ((sx - ox) * px_mm / Wt, (sy - oy) * px_mm / Ht)
@@ -569,7 +579,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     # bianco a vista. La sezione parte dalla cima della parete (phi = pi,
     # tangente in su), sale, gira in fuori e scende, e torna li': il centro
     # e' mezzo diametro fuori dalla parete, all'altezza della cima
-    rr = risvolto / 2.0
+    rr = p.orlo / 2.0
     b = len(V)
     C = p.giro(R_cima)
     fs = np.linspace(0.0, 1.0, PASSI_GIRO + 1)
