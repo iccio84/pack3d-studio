@@ -4168,21 +4168,24 @@ giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
   angoli tagliati a 45 gradi: ai fianchi il fondo sale di un triangolo di
   lato 0,2 volte la larghezza (3,7 mm sul caso; al massimo 0,8 volte
   l'altezza della saldatura).
-- La **bocca** e' rimboccata in fuori: la cima del foglio si piega sul tubo
-  e da fuori si vede, sotto il bordo, una fascia bianca, il rovescio; il
-  tubo e' piu' basso di tanto. La fascia e' quella che il DT lascia in cima
-  fuori dalla stampa massima: l'arco di un altro stile concentrico alla
-  bocca, entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco
-  rosso a 387,6 mm contro il taglio a 390,1). Se il DT non lo disegna, 3 mm
-  (`RISVOLTO`, valore d'uso). La piega e' tonda e stacca la fascia dal tubo
-  di 0,6 mm (`RIMBOCCO`), che torna a uno spessore sul bordo tagliato: un
-  orlo, come nelle foto, non una fascia a filo. La fascia e la piega sono
-  fuori, in piena luce: **bianco carta** (`folding.INTERNO`, la tinta
-  "rovescio"), non il rovescio in ombra dell'interno (`ballotin.INTERNO`,
-  scurito per le scatole chiuse), che la faceva grigia.
+- La **bocca** ha l'**orlo arrotolato a sezione tonda**: un tubetto tutto
+  attorno, come l'orlo di un vasetto (chiesto cosi' da chi ha caricato il
+  caso: «il risvolto a sezione tubolare, stile Nutella pot»). La parete
+  finisce alla stampa massima in cima; la carta sale, gira in fuori e torna
+  alla parete, e il tubetto e' centrato li', mezzo sopra e mezzo sotto. Il
+  **diametro** e' la fascia che il DT lascia in cima fuori dalla stampa
+  massima: l'arco di un altro stile concentrico alla bocca, entro 10 mm sotto
+  il taglio (`_risvolto`: 2,5 mm sul caso, l'arco rosso a 387,6 mm contro il
+  taglio a 390,1); da fuori l'orlo e' alto quanto la fascia. Se il DT non lo
+  disegna, 3 mm (`RISVOLTO`, valore d'uso). Arrotolato in fuori, da fuori si
+  vede il rovescio: **bianco carta** in piena luce (`folding.INTERNO`, la
+  tinta "rovescio"), non il rovescio in ombra dell'interno
+  (`ballotin.INTERNO`, scurito per le scatole chiuse), che lo faceva grigio.
+  Arrotolare 2,5 mm di carta darebbe un tubetto di 0,8 mm: il diametro e'
+  quello che si vede, non la carta che serve a farlo.
 - Il tubo e' **carta**, come il cono: lo spessore 3 (0,7 mm) fa un bordo e
   un risvolto da scatola. Chi lo carica sceglie lo spessore 1.
-- Il fondo, il bordo del risvolto e la piega in cima hanno la costa; dentro,
+- Il fondo e la cima della parete, dentro l'orlo, hanno la costa; dentro,
   il rovescio.
 
 Il caso 84c854d6a5 e' stato respinto la prima volta proprio qui: la
@@ -4203,14 +4206,14 @@ piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
 29 mm contro 18) che spuntava con un gradino da 3 mm di raccordo, e di lato
 il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
 saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
-l'orlo bianco staccato. Le foto di chi l'ha caricato sono piu' tozze del DT
+l'orlo bianco, poi a tubetto. Alto 179,7 mm alla cima dell'orlo. Le foto di chi l'ha caricato sono piu' tozze del DT
 (alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
 restano quelle del DT al vero.
 
 ### Cosa manca
 
 - Quanto della fascia fuori stampa resta a vista come saldatura (un terzo)
-  e' un valore d'uso: il DT non lo disegna. Il risvolto e' un valore d'uso
+  e' un valore d'uso: il DT non lo disegna. Il diametro dell'orlo e' un valore d'uso
   solo se il DT non disegna la stampa massima in cima.
 - Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
   secondo pezzo come il lid del cono.

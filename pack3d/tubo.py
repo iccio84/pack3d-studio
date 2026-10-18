@@ -10,12 +10,13 @@ retro. Montato:
 
 - in cima il tubo e' tondo, con la circonferenza dell'arco grande meno la
   pattina;
-- la bocca e' rimboccata in fuori: da fuori, sotto il bordo, si vede una
-  fascia bianca, il rovescio del cartoncino, alta quanto la fascia che il DT
-  lascia in cima fuori dalla stampa massima (`RISVOLTO` se non la disegna).
-  La piega e' tonda e stacca la fascia dal tubo (`RIMBOCCO`), che sul bordo
-  tagliato torna a filo; e' fuori, in piena luce: bianco carta, non il
-  rovescio in ombra dell'interno;
+- la bocca ha l'orlo arrotolato in fuori, a sezione tonda: un tubetto
+  tutto attorno, come l'orlo di un vasetto. La carta sale, gira in fuori e
+  torna alla parete, e da fuori si vede il rovescio, bianco carta in piena
+  luce (non il rovescio in ombra dell'interno). Il diametro del tubetto e'
+  la fascia che il DT lascia in cima fuori dalla stampa massima (`RISVOLTO`
+  se non la disegna): da fuori l'orlo e' alto quanto lei. La parete finisce
+  alla stampa massima, e il tubetto e' centrato li';
 - sul fondo la fascia che il DT lascia fuori dalla stampa massima, a
   tratteggio: la saldatura comincia dove finisce la grafica, e ne resta a
   vista solo un terzo, sotto la stampa massima - corta, piatta, le due pareti
@@ -70,13 +71,12 @@ RIGHE_FONDE = 0.08
 # i fianchi della saldatura, dove le due pareti si incontrano: la parte del
 # coseno in cui il davanti passa al dietro (lo spigolo arrotondato)
 SPIGOLO = 0.15
-# la bocca rimboccata in fuori: la fascia bianca che si vede, mm, se il DT
-# non disegna la stampa massima in cima
+# il diametro del tubetto dell'orlo, mm, se il DT non disegna la stampa
+# massima in cima
 RISVOLTO = 3.0
 RISVOLTO_MAX = 10.0     # mm: un arco piu' in basso non e' quello della bocca
-# mm: quanto la piega tonda della bocca stacca la fascia rimboccata dal tubo
-RIMBOCCO = 0.6
-PASSI_PIEGA = 8
+# i passi attorno alla sezione del tubetto dell'orlo
+PASSI_ORLO = 24
 PASSI_GIRO = 72
 PASSI_ALTO = 60
 
@@ -92,7 +92,7 @@ class Tubo:
     pattina: float          # mm
     pattina_a_sinistra: bool
     saldatura: float        # mm lungo il lato, dal fondo
-    risvolto: float = RISVOLTO      # mm, la bocca rimboccata
+    risvolto: float = RISVOLTO      # mm, il diametro dell'orlo
     pattina_letta: bool = False
     saldatura_letta: bool = False
     risvolto_letto: bool = False
@@ -109,13 +109,16 @@ class Tubo:
 
     @property
     def R_cima(self):
-        """Il raggio dell'arco della piega della bocca."""
+        """Il raggio dell'arco dove la parete finisce e comincia l'orlo: la
+        stampa massima in cima."""
         return self.R_bocca - self.risvolto
 
     @property
     def alto(self):
-        """L'altezza del tubo montato, dal fondo saldato alla piega."""
-        return (self.R_cima - self.R_base) * math.sqrt(max(0.0, 1.0 - self.k ** 2))
+        """L'altezza del tubo montato, dal fondo saldato alla cima dell'orlo
+        (mezzo tubetto sopra la parete)."""
+        return ((self.R_cima - self.R_base) * math.sqrt(max(0.0, 1.0 - self.k ** 2))
+                + self.risvolto / 2.0)
 
     def giro(self, rho):
         """La circonferenza del tubo all'altezza dell'arco di raggio rho."""
@@ -307,7 +310,7 @@ def riconosci(pdf, page_no=0):
 def _risvolto(per_stile, stile_dt, c, Rg, giro_bocca):
     """La fascia in cima fuori dalla stampa massima, in mm: l'arco di un
     altro stile concentrico alla bocca e poco sotto. E' quella che si
-    rimbocca in fuori. None se il DT non la disegna."""
+    arrotola nell'orlo. None se il DT non la disegna."""
     migliore = None
     for stile, tratti in per_stile.items():
         if stile == stile_dt:
@@ -414,16 +417,17 @@ def dichiara(p):
                 else " (stimata: il DT non disegna la stampa massima)",
                 PIZZICO * p.giro(p.R_base) / math.pi,
                 p.saldatura * (1.0 - SALDATA)),
-             "aperto in cima, la bocca rimboccata in fuori: fascia bianca "
-             "da %.1f mm%s" % (p.risvolto, " (la stampa massima in cima)"
-                               if p.risvolto_letto else " (valore d'uso)")]
+             "aperto in cima, l'orlo arrotolato in fuori a sezione tonda, "
+             "bianco: un tubetto da %.1f mm di diametro%s"
+             % (p.risvolto, " (la fascia fuori dalla stampa massima in cima)"
+                if p.risvolto_letto else " (valore d'uso)")]
     return righe
 
 
 def tela(tex):
     """La texture del DT con sotto tre strisce: il rovescio in ombra
     (l'interno, `ballotin.INTERNO`), il taglio e il rovescio in piena luce
-    (la fascia rimboccata della bocca, fuori). Il GLB resta a un materiale."""
+    (l'orlo della bocca, fuori). Il GLB resta a un materiale."""
     from PIL import Image
     from .ballotin import INTERNO, STRISCIA, TAGLIO
     t = Image.new("RGB", (tex.width, tex.height + 3 * STRISCIA), INTERNO)
@@ -469,7 +473,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     def punto(rho, s, dentro, oltre=0.0):
         """Il punto del tubo all'altezza dell'arco rho, a s mm lungo il giro
         dal mezzo del fronte (positivo verso destra); `oltre` lo porta fuori
-        dal tubo di tanti mm (il risvolto)."""
+        dal tubo di tanti mm (l'orlo)."""
         C = p.giro(rho)
         u = rho - base
         Y = u * math.sqrt(max(0.0, 1.0 - p.k ** 2))
@@ -514,14 +518,14 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         return p.a_sin + f * vis
 
     def striscia(f0, f1, dentro, verso, uv_fisso=None, oltre=0.0, raggio=0.0,
-                 righe=None, fuori=0.0):
+                 righe=None):
         b = len(V)
         fs = np.linspace(f0, f1, PASSI_GIRO + 1)
         for rho in (rhos if righe is None else righe):
             C = p.giro(rho)
             for f in fs:
                 s = (f - 0.5) * C
-                x, y, z = punto(rho, s, dentro, fuori(rho) if callable(fuori) else fuori)
+                x, y, z = punto(rho, s, dentro)
                 if raggio:
                     # la pattina sta sotto il bordo che la copre: un poco dentro
                     rr = math.hypot(x, z) or 1.0
@@ -561,37 +565,30 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         striscia(-fp, 0.0, False, 1, oltre=1, raggio=sp / 2.0)
     else:
         striscia(1.0, 1.0 + fp, False, 1, oltre=1, raggio=sp / 2.0)
-    # il risvolto: la cima del foglio rimboccata in fuori sul tubo, col
-    # rovescio bianco a vista. La piega tonda la stacca dal tubo di
-    # `stacco`; verso il bordo tagliato torna a uno spessore dalla parete
-    stacco = max(RIMBOCCO, 2.0 * sp)
-    giu = np.linspace(R_cima - risvolto, R_cima, 7)
-
-    def fuori(rho):
-        t = (rho - (R_cima - risvolto)) / risvolto if risvolto > 0 else 1.0
-        return sp + (stacco - sp) * _liscio(t)
-    striscia(0.0, 1.0, False, 1, uv_fisso=uv_rovescio, righe=giu, fuori=fuori)
-    # la piega in cima: mezzo giro dalla parete di dentro alla fascia fuori
-    rr = (stacco + sp) / 2.0
+    # l'orlo: un tubetto attorno alla bocca, a sezione tonda, col rovescio
+    # bianco a vista. La sezione parte dalla cima della parete (phi = pi,
+    # tangente in su), sale, gira in fuori e scende, e torna li': il centro
+    # e' mezzo diametro fuori dalla parete, all'altezza della cima
+    rr = risvolto / 2.0
     b = len(V)
     C = p.giro(R_cima)
     fs = np.linspace(0.0, 1.0, PASSI_GIRO + 1)
-    for phi in np.linspace(0.0, math.pi, PASSI_PIEGA + 1):
+    for phi in np.linspace(math.pi, -math.pi, PASSI_ORLO + 1):
         for f in fs:
-            x, y, z = punto(R_cima, (f - 0.5) * C, False,
-                            -sp + rr * (1.0 - math.cos(phi)))
+            x, y, z = punto(R_cima, (f - 0.5) * C, False, rr * (1.0 + math.cos(phi)))
             V.append((x, y + rr * math.sin(phi), z))
             UV.append(uv_rovescio)
     n = len(fs)
-    for i in range(PASSI_PIEGA):
+    for i in range(PASSI_ORLO):
         for j in range(n - 1):
             v00 = b + i * n + j
             v01, v10, v11 = v00 + 1, v00 + n, v00 + n + 1
             T.extend([(v00, v11, v01), (v00, v10, v11)])
-    # le coste, fra il fuori e il dentro: il fondo e il bordo del risvolto
+    # le coste, fra il fuori e il dentro: il fondo e la cima della parete,
+    # dentro l'orlo
     for rho, a, b_, uvc, su in (
             (base, (False, 0.0), (True, 0.0), uv_taglio, False),
-            (R_cima - risvolto, (False, sp), (False, 0.0), uv_taglio, False)):
+            (R_cima, (False, 0.0), (True, 0.0), uv_rovescio, True)):
         b = len(V)
         C = p.giro(rho)
         fs = np.linspace(0.0, 1.0, PASSI_GIRO + 1)
