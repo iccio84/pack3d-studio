@@ -14,6 +14,7 @@ forma che il codice non conosce ancora, la ricetta e' in FORME.md.
   flowpack, astuccio. Un pack che esce della famiglia sbagliata si guarda qui.
 - `server.py`, `build_carton`, `build_vassoio`, `build_plancia`,
   `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
+  `build_tubo`,
   `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/verifica.py`: le verifiche della costruzione, nell'ordine in cui si
   fanno a mano (UVW contro il DT, fronte sul fronte, marchio dritto, facce
@@ -40,6 +41,7 @@ forma che il codice non conosce ancora, la ricetta e' in FORME.md.
 |---|---|
 | astuccio | `dieline.py` (fustella: `extract`, `solve_carton`), `folding.py` (piegatura, `build_faces`), `incisioni.py` (tagli dentro le facce), `apertura.py` (strappo aperto), `rilievo.py` (embossing), `lamina.py` (foil: metallo sulla scatola a prisma) |
 | scatola a punta | `punta.py` |
+| tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `server.build_tubo` |
 | scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `server.build_prisma` |
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
 | vassoio espositore | `vassoio.py` |
