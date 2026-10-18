@@ -4101,6 +4101,67 @@ cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
 ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
 colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
+## Il tubo a cono
+
+Uno sleeve di cartoncino arrotolato in un cono lungo e stretto, aperto in
+cima, col fondo schiacciato e saldato piatto: il tubo di un gelato da
+spremere. Un pezzo, cartotecnico (`pack3d/tubo.py`, `server.build_tubo`).
+E' nato dal caso 84c854d6a5: dichiarato cartotecnico in un pezzo, il solutore
+astuccio lo rifiutava («la sequenza delle fasce non e' ne' quella di un
+astuccio chiuso...», fasce 331, 15, 15, 24...), la scatola a punta e la coppa
+non lo prendevano, e il caso finiva in errore. Chi l'ha caricato: «la parte
+bassa e' saldata/incollata, poi sale e prende forma di un cono allungato;
+il PDF e' uno sleeve come il cono gelato».
+
+Si prova dopo l'astuccio, dopo la scatola a punta e dopo la coppa
+(`_analyze_pdf`): i casi che quelli prendono non cambiano strada.
+
+### La firma in fustella
+
+In uno stile di tratto (penna e colore) solo, tutte vere:
+
+- un centro, dagli archi curvi (freccia di almeno 0,8 mm);
+- due rette lunghe almeno 80 mm che puntano al centro entro 3 gradi - il
+  lato della pattina e' parallelo al raggio, scostato di qualche mm - coi
+  capi a due raggi uguali entro 6 mm: il fondo e la bocca;
+- un tratto curvo a ciascuno dei due raggi (la mediana dello scarto entro
+  3 mm): gli archi possono essere spezzati in piu' tratti;
+- l'arco del fondo lungo almeno 20 mm (due lati dello stesso fianco no);
+- il lato lungo almeno 1,2 volte il diametro della bocca: piu' tozzo e' una
+  coppa.
+
+Se i contorni sono due, uno dentro l'altro nella stessa penna - sul
+84c854d6a5 l'abbondanza di stampa a 2 mm fuori dal taglio - il taglio e'
+quello dentro: la coppia di lati piu' stretta.
+
+### Il solido
+
+Con Phi l'angolo del settore, p la pattina e rho il raggio sul foglio, il
+giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
+(rho - R_fondo) sqrt(1 - (Phi / 2 pi)^2). Sul 84c854d6a5: lati 197 mm,
+archi 122,6 e 60,6, alto 196,8, bocca 36,5, fondo 16,8.
+
+- La **pattina** la scrive il cartiglio («Pattina 8 mm»), se il testo si
+  legge; se no 8 mm. Sta dal lato dove la stampa massima e' piu' lontana dal
+  taglio (11 mm contro 4 sul caso), e va sotto l'altro bordo, sul retro,
+  mezzo spessore dentro.
+- Il **fronte** e' il mezzo della parte che si vede; la destra del foglio,
+  guardando dal centro verso la bocca, e' la destra del pack: la stampa e'
+  fuori, niente specchiatura.
+- Il **fondo**: la fascia della saldatura e' quella fra il fondo e la fine
+  delle linee della stampa massima (rette di un altro stile parallele ai
+  lati), 23,8 mm sul caso; se il DT non le disegna, il 12% del lato. Li' il
+  giro e' due pareti piatte larghe C/2, una contro l'altra a uno spessore;
+  sopra, in un'altra fascia alta uguale, il tubo torna tondo (smoothstep).
+- La bocca e il fondo hanno la costa; dentro, il rovescio.
+
+### Cosa manca
+
+- Il raccordo fra il fondo piatto e il tubo tondo e' una stima (una fascia
+  alta come la saldatura): il DT non lo disegna.
+- Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
+  secondo pezzo come il lid del cono.
+
 ## La scatola a prisma
 
 Una scatola di cartoncino con il fondo a poligono - esagono, ottagono,
