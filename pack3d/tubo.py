@@ -10,10 +10,13 @@ retro. Montato:
 
 - in cima il tubo e' tondo, con la circonferenza dell'arco grande meno la
   pattina;
-- sul fondo la fascia della saldatura - quella che il DT lascia fuori dalla
-  stampa massima, a tratteggio - e' schiacciata piatta, le due pareti una
-  contro l'altra, e sopra la saldatura il tubo torna tondo in un'altra fascia
-  alta uguale.
+- la bocca e' rimboccata in fuori (`RISVOLTO`): da fuori, sotto il bordo,
+  si vede una fascia bianca, il rovescio del cartoncino;
+- sul fondo la fascia che il DT lascia fuori dalla stampa massima, a
+  tratteggio, e' quella che si deforma: in basso un terzo e' la saldatura,
+  schiacciata piatta, le due pareti una contro l'altra, rigata dalle ganasce
+  e con gli angoli tagliati; sopra il tubo torna tondo, e alla stampa massima
+  lo e' gia'.
 
 Il fronte e' il mezzo della parte che si vede, fra la pattina e l'altro lato.
 La texture e' il DT intero, come per la scatola a punta: ogni punto della
@@ -45,6 +48,17 @@ PATTINA = 8.0
 PARALLELO = math.radians(1.5)
 # la saldatura, se il DT non disegna la stampa massima: una parte del lato
 SALDATURA = 0.12
+# della fascia fuori dalla stampa massima, la parte saldata piatta (il resto
+# torna tondo)
+PIATTA = 1.0 / 3.0
+# gli angoli tagliati della saldatura: il lato del triangolo, in parte
+# dell'altezza della saldatura
+SMUSSO = 0.6
+# le righe delle ganasce sulla saldatura: passo e profondita', mm
+RIGHE_PASSO = 1.2
+RIGHE_FONDE = 0.15
+# la bocca rimboccata in fuori: la fascia bianca che si vede, mm
+RISVOLTO = 6.0
 PASSI_GIRO = 72
 PASSI_ALTO = 60
 
@@ -320,18 +334,23 @@ def _stampa_massima(per_stile, stile_dt, c, Rp, Rg, a_m, a_sin, a_des):
 
 def dichiara(p):
     """Le righe che la pagina mostra prima di costruire."""
+    alto = p.altezza - RISVOLTO * math.sqrt(max(0.0, 1.0 - p.k ** 2))
     righe = ["tubo a cono: alto %.1f mm, bocca %.1f mm, fondo %.1f mm di "
-             "diametro" % (p.altezza, p.d_bocca, p.d_fondo),
+             "diametro" % (alto, p.giro(p.R_bocca - RISVOLTO) / math.pi,
+                           p.d_fondo),
              "steso a settore di corona: lati da %.1f mm, archi da %.1f e "
              "%.1f mm" % (p.lato, p.R_bocca * (p.a_des - p.a_sin),
                            p.R_fondo * (p.a_des - p.a_sin)),
              "pattina da %.1f mm sul lato %s del foglio, sul retro%s"
              % (p.pattina, "sinistro" if p.pattina_a_sinistra else "destro",
                 "" if p.pattina_letta else " (non scritta sul DT: valore d'uso)"),
-             "fondo saldato piatto per %.1f mm%s, poi il tubo torna tondo"
-             % (p.saldatura, " (la fascia fuori dalla stampa massima)"
-                if p.saldatura_letta else " (stimato: il DT non lo disegna)"),
-             "aperto in cima"]
+             "fondo saldato piatto per %.1f mm, rigato e con gli angoli "
+             "tagliati; tondo di nuovo a %.1f mm dal fondo%s"
+             % (p.saldatura * PIATTA, p.saldatura,
+                " (la stampa massima)" if p.saldatura_letta
+                else " (stimato: il DT non lo disegna)"),
+             "aperto in cima, la bocca rimboccata in fuori: fascia bianca "
+             "da %.1f mm (valore d'uso)" % RISVOLTO]
     return righe
 
 
@@ -353,6 +372,9 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     cx, cy = p.centro
     span = p.a_des - p.a_sin
     sal = p.saldatura
+    piatta = sal * PIATTA
+    smusso = piatta * SMUSSO
+    R_cima = p.R_bocca - RISVOLTO
 
     def uv(sx, sy):
         return ((sx - ox) * px_mm / Wt, (sy - oy) * px_mm / Ht)
@@ -360,13 +382,14 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     def foglio(rho, a):
         return cx + rho * math.cos(a), cy + rho * math.sin(a)
 
-    def punto(rho, s, dentro):
+    def punto(rho, s, dentro, oltre=0.0):
         """Il punto del tubo all'altezza dell'arco rho, a s mm lungo il giro
-        dal mezzo del fronte (positivo verso destra)."""
+        dal mezzo del fronte (positivo verso destra); `oltre` lo porta fuori
+        dal tubo di tanti mm (il risvolto)."""
         C = p.giro(rho)
         u = rho - p.R_fondo
         Y = u * math.sqrt(max(0.0, 1.0 - p.k ** 2))
-        r = C / (2.0 * math.pi) - (sp if dentro else 0.0)
+        r = C / (2.0 * math.pi) - (sp if dentro else 0.0) + oltre
         th = 2.0 * math.pi * s / C
         xc, zc = r * math.sin(th), r * math.cos(th)
         # schiacciato: il giro diventa due pareti piatte larghe C/2
@@ -376,12 +399,25 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         else:
             xf = (0.5 * np.sign(q) - q) * C
             zf = -(0.0 if dentro else sp)
-        w = 1.0 - _liscio((u - sal) / sal) if sal > 0 else 0.0
+        if piatta <= 0:
+            return (xc, Y, zc)
+        # piatto fino a `piatta`, poi tondo di nuovo alla stampa massima
+        w = 1.0 - _liscio((u - piatta) / (sal - piatta))
+        if u < piatta:
+            # le righe delle ganasce, le due pareti insieme
+            zf += (RIGHE_FONDE * math.sin(2.0 * math.pi * u / RIGHE_PASSO)
+                   * min(1.0, (piatta - u) / RIGHE_PASSO))
+            # gli angoli tagliati: il fondo sale verso i fianchi
+            e = abs(xf) - (C / 4.0 - smusso)
+            if e > 0:
+                Y = e + Y * (1.0 - e / piatta)
         return ((1 - w) * xc + w * xf, Y, (1 - w) * zc + w * zf)
 
-    rhos = np.linspace(p.R_fondo, p.R_bocca, PASSI_ALTO + 1)
+    rhos = np.linspace(p.R_fondo, R_cima, PASSI_ALTO + 1)
     if sal > 0:
-        extra = np.linspace(p.R_fondo, p.R_fondo + 2 * sal, 25)
+        extra = np.r_[np.linspace(p.R_fondo, p.R_fondo + piatta,
+                                  int(4 * piatta / RIGHE_PASSO) + 2),
+                      np.linspace(p.R_fondo + piatta, p.R_fondo + sal, 25)]
         rhos = np.unique(np.r_[rhos, extra])
     V, UV, T = [], [], []
 
@@ -396,14 +432,15 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             return p.a_sin + p.pattina / rho + f * vis
         return p.a_sin + f * vis
 
-    def striscia(f0, f1, dentro, verso, uv_fisso=None, oltre=0.0, raggio=0.0):
+    def striscia(f0, f1, dentro, verso, uv_fisso=None, oltre=0.0, raggio=0.0,
+                 righe=None, fuori=0.0):
         b = len(V)
         fs = np.linspace(f0, f1, PASSI_GIRO + 1)
-        for rho in rhos:
+        for rho in (rhos if righe is None else righe):
             C = p.giro(rho)
             for f in fs:
                 s = (f - 0.5) * C
-                x, y, z = punto(rho, s, dentro)
+                x, y, z = punto(rho, s, dentro, fuori)
                 if raggio:
                     # la pattina sta sotto il bordo che la copre: un poco dentro
                     rr = math.hypot(x, z) or 1.0
@@ -422,7 +459,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
                 else:
                     UV.append(uv(*foglio(rho, a_di(f, rho))))
         n = len(fs)
-        for i in range(len(rhos) - 1):
+        for i in range(len(rhos if righe is None else righe) - 1):
             for j in range(n - 1):
                 v00 = b + i * n + j
                 v01, v10, v11 = v00 + 1, v00 + n, v00 + n + 1
@@ -443,17 +480,24 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         striscia(-fp, 0.0, False, 1, oltre=1, raggio=sp / 2.0)
     else:
         striscia(1.0, 1.0 + fp, False, 1, oltre=1, raggio=sp / 2.0)
-    # le coste: la bocca e il fondo, fra il fuori e il dentro
-    for rho in (p.R_bocca, p.R_fondo):
+    # il risvolto: la cima del foglio rimboccata in fuori sul tubo, col
+    # rovescio bianco a vista, uno spessore fuori dalla parete
+    giu = np.linspace(R_cima - RISVOLTO, R_cima, 7)
+    striscia(0.0, 1.0, False, 1, uv_fisso=uv_interno, righe=giu, fuori=sp)
+    # le coste, fra il fuori e il dentro: il fondo, il bordo del risvolto, e
+    # la piega in cima, bianca anche lei
+    for rho, a, b_, uvc, su in (
+            (p.R_fondo, (False, 0.0), (True, 0.0), uv_taglio, False),
+            (R_cima - RISVOLTO, (False, sp), (False, 0.0), uv_taglio, False),
+            (R_cima, (False, sp), (True, 0.0), uv_interno, True)):
         b = len(V)
         C = p.giro(rho)
         fs = np.linspace(0.0, 1.0, PASSI_GIRO + 1)
         for f in fs:
-            V.append(punto(rho, (f - 0.5) * C, False))
-            UV.append(uv_taglio)
-            V.append(punto(rho, (f - 0.5) * C, True))
-            UV.append(uv_taglio)
-        su = rho == p.R_bocca
+            V.append(punto(rho, (f - 0.5) * C, a[0], a[1]))
+            UV.append(uvc)
+            V.append(punto(rho, (f - 0.5) * C, b_[0], b_[1]))
+            UV.append(uvc)
         for j in range(len(fs) - 1):
             a0, a1, b0, b1 = b + 2 * j, b + 2 * j + 1, b + 2 * j + 2, b + 2 * j + 3
             if su:

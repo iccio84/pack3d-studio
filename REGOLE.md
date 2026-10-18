@@ -4148,17 +4148,35 @@ archi 122,6 e 60,6, alto 196,8, bocca 36,5, fondo 16,8.
 - Il **fronte** e' il mezzo della parte che si vede; la destra del foglio,
   guardando dal centro verso la bocca, e' la destra del pack: la stampa e'
   fuori, niente specchiatura.
-- Il **fondo**: la fascia della saldatura e' quella fra il fondo e la fine
-  delle linee della stampa massima (rette di un altro stile parallele ai
-  lati), 23,8 mm sul caso; se il DT non le disegna, il 12% del lato. Li' il
-  giro e' due pareti piatte larghe C/2, una contro l'altra a uno spessore;
-  sopra, in un'altra fascia alta uguale, il tubo torna tondo (smoothstep).
-- La bocca e il fondo hanno la costa; dentro, il rovescio.
+- Il **fondo**: la fascia fuori dalla stampa massima e' quella fra il fondo
+  e la fine delle linee della stampa massima (rette di un altro stile
+  parallele ai lati), 23,8 mm sul caso; se il DT non le disegna, il 12% del
+  lato. E' la fascia che si deforma, non la saldatura: la saldatura e' il
+  terzo in basso (`PIATTA`, 7,9 mm sul caso), dove il giro e' due pareti
+  piatte larghe C/2, una contro l'altra a uno spessore; sopra il tubo torna
+  tondo (smoothstep) e alla stampa massima lo e' gia', cosi' la grafica
+  "essenziale" non si deforma. La saldatura e' rigata dalle ganasce (righe
+  orizzontali, passo 1,2 mm, 0,15 mm di fondo, che si spengono verso
+  l'alto) e ha gli angoli tagliati: ai fianchi il fondo sale di un
+  triangolo a 45 gradi di lato 0,6 volte la saldatura.
+- La **bocca** e' rimboccata in fuori (`RISVOLTO`, 6 mm): la cima del foglio
+  si piega sul tubo e da fuori si vede, sotto il bordo, una fascia bianca,
+  il rovescio; il tubo e' piu' basso di tanto. Il DT non lo disegna: e' il
+  valore d'uso, letto sulla foto di chi ha caricato il caso (la fascia e'
+  circa un sesto del diametro della bocca).
+- Il fondo, il bordo del risvolto e la piega in cima hanno la costa; dentro,
+  il rovescio.
+
+Il caso 84c854d6a5 e' stato respinto la prima volta proprio qui: la
+saldatura piatta lunga quanto tutta la fascia fuori stampa, piu' un raccordo
+alto uguale (47,6 mm su 196,8), e la bocca tagliata netta. Chi l'ha caricato:
+"un risvolto bianco nella parte superiore", "in basso la saldatura e' molto
+piu' piccola ed ha i lati tagliati".
 
 ### Cosa manca
 
-- Il raccordo fra il fondo piatto e il tubo tondo e' una stima (una fascia
-  alta come la saldatura): il DT non lo disegna.
+- Quanto della fascia fuori stampa e' saldato (un terzo) e quanto e' alto il
+  risvolto (6 mm) sono valori d'uso: il DT non li disegna.
 - Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
   secondo pezzo come il lid del cono.
 
