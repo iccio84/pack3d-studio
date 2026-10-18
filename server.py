@@ -735,6 +735,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
 # modello diventano colori pieni (`steso.senza_strisce`)
 TINTE_VASSOIO = {vassoio.INTERNO: "interno", vassoio.TAGLIO: "taglio"}
 TINTE_BALLOTIN = {ballotin.INTERNO: "interno", ballotin.TAGLIO: "taglio"}
+# il tubo ha in piu' il rovescio in piena luce: la bocca rimboccata, fuori
+TINTE_TUBO = {**TINTE_BALLOTIN, folding.INTERNO: "rovescio"}
 
 
 def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
@@ -1855,11 +1857,11 @@ def build_tubo(pdf, out_glb, quality="hd", lastre_extra=(),
         colata_riquadro=colata_riquadro)["dt"]
     scala = dpi_tex / 72.0
     origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
-    tela = ballotin.con_interno(tex)
+    tela = tubo.tela(tex)
     V, UV, T = tubo.maglia(p, origine, scala / PT2MM, tela.size,
                            spessore=carta)
     tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
-                                             TINTE_BALLOTIN)
+                                             TINTE_TUBO)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax, tinte=tinte)
     return tubo.dichiara(p) + avvisi
 

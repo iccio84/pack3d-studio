@@ -4155,21 +4155,31 @@ giro del tubo e' C(rho) = rho Phi - p, il raggio C / 2 pi, l'altezza
   lato. La saldatura **comincia dove finisce la grafica**: a vista resta
   solo il terzo della fascia subito sotto la stampa massima (`SALDATA`, 7,9
   mm sul caso), il resto (15,9 mm) e' rifilato e il tubo finisce li'
-  (`Tubo.R_base`). Della saldatura i 6 decimi in basso (`PIATTA`, 4,8 mm)
-  sono schiacciati piatti, il giro due pareti larghe C/2 una contro l'altra
-  a uno spessore; sopra il tubo torna tondo (smoothstep) e alla stampa
-  massima lo e' gia', cosi' la grafica "essenziale" non si deforma. La
-  saldatura e' rigata dalle ganasce (righe orizzontali, passo 1,2 mm, 0,15
-  mm di fondo, che si spengono verso l'alto) e ha gli angoli tagliati: ai
-  fianchi il fondo sale di un triangolo a 45 gradi di lato 0,6 volte la
-  parte piatta.
+  (`Tubo.R_base`). La saldatura e' **tutta piatta** e **larga quanto il
+  tubo**: le due pareti una contro l'altra, ognuna col suo spessore, i
+  fianchi ripiegati dentro. Non si appiattisce a perimetro costante (due
+  pareti larghe C/2, 1,57 volte il diametro): faceva un piede che sporgeva
+  dal tubo, con un gradino, e le foto di chi l'ha caricato non ce l'hanno.
+  Sopra la saldatura il tubo si **schiaccia a poco a poco**, per un diametro
+  del fondo (`PIZZICO`, 18,3 mm sul caso, smoothstep): di fronte non cambia,
+  di lato si assottiglia fino alla saldatura. Con 3 mm di raccordo, come
+  prima, di lato il tubo finiva in un ago. La saldatura e' rigata dalle
+  ganasce (righe orizzontali, passo 0,8 mm, 0,08 mm di fondo) e ha gli
+  angoli tagliati a 45 gradi: ai fianchi il fondo sale di un triangolo di
+  lato 0,2 volte la larghezza (3,7 mm sul caso; al massimo 0,8 volte
+  l'altezza della saldatura).
 - La **bocca** e' rimboccata in fuori: la cima del foglio si piega sul tubo
   e da fuori si vede, sotto il bordo, una fascia bianca, il rovescio; il
   tubo e' piu' basso di tanto. La fascia e' quella che il DT lascia in cima
   fuori dalla stampa massima: l'arco di un altro stile concentrico alla
   bocca, entro 10 mm sotto il taglio (`_risvolto`: 2,5 mm sul caso, l'arco
   rosso a 387,6 mm contro il taglio a 390,1). Se il DT non lo disegna, 3 mm
-  (`RISVOLTO`, valore d'uso).
+  (`RISVOLTO`, valore d'uso). La piega e' tonda e stacca la fascia dal tubo
+  di 0,6 mm (`RIMBOCCO`), che torna a uno spessore sul bordo tagliato: un
+  orlo, come nelle foto, non una fascia a filo. La fascia e la piega sono
+  fuori, in piena luce: **bianco carta** (`folding.INTERNO`, la tinta
+  "rovescio"), non il rovescio in ombra dell'interno (`ballotin.INTERNO`,
+  scurito per le scatole chiuse), che la faceva grigia.
 - Il tubo e' **carta**, come il cono: lo spessore 3 (0,7 mm) fa un bordo e
   un risvolto da scatola. Chi lo carica sceglie lo spessore 1.
 - Il fondo, il bordo del risvolto e la piega in cima hanno la costa; dentro,
@@ -4187,6 +4197,15 @@ massima, 23,8 mm sotto la grafica; risvolto 6 mm; spessore 3, alto 191 mm):
 sottile, il calippo e' troppo alto: fare partire la saldatura appena finisce
 la grafica". Da qui la fascia rifilata, il risvolto letto dal DT e lo
 spessore 1: alto 178,4 mm, fondo 18,3 mm.
+
+La terza versione, ripresa a mano: le misure giuste, ma il fondo era un
+piede piatto piu' largo del tubo (il giro schiacciato a perimetro costante,
+29 mm contro 18) che spuntava con un gradino da 3 mm di raccordo, e di lato
+il tubo finiva in un ago; l'orlo della bocca era grigio. Da qui la
+saldatura larga quanto il tubo, il tubo che si schiaccia per un diametro e
+l'orlo bianco staccato. Le foto di chi l'ha caricato sono piu' tozze del DT
+(alte circa tre volte la bocca, il DT 4,9): sono illustrazioni, e le misure
+restano quelle del DT al vero.
 
 ### Cosa manca
 

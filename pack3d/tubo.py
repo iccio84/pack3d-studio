@@ -12,13 +12,18 @@ retro. Montato:
   pattina;
 - la bocca e' rimboccata in fuori: da fuori, sotto il bordo, si vede una
   fascia bianca, il rovescio del cartoncino, alta quanto la fascia che il DT
-  lascia in cima fuori dalla stampa massima (`RISVOLTO` se non la disegna);
+  lascia in cima fuori dalla stampa massima (`RISVOLTO` se non la disegna).
+  La piega e' tonda e stacca la fascia dal tubo (`RIMBOCCO`), che sul bordo
+  tagliato torna a filo; e' fuori, in piena luce: bianco carta, non il
+  rovescio in ombra dell'interno;
 - sul fondo la fascia che il DT lascia fuori dalla stampa massima, a
   tratteggio: la saldatura comincia dove finisce la grafica, e ne resta a
-  vista solo un terzo, sotto la stampa massima - corta, schiacciata piatta,
-  le due pareti una contro l'altra, rigata dalle ganasce e con gli angoli
-  tagliati; il resto della fascia e' rifilato. Alla stampa massima il tubo e'
-  ancora tondo.
+  vista solo un terzo, sotto la stampa massima - corta, piatta, le due pareti
+  una contro l'altra, rigata dalle ganasce e con gli angoli tagliati a 45
+  gradi; il resto della fascia e' rifilato. La saldatura e' larga quanto il
+  tubo (i fianchi si ripiegano dentro), non di piu': nessun piede che sporge.
+  Sopra, il tubo si schiaccia a poco a poco, per mezzo diametro: di fronte
+  non cambia, di lato si assottiglia fino alla saldatura.
 
 Il fronte e' il mezzo della parte che si vede, fra la pattina e l'altro lato.
 La texture e' il DT intero, come per la scatola a punta: ogni punto della
@@ -53,18 +58,25 @@ SALDATURA = 0.12
 # della fascia fuori dalla stampa massima, la parte che resta a vista sotto
 # la grafica: la saldatura (il resto e' rifilato)
 SALDATA = 1.0 / 3.0
-# della saldatura, la parte schiacciata piatta (sopra si raccorda al tondo)
-PIATTA = 0.6
-# gli angoli tagliati della saldatura: il lato del triangolo, in parte
-# dell'altezza della saldatura
-SMUSSO = 0.6
+# sopra la saldatura il tubo si schiaccia: per tanti diametri del fondo
+PIZZICO = 1.0
+# gli angoli tagliati della saldatura, a 45 gradi: il lato del triangolo, in
+# parte della larghezza (al massimo SMUSSO_MAX dell'altezza della saldatura)
+SMUSSO = 0.2
+SMUSSO_MAX = 0.8
 # le righe delle ganasce sulla saldatura: passo e profondita', mm
-RIGHE_PASSO = 1.2
-RIGHE_FONDE = 0.15
+RIGHE_PASSO = 0.8
+RIGHE_FONDE = 0.08
+# i fianchi della saldatura, dove le due pareti si incontrano: la parte del
+# coseno in cui il davanti passa al dietro (lo spigolo arrotondato)
+SPIGOLO = 0.15
 # la bocca rimboccata in fuori: la fascia bianca che si vede, mm, se il DT
 # non disegna la stampa massima in cima
 RISVOLTO = 3.0
 RISVOLTO_MAX = 10.0     # mm: un arco piu' in basso non e' quello della bocca
+# mm: quanto la piega tonda della bocca stacca la fascia rimboccata dal tubo
+RIMBOCCO = 0.6
+PASSI_PIEGA = 8
 PASSI_GIRO = 72
 PASSI_ALTO = 60
 
@@ -393,18 +405,34 @@ def dichiara(p):
              "pattina da %.1f mm sul lato %s del foglio, sul retro%s"
              % (p.pattina, "sinistro" if p.pattina_a_sinistra else "destro",
                 "" if p.pattina_letta else " (non scritta sul DT: valore d'uso)"),
-             "saldatura da %.1f mm sotto la grafica%s, piatta per %.1f mm, "
-             "rigata e con gli angoli tagliati; il resto della fascia (%.1f "
-             "mm) rifilato"
+             "saldatura da %.1f mm subito sotto la grafica%s: piatta, larga "
+             "quanto il tubo, rigata e con gli angoli tagliati; sopra il tubo "
+             "si schiaccia per %.1f mm; il resto della fascia (%.1f mm) "
+             "rifilato"
              % (p.saldatura * SALDATA,
                 " (la stampa massima)" if p.saldatura_letta
                 else " (stimata: il DT non disegna la stampa massima)",
-                p.saldatura * SALDATA * PIATTA,
+                PIZZICO * p.giro(p.R_base) / math.pi,
                 p.saldatura * (1.0 - SALDATA)),
              "aperto in cima, la bocca rimboccata in fuori: fascia bianca "
              "da %.1f mm%s" % (p.risvolto, " (la stampa massima in cima)"
                                if p.risvolto_letto else " (valore d'uso)")]
     return righe
+
+
+def tela(tex):
+    """La texture del DT con sotto tre strisce: il rovescio in ombra
+    (l'interno, `ballotin.INTERNO`), il taglio e il rovescio in piena luce
+    (la fascia rimboccata della bocca, fuori). Il GLB resta a un materiale."""
+    from PIL import Image
+    from .ballotin import INTERNO, STRISCIA, TAGLIO
+    t = Image.new("RGB", (tex.width, tex.height + 3 * STRISCIA), INTERNO)
+    t.paste(tex.convert("RGB"), (0, 0))
+    t.paste(Image.new("RGB", (tex.width, STRISCIA), TAGLIO),
+            (0, tex.height + STRISCIA))
+    t.paste(Image.new("RGB", (tex.width, STRISCIA), folding.INTERNO),
+            (0, tex.height + 2 * STRISCIA))
+    return t
 
 
 def _liscio(t):
@@ -414,20 +442,21 @@ def _liscio(t):
 
 def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     """(V, UV, T) del tubo montato, in mm, con la texture del DT intero e
-    sotto le strisce del rovescio (`ballotin.con_interno`). Il fronte guarda
-    +Z, la bocca +Y, il fondo sta a Y = 0."""
+    sotto le strisce del rovescio (`tela`). Il fronte guarda +Z, la bocca +Y,
+    il fondo sta a Y = 0."""
     from .ballotin import STRISCIA
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     Wt, Ht = misura_tex
-    uv_interno = (0.5, (Ht - 1.5 * STRISCIA) / Ht)
-    uv_taglio = (0.5, (Ht - 0.5 * STRISCIA) / Ht)
+    uv_interno = (0.5, (Ht - 2.5 * STRISCIA) / Ht)
+    uv_taglio = (0.5, (Ht - 1.5 * STRISCIA) / Ht)
+    uv_rovescio = (0.5, (Ht - 0.5 * STRISCIA) / Ht)
     ox, oy = origine_mm
     cx, cy = p.centro
     span = p.a_des - p.a_sin
     base = p.R_base
     sal = p.R_fondo + p.saldatura - base     # la saldatura a vista
-    piatta = sal * PIATTA
-    smusso = piatta * SMUSSO
+    pizzico = PIZZICO * p.giro(base) / math.pi
+    smusso = min(SMUSSO * p.giro(base) / math.pi, SMUSSO_MAX * sal)
     R_cima = p.R_cima
     risvolto = p.risvolto
 
@@ -446,33 +475,30 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         Y = u * math.sqrt(max(0.0, 1.0 - p.k ** 2))
         r = C / (2.0 * math.pi) - (sp if dentro else 0.0) + oltre
         th = 2.0 * math.pi * s / C
-        xc, zc = r * math.sin(th), r * math.cos(th)
-        # schiacciato: il giro diventa due pareti piatte larghe C/2
-        q = ((s / C) + 0.5) % 1.0 - 0.5          # -0.5..0.5, 0 sul fronte
-        if abs(q) <= 0.25:
-            xf, zf = q * C, (0.0 if dentro else sp)
-        else:
-            xf = (0.5 * np.sign(q) - q) * C
-            zf = -(0.0 if dentro else sp)
-        if piatta <= 0:
-            return (xc, Y, zc)
-        # piatto fino a `piatta`, poi tondo di nuovo alla stampa massima (`sal`)
-        w = 1.0 - _liscio((u - piatta) / (sal - piatta))
-        if u < piatta:
+        x, zc = r * math.sin(th), r * math.cos(th)
+        if sal <= 0:
+            return (x, Y, zc)
+        # schiacciato: la larghezza resta quella del tubo, lo spessore va a
+        # zero - le due pareti una contro l'altra, ognuna col suo spessore.
+        # Tondo sopra `sal + pizzico`, piatto sotto `sal` (la stampa massima)
+        tondo = _liscio((u - sal) / pizzico) if pizzico > 0 else float(u >= sal)
+        verso = max(-1.0, min(1.0, math.cos(th) / SPIGOLO))
+        z = zc * tondo + verso * (0.0 if dentro else sp) * (1.0 - tondo)
+        if u < sal:
             # le righe delle ganasce, le due pareti insieme
-            zf += (RIGHE_FONDE * math.sin(2.0 * math.pi * u / RIGHE_PASSO)
-                   * min(1.0, (piatta - u) / RIGHE_PASSO))
-            # gli angoli tagliati: il fondo sale verso i fianchi
-            e = abs(xf) - (C / 4.0 - smusso)
+            z += (RIGHE_FONDE * math.sin(2.0 * math.pi * u / RIGHE_PASSO)
+                  * min(1.0, (sal - u) / RIGHE_PASSO, u / RIGHE_PASSO + 0.5))
+            # gli angoli tagliati a 45 gradi: il fondo sale verso i fianchi
+            e = abs(x) - (r - smusso)
             if e > 0:
-                Y = e + Y * (1.0 - e / piatta)
-        return ((1 - w) * xc + w * xf, Y, (1 - w) * zc + w * zf)
+                Y = e + Y * (1.0 - e / sal)
+        return (x, Y, z)
 
     rhos = np.linspace(base, R_cima, PASSI_ALTO + 1)
     if sal > 0:
-        extra = np.r_[np.linspace(base, base + piatta,
-                                  int(4 * piatta / RIGHE_PASSO) + 2),
-                      np.linspace(base + piatta, base + sal, 25)]
+        extra = np.r_[np.linspace(base, base + sal,
+                                  int(4 * sal / RIGHE_PASSO) + 2),
+                      np.linspace(base + sal, base + sal + pizzico, 25)]
         rhos = np.unique(np.r_[rhos, extra])
     V, UV, T = [], [], []
 
@@ -495,7 +521,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             C = p.giro(rho)
             for f in fs:
                 s = (f - 0.5) * C
-                x, y, z = punto(rho, s, dentro, fuori)
+                x, y, z = punto(rho, s, dentro, fuori(rho) if callable(fuori) else fuori)
                 if raggio:
                     # la pattina sta sotto il bordo che la copre: un poco dentro
                     rr = math.hypot(x, z) or 1.0
@@ -536,15 +562,36 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     else:
         striscia(1.0, 1.0 + fp, False, 1, oltre=1, raggio=sp / 2.0)
     # il risvolto: la cima del foglio rimboccata in fuori sul tubo, col
-    # rovescio bianco a vista, uno spessore fuori dalla parete
+    # rovescio bianco a vista. La piega tonda la stacca dal tubo di
+    # `stacco`; verso il bordo tagliato torna a uno spessore dalla parete
+    stacco = max(RIMBOCCO, 2.0 * sp)
     giu = np.linspace(R_cima - risvolto, R_cima, 7)
-    striscia(0.0, 1.0, False, 1, uv_fisso=uv_interno, righe=giu, fuori=sp)
-    # le coste, fra il fuori e il dentro: il fondo, il bordo del risvolto, e
-    # la piega in cima, bianca anche lei
+
+    def fuori(rho):
+        t = (rho - (R_cima - risvolto)) / risvolto if risvolto > 0 else 1.0
+        return sp + (stacco - sp) * _liscio(t)
+    striscia(0.0, 1.0, False, 1, uv_fisso=uv_rovescio, righe=giu, fuori=fuori)
+    # la piega in cima: mezzo giro dalla parete di dentro alla fascia fuori
+    rr = (stacco + sp) / 2.0
+    b = len(V)
+    C = p.giro(R_cima)
+    fs = np.linspace(0.0, 1.0, PASSI_GIRO + 1)
+    for phi in np.linspace(0.0, math.pi, PASSI_PIEGA + 1):
+        for f in fs:
+            x, y, z = punto(R_cima, (f - 0.5) * C, False,
+                            -sp + rr * (1.0 - math.cos(phi)))
+            V.append((x, y + rr * math.sin(phi), z))
+            UV.append(uv_rovescio)
+    n = len(fs)
+    for i in range(PASSI_PIEGA):
+        for j in range(n - 1):
+            v00 = b + i * n + j
+            v01, v10, v11 = v00 + 1, v00 + n, v00 + n + 1
+            T.extend([(v00, v11, v01), (v00, v10, v11)])
+    # le coste, fra il fuori e il dentro: il fondo e il bordo del risvolto
     for rho, a, b_, uvc, su in (
             (base, (False, 0.0), (True, 0.0), uv_taglio, False),
-            (R_cima - risvolto, (False, sp), (False, 0.0), uv_taglio, False),
-            (R_cima, (False, sp), (True, 0.0), uv_interno, True)):
+            (R_cima - risvolto, (False, sp), (False, 0.0), uv_taglio, False)):
         b = len(V)
         C = p.giro(rho)
         fs = np.linspace(0.0, 1.0, PASSI_GIRO + 1)
