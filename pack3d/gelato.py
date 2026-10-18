@@ -13,8 +13,9 @@ tutti i materiali che hanno un colore da immagine (GLAM.md, sezione 8), e la
 texture a parte e il template PSD contano le immagini del colore
 (`pack3d.texture`): con una sua texture il modello ne avrebbe due, e Glam ci
 stamperebbe sopra l'artwork. Il colore e' pieno (`baseColorFactor`, il gusto)
-con le variazioni e l'ombra del tubo nei colori dei vertici (COLOR_0);
-il dettaglio sta nelle altre mappe:
+con le variazioni e l'ombra del tubo nei colori dei vertici (COLOR_0, in
+RGBA: in RGB il render di Glam lo fa nero); il dettaglio sta nelle altre
+mappe:
 
 - le normali: la grana satinata dei fianchi, le scaglie di cristallo sulla
   cima;
@@ -337,7 +338,12 @@ def aggiungi(glb_path, p, spessore, quale, lato=LATO, unit_scale=0.001):
         "POSITION": accessorio((V * unit_scale).astype(np.float32), "VEC3", 5126, 34962, True),
         "NORMAL": accessorio(N.astype(np.float32), "VEC3", 5126, 34962),
         "TEXCOORD_0": accessorio(UV.astype(np.float32), "VEC2", 5126, 34962),
-        "COLOR_0": accessorio(colore.astype(np.float32), "VEC3", 5126, 34962)}
+        # RGBA, l'alfa a 1: il render di Glam (three-gpu-pathtracer) unisce le
+        # mesh e da' al tubo, che non ha colori, un RGBA di serie; con un
+        # COLOR_0 RGB le misure non tornano, la copia va al contrario e il
+        # ghiaccio resta a zero: nero, col solo bagliore
+        "COLOR_0": accessorio(np.c_[colore, np.ones(len(colore))].astype(np.float32),
+                              "VEC4", 5126, 34962)}
     indici = accessorio(T.reshape(-1), "SCALAR", 5125, 34963)
     J.setdefault("samplers", []).append({"magFilter": 9729, "minFilter": 9987,
                                          "wrapS": 10497, "wrapT": 33071})

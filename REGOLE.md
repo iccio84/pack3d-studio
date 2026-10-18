@@ -4254,6 +4254,13 @@ identico al byte.
   (che fa anche da clearcoat: tutto lucido, le scaglie di piu') e
   nell'emissione (il sorbetto lascia passare un poco di luce, le scaglie
   brillano).
+- I **colori dei vertici sono RGBA**, con l'alfa a 1. Il render di Glam (il
+  path tracer three-gpu-pathtracer, «Anteprima Render» e «Render HD») unisce
+  tutte le mesh in una sola e da' a quelle senza colori, il tubo, un RGBA di
+  serie; quando trova un COLOR_0 RGB le misure non tornano, la libreria
+  copia al contrario e il ghiaccio resta a zero: nero, col solo bagliore
+  dell'emissione, piu' o meno visibile secondo il lato e le luci. Il viewer
+  interattivo non unisce le mesh e lo mostrava giusto.
 - Il **lime** e' misurato sulla foto del caso: giallo-verde, il rosso quasi
   quanto il verde e poco blu (180, 200, 40 circa in sRGB). Il primo, piu'
   verde e piu' chiaro, sembrava pistacchio.
