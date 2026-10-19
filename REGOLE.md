@@ -4325,16 +4325,25 @@ rigonfiamento e pinne: costruisce subito.
   triangoli ai lati; il lembo del fondo sta sotto e non si vede. Ogni pezzo
   e' il foglio piegato sulla sua piega, senza stirarsi: la grafica della
   testata e' quella del foglio da cui la carta arriva.
-- Il film e' sottile (0,1 mm): la barretta si modella con le sue facce, senza
-  spessore e senza l'interno. Il fronte (la faccia col marchio) guarda +Z,
-  la testa della scritta +Y.
+- Gli **spigoli** lunghi sono arrotondati (1 mm, `RAGGIO`) e il film passa
+  sugli spigoli delle testate con una piega tonda (0,8 mm, `RAGGIO_TESTA`):
+  a spigoli vivi sembrava un blocchetto di legno. La grafica gira attorno
+  allo spigolo senza stirarsi (la piega del foglio sta a meta' dell'arco).
+- I **risvolti si vedono**: sulla testata il film sta in tre strati - sotto
+  il lembo del fondo, sopra le alette dei fianchi, in cima il triangolo del
+  lembo della faccia - e ogni strato ha il suo spessore a vista, 0,3 mm
+  (`STRATO`) invece degli 0,1 del film; la punta del triangolo si stacca di
+  0,7 mm (`STACCO`). Col film vero, schiacciato e sottile, la testata
+  sembrava dipinta: «fai i risvolti piu' a vista, staccati, spessi». Anche
+  il sormonto sotto ha il suo gradino.
+- La barretta si modella con le sue facce, senza l'interno. Il fronte (la
+  faccia col marchio) guarda +Z, la testa della scritta +Y.
 
 ### Cosa manca
 
 - Sul fondo il DT segna due pieghe diagonali per testata, dagli spigoli del
   fondo verso il mezzo: la carta li' e' piegata su se stessa. Il modello ha
   il fondo liscio.
-- Gli spigoli sono vivi; la barretta vera li ha appena arrotondati.
 - Il foglio deve stare dritto sulla tavola, il passo in orizzontale; e la
   scritta della faccia si legge con la testa verso la fascia di sopra.
 

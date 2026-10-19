@@ -50,6 +50,16 @@ LUNGA = 0.95
 FASCIA_MIN = 3.0
 # mm: le testate della faccia stanno dentro il foglio almeno di tanto
 TESTA_MIN = 3.0
+# mm: gli spigoli lunghi della barretta, arrotondati
+RAGGIO = 1.0
+# mm: la piega del film sugli spigoli delle testate
+RAGGIO_TESTA = 0.8
+# mm: lo spessore di un risvolto sulla testata. Il film ne ha 0,1: cosi'
+# sottile il bordo di lembo e alette non si vedeva, e la testata sembrava
+# dipinta («fai i risvolti piu' a vista, staccati, spessi»)
+STRATO = 0.3
+# mm: di quanto la punta del lembo della faccia si stacca dalla testata
+STACCO = 0.7
 
 
 @dataclass
@@ -320,143 +330,343 @@ def dichiara(p):
 def maglia(p, origine_mm, px_mm, misura_tex):
     """(V, UV, T) della barretta incartata, in mm, con la texture del foglio
     intero. La faccia guarda +Z, la testa della scritta +Y, la barretta corre
-    lungo X; il centro della barretta e' l'origine."""
+    lungo X; il centro della barretta e' l'origine.
+
+    Il film gira attorno alla sezione con gli spigoli arrotondati (`RAGGIO`),
+    passa sugli spigoli delle testate con una piega tonda (`RAGGIO_TESTA`) e
+    finisce sulla testata in tre strati: sotto il lembo del fondo, sopra le
+    alette dei fianchi, in cima il triangolo del lembo della faccia, che si
+    stacca verso la punta (`STACCO`). Ogni strato ha il suo spessore a vista
+    (`STRATO`)."""
     Wt, Ht = misura_tex
-    ox, oy = origine_mm
     fx, fy = p.origine          # l'angolo del foglio, mm sulla pagina
+    ox, oy = origine_mm
     P, G = p.passo, p.nastro
     l1, l2, l3, l4 = p.linee
-    f = p.fasce
+    fa = p.fasce
     a, B = p.faccia, p.fondo
     d1, d3, h = p.sezione()
     tf, tb = p.testa_faccia, p.testa_base
+    r = min(RAGGIO, 0.3 * min(fa[1], fa[3], a))
+    rt = RAGGIO_TESTA
+    T1, T2, W0 = STRATO, 2.0 * STRATO, 0.05
 
     def uv(sx, sy):
-        """sx, sy: mm sul foglio, dal suo angolo."""
+        """sx, sy: mm sul foglio, dal suo angolo in alto a sinistra."""
         return ((fx + sx - ox) * px_mm / Wt, (fy + sy - oy) * px_mm / Ht)
 
-    # gli spigoli della sezione (Y, Z)
+    # la sezione, da un taglio all'altro del fondo: la fascia che sta sopra
+    # ha il taglio a vista, dell'altra si vede solo il pezzo fino a li'
     BT = np.array([a / 2.0, h / 2.0])           # retro in cima
     FT = np.array([-a / 2.0, h / 2.0])          # fronte in cima
     FB = np.array([-a / 2.0 - d3, -h / 2.0])    # fronte alla base
     BB = np.array([a / 2.0 + d1, -h / 2.0])     # retro alla base
     giu = (BB - FB) / np.linalg.norm(BB - FB)   # lungo il fondo, verso il retro
+    if p.fuori_sopra:
+        y_ini, y_fin = 0.0, l4 + (B - fa[0])
+        bordo, verso_bordo = y_ini, 1.0
+    else:
+        y_ini, y_fin = l1 - (B - fa[4]), G
+        bordo, verso_bordo = y_fin, -1.0
+    pts = [BB - (l1 - y_ini) * giu, BB, BT, FT, FB, FB + (y_fin - l4) * giu]
+    yk = [y_ini, l1, l2, l3, l4, y_fin]
+    ang = {}
+    for k in range(1, 5):
+        u_in = pts[k] - pts[k - 1]
+        u_in /= np.linalg.norm(u_in)
+        u_out = pts[k + 1] - pts[k]
+        u_out /= np.linalg.norm(u_out)
+        psi = math.acos(max(-1.0, min(1.0, float(np.dot(u_in, u_out)))))
+        bis = u_out - u_in
+        bis /= np.linalg.norm(bis)
+        c = pts[k] + bis * r / math.cos(psi / 2.0)
+        t_in = pts[k] - r * math.tan(psi / 2.0) * u_in
+        ang[k] = (c, math.atan2(*(t_in - c)[::-1]), psi,
+                  r * math.tan(psi / 2.0), r * psi)
 
-    def sezione(y):
-        """Il punto della sezione per la quota y del foglio (mm dal taglio
-        di sopra), e la x di testata (dal taglio di testa) a quella quota."""
-        if y <= l1:                     # fondo, la fascia di sopra
-            return BB - (l1 - y) * giu, tb
-        if y <= l2:                     # retro: dalla base alla faccia
-            t = (y - l1) / f[1]
-            return BB + t * (BT - BB), tb + t * (tf - tb)
-        if y <= l3:                     # la faccia
-            t = (y - l2) / f[2]
-            return BT + t * (FT - BT), tf
-        if y <= l4:                     # fronte: dalla faccia alla base
-            t = (y - l3) / f[3]
-            return FT + t * (FB - FT), tf + t * (tb - tf)
-        return FB + (y - l4) * giu, tb  # fondo, la fascia di sotto
+    def profilo(y):
+        """Il punto della sezione per la quota y del foglio, e la normale."""
+        for k in range(1, 5):
+            c, a0, psi, _ak, A = ang[k]
+            if abs(y - yk[k]) <= A / 2.0:
+                t = (y - (yk[k] - A / 2.0)) / A
+                q = a0 + t * psi
+                n = np.array([math.cos(q), math.sin(q)])
+                return c + r * n, n
+        i = max(j for j in range(5) if yk[j] <= y + 1e-9)
+        i = min(i, 4)
+        u = pts[i + 1] - pts[i]
+        u /= np.linalg.norm(u)
+        a_s, A_s = (ang[i][3], ang[i][4]) if i in ang else (0.0, 0.0)
+        a_e, A_e = (ang[i + 1][3], ang[i + 1][4]) if i + 1 in ang else (0.0, 0.0)
+        lo, hi = yk[i] + A_s / 2.0, yk[i + 1] - A_e / 2.0
+        t = (y - lo) / (hi - lo) if hi > lo else 0.0
+        p0, p1 = pts[i] + a_s * u, pts[i + 1] - a_e * u
+        return p0 + t * (p1 - p0), np.array([u[1], -u[0]])
+
+    def testata(y):
+        """La x della piega di testata alla quota y, dal taglio di testa."""
+        if y <= l1:
+            return tb
+        if y <= l2:
+            return tb + (y - l1) / fa[1] * (tf - tb)
+        if y <= l3:
+            return tf
+        if y <= l4:
+            return tf + (y - l3) / fa[3] * (tb - tf)
+        return tb
+
+    def rialzo(y):
+        """Il sormonto: la fascia di sopra sta sull'altra, uno strato su."""
+        d = (y - bordo) * verso_bordo
+        if d <= p.sormonto:
+            return T1
+        return T1 * max(0.0, 1.0 - (d - p.sormonto) / 1.0)
+
+    # le quote dei vertici attorno alla sezione: pochi sulle facce piane,
+    # fitti sugli spigoli tondi e dove il sormonto scende
+    quote = set(np.linspace(y_ini, y_fin, 25))
+    for k in range(1, 5):
+        A = ang[k][4]
+        quote.update(np.linspace(yk[k] - A / 2.0, yk[k] + A / 2.0, 7))
+    for d in (p.sormonto, p.sormonto + 0.5, p.sormonto + 1.0):
+        quote.add(bordo + verso_bordo * d)
+    quote = sorted(q for q in quote if y_ini - 1e-9 <= q <= y_fin + 1e-9)
+
+    # la testata, in coordinate sue: e di traverso (Y), f giu' lungo la
+    # testata dallo spigolo della faccia, w fuori
+    Lf = math.hypot(tf - tb, h)
+    nb = math.hypot(d1, Lf)
+    nf = math.hypot(d3, Lf)
+    q_banda = [(0.0, -1.0), (-Lf / nb, d1 / nb), (0.0, 1.0), (Lf / nf, d3 / nf),
+               (0.0, -1.0)]
+    w_banda = [W0, T1, T2, T1, W0]
+    e_apice = (d1 - d3) / 2.0
+    lim = [l1, l2, l3, l4]
+
+    def banda_e_peso(y):
+        """La fascia della quota y e, sugli spigoli tondi, il peso della
+        fascia dopo: (i, j, t)."""
+        for k in range(1, 5):
+            A = ang[k][4]
+            if abs(y - yk[k]) <= A / 2.0 and A > 0:
+                return k - 1, k, (y - (yk[k] - A / 2.0)) / A
+        i = sum(1 for v in lim if y > v)
+        return i, i, 0.0
+
+    def da_foglio_testata(i, e, f_):
+        """Il punto della testata (e, f) sul lembo della fascia i: (x dal
+        taglio di testa, y) sul foglio. Ogni lembo e' il foglio piegato
+        sulla sua piega, senza stirarsi."""
+        if i == 2:
+            return tf - f_, l2 + (a / 2.0 - e)
+        if i in (1, 3):
+            if i == 1:
+                E0, E1 = np.array([a / 2.0, 0.0]), np.array([a / 2.0 + d1, Lf])
+                s0, s1 = np.array([tf, l2]), np.array([tb, l1])
+            else:
+                E0, E1 = np.array([-a / 2.0, 0.0]), np.array([-a / 2.0 - d3, Lf])
+                s0, s1 = np.array([tf, l3]), np.array([tb, l4])
+            ed = (E1 - E0) / np.linalg.norm(E1 - E0)
+            v = np.array([e, f_]) - E0
+            t = float(np.dot(v, ed))
+            g = abs(float(ed[0] * v[1] - ed[1] * v[0]))
+            es = (s1 - s0) / np.linalg.norm(s1 - s0)
+            ns = np.array([es[1], -es[0]])
+            if ns[0] > 0:
+                ns = -ns
+            q = s0 + t * es + g * ns
+            return float(q[0]), float(q[1])
+        u = e + a / 2.0 + d3
+        if p.fuori_sopra:
+            y = l1 - (B - u) if u >= B - fa[0] else l4 + u
+        else:
+            y = l4 + u if u <= fa[4] else l1 - (B - u)
+        return tb - (Lf - f_), y
 
     V, UV, T = [], [], []
 
-    def quad_strip(ys, nx=48):
-        """Una fascia del foglio fra le quote ys (crescenti), dalla testata di
-        sinistra a quella di destra, coi suoi vertici."""
-        base = len(V)
-        for y in ys:
-            (Y, Z), xt = sezione(y)
-            for i in range(nx + 1):
-                x = xt + (P - 2 * xt) * i / nx
-                V.append((x - P / 2.0, Y, Z))
-                UV.append(uv(x, y))
-        n = nx + 1
-        for j in range(len(ys) - 1):
-            for i in range(nx):
-                q = base + j * n + i
-                T.append((q, q + 1, q + n + 1))
-                T.append((q, q + n + 1, q + n))
+    def nuovo(q, t_uv):
+        V.append(tuple(float(c) for c in q))
+        UV.append(t_uv)
+        return len(V) - 1
 
-    # il fondo: della fascia che sta sotto si vede solo il pezzo fuori
-    # dall'altra, fino al taglio dell'altra
-    if p.fuori_sopra:
-        quad_strip([0.0, l1])                       # sopra, col taglio a vista
-        quad_strip([l4, l4 + (B - f[0])])           # sotto, il pezzo a vista
-    else:
-        quad_strip([l1 - (B - f[4]), l1])
-        quad_strip([l4, G])
-    quad_strip([l1, l2], 8)
-    quad_strip([l2, l3], 12)
-    quad_strip([l3, l4], 8)
+    def hermite(p0, m0, p1, m1, t):
+        t2, t3 = t * t, t * t * t
+        return ((2 * t3 - 3 * t2 + 1) * p0 + (t3 - 2 * t2 + t) * m0
+                + (-2 * t3 + 3 * t2) * p1 + (t3 - t2) * m1)
 
-    # le testate
-    for sinistra in (True, False):
-        s = 1.0 if sinistra else -1.0
+    class Testa:
+        """Il telaio di una testata: s = +1 a sinistra, -1 a destra."""
 
-        def X(x):
-            """x dal taglio di testa di questa testata -> X della barretta."""
-            return s * (x - P / 2.0)
+        def __init__(self, s):
+            self.s = s
+            self.Xt, self.Xb = self.X(tf), self.X(tb)
+            self.O = np.array([self.Xt, 0.0, h / 2.0])
+            dd = np.array([self.Xb - self.Xt, 0.0, -h])
+            self.dd = dd / np.linalg.norm(dd)
+            nn = np.array([self.dd[2], 0.0, -self.dd[0]])
+            self.nn = nn if s > 0 else -nn
+            self.Yh = np.array([0.0, 1.0, 0.0])
 
-        def foglio_x(x):
-            return x if sinistra else P - x
+        def X(self, x):
+            return self.s * (x - P / 2.0)
 
-        Xt, Xb = X(tf), X(tb)
-        p_bt = np.array([Xt, BT[0], BT[1]])
-        p_ft = np.array([Xt, FT[0], FT[1]])
-        p_fb = np.array([Xb, FB[0], FB[1]])
-        p_bb = np.array([Xb, BB[0], BB[1]])
-        apice = (p_fb + p_bb) / 2.0
-        # il lembo della faccia, piegato sullo spigolo della faccia: giu'
-        # lungo la testata, di traverso alla barretta
-        lungo = np.array([Xb - Xt, 0.0, -h])
-        lungo /= np.linalg.norm(lungo)
+        def punto(self, e, f_, w):
+            return self.O + e * self.Yh + f_ * self.dd + w * self.nn
 
-        def da_faccia(q):
-            fq = float(np.dot(q - p_bt, lungo))         # giu' dallo spigolo
-            Y = q[1]
-            return uv(foglio_x(tf - fq), l2 + (a / 2.0 - Y))
+        def uv(self, xs, ys_):
+            return uv(xs if self.s > 0 else P - xs, ys_)
 
-        def da_fianco(q, c0, c1, s0, s1):
-            """Il punto della testata q, sull'aletta del fianco piegata sullo
-            spigolo c0-c1 (3D), che sul foglio e' s0-s1."""
-            e3 = c1 - c0
-            L = np.linalg.norm(e3)
-            e3 = e3 / L
-            t = float(np.dot(q - c0, e3))
-            g = float(np.linalg.norm(q - c0 - t * e3))
-            es = (s1 - s0) / np.linalg.norm(s1 - s0)
-            # verso fuori dalla barretta: x che cala verso il taglio
-            n = np.array([es[1], -es[0]])
-            if n[0] > 0:
-                n = -n
-            pt = s0 + t * es + g * n
-            return uv(foglio_x(pt[0]), pt[1])
+    teste = [Testa(1.0), Testa(-1.0)]
+    NPIEGA = 6
+    NCORPO = 30
 
-        tri = [
-            # il triangolo del lembo, la punta in basso
-            ((p_bt, p_ft, apice), da_faccia),
-            # l'aletta del retro
-            ((p_bt, apice, p_bb),
-             lambda q: da_fianco(q, p_bt, p_bb, np.array([tf, l2]),
-                                 np.array([tb, l1]))),
-            # l'aletta del fronte
-            ((p_ft, p_fb, apice),
-             lambda q: da_fianco(q, p_ft, p_fb, np.array([tf, l3]),
-                                 np.array([tb, l4]))),
-        ]
-        for (A, Bv, C), mappa in tri:
-            base = len(V)
-            for q in (A, Bv, C):
-                V.append(tuple(q))
-                UV.append(mappa(q))
-            T.append((base, base + 1, base + 2))
+    # il corpo e le pieghe di testata: una griglia sola, una riga per quota
+    righe = []
+    for y in quote:
+        p2, n2 = profilo(y)
+        p2 = p2 + rialzo(y) * n2
+        xt = testata(y)
+        i, j, t = banda_e_peso(y)
+        q = np.array(q_banda[i]) * (1 - t) + np.array(q_banda[j]) * t
+        q /= np.linalg.norm(q)
+        w = w_banda[i] * (1 - t) + w_banda[j] * t
+        banda = i if t < 0.5 else j
+        riga = []
+        lati = []
+        for te in teste:
+            E = np.array([te.X(xt), p2[0], p2[1]])
+            e, f_ = float(p2[0]), float(np.dot(E - te.O, te.dd))
+            eF, fF = e + rt * q[0], f_ + rt * q[1]
+            F = te.punto(eF, fF, w)
+            Bc = np.array([te.X(xt + rt), p2[0], p2[1]])
+            k = 1.5 * rt
+            m0 = -(q[0] * te.Yh + q[1] * te.dd) * k
+            m1 = np.array([te.s, 0.0, 0.0]) * k
+            sF = da_foglio_testata(banda, eF, fF)
+            sB = (xt + rt, y)
+            piega = []
+            for n in range(NPIEGA + 1):
+                tt = n / NPIEGA
+                piega.append((hermite(F, m0, Bc, m1, tt),
+                              te.uv(sF[0] + tt * (sB[0] - sF[0]),
+                                    sF[1] + tt * (sB[1] - sF[1]))))
+            lati.append(piega)
+        sinistra, destra = lati
+        riga.extend(sinistra)
+        for n in range(1, NCORPO):
+            x = xt + rt + (P - 2 * (xt + rt)) * n / NCORPO
+            riga.append((np.array([x - P / 2.0, p2[0], p2[1]]), uv(x, y)))
+        riga.extend(destra[::-1])
+        righe.append([nuovo(qv, tv) for qv, tv in riga])
+    for r0, r1 in zip(righe[:-1], righe[1:]):
+        for c in range(len(r0) - 1):
+            T.append((r0[c], r0[c + 1], r1[c + 1]))
+            T.append((r0[c], r1[c + 1], r1[c]))
+    # il taglio della fascia di sopra: il gradino dello strato
+    r0, r1 = (righe[-1], righe[0]) if p.fuori_sopra else (righe[0], righe[-1])
+    for c in range(len(r0) - 1):
+        T.append((r0[c], r0[c + 1], r1[c + 1]))
+        T.append((r0[c], r1[c + 1], r1[c]))
+    n_corpo = len(T)
+
+    # i lembi sulle testate
+    da_girare = []      # (triangolo, punto di riferimento dentro)
+    for te in teste:
+        def tri(pa, pb, pc, banda, w, ref):
+            """Un triangolo piatto del lembo della fascia `banda`, a w."""
+            ids = [nuovo(te.punto(e, f_, w),
+                         te.uv(*da_foglio_testata(banda, e, f_)))
+                   for e, f_ in (pa, pb, pc)]
+            da_girare.append((len(T), ref))
+            T.append(tuple(ids))
+
+        def bordo_a_vista(pa, pb, w_su, w_giu, banda, n=6):
+            """Lo spessore di un lembo lungo il suo bordo libero."""
+            prima = None
+            for k in range(n + 1):
+                t = k / n
+                e = pa[0] + t * (pb[0] - pa[0])
+                f_ = pa[1] + t * (pb[1] - pa[1])
+                st = te.uv(*da_foglio_testata(banda, e, f_))
+                su = nuovo(te.punto(e, f_, w_su(e, f_)), st)
+                giu_ = nuovo(te.punto(e, f_, w_giu), st)
+                if prima is not None:
+                    for tr in ((prima[0], su, giu_), (prima[0], giu_, prima[1])):
+                        da_girare.append((len(T), ("bordo", pa, pb, te)))
+                        T.append(tr)
+                prima = (su, giu_)
+
+        # sotto: il lembo del fondo, su tutta la testata (si vede nelle fessure)
+        base = [(-a / 2.0 + rt, rt), (a / 2.0 - rt, rt),
+                (a / 2.0 + d1 - rt, Lf - rt), (-a / 2.0 - d3 + rt, Lf - rt)]
+        tri(base[0], base[1], base[2], 4, W0 * 0.5, "fuori")
+        tri(base[0], base[2], base[3], 4, W0 * 0.5, "fuori")
+        # le alette dei fianchi
+        for banda, E0, E1 in ((1, (a / 2.0, 0.0), (a / 2.0 + d1, Lf)),
+                              (3, (-a / 2.0, 0.0), (-a / 2.0 - d3, Lf))):
+            qb = q_banda[banda]
+            P1 = (E0[0] + rt * qb[0], E0[1] + rt * qb[1])
+            # sulla piega spostata, alla quota della piega del fondo
+            tt = ((Lf - rt) - P1[1]) / (E1[1] - E0[1])
+            P2 = (P1[0] + tt * (E1[0] - E0[0]), Lf - rt)
+            P3 = (e_apice, Lf - rt)
+            tri(P1, P2, P3, banda, T1, "fuori")
+            bordo_a_vista(P2, P3, lambda e, f_: T1, W0 * 0.5, banda)
+
+        # in cima il lembo della faccia, a triangolo con la punta in basso,
+        # che si stacca verso la punta
+        def w_lembo(e, f_):
+            t = max(0.0, (f_ - rt) / (Lf - rt))
+            return T2 + STACCO * t * t
+
+        Q1, Q2, Q3 = (-a / 2.0, rt), (a / 2.0, rt), (e_apice, Lf - 0.3 * rt)
+        NU, NV = 6, 8
+        griglia = []
+        for jv in range(NV + 1):
+            v = jv / NV
+            riga = []
+            for iu in range(NU + 1):
+                u = iu / NU
+                e = (1 - v) * (Q1[0] + u * (Q2[0] - Q1[0])) + v * Q3[0]
+                f_ = (1 - v) * (Q1[1] + u * (Q2[1] - Q1[1])) + v * Q3[1]
+                riga.append(nuovo(te.punto(e, f_, w_lembo(e, f_)),
+                                  te.uv(*da_foglio_testata(2, e, f_))))
+            griglia.append(riga)
+        for jv in range(NV):
+            for iu in range(NU):
+                a0, a1 = griglia[jv][iu], griglia[jv][iu + 1]
+                b0, b1 = griglia[jv + 1][iu], griglia[jv + 1][iu + 1]
+                for tr in ((a0, a1, b1), (a0, b1, b0)):
+                    da_girare.append((len(T), "fuori"))
+                    T.append(tr)
+        bordo_a_vista(Q1, Q3, w_lembo, T1, 2, n=NV)
+        bordo_a_vista(Q2, Q3, w_lembo, T1, 2, n=NV)
 
     V = np.asarray(V, float)
     T = np.asarray(T, np.int64)
-    # tutti i triangoli verso fuori: la barretta e' convessa
+    # il corpo verso fuori: la barretta e' convessa
     c = V.mean(0)
-    for k, (i, j, m) in enumerate(T):
+    for k in range(n_corpo):
+        i, j, m = T[k]
         nrm = np.cross(V[j] - V[i], V[m] - V[i])
         if np.dot(nrm, (V[i] + V[j] + V[m]) / 3.0 - c) < 0:
+            T[k] = (i, m, j)
+    # i lembi: verso fuori dalla testata; i bordi: verso fuori dal lembo
+    for k, ref in da_girare:
+        i, j, m = T[k]
+        nrm = np.cross(V[j] - V[i], V[m] - V[i])
+        cen = (V[i] + V[j] + V[m]) / 3.0
+        if ref == "fuori":
+            te = teste[0] if cen[0] < 0 else teste[1]
+            dentro = np.dot(nrm, te.nn) < 0
+        else:
+            _tag, pa, pb, te = ref
+            # fuori dal bordo: dalla parte opposta al centro della testata
+            mid = te.punto((pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0, 0.0)
+            ctr = te.punto(0.0, Lf / 2.0, 0.0)
+            dentro = np.dot(nrm, mid - ctr) < 0
+        if dentro:
             T[k] = (i, m, j)
     return V, np.asarray(UV, float), T
