@@ -2738,7 +2738,9 @@ async function procedi(kind, extra){
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
-    if (kind === 'flowpack'){
+    // l'incarto a triangolo e' un film, ma non ha pinne ne' rigonfiamento:
+    // si costruisce subito
+    if (kind === 'flowpack' && info.kind !== 'incarto'){
       document.getElementById('teeth').value = '';
       document.getElementById('params-tit').textContent = 'Opzioni del flowpack';
       quantiFld.hidden = true;

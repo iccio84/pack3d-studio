@@ -11,10 +11,12 @@ forma che il codice non conosce ancora, la ricetta e' in FORME.md.
 - `server.py`, `_analyze_pdf`: la **lettura** del PDF e il riconoscimento
   della famiglia, in quest'ordine: coppa, pouch, flowpack dichiarato,
   vassoio e display con plancia, cono, ballotin, film che si dichiara
-  flowpack, astuccio. Un pack che esce della famiglia sbagliata si guarda qui.
+  flowpack, astuccio; l'incarto a triangolo si prova prima del flowpack
+  (`_analisi_incarto`). Un pack che esce della famiglia sbagliata si guarda
+  qui.
 - `server.py`, `build_carton`, `build_vassoio`, `build_plancia`,
   `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
-  `build_tubo`,
+  `build_tubo`, `build_incarto`,
   `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/verifica.py`: le verifiche della costruzione, nell'ordine in cui si
   fanno a mano (UVW contro il DT, fronte sul fronte, marchio dritto, facce
@@ -44,6 +46,7 @@ forma che il codice non conosce ancora, la ricetta e' in FORME.md.
 | tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `server.build_tubo`; `gelato.py` (il ghiacciolo che esce dalla bocca, a scelta) |
 | scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `server.build_prisma` |
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
+| incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `server.build_incarto` |
 | vassoio espositore | `vassoio.py` |
 | display con plancia | `plancia.py` |
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |

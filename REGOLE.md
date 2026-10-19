@@ -4287,6 +4287,57 @@ identico al byte.
 - Il lid, il tappo che chiude la bocca, non c'e': se arriva, sara' un
   secondo pezzo come il lid del cono.
 
+## L'incarto a triangolo
+
+Il foglio di film che avvolge una barretta rigida e si chiude sulle testate
+ripiegato, senza saldature ne' pinne: il Kinder Maxi («KM T1 WRAPPING
+(DOUBLE FOIL)»). Il codice sta in `pack3d/incarto.py`, il montaggio in
+`server.build_incarto`. Si dichiara flowpack (e' un film) o niente: l'analisi
+lo prova **prima** del flowpack, perche' il flowpack non lo rifiuta ma lo
+risolve male - un tubo gonfio con le pinne seghettate al posto delle testate
+- e sui flowpack esce subito (`server._analisi_incarto`; su tutto il parco
+non scatta mai, in qualche decimo di secondo). La pagina non chiede denti,
+rigonfiamento e pinne: costruisce subito.
+
+- Il **DT** e' un rettangolo, il passo lungo la barretta (141 mm) e il nastro
+  attorno (70). Le righe intere, da un taglio all'altro, sono gli spigoli
+  della barretta: cinque fasce, 18,75 | 10,5 | 17,5 | 10,5 | 12,75. Una riga a
+  meno di 3 mm da un taglio non fa fascia (sul Kinder Maxi quella a 1 mm,
+  dove l'eye-mark non e' stampato).
+- La **faccia** e' la fascia di mezzo, quella con le testate dritte: la
+  barretta li' e' lunga 108 mm (16,5 di lembo per parte). Sui **fianchi** le
+  testate sono inclinate, da 16,5 a 14 mm dal taglio: la barretta alla base
+  e' lunga 113, e la testata e' un piano inclinato di 14 gradi. Le due fasce
+  di fuori sono il **fondo**, con le testate in diagonale fino al taglio.
+- Il **sormonto** del fondo e' la riga intera piu' lontana dal suo taglio
+  dentro una delle due fasce del fondo (tratteggiata, sul Kinder Maxi a 10
+  mm): li' arriva il taglio dell'altra fascia, che sta sopra, a vista. Se il
+  DT non la disegna, 0,8 volte la fascia del fondo piu' stretta, ed e'
+  dichiarato stimato.
+- La **sezione** e' un trapezio: la faccia (17,5) in cima, il fondo largo
+  quanto avanza del nastro (31,5 - 10 = 21,5), i fianchi (10,5) inclinati;
+  alta 10,3 mm.
+- La **testata** si chiude a triangolo, la punta in basso (chiesto a chi ha
+  il pack: guardata di punta, il triangolo ha la punta verso il fondo). Il
+  lembo della faccia scende sulla testata coi lati ripiegati sotto: un
+  triangolo con la base sullo spigolo della faccia e la punta a meta' dello
+  spigolo del fondo. Le alette dei fianchi, ripiegate prima, coprono i due
+  triangoli ai lati; il lembo del fondo sta sotto e non si vede. Ogni pezzo
+  e' il foglio piegato sulla sua piega, senza stirarsi: la grafica della
+  testata e' quella del foglio da cui la carta arriva.
+- Il film e' sottile (0,1 mm): la barretta si modella con le sue facce, senza
+  spessore e senza l'interno. Il fronte (la faccia col marchio) guarda +Z,
+  la testa della scritta +Y.
+
+### Cosa manca
+
+- Sul fondo il DT segna due pieghe diagonali per testata, dagli spigoli del
+  fondo verso il mezzo: la carta li' e' piegata su se stessa. Il modello ha
+  il fondo liscio.
+- Gli spigoli sono vivi; la barretta vera li ha appena arrotondati.
+- Il foglio deve stare dritto sulla tavola, il passo in orizzontale; e la
+  scritta della faccia si legge con la testa verso la fascia di sopra.
+
 ## La scatola a prisma
 
 Una scatola di cartoncino con il fondo a poligono - esagono, ottagono,
