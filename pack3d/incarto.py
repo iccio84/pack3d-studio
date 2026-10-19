@@ -55,11 +55,9 @@ RAGGIO = 1.0
 # mm: la piega del film sugli spigoli delle testate
 RAGGIO_TESTA = 0.8
 # mm: lo spessore di un risvolto sulla testata. Il film ne ha 0,1: cosi'
-# sottile il bordo di lembo e alette non si vedeva, e la testata sembrava
-# dipinta («fai i risvolti piu' a vista, staccati, spessi»)
+# sottile il bordo delle alette non si vedeva, e la testata sembrava dipinta
+# («fai i risvolti piu' a vista, spessi»)
 STRATO = 0.3
-# mm: di quanto la punta del lembo della faccia si stacca dalla testata
-STACCO = 0.7
 
 
 @dataclass
@@ -334,10 +332,10 @@ def maglia(p, origine_mm, px_mm, misura_tex):
 
     Il film gira attorno alla sezione con gli spigoli arrotondati (`RAGGIO`),
     passa sugli spigoli delle testate con una piega tonda (`RAGGIO_TESTA`) e
-    finisce sulla testata in tre strati: sotto il lembo del fondo, sopra le
-    alette dei fianchi, in cima il triangolo del lembo della faccia, che si
-    stacca verso la punta (`STACCO`). Ogni strato ha il suo spessore a vista
-    (`STRATO`)."""
+    finisce sulla testata in tre strati: sotto il lembo del fondo, sopra il
+    lembo della faccia, in cima le alette rosse dei fianchi, che lasciano a
+    vista il triangolo del lembo. Il bordo delle alette ha il suo spessore a
+    vista (`STRATO`); tutto attaccato, un pezzo solo."""
     Wt, Ht = misura_tex
     fx, fy = p.origine          # l'angolo del foglio, mm sulla pagina
     ox, oy = origine_mm
@@ -440,7 +438,7 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     nf = math.hypot(d3, Lf)
     q_banda = [(0.0, -1.0), (-Lf / nb, d1 / nb), (0.0, 1.0), (Lf / nf, d3 / nf),
                (0.0, -1.0)]
-    w_banda = [W0, T1, T2, T1, W0]
+    w_banda = [W0, T2, T1, T2, W0]
     e_apice = (d1 - d3) / 2.0
     lim = [l1, l2, l3, l4]
 
@@ -525,8 +523,10 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     # il corpo e le pieghe di testata: una griglia sola, una riga per quota
     righe = []
     for y in quote:
-        p2, n2 = profilo(y)
-        p2 = p2 + rialzo(y) * n2
+        p0, n2 = profilo(y)
+        # il gradino del sormonto sul fondo, che sulle pieghe di testata
+        # sfuma: sulla testata non sporge
+        p2 = p0 + rialzo(y) * n2
         xt = testata(y)
         i, j, t = banda_e_peso(y)
         q = np.array(q_banda[i]) * (1 - t) + np.array(q_banda[j]) * t
@@ -536,8 +536,8 @@ def maglia(p, origine_mm, px_mm, misura_tex):
         riga = []
         lati = []
         for te in teste:
-            E = np.array([te.X(xt), p2[0], p2[1]])
-            e, f_ = float(p2[0]), float(np.dot(E - te.O, te.dd))
+            E = np.array([te.X(xt), p0[0], p0[1]])
+            e, f_ = float(p0[0]), float(np.dot(E - te.O, te.dd))
             eF, fF = e + rt * q[0], f_ + rt * q[1]
             F = te.punto(eF, fF, w)
             Bc = np.array([te.X(xt + rt), p2[0], p2[1]])
@@ -582,28 +582,36 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             da_girare.append((len(T), ref))
             T.append(tuple(ids))
 
-        def bordo_a_vista(pa, pb, w_su, w_giu, banda, n=6):
-            """Lo spessore di un lembo lungo il suo bordo libero."""
+        def bordo_a_vista(pa, pb, w_su, w_giu, banda, cen, n=6):
+            """Lo spessore di un'aletta lungo il suo bordo libero, da w_su
+            fino allo strato sotto, w_giu: verso fuori dall'aletta, il cui
+            mezzo e' `cen`."""
             prima = None
             for k in range(n + 1):
                 t = k / n
                 e = pa[0] + t * (pb[0] - pa[0])
                 f_ = pa[1] + t * (pb[1] - pa[1])
                 st = te.uv(*da_foglio_testata(banda, e, f_))
-                su = nuovo(te.punto(e, f_, w_su(e, f_)), st)
+                su = nuovo(te.punto(e, f_, w_su), st)
                 giu_ = nuovo(te.punto(e, f_, w_giu), st)
                 if prima is not None:
                     for tr in ((prima[0], su, giu_), (prima[0], giu_, prima[1])):
-                        da_girare.append((len(T), ("bordo", pa, pb, te)))
+                        da_girare.append((len(T), ("bordo", te.punto(*cen, w_su))))
                         T.append(tr)
                 prima = (su, giu_)
 
-        # sotto: il lembo del fondo, su tutta la testata (si vede nelle fessure)
+        # sotto tutto, il lembo del fondo
         base = [(-a / 2.0 + rt, rt), (a / 2.0 - rt, rt),
                 (a / 2.0 + d1 - rt, Lf - rt), (-a / 2.0 - d3 + rt, Lf - rt)]
         tri(base[0], base[1], base[2], 4, W0 * 0.5, "fuori")
         tri(base[0], base[2], base[3], 4, W0 * 0.5, "fuori")
-        # le alette dei fianchi
+        # sopra, il lembo della faccia: si vede il triangolo fra le alette,
+        # la base sullo spigolo della faccia e la punta in basso
+        P3 = (e_apice, Lf - rt)
+        tri((-a / 2.0, rt), (a / 2.0, rt), P3, 2, T1, "fuori")
+        # in cima le alette rosse dei fianchi, ripiegate sul lembo: il loro
+        # bordo in diagonale, dallo spigolo della faccia alla punta, e' il
+        # risvolto a vista, col suo spessore fino al lembo sotto
         for banda, E0, E1 in ((1, (a / 2.0, 0.0), (a / 2.0 + d1, Lf)),
                               (3, (-a / 2.0, 0.0), (-a / 2.0 - d3, Lf))):
             qb = q_banda[banda]
@@ -611,38 +619,10 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             # sulla piega spostata, alla quota della piega del fondo
             tt = ((Lf - rt) - P1[1]) / (E1[1] - E0[1])
             P2 = (P1[0] + tt * (E1[0] - E0[0]), Lf - rt)
-            P3 = (e_apice, Lf - rt)
-            tri(P1, P2, P3, banda, T1, "fuori")
-            bordo_a_vista(P2, P3, lambda e, f_: T1, W0 * 0.5, banda)
-
-        # in cima il lembo della faccia, a triangolo con la punta in basso,
-        # che si stacca verso la punta
-        def w_lembo(e, f_):
-            t = max(0.0, (f_ - rt) / (Lf - rt))
-            return T2 + STACCO * t * t
-
-        Q1, Q2, Q3 = (-a / 2.0, rt), (a / 2.0, rt), (e_apice, Lf - 0.3 * rt)
-        NU, NV = 6, 8
-        griglia = []
-        for jv in range(NV + 1):
-            v = jv / NV
-            riga = []
-            for iu in range(NU + 1):
-                u = iu / NU
-                e = (1 - v) * (Q1[0] + u * (Q2[0] - Q1[0])) + v * Q3[0]
-                f_ = (1 - v) * (Q1[1] + u * (Q2[1] - Q1[1])) + v * Q3[1]
-                riga.append(nuovo(te.punto(e, f_, w_lembo(e, f_)),
-                                  te.uv(*da_foglio_testata(2, e, f_))))
-            griglia.append(riga)
-        for jv in range(NV):
-            for iu in range(NU):
-                a0, a1 = griglia[jv][iu], griglia[jv][iu + 1]
-                b0, b1 = griglia[jv + 1][iu], griglia[jv + 1][iu + 1]
-                for tr in ((a0, a1, b1), (a0, b1, b0)):
-                    da_girare.append((len(T), "fuori"))
-                    T.append(tr)
-        bordo_a_vista(Q1, Q3, w_lembo, T1, 2, n=NV)
-        bordo_a_vista(Q2, Q3, w_lembo, T1, 2, n=NV)
+            cen = ((P1[0] + P2[0] + P3[0]) / 3.0, (P1[1] + P2[1] + P3[1]) / 3.0)
+            tri(P1, P2, P3, banda, T2, "fuori")
+            bordo_a_vista(P1, P3, T2, T1, banda, cen, n=8)
+            bordo_a_vista(P2, P3, T2, W0 * 0.5, banda, cen)
 
     V = np.asarray(V, float)
     T = np.asarray(T, np.int64)
@@ -662,11 +642,8 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             te = teste[0] if cen[0] < 0 else teste[1]
             dentro = np.dot(nrm, te.nn) < 0
         else:
-            _tag, pa, pb, te = ref
-            # fuori dal bordo: dalla parte opposta al centro della testata
-            mid = te.punto((pa[0] + pb[0]) / 2.0, (pa[1] + pb[1]) / 2.0, 0.0)
-            ctr = te.punto(0.0, Lf / 2.0, 0.0)
-            dentro = np.dot(nrm, mid - ctr) < 0
+            # fuori dal bordo: dalla parte opposta al mezzo dell'aletta
+            dentro = np.dot(nrm, cen - ref[1]) < 0
         if dentro:
             T[k] = (i, m, j)
     return V, np.asarray(UV, float), T

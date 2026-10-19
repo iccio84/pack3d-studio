@@ -4318,24 +4318,26 @@ rigonfiamento e pinne: costruisce subito.
   quanto avanza del nastro (31,5 - 10 = 21,5), i fianchi (10,5) inclinati;
   alta 10,3 mm.
 - La **testata** si chiude a triangolo, la punta in basso (chiesto a chi ha
-  il pack: guardata di punta, il triangolo ha la punta verso il fondo). Il
-  lembo della faccia scende sulla testata coi lati ripiegati sotto: un
-  triangolo con la base sullo spigolo della faccia e la punta a meta' dello
-  spigolo del fondo. Le alette dei fianchi, ripiegate prima, coprono i due
-  triangoli ai lati; il lembo del fondo sta sotto e non si vede. Ogni pezzo
-  e' il foglio piegato sulla sua piega, senza stirarsi: la grafica della
-  testata e' quella del foglio da cui la carta arriva.
+  il pack: guardata di punta, il triangolo ha la punta verso il fondo). Sotto
+  tutto il lembo del fondo; sopra il lembo della faccia, che scende sulla
+  testata; in cima le due **alette rosse dei fianchi**, ripiegate sul lembo:
+  sono loro i risvolti a vista, e il loro bordo in diagonale, dallo spigolo
+  della faccia a meta' dello spigolo del fondo, lascia vedere il triangolo
+  bianco del lembo. Ogni pezzo e' il foglio piegato sulla sua piega, senza
+  stirarsi: la grafica della testata e' quella del foglio da cui la carta
+  arriva. La prima versione aveva il triangolo del lembo sopra le alette, e
+  la seconda staccato verso la punta: «deve essere un pezzo unico e i
+  risvolti visibili sono i due laterali rossi».
 - Gli **spigoli** lunghi sono arrotondati (1 mm, `RAGGIO`) e il film passa
   sugli spigoli delle testate con una piega tonda (0,8 mm, `RAGGIO_TESTA`):
   a spigoli vivi sembrava un blocchetto di legno. La grafica gira attorno
   allo spigolo senza stirarsi (la piega del foglio sta a meta' dell'arco).
-- I **risvolti si vedono**: sulla testata il film sta in tre strati - sotto
-  il lembo del fondo, sopra le alette dei fianchi, in cima il triangolo del
-  lembo della faccia - e ogni strato ha il suo spessore a vista, 0,3 mm
-  (`STRATO`) invece degli 0,1 del film; la punta del triangolo si stacca di
-  0,7 mm (`STACCO`). Col film vero, schiacciato e sottile, la testata
-  sembrava dipinta: «fai i risvolti piu' a vista, staccati, spessi». Anche
-  il sormonto sotto ha il suo gradino.
+- I **risvolti si vedono**: ogni strato della testata e' 0,3 mm (`STRATO`)
+  invece degli 0,1 del film, e il bordo delle alette ha il suo spessore a
+  vista. Col film vero, schiacciato e sottile, la testata sembrava dipinta:
+  «fai i risvolti piu' a vista, spessi». Tutto attaccato, senza fessure:
+  un pezzo solo. Anche il sormonto sotto ha il suo gradino, che sulle pieghe
+  di testata sfuma.
 - La barretta si modella con le sue facce, senza l'interno. Il fronte (la
   faccia col marchio) guarda +Z, la testa della scritta +Y.
 
