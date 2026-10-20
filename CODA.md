@@ -4,7 +4,8 @@ Queste sono le istruzioni per la sessione di Claude Code che prende i casi
 nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
 rilascio della settimana sta in RILASCIO.md, la mappa del codice in MAPPA.md,
 il perche' delle regole del codice in REGOLE.md, la ricetta per una forma
-nuova in FORME.md.
+nuova in FORME.md. I gadget non passano dalla coda: le loro regole sono in
+GADGET.md.
 
 ## Prima di tutto: risparmiare
 

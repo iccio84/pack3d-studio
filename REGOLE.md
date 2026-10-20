@@ -5904,6 +5904,15 @@ TAPPO, VASSOIO, FLOWPACK...) nella sua zona.
   dallo Space con `/api/import-template`. Se non passa, modello e texture ci
   sono lo stesso.
 
+## I gadget
+
+Gli oggetti promozionali fatti in 3D - un dispenser, una tazza, una
+borraccia - non sono pack e spesso non hanno un DT: arrivano foto, testo,
+misure e immagini esempio che non sono il prodotto. Le tre regole qui sopra
+non si applicano; le loro regole stanno in GADGET.md (le fonti e quale
+comanda, cosa chiedere subito, misurare da una foto, il modello, la
+verifica sul modello, i render). La categoria non e' ancora nella pagina.
+
 ## Casi calibrati
 
 Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel

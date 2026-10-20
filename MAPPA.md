@@ -4,7 +4,9 @@ Per chi corregge un caso della coda (CODA.md): dove sta quello che serve,
 senza aprire i file interi. `server.py` e la pagina sono lunghi (decine di
 migliaia di parole), REGOLE.md ancora di piu': si cerca con `grep -n` e si
 legge solo il pezzo (`sed -n 'A,Bp'`, o Read con offset e limit). Per una
-forma che il codice non conosce ancora, la ricetta e' in FORME.md.
+forma che il codice non conosce ancora, la ricetta e' in FORME.md. I gadget
+(oggetti promozionali senza DT) non hanno ancora codice qui: le loro regole
+sono in GADGET.md.
 
 ## Il giro di una costruzione
 
