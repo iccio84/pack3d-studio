@@ -2512,7 +2512,11 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  "standup": "pouch", "busta": "pouch", "bag": "pouch",
                  # un vassoio coi suoi flowpack dentro, vedi `pack3d.riempimento`
                  "riempimento": "riempimento", "riempimenti": "riempimento",
-                 "vassoio pieno": "riempimento", "filling": "riempimento"}
+                 "vassoio pieno": "riempimento", "filling": "riempimento",
+                 # un foglio che avvolge un prodotto: a pieghe (la barretta)
+                 # o avvolto tutto (l'ovetto), vedi `analisi_incarto_dichiarato`
+                 "incarto": "incarto", "incarti": "incarto",
+                 "wrapping": "incarto", "wrapper": "incarto"}
 
 
 def normalizza_kind(kind):
@@ -2521,12 +2525,15 @@ def normalizza_kind(kind):
     return SINONIMI_KIND.get(str(kind).strip().lower(), kind)
 
 
-KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch", "riempimento")
+KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch", "riempimento",
+             "incarto")
 # come l'utente ha chiamato il pack, per il controllo dell'AI
 NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
              "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato",
              "pouch": "pouch (busta stand-up col soffietto sul fondo)",
-             "riempimento": "riempimento (un vassoio espositore coi suoi flowpack)"}
+             "riempimento": "riempimento (un vassoio espositore coi suoi flowpack)",
+             "incarto": "incarto (un foglio di carta, alluminio o plastica che "
+                        "avvolge un prodotto)"}
 
 
 def dichiarazione(kind, pezzi):
@@ -2543,7 +2550,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
                 "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "incisioni", "cu", "gelato")
+                "quanti", "incisioni", "cu", "gelato", "chiusura")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2657,6 +2664,27 @@ def incisioni_scelte(valore):
         raise ValueError("La fustella dell'apertura modellata si dice con si' o no")
 
 
+# Come si chiude l'incarto: "pieghe", il foglio attorno al prodotto e chiuso
+# con le pieghe sulle testate (le barrette, `pack3d.incarto`); "avvolto", il
+# foglio che avvolge tutto il prodotto (tipo l'ovetto), che il codice non sa
+# ancora costruire. Senza dichiarazione, a pieghe: e' quello che c'e'.
+CHIUSURE_INCARTO = {"pieghe": "pieghe", "a pieghe": "pieghe",
+                    "piegato": "pieghe", "barretta": "pieghe",
+                    "avvolto": "avvolto", "avviluppato": "avvolto",
+                    "avvolgente": "avvolto", "ovetto": "avvolto"}
+
+
+def chiusura_incarto(valore):
+    """"pieghe" o "avvolto"; ValueError per tutto il resto."""
+    if valore in (None, ""):
+        return "pieghe"
+    v = CHIUSURE_INCARTO.get(str(valore).strip().lower())
+    if v is None:
+        raise ValueError("La chiusura dell'incarto si dice con 'pieghe' (le "
+                         "barrette) o 'avvolto' (tipo l'ovetto)")
+    return v
+
+
 def pellicola_scelta(valore):
     """True, False, o None se non e' dichiarata. ValueError se non e' un si'
     o un no."""
@@ -2719,6 +2747,10 @@ def _analyze_pdf(pdf, kind=None, domande=False):
         # due PDF, non uno: vedi `analisi_riempimento`. Qui non deve mai
         # arrivare, e se arriva non deve cadere nel ramo del flowpack.
         raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
+    if kind == "incarto":
+        # dichiarato senza dire come si chiude: a pieghe, vedi
+        # `analisi_incarto_dichiarato` (la pagina passa da li')
+        return analisi_incarto_dichiarato(pdf, "pieghe")
     if kind == "pouch":
         pu = analisi_pouch(pdf)
         return dict(kind="pouch", title="Pouch",
@@ -2945,6 +2977,66 @@ def _analyze_pdf(pdf, kind=None, domande=False):
             if cp.riconosci(pdf) is not None:
                 return analisi_coppa([pdf])
         raise
+
+
+# l'immagine del prodotto da incartare: la pagina la rimpicciolisce a 1600 px
+PRODOTTO_MAX = 12 * 1024 * 1024
+
+
+def _separa_prodotto(data, opts):
+    """`(corpo dei PDF, loro parti, immagine o None)`.
+
+    L'immagine del prodotto da incartare arriva in coda al corpo, dopo i PDF:
+    l'ultima delle `parti`, quando `opts["prodotto"]` c'e'. ValueError se le
+    parti non tornano o se non e' una foto JPEG, PNG o WebP."""
+    if not opts.get("prodotto"):
+        return data, opts.get("parti"), None
+    try:
+        parti = [int(k) for k in (opts.get("parti") or [])]
+    except (TypeError, ValueError):
+        parti = []
+    if len(parti) < 2 or any(k <= 0 for k in parti) or sum(parti) != len(data):
+        raise ValueError("L'immagine del prodotto non torna col corpo: "
+                         "manda il PDF e poi l'immagine, con le loro lunghezze")
+    n = parti[-1]
+    if n > PRODOTTO_MAX:
+        raise ValueError("L'immagine del prodotto e' troppo grande (al massimo "
+                         "%d MB)" % (PRODOTTO_MAX // (1024 * 1024)))
+    immagine = data[-n:]
+    coda.tipo_foto(immagine)
+    resto = parti[:-1]
+    return data[:-n], (resto if len(resto) > 1 else None), immagine
+
+
+def riga_prodotto(immagine, nome):
+    """La riga per chi guarda il modello: l'immagine del prodotto ricevuta."""
+    try:
+        from PIL import Image
+        import io
+        w, h = Image.open(io.BytesIO(immagine)).size
+        misura = "%d x %d px" % (w, h)
+    except Exception:
+        misura = "%d kB" % (len(immagine) // 1024)
+    return ("il prodotto da incartare: %s, immagine %s (va col caso, se finisce "
+            "in coda; la misura del modello per ora la da' il DT)"
+            % ("\u00ab%s\u00bb" % nome if nome else "senza nome", misura))
+
+
+def analisi_incarto_dichiarato(pdf, chiusura):
+    """L'incarto dichiarato dalla pagina: a pieghe, il foglio della barretta
+    (`_analisi_incarto`); avvolto, tipo l'ovetto, non ancora. Si ferma con
+    l'errore che dice cosa manca, e il caso va in coda."""
+    if chiusura == "avvolto":
+        raise ValueError("incarto avvolto (tipo l'ovetto): il codice non sa "
+                         "ancora costruirlo. Il caso va in coda col PDF e "
+                         "l'immagine del prodotto")
+    letto = _analisi_incarto(pdf)
+    if letto is None:
+        raise ValueError("incarto a pieghe: il DT non si legge come il foglio "
+                         "di una barretta incartata (vuole cinque fasce fra "
+                         "righe intere, la faccia in mezzo con le testate "
+                         "dritte e i fianchi con le testate inclinate)")
+    return letto
 
 
 def _analisi_incarto(pdf):
@@ -3450,10 +3542,20 @@ class Handler(BaseHTTPRequestHandler):
             if not data.startswith(b"%PDF"):
                 return self._send(400, "Il file caricato non e' un PDF")
             opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            # L'immagine del prodotto da incartare arriva in coda, dopo i PDF
+            # (vedi `_separa_prodotto`): gli incarti la chiedono, perche' la
+            # misura finale del 3D dipende anche dal prodotto.
+            try:
+                data, parti_pdf, prodotto = _separa_prodotto(data, opts)
+            except ValueError as e:
+                return self._send(400, str(e))
+            dichiarato = opts.get("prodotto")
+            nome_prodotto = (unquote(str(dichiarato.get("nome") or ""))[:200]
+                             if isinstance(dichiarato, dict) else "")
             # Piu' PDF in un corpo solo, uno dopo l'altro: `parti` ne dice le
             # lunghezze. Serve alla coppa, che arriva in due file - lo sleeve
             # e il tappo - e si costruisce intera solo con tutti e due.
-            blocchi = _dividi(data, opts.get("parti"))
+            blocchi = _dividi(data, parti_pdf)
             if blocchi is None:
                 return self._send(400, "Le parti dichiarate non tornano col "
                                        "corpo, o una non e' un PDF")
@@ -3478,6 +3580,20 @@ class Handler(BaseHTTPRequestHandler):
                                            "dichiara %s"
                                            % (kind, " o ".join("'%s'" % k
                                                                for k in KIND_NOTI)))
+                if kind == "incarto" and prodotto is None:
+                    return self._send(400, "Incarti: carica anche l'immagine del "
+                                           "prodotto da incartare. La misura "
+                                           "finale del 3D dipende anche dal "
+                                           "prodotto, non solo dallo steso")
+                if prodotto is not None and kind != "incarto":
+                    return self._send(400, "L'immagine del prodotto serve solo "
+                                           "agli incarti")
+                # il caso in coda porta anche l'immagine del prodotto
+                blocchi_caso, nomi_caso = list(blocchi), list(nomi)
+                if prodotto is not None:
+                    base = os.path.splitext(nome_prodotto)[0] or "immagine"
+                    blocchi_caso.append(prodotto)
+                    nomi_caso.append("prodotto_%s.%s" % (base, coda.tipo_foto(prodotto)))
                 # Il cartotecnico dice di quanti pezzi e' fatto, e ogni pezzo
                 # e' un PDF: se i conti non tornano non si indovina quale
                 # manca, si dice.
@@ -3502,6 +3618,7 @@ class Handler(BaseHTTPRequestHandler):
                     con_pellicola = pellicola_scelta(opts.get("pellicola"))
                     con_incisioni = incisioni_scelte(opts.get("incisioni"))
                     con_gelato = gelato.gusto(opts.get("gelato"))
+                    chiusura = chiusura_incarto(opts.get("chiusura"))
                     quanti = quanti_pezzi(opts.get("quanti"))
                     cu = cu_riempimento(opts.get("cu"))
                 except ValueError as e:
@@ -3519,8 +3636,8 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         letto = analisi_riempimento(pdfs, cu)
                     except Exception as e:
-                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
-                                                      blocchi)
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
+                                                      blocchi_caso)
                         return self._send(500, errore, controllo=verdetto)
                     return self._send(200, json.dumps(letto))
                 if (in_piu_pezzi(kind, pdfs)
@@ -3530,8 +3647,8 @@ class Handler(BaseHTTPRequestHandler):
                     try:
                         letto = analisi_coppa(pdfs, kind)
                     except Exception as e:
-                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
-                                                      blocchi)
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
+                                                      blocchi_caso)
                         return self._send(500, errore, controllo=verdetto)
                     return self._send(200, json.dumps(letto))
                 if self.path.startswith("/api/analyze-ai"):
@@ -3544,10 +3661,15 @@ class Handler(BaseHTTPRequestHandler):
                     # PDF che il codice non sa leggere si ferma qui, e la
                     # costruzione non parte mai. Va in coda da qui.
                     try:
-                        letto = analyze_pdf(pdf, kind, domande=True)
+                        if kind == "incarto":
+                            letto = analisi_incarto_dichiarato(pdf, chiusura)
+                            letto = dict(letto, meta=list(letto.get("meta") or [])
+                                         + [riga_prodotto(prodotto, nome_prodotto)])
+                        else:
+                            letto = analyze_pdf(pdf, kind, domande=True)
                     except Exception as e:
-                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
-                                                      blocchi)
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
+                                                      blocchi_caso)
                         return self._send(500, errore, controllo=verdetto)
                     return self._send(200, json.dumps(letto))
                 if self.path.startswith("/api/build"):
@@ -3565,7 +3687,9 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_riempimento(pdfs, cu) if kind == "riempimento"
+                        info = (analisi_incarto_dichiarato(pdf, chiusura)
+                                if kind == "incarto"
+                                else analisi_riempimento(pdfs, cu) if kind == "riempimento"
                                 else analisi_coppa(pdfs, kind)
                                 if in_piu_pezzi(kind, pdfs)
                                 else analyze_pdf(pdf, kind))
@@ -3575,6 +3699,10 @@ class Handler(BaseHTTPRequestHandler):
                         # Su TUTTI i rami: e' proprio sul ramo che se ne
                         # dimenticava che nasceva l'UnboundLocalError.
                         avvisi_ingresso = []
+                        # l'immagine del prodotto da incartare: nei dettagli
+                        # tecnici, non fra le righe dell'AI
+                        righe_prodotto = ([riga_prodotto(prodotto, nome_prodotto)]
+                                          if prodotto is not None else [])
                         # Le aree riservate che l'agente ha visto: valgono su
                         # tutte e due le famiglie, quindi si leggono una volta
                         # sola prima di scegliere il ramo.
@@ -3719,7 +3847,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "%d kB" % (os.path.getsize(out) // 1024))
                         with open(out, "rb") as fh:
                             glb = fh.read()
-                        meta = avvisi_ingresso + list(avvisi)
+                        meta = righe_prodotto + avvisi_ingresso + list(avvisi)
                         # Le righe dell'AI - le sue scelte, il verdetto del
                         # controllo, la correzione - viaggiano anche in un
                         # header loro: la pagina le tiene in vista, e il
@@ -3749,8 +3877,8 @@ class Handler(BaseHTTPRequestHandler):
                                 meta.append(righe_ai[-1])
                         traccia("totale", t0)
                     except Exception as e:
-                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi, opts,
-                                                      blocchi, info)
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
+                                                      blocchi_caso, info)
                         return self._send(500, errore, controllo=verdetto)
                     finally:
                         _slots.release()
@@ -3777,14 +3905,15 @@ class Handler(BaseHTTPRequestHandler):
                                                    quadro, verdetto, ctx)
                             if nuovo is not None:
                                 glb, avvisi_corr, quadro, verdetto, ctx = nuovo
-                                meta = avvisi_ingresso + list(avvisi_corr)
+                                meta = (righe_prodotto + avvisi_ingresso
+                                        + list(avvisi_corr))
                             ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
                         # anche il dubbio: il modello all'utente arriva lo
                         # stesso, ma qualcuno deve guardarlo, e se ha un
                         # difetto vero correggerlo come un caso respinto
                         if verdetto["esito"] in ("sbagliato", "dubbio"):
                             verdetto["codice"], verdetto["in_coda"] = coda.metti(
-                                blocchi, nomi, verdetto, quadro["viste"], ctx)
+                                blocchi_caso, nomi_caso, verdetto, quadro["viste"], ctx)
                             verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
                         if riga:
                             meta.insert(0, riga)

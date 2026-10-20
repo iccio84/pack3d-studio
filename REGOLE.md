@@ -410,8 +410,8 @@ allora si gira la scatola intera, guscio, interno e coste
 
 **La prima domanda e' la famiglia, prima di ogni PDF.** Appena aperta, la
 pagina chiede: *Che tipo di Pack/Riempimento intendi realizzare?* - Flowpack,
-Pouch, Cartotecnico, Vassoio, Riempimenti - ognuna con la sua descrizione in
-una riga. Senza la famiglia non si carica niente: un PDF trascinato prima
+Pouch, Cartotecnico, Vassoio, Riempimenti, Incarti - ognuna con la sua
+descrizione in una riga. Senza la famiglia non si carica niente: un PDF trascinato prima
 riceve solo la richiesta di sceglierla, e al server non parte nulla. Scelta
 la famiglia, il passo della famiglia chiede il resto e ha **un posto per ogni
 PDF**, col suo nome: si sa sempre quali file mancano.
@@ -423,6 +423,7 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 | **Cartotecnico** | **astuccio** (un solo elemento che si chiude da solo) o **scatola** (due o piu' elementi, per esempio base piu' coperchio); lo **spessore della carta**, da 1 a 3; l'astuccio un PDF, la scatola **di quante parti** e' fatta e poi **esattamente quei PDF**, uno per parte. Dopo lo studio, se l'astuccio ha un'**apertura a strappo**: chiuso - e allora se si vuole la **fustella dell'apertura modellata** - o aperto, e allora di **quanti gradi** si apre il coperchio. Se ha una finestra, la **pellicola** | passo `carto`, `parti`, `spessore`; pannelli `strappo` e `pellicola`; `pezzi`, `spessore`, `apertura`, `incisioni`, `pellicola` nell'intestazione |
 | **Vassoio** - contenitore espositivo per le CU, display con plancia compresi, realizzati vuoti | il PDF, e si costruisce | `build_vassoio`, `build_plancia` |
 | **Riempimenti** - TU: un vassoio o un display con dentro le CU | che cosa e' il **pack (CU)**: flowpack o astuccio, e dell'astuccio lo spessore della carta; due posti, il **pack (CU)** e il **vassoio o display**, e finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack, o - per l'astuccio con l'apertura a strappo - se se ne vuole la fustella modellata | `cu`, `analisi_riempimento`, `build_riempimento` |
+| **Incarti** - un foglio di carta, alluminio o plastica che avvolge un prodotto | come si **chiude**: **a pieghe** (le barrette) o **avvolto** (tipo l'ovetto); due posti, il **PDF dello steso** e l'**immagine del prodotto** da incartare (JPEG, PNG o WebP), e finche' non ci sono tutti e due non si procede. Poi si costruisce, senza altre domande | passo `incarto-scelta`; `chiusura` e `prodotto` nell'intestazione; `analisi_incarto_dichiarato`, `build_incarto` |
 
 Le famiglie da un PDF solo partono appena il PDF c'e'. Se la lettura o la
 costruzione si ferma, si torna al passo coi PDF ancora al loro posto: se ne
@@ -4292,7 +4293,9 @@ identico al byte.
 Il foglio di film che avvolge una barretta rigida e si chiude sulle testate
 ripiegato, senza saldature ne' pinne: il Kinder Maxi («KM T1 WRAPPING
 (DOUBLE FOIL)»). Il codice sta in `pack3d/incarto.py`, il montaggio in
-`server.build_incarto`. Si dichiara flowpack (e' un film) o niente: l'analisi
+`server.build_incarto`. Dalla pagina si dichiara **Incarti**, chiuso **a
+pieghe** (vedi *Gli incarti nella pagina*, sotto); dichiarato flowpack (e' un
+film) o senza tipo, lo si riconosce lo stesso: l'analisi
 lo prova **prima** del flowpack, perche' il flowpack non lo rifiuta ma lo
 risolve male - un tubo gonfio con le pinne seghettate al posto delle testate
 - e sui flowpack esce subito (`server._analisi_incarto`; su tutto il parco
@@ -4393,6 +4396,36 @@ rigonfiamento e pinne: costruisce subito.
 - La barretta si modella con le sue facce, senza l'interno. Il fronte (la
   faccia col marchio) guarda +Z, la testa della scritta +Y.
 
+### Gli incarti nella pagina
+
+La famiglia **Incarti**: un foglio di carta, alluminio o plastica che avvolge
+un prodotto e si chiude **con le pieghe** (le barrette) o **avvolgendolo**
+tutto (tipo l'ovetto con la sorpresa). La misura finale del 3D non dipende
+solo dallo steso ma anche dal **prodotto**: per questo la pagina, oltre al
+PDF, chiede **l'immagine del prodotto da incartare**.
+
+- La pagina chiede prima come si chiude (`chiusura`: `pieghe` o `avvolto`),
+  poi mostra due posti, il PDF dello steso e l'immagine; il tasto del
+  secondo apre la scelta delle immagini. Un file trascinato va nel posto
+  del suo tipo. L'immagine si rimpicciolisce a 1600 px sul lato lungo, in
+  JPEG, come la foto della nota.
+- Il corpo della richiesta e' il PDF e poi l'immagine, di fila: `parti`
+  ne da' le lunghezze e `prodotto` (`nome`, `tipo`) dice che l'ultimo
+  pezzo e' l'immagine. Il server la separa subito (`_separa_prodotto`: deve
+  essere davvero una JPEG, PNG o WebP, al massimo 12 MB). Senza immagine un
+  incarto si ferma con 400; un'immagine con un'altra famiglia pure.
+- **A pieghe** si costruisce come l'incarto a triangolo; se il PDF non e'
+  un incarto a triangolo, si ferma e va in coda. **Avvolto** il codice non
+  lo sa ancora costruire: si ferma subito, e il caso va in coda col PDF e
+  l'immagine.
+- L'immagine **va col caso** (`prodotto_<nome>.jpg`, accanto al PDF) e nei
+  dettagli tecnici c'e' una riga che la nomina, con le sue misure in pixel.
+  **Per ora la misura del modello la da' il DT**: l'immagine non entra
+  ancora nella costruzione.
+- Gli **incarti parzialmente scartati** (la barretta che esce dal foglio
+  aperto) nella pagina non ci sono ancora: come chiederli si decide dopo,
+  per esempio con un'immagine guida.
+
 ### Cosa manca
 
 - Sul fondo il DT segna due pieghe diagonali per testata, dagli spigoli del
@@ -4400,6 +4433,9 @@ rigonfiamento e pinne: costruisce subito.
   il fondo liscio.
 - Il foglio deve stare dritto sulla tavola, il passo in orizzontale; e la
   scritta della faccia si legge con la testa verso la fascia di sopra.
+- L'incarto **avvolto** (l'ovetto) non si costruisce: va in coda.
+- L'immagine del prodotto non entra ancora nella misura del modello.
+- Gli incarti parzialmente scartati nella pagina.
 
 ## La scatola a prisma
 

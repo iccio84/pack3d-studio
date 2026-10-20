@@ -115,7 +115,10 @@ def _richiesta(metodo, percorso, corpo=None, timeout=60):
 
 def _nome_file(nome):
     base = re.sub(r"[^A-Za-z0-9._-]+", "_", nome).strip("._") or "artwork"
-    return base if base.lower().endswith(".pdf") else base + ".pdf"
+    # l'immagine del prodotto di un incarto resta un'immagine
+    if base.lower().endswith((".pdf", ".jpg", ".png", ".webp")):
+        return base
+    return base + ".pdf"
 
 
 def _corpo_issue(cod, nomi, verdetto, contesto, cartella):

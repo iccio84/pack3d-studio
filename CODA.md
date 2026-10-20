@@ -89,6 +89,8 @@ cartoncino, e' un cartotecnico e si costruisce.
     `contesto.opzioni`), `viste_modello.jpg` (il modello respinto; manca se
     la costruzione si e' fermata, e l'errore e' in `motivo`), `stato.json`
     (la storia degli stati per chi l'ha caricato), le foto delle sue note.
+    Un incarto ha in piu' l'immagine del prodotto da incartare,
+    `prodotto_<nome>.jpg` (o `.png`, `.webp`), accanto al PDF.
   - Una **issue aperta per ogni caso**, `Caso nuovo <codice>: <file>`. Arriva
     solo se chi ha caricato il PDF l'ha **mandato** dalla pagina.
   - `contatti/<codice>.json`: l'email di chi ha mandato il caso. **Non

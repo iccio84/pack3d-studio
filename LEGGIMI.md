@@ -54,8 +54,9 @@ combinazione funziona.
 ## Cosa fa l'interfaccia
 
 1. Per prima cosa la pagina chiede **che tipo di Pack/Riempimento** si vuole
-   realizzare: Flowpack, Pouch, Cartotecnico, Vassoio, Riempimenti. Poi il
-   passo della famiglia, con un posto per ogni PDF (solo PDF):
+   realizzare: Flowpack, Pouch, Cartotecnico, Vassoio, Riempimenti, Incarti.
+   Poi il passo della famiglia, con un posto per ogni PDF (solo PDF, tranne
+   l'immagine del prodotto degli incarti):
    - **Flowpack**: il PDF, poi le domande obbligatorie - numero dei denti
      della zigrinatura, rigonfiamento, apertura delle pinne - e la casella
      per dire se il film avvolge una scatola;
@@ -67,7 +68,11 @@ combinazione funziona.
      ha una finestra, se ci va la pellicola trasparente;
    - **Riempimenti**: che cosa e' il pack (CU), flowpack o astuccio; il pack
      e il vassoio o display; poi quanti pack mettere e le domande del
-     flowpack, o la fustella dell'apertura a strappo dell'astuccio.
+     flowpack, o la fustella dell'apertura a strappo dell'astuccio;
+   - **Incarti**: come si chiude il foglio, a pieghe (le barrette) o
+     avvolto (tipo l'ovetto); il PDF dello steso e l'immagine del prodotto
+     da incartare (JPEG, PNG o WebP). L'avvolto il codice non lo costruisce
+     ancora: il caso va in coda col PDF e l'immagine.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.

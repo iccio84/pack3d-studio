@@ -15,7 +15,10 @@ sono in GADGET.md.
   vassoio e display con plancia, cono, ballotin, film che si dichiara
   flowpack, astuccio; l'incarto a triangolo si prova prima del flowpack
   (`_analisi_incarto`). Un pack che esce della famiglia sbagliata si guarda
-  qui.
+  qui. La famiglia **Incarti** dichiarata dalla pagina passa da
+  `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`); la sua
+  immagine del prodotto la separa dal PDF `_separa_prodotto`, all'inizio di
+  `do_POST`, e va col caso (`blocchi_caso`).
 - `server.py`, `build_carton`, `build_vassoio`, `build_plancia`,
   `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
   `build_tubo`, `build_incarto`,
