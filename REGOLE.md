@@ -4317,26 +4317,23 @@ rigonfiamento e pinne: costruisce subito.
 - La **sezione** e' un trapezio: la faccia (17,5) in cima, il fondo largo
   quanto avanza del nastro (31,5 - 10 = 21,5), i fianchi (10,5) inclinati;
   alta 10,3 mm.
-- La **testata** la chiudono le due **alette rosse dei fianchi, una sopra
-  l'altra**, come una chiusura di carta (le foto del pack: la testata e'
-  tutta rossa). Sotto tutte e due, e non si vedono, il lembo del fondo e
-  quello della faccia. Ogni aletta e' il foglio piegato sullo spigolo del
-  suo fianco, e il suo bordo e' la piega in diagonale dove il foglio esce
-  dalla fascia: la riga della faccia, che sulla testata e' una retta dal suo
-  angolo in cima fino all'altro fianco, vicino alla base. Sopra sta l'aletta
-  del fianco col retro (`ALETTA_SOPRA`): il suo bordo a vista parte
-  dall'angolo in cima dal lato del retro e scende verso il fronte, come
-  nelle foto; dall'altra parte si vede l'aletta col fronte. Le alette
-  prendono la grafica dal loro lembo sulla riga di mezzo della fascia, a
-  un millimetro dal taglio: vicino alle righe della faccia il lembo ha le
-  onde bianche della faccia, che nel pack piegato stanno sotto le pieghe
-  (piegato tale e quale, l'aletta di sopra si riempiva di bianco e
-  d'azzurro), e sul taglio la texture ha il suo orlo (due righe scure sulla
-  testata di destra). Le versioni prima: il triangolo del lembo sopra le
-  alette; staccato verso la punta («deve essere un pezzo unico e i
-  risvolti visibili sono i due laterali rossi»); le alette affiancate col
-  triangolo bianco del lembo fra loro, la punta in basso; poi «un'aletta
-  deve finire sopra l'altra come una chiusura di carta».
+- La **testata si chiude a triangolo**, come nelle foto del pack (la
+  barretta appoggiata sul fondo, vista dal davanti): in mezzo il **lembo
+  bianco della faccia**, che scende sulla testata e finisce a punta a meta'
+  della base; ai lati le due **alette rosse dei fianchi**, che arrivano
+  dagli angoli in basso fino alla punta. Il lembo della faccia sta sopra le
+  alette (nella foto il suo bordo fa ombra sul rosso), il lembo del fondo
+  sotto tutto e non si vede. Ogni pezzo e' il foglio piegato sulla sua
+  piega, senza stirarsi; le alette prendono la grafica dal loro lembo sulla
+  riga di mezzo della fascia, a un millimetro dal taglio (vicino alle righe
+  della faccia il lembo ha le onde bianche della faccia, che nel pack
+  piegato stanno sotto il lembo bianco; sul taglio la texture ha il suo
+  orlo). Le versioni prima: il triangolo del lembo sopra le alette;
+  staccato verso la punta («deve essere un pezzo unico e i risvolti
+  visibili sono i due laterali rossi»); a filo, piatto; le due alette una
+  sopra l'altra a coprire tutta la testata (da «un'aletta deve finire sopra
+  l'altra come una chiusura di carta»), corretta con le foto: «le alette
+  devono essere come in foto».
 - **Un monoblocco con tutti gli spigoli e gli angoli arrotondati**: una
   superficie sola e chiusa (nessuno spigolo libero, le normali tutte fuori),
   gli spigoli lunghi tondi di 1,5 mm (`RAGGIO`) e quelli delle testate pure
@@ -4344,27 +4341,31 @@ rigonfiamento e pinne: costruisce subito.
   l'angolo e' tondo. A spigoli vivi sembrava un blocchetto di legno. La
   grafica gira attorno agli spigoli senza stirarsi (la piega del foglio sta
   a meta' dell'arco).
-- La **testata** e' piana sotto le alette: due zone, l'aletta di sopra e
-  quella di sotto, divise dal bordo dell'aletta di sopra. E' fatta coi punti
-  stessi del bordo del raccordo, compresi i due dove il bordo dell'aletta lo
-  taglia: fra testata e raccordo non resta fessura (con un bordo
-  semplificato ne restava una di 0,14 mm). Il fondo non ha il gradino del sormonto: i due
-  capi della sezione cadono nello stesso punto. La versione prima aveva i
-  risvolti a strati di 0,3 mm, staccati e col bordo a vista («fai i
-  risvolti piu' a vista, spessi»), e il gradino del sormonto sotto; poi
-  e' stata chiesta cosi': «un monoblocco con tutti gli angoli/spigoli
-  smussati».
-- **Lo spessore dell'aletta di sopra**: e' rialzata su quella di sotto, come
-  un foglio un po' spesso che si piega - zero nell'angolo tondo in cima da
-  cui parte il suo bordo, 0,9 mm alla base (`SPESSORE_ALETTE`), e di nuovo
-  zero entro 3 mm dagli angoli tondi in basso (`ANGOLO_ALETTE`). Il suo
-  bordo in diagonale ha lo spessore a vista, e dove arriva sul raccordo gira
-  attorno allo spigolo fino al corpo; i raccordi restano di 1,5 mm e
-  partono dalla testata rialzata. Chiesto dopo il
+- La **testata** e' piana sotto i lembi: tre zone, divise dalle due rette
+  dagli angoli in cima alla punta. E' fatta coi punti stessi del bordo del
+  raccordo, compresi i tre dove i lembi si incontrano (le due rette e la
+  punta): fra testata e raccordo non resta fessura (con un bordo
+  semplificato ne restava una di 0,14 mm). Il fondo non ha il gradino del
+  sormonto: i due capi della sezione cadono nello stesso punto. La
+  versione prima aveva i risvolti a strati di 0,3 mm, staccati e col bordo
+  a vista («fai i risvolti piu' a vista, spessi»), e il gradino del
+  sormonto sotto; poi e' stata chiesta cosi': «un monoblocco con tutti gli
+  angoli/spigoli smussati».
+- **Lo spessore del lembo della faccia**: sta su, sulle alette, come un
+  foglio un po' spesso che si piega - zero in cima, dove il lembo e' ancora
+  la faccia che gira sullo spigolo, piu' spesso verso la base (fino a 0,9
+  mm, `SPESSORE_LEMBO`), e di nuovo zero entro 3 mm dalla punta
+  (`PUNTA_LEMBO`), che finisce sullo spigolo tondo della base. I suoi due
+  bordi in diagonale hanno lo spessore a vista; sul bordo della testata lo
+  spessore e' zero, e i raccordi restano tutti di 1,5 mm. Chiesto dopo il
   monoblocco piatto: «fai in modo che si veda di piu' lo spessore delle
   pieghe, lasciando invariati gli smussi; piu' spesse le alette verso la
-  base e meno sugli angoli smussati». Sui due capi la barretta e' cosi'
-  lunga 0,8 mm in piu'.
+  base e meno sugli angoli smussati».
+- **Il taglio del fondo sulla testata**: il taglio del sormonto ha un orlo
+  bianco, che lungo il fondo si vede come una riga. Sulla testata il fondo
+  sta sotto le alette: la piega del raccordo parte dalla riga di mezzo
+  della fascia del fondo, e l'orlo resta sul corpo (prima ne arrivava un
+  rettangolo bianco vicino alla base della testata).
 - **Un buco bianco sugli angoli** (corretto): a meta' di ogni spigolo tondo
   il raccordo passa da un lembo all'altro, e un triangolo solo fra i due
   prendeva la grafica da due punti lontani del foglio, portando sull'angolo
