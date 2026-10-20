@@ -4328,16 +4328,25 @@ rigonfiamento e pinne: costruisce subito.
   arriva. La prima versione aveva il triangolo del lembo sopra le alette, e
   la seconda staccato verso la punta: «deve essere un pezzo unico e i
   risvolti visibili sono i due laterali rossi».
-- Gli **spigoli** lunghi sono arrotondati (1 mm, `RAGGIO`) e il film passa
-  sugli spigoli delle testate con una piega tonda (0,8 mm, `RAGGIO_TESTA`):
-  a spigoli vivi sembrava un blocchetto di legno. La grafica gira attorno
-  allo spigolo senza stirarsi (la piega del foglio sta a meta' dell'arco).
-- I **risvolti si vedono**: ogni strato della testata e' 0,3 mm (`STRATO`)
-  invece degli 0,1 del film, e il bordo delle alette ha il suo spessore a
-  vista. Col film vero, schiacciato e sottile, la testata sembrava dipinta:
-  «fai i risvolti piu' a vista, spessi». Tutto attaccato, senza fessure:
-  un pezzo solo. Anche il sormonto sotto ha il suo gradino, che sulle pieghe
-  di testata sfuma.
+- **Un monoblocco con tutti gli spigoli e gli angoli arrotondati**: una
+  superficie sola e chiusa (nessuno spigolo libero, le normali tutte fuori),
+  gli spigoli lunghi tondi di 1,5 mm (`RAGGIO`) e quelli delle testate pure
+  (1,5 mm, `RAGGIO_TESTA`): agli angoli i due raccordi si incontrano e anche
+  l'angolo e' tondo. A spigoli vivi sembrava un blocchetto di legno. La
+  grafica gira attorno agli spigoli senza stirarsi (la piega del foglio sta
+  a meta' dell'arco).
+- La **testata e' piana** e i lembi sono la sua grafica, a filo: le due
+  rette dagli angoli in cima alla punta (a meta' dello spigolo del fondo) la
+  dividono in tre - in cima il lembo della faccia, ai lati le alette rosse -
+  e ogni zona prende la grafica dal suo lembo. La testata e' fatta coi punti
+  stessi del bordo del raccordo, compresi i tre dove i lembi si incontrano:
+  fra testata e raccordo non resta fessura (con un bordo semplificato ne
+  restava una di 0,14 mm). Il fondo non ha il gradino del sormonto: i due
+  capi della sezione cadono nello stesso punto. La versione prima aveva i
+  risvolti a strati di 0,3 mm, staccati e col bordo a vista («fai i
+  risvolti piu' a vista, spessi»), e il gradino del sormonto sotto; poi
+  e' stata chiesta cosi': «un monoblocco con tutti gli angoli/spigoli
+  smussati».
 - La barretta si modella con le sue facce, senza l'interno. Il fronte (la
   faccia col marchio) guarda +Z, la testa della scritta +Y.
 
