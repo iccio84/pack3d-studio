@@ -37,7 +37,7 @@ Le alette pero' stanno su, sul lembo della faccia, del loro spessore,
 come un foglio un po' spesso che si piega: nulle in cima, piu' spesse
 verso la base (`SPESSORE_ALETTE`), di nuovo nulle sul bordo della
 testata, dove girano sullo spigolo; i loro bordi in diagonale hanno lo
-spessore a vista, tondi come il foglio che si ripiega.
+spessore a vista, con gli spigoli smussati come il foglio che si ripiega.
 """
 from __future__ import annotations
 
@@ -76,6 +76,10 @@ BORDO_ALETTE = 2.5
 # carta («una aletta deve stare sopra l'altra»): ognuna arriva oltre la
 # meta' di meta' di questo
 SORMONTO_ALETTE = 4.0
+# il bordo delle alette e' una parete dritta con gli spigoli smussati: il
+# raggio dello smusso, in parti della sua altezza (0,5: mezzo cerchio, che
+# era troppo morbido; «fai i bordi meno morbidi come da foto»)
+SMUSSO_BORDO = 0.2
 # l'aletta che sta sopra l'altra: 1, quella del fianco col retro; 3, quella
 # col fronte. Nella foto del pack il bordo arricciato, a vista, e' quello
 # dell'aletta col retro
@@ -364,7 +368,7 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     arrotondati (`RAGGIO`), passa sugli spigoli delle testate con un raccordo
     tondo (`RAGGIO_TESTA`) e sulla testata si chiude col lembo della
     faccia in mezzo, e sopra di lui le due alette dei fianchi, una sopra
-    l'altra sulla base, rialzate del loro spessore coi bordi tondi a
+    l'altra sulla base, rialzate del loro spessore coi bordi smussati a
     vista. Niente gradini sul corpo: la superficie e' una sola e chiusa."""
     Wt, Ht = misura_tex
     fx, fy = p.origine          # l'angolo del foglio, mm sulla pagina
@@ -784,7 +788,17 @@ def maglia(p, origine_mm, px_mm, misura_tex):
         return lembo_aletta(banda, e, f_)
 
     NANELLI = 8
-    NTONDO = 8                  # i tratti del mezzo cerchio sul bordo delle alette
+    NTONDO = 4                  # i tratti di ogni smusso sul bordo delle alette
+    # il profilo del bordo, dall'alto in basso: (in fuori, in su), in parti
+    # della sua altezza. Lo smusso in alto, la parete dritta, lo smusso in
+    # basso, che torna sul piano di sotto
+    profilo_bordo = []
+    for n in range(NTONDO + 1):
+        g_ = (math.pi / 2.0) * n / NTONDO
+        profilo_bordo.append((SMUSSO_BORDO * math.sin(g_), 1.0 - SMUSSO_BORDO * (1.0 - math.cos(g_))))
+    for n in range(NTONDO + 1):
+        g_ = (math.pi / 2.0) * n / NTONDO
+        profilo_bordo.append((SMUSSO_BORDO * math.cos(g_), SMUSSO_BORDO * (1.0 - math.sin(g_))))
     blocchi = []                # (primo, ultimo triangolo, testata, verso di riferimento)
     for te in teste:
         centri = {}
@@ -814,11 +828,12 @@ def maglia(p, origine_mm, px_mm, misura_tex):
                     T.append((A_[m], B_[m], B_[m1]))
                     T.append((A_[m], B_[m1], A_[m1]))
             blocchi.append((primo, len(T), te, None))
-        # i bordi delle alette, tondi come in foto: il foglio spesso si
-        # ripiega su se stesso, e il bordo e' mezzo cerchio alto quanto
-        # sporge l'aletta, dal suo sopra giu' fino a quello che c'e' sotto, su
-        # cui sporge di meta' (a gradino dritto sembrava tagliato). Con la
-        # grafica dell'aletta; ai capi il bordo non c'e'
+        # i bordi delle alette, smussati come in foto: il foglio spesso si
+        # ripiega su se stesso, e il bordo e' una parete alta quanto sporge
+        # l'aletta, dal suo sopra giu' fino a quello che c'e' sotto, con gli
+        # spigoli tondi (`SMUSSO_BORDO`: a gradino vivo sembrava tagliato, a
+        # mezzo cerchio troppo morbido). Con la grafica dell'aletta; ai capi
+        # il bordo non c'e'
         for linea, banda, giu_w, su_w, verso_zona in bordi:
             pts = [np.asarray(q, float) for q in linea]
             d = pts[-1] - pts[0]
@@ -830,15 +845,14 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             for q in pts:
                 st = te.uv(*grafica(banda, *q))
                 b_, t_ = giu_w(*q), su_w(*q)
-                mezzo_ = (t_ - b_) / 2.0
+                alto = t_ - b_
                 col = []
-                for n in range(NTONDO + 1):
-                    th = math.pi * n / NTONDO
-                    r_ = q + verso * mezzo_ * math.sin(th)
-                    col.append(nuovo(te.punto(r_[0], r_[1], b_ + mezzo_ * (1.0 + math.cos(th))), st))
+                for fuori_, su_ in profilo_bordo:
+                    r_ = q + verso * alto * fuori_
+                    col.append(nuovo(te.punto(r_[0], r_[1], b_ + alto * su_), st))
                 colonne.append(col)
             for c0, c1 in zip(colonne[:-1], colonne[1:]):
-                for n in range(NTONDO):
+                for n in range(len(profilo_bordo) - 1):
                     for tr in ((c0[n], c0[n + 1], c1[n + 1]), (c0[n], c1[n + 1], c1[n])):
                         A_, B_, C_ = (np.asarray(V[i]) for i in tr)
                         if np.linalg.norm(np.cross(B_ - A_, C_ - A_)) > 1e-10:

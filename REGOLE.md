@@ -4372,11 +4372,13 @@ rigonfiamento e pinne: costruisce subito.
   Chiesto dopo il monoblocco piatto: «fai in modo che si veda di piu' lo
   spessore delle pieghe, lasciando invariati gli smussi; piu' spesse le
   alette verso la base e meno sugli angoli smussati».
-- **I bordi delle alette sono tondi**, come il foglio spesso che si
-  ripiega: mezzo cerchio alto quanto sporge l'aletta (fino a circa 0,7 mm),
-  dal suo sopra fino a quello che c'e' sotto, su cui sporge di meta'. Prima
-  era un gradino dritto, che sembrava tagliato («riesci a fare lo spessore
-  piu' morbido/smussato come in foto?»).
+- **I bordi delle alette sono smussati**, come il foglio spesso che si
+  ripiega: una parete alta quanto sporge l'aletta (fino a circa 0,7 mm),
+  dal suo sopra fino a quello che c'e' sotto, con gli spigoli tondi di un
+  quinto della sua altezza (`SMUSSO_BORDO`), e sporge di altrettanto. Le
+  versioni prima: un gradino vivo, che sembrava tagliato («riesci a fare lo
+  spessore piu' morbido/smussato come in foto?»); poi mezzo cerchio, troppo
+  morbido («fai i bordi meno morbidi come da foto»).
 - **Il taglio del fondo sulla testata**: il taglio del sormonto ha un orlo
   bianco, che lungo il fondo si vede come una riga. Sulla testata il fondo
   sta sotto le alette: la piega del raccordo parte dalla riga di mezzo
