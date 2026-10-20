@@ -21,7 +21,7 @@ avanza del nastro, i fianchi inclinati.
 
 La testata si chiude a triangolo, come nelle foto del pack: in mezzo il
 lembo bianco della faccia, che scende sulla testata e finisce a punta a
-meta' della base; ai lati le due alette rosse dei fianchi, sotto di lui.
+meta' della base; ai lati le due alette rosse dei fianchi, sopra di lui.
 Il lembo del fondo sta sotto tutto e non si vede. Ogni pezzo e' il foglio
 piegato attorno alla sua piega, senza stirarsi.
 
@@ -32,10 +32,11 @@ Il modello e' un **monoblocco**, con tutti gli spigoli e gli angoli
 arrotondati (chiesto cosi', dopo una versione coi risvolti a strati,
 spessi e staccati): i lembi della testata non sono pezzi sopra pezzi ma
 la grafica sulla testata, e il fondo non ha il gradino del sormonto.
-Il lembo della faccia pero' sta su, sulle alette, del suo spessore, come
-un foglio un po' spesso che si piega: nullo in cima, piu' grande verso la
-base (`SPESSORE_LEMBO`), di nuovo nullo alla punta; i suoi due bordi in
-diagonale hanno lo spessore a vista.
+Le alette pero' stanno su, sul lembo della faccia, del loro spessore,
+come un foglio un po' spesso che si piega: nulle in cima, piu' spesse
+verso la base (`SPESSORE_ALETTE`), di nuovo nulle sul bordo della
+testata, dove girano sullo spigolo; i loro bordi in diagonale hanno lo
+spessore a vista.
 """
 from __future__ import annotations
 
@@ -61,14 +62,15 @@ RAGGIO = 1.5
 # mm: gli spigoli delle testate, arrotondati come quelli lunghi: agli angoli
 # i due raccordi si incontrano e anche l'angolo e' tondo
 RAGGIO_TESTA = 1.5
-# mm: lo spessore del lembo della faccia sulle alette, verso la base. Come
-# un foglio un po' spesso che si piega: nullo in cima, dove il lembo e'
-# ancora la faccia che gira sullo spigolo, piu' spesso verso la base
-# («si veda di piu' lo spessore delle pieghe, lasciando invariati gli smussi»)
-SPESSORE_LEMBO = 0.9
-# mm: entro questa distanza dalla punta del lembo lo spessore cala a zero:
-# la punta finisce sullo spigolo tondo della base, che resta com'e'
-PUNTA_LEMBO = 3.0
+# mm: lo spessore delle alette sul lembo della faccia, verso la base. Come
+# un foglio un po' spesso che si piega: nulle in cima, piu' spesse verso la
+# base («si veda di piu' lo spessore delle pieghe, lasciando invariati gli
+# smussi»; «il rosso deve stare sopra»)
+SPESSORE_ALETTE = 0.9
+# mm: entro questa distanza dal bordo della testata lo spessore cala a zero:
+# li' l'aletta e' il foglio che gira sullo spigolo, e i raccordi restano
+# com'erano
+BORDO_ALETTE = 2.5
 
 
 @dataclass
@@ -330,8 +332,8 @@ def dichiara(p):
             "faccia e %.1f sul fondo, alta %.1f; fianchi %.1f e %.1f mm"
             % (lungo_su, lungo_giu, a, B, h, p.fasce[1], p.fasce[3]),
             "testate inclinate di %.0f gradi, chiuse a triangolo: il lembo "
-            "della faccia scende a punta fino a meta' della base, sopra le "
-            "alette dei fianchi, spesso fino a %.1f mm" % (incl, SPESSORE_LEMBO),
+            "della faccia scende a punta fino a meta' della base, le alette "
+            "dei fianchi sopra di lui, spesse fino a %.1f mm" % (incl, SPESSORE_ALETTE),
             "fondo sormontato di %.1f mm%s" % (
                 p.sormonto, "" if p.sormonto_letto else " (stimato)")]
 
@@ -350,8 +352,9 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     Un monoblocco: il film gira attorno alla sezione con gli spigoli
     arrotondati (`RAGGIO`), passa sugli spigoli delle testate con un raccordo
     tondo (`RAGGIO_TESTA`) e sulla testata si chiude a triangolo: il lembo
-    della faccia in mezzo, rialzato del suo spessore (`spessore`) sulle due
-    alette dei fianchi, coi bordi in diagonale a vista. Niente gradini sul
+    della faccia in mezzo, e sopra di lui le due alette dei fianchi,
+    rialzate del loro spessore (`spessore`), coi bordi in diagonale a
+    vista. Niente gradini sul
     corpo: la superficie e' una sola e chiusa."""
     Wt, Ht = misura_tex
     fx, fy = p.origine          # l'angolo del foglio, mm sulla pagina
@@ -484,7 +487,7 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     # la testata piana, dentro i raccordi, chiusa a triangolo come nelle foto
     # del pack: in mezzo il lembo bianco della faccia, che scende sulla
     # testata e finisce a punta a meta' della base; ai lati le alette rosse
-    # dei fianchi, sotto il lembo (il lembo del fondo e' sotto tutto, coperto).
+    # dei fianchi, sopra il lembo (il lembo del fondo e' sotto tutto, coperto).
     # Le due rette dagli angoli in cima alla punta la dividono in tre
     q1, q3 = np.array(q_banda[1]), np.array(q_banda[3])
     E0d, E0s = np.array([a / 2.0, 0.0]), np.array([-a / 2.0, 0.0])
@@ -499,8 +502,8 @@ def maglia(p, origine_mm, px_mm, misura_tex):
         """Il punto del foglio da cui l'aletta della fascia i prende la
         grafica: la distanza dal taglio come la piega, ma sulla riga di
         mezzo della fascia. Vicino alle righe della faccia il lembo ha le
-        onde bianche della faccia, che nel pack piegato finiscono sotto il
-        lembo della faccia (le foto: le alette sono tutte rosse)."""
+        onde bianche della faccia, che nel pack piegato finiscono nelle
+        pieghe (le foto: le alette sono tutte rosse)."""
         x, _y = da_foglio_testata(i, e, f_)
         mezzo = (l3 + l4) / 2.0 if i == 3 else (l1 + l2) / 2.0
         # a un millimetro dal taglio: sul taglio il foglio finisce, e la
@@ -610,9 +613,9 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     NCORPO = 30
 
     # il corpo e i raccordi delle testate: una griglia sola, una riga per
-    # quota; il raccordo va dal bordo della testata piana (F) al corpo. Il
-    # lembo della faccia e' rialzato solo dentro: sul bordo il suo spessore
-    # e' zero, e i raccordi restano tutti uguali
+    # quota; il raccordo va dal bordo della testata piana (F) al corpo. Le
+    # alette sono rialzate solo dentro: sul bordo il loro spessore e' zero,
+    # e i raccordi restano tutti uguali
     righe = []
     giro = []                   # (e, f) del bordo della testata, quota per quota
     al_giro = {}                # la quota -> il suo posto nel giro
@@ -686,11 +689,13 @@ def maglia(p, origine_mm, px_mm, misura_tex):
         return [tuple(A0 + (A1 - A0) * k / ND) for k in range(1, ND)]
 
     in_cima = arco(i_d, i_s)
+    fuori = {1: arco(i_p, i_d), 3: arco(i_s, i_p)}      # il bordo di ogni aletta
 
-    # lo spessore del lembo della faccia nel punto (e, f) della testata: zero
-    # in cima, dove il lembo e' ancora la faccia che gira sullo spigolo, poi
-    # cresce verso la base; vicino alla punta torna a zero, e la punta
-    # finisce sullo spigolo tondo della base com'e'
+    # lo spessore delle alette nel punto (e, f) della testata: sono loro a
+    # stare sopra il lembo della faccia, rialzate come un foglio un po'
+    # spesso. Zero in cima, poi crescono verso la base; sul bordo della
+    # testata, dove l'aletta e' il foglio che gira sullo spigolo del suo
+    # fianco, tornano a zero, e i raccordi restano com'erano
     f_cima = max(q[1] for q in in_cima)
     f_base = Lf - rt
 
@@ -698,16 +703,25 @@ def maglia(p, origine_mm, px_mm, misura_tex):
         t = min(1.0, max(0.0, t))
         return t * t * (3.0 - 2.0 * t)
 
-    def spessore(e, f_):
+    def dal_bordo(q, linea):
+        """mm dal punto q alla spezzata `linea`."""
+        q = np.asarray(q, float)
+        A = np.asarray(linea[:-1], float)
+        d = np.asarray(linea[1:], float) - A
+        t = np.einsum("ij,ij->i", q - A, d) / np.maximum(np.einsum("ij,ij->i", d, d), 1e-12)
+        vicino = A + np.clip(t, 0.0, 1.0)[:, None] * d
+        return float(np.min(np.linalg.norm(vicino - q, axis=1)))
+
+    def spessore(banda, e, f_):
         su = liscio((f_ - f_cima) / (f_base - f_cima))
-        return SPESSORE_LEMBO * su * liscio(math.hypot(e - Xp[0], f_ - Xp[1]) / PUNTA_LEMBO)
+        return SPESSORE_ALETTE * su * liscio(dal_bordo((e, f_), fuori[banda]) / BORDO_ALETTE)
 
     piatto = lambda e, f_: 0.0
-    zone = [(2, in_cima + retta(Xs, Xp) + [tuple(Xp)] + retta(Xp, Xd), spessore),
-            (1, arco(i_p, i_d) + retta(Xd, Xp), piatto),     # l'aletta col retro
-            (3, arco(i_s, i_p) + retta(Xp, Xs), piatto)]     # l'aletta col fronte
-    # i bordi a vista del lembo: dalla punta all'angolo in cima, con l'aletta
-    # che ci sta sotto
+    zone = [(2, in_cima + retta(Xs, Xp) + [tuple(Xp)] + retta(Xp, Xd), piatto),
+            (1, fuori[1] + retta(Xd, Xp), lambda e, f_: spessore(1, e, f_)),   # col retro
+            (3, fuori[3] + retta(Xp, Xs), lambda e, f_: spessore(3, e, f_))]   # col fronte
+    # i bordi a vista delle alette: dalla punta all'angolo in cima, sopra il
+    # lembo della faccia
     bordi = [([tuple(Xp)] + retta(Xp, Xd) + [tuple(Xd)], 1),
              ([tuple(Xs)] + retta(Xs, Xp) + [tuple(Xp)], 3)]
 
@@ -716,7 +730,7 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             return da_foglio_testata(2, e, f_)
         return lembo_aletta(banda, e, f_)
 
-    NANELLI = 6
+    NANELLI = 8
     blocchi = []                # (primo, ultimo triangolo, testata, verso di riferimento)
     for te in teste:
         centri = {}
@@ -726,8 +740,8 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             centri[banda] = cen
             st = lambda q: te.uv(*grafica(banda, *q))
             primo = len(T)
-            # anelli dal centro al bordo: il lembo della faccia e' rialzato e
-            # curvo, le alette piane
+            # anelli dal centro al bordo: le alette rialzate e curve, il lembo
+            # della faccia piano
             c0 = nuovo(te.punto(cen[0], cen[1], w(*cen)), st(cen))
             anelli = []
             for k in range(1, NANELLI + 1):
@@ -746,23 +760,24 @@ def maglia(p, origine_mm, px_mm, misura_tex):
                     T.append((A_[m], B_[m], B_[m1]))
                     T.append((A_[m], B_[m1], A_[m1]))
             blocchi.append((primo, len(T), te, None))
-        # i due bordi del lembo: dall'aletta (giu') al lembo (su), con la
-        # grafica del lembo; ai capi lo spessore e' zero e il bordo non c'e'
-        for linea, sotto in bordi:
+        # i due bordi delle alette: dal lembo della faccia (giu') all'aletta
+        # (su), con la grafica dell'aletta; ai capi lo spessore e' zero e il
+        # bordo non c'e'
+        for linea, banda in bordi:
             primo = len(T)
             prima = None
             for q in linea:
                 q = np.asarray(q, float)
-                st = te.uv(*grafica(2, *q))
+                st = te.uv(*grafica(banda, *q))
                 giu_ = nuovo(te.punto(q[0], q[1], 0.0), st)
-                su = nuovo(te.punto(q[0], q[1], spessore(*q)), st)
+                su = nuovo(te.punto(q[0], q[1], spessore(banda, *q)), st)
                 if prima is not None:
                     for tr in ((prima[0], giu_, su), (prima[0], su, prima[1])):
                         A_, B_, C_ = (np.asarray(V[i]) for i in tr)
                         if np.linalg.norm(np.cross(B_ - A_, C_ - A_)) > 1e-10:
                             T.append(tr)
                 prima = (giu_, su)
-            verso = centri[sotto] - centri[2]
+            verso = centri[2] - centri[banda]
             blocchi.append((primo, len(T), te, te.punto(*verso) - te.punto(0.0, 0.0)))
 
     V = np.asarray(V, float)
@@ -773,10 +788,11 @@ def maglia(p, origine_mm, px_mm, misura_tex):
         return np.cross(V[j] - V[i], V[m] - V[i])
 
     # le facce verso fuori, a blocchi interi: la griglia del corpo, ogni
-    # zona della testata e ogni bordo del lembo hanno il giro dei triangoli
-    # coerente, e si girano tutti insieme. Il riferimento: il triangolo piu'
-    # grande della faccia in cima (+Z) per il corpo, la normale della
-    # testata per le zone, verso l'aletta di sotto per i bordi
+    # zona della testata e ogni bordo delle alette hanno il giro dei
+    # triangoli coerente, e si girano tutti insieme. Il riferimento: il
+    # triangolo piu' grande della faccia in cima (+Z) per il corpo, la
+    # normale della testata per le zone, verso il lembo della faccia per i
+    # bordi
     cima = max(range(n_corpo), key=lambda k: (V[T[k]][:, 2].min(), np.linalg.norm(normale(k))))
     if normale(cima)[2] < 0:
         T[:n_corpo] = T[:n_corpo][:, [0, 2, 1]]

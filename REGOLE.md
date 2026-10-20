@@ -4321,14 +4321,14 @@ rigonfiamento e pinne: costruisce subito.
   barretta appoggiata sul fondo, vista dal davanti): in mezzo il **lembo
   bianco della faccia**, che scende sulla testata e finisce a punta a meta'
   della base; ai lati le due **alette rosse dei fianchi**, che arrivano
-  dagli angoli in basso fino alla punta. Il lembo della faccia sta sopra le
-  alette (nella foto il suo bordo fa ombra sul rosso), il lembo del fondo
-  sotto tutto e non si vede. Ogni pezzo e' il foglio piegato sulla sua
+  dagli angoli in basso fino alla punta. **Il rosso sta sopra**: le alette
+  sono ripiegate sul lembo della faccia (chiesto cosi', «il rosso deve
+  stare sopra», dopo una versione col bianco sopra le alette); il lembo del
+  fondo sta sotto tutto e non si vede. Ogni pezzo e' il foglio piegato sulla sua
   piega, senza stirarsi; le alette prendono la grafica dal loro lembo sulla
   riga di mezzo della fascia, a un millimetro dal taglio (vicino alle righe
   della faccia il lembo ha le onde bianche della faccia, che nel pack
-  piegato stanno sotto il lembo bianco; sul taglio la texture ha il suo
-  orlo). Le versioni prima: il triangolo del lembo sopra le alette;
+  piegato finiscono nelle pieghe; sul taglio la texture ha il suo orlo). Le versioni prima: il triangolo del lembo sopra le alette;
   staccato verso la punta («deve essere un pezzo unico e i risvolti
   visibili sono i due laterali rossi»); a filo, piatto; le due alette una
   sopra l'altra a coprire tutta la testata (da «un'aletta deve finire sopra
@@ -4351,13 +4351,14 @@ rigonfiamento e pinne: costruisce subito.
   a vista («fai i risvolti piu' a vista, spessi»), e il gradino del
   sormonto sotto; poi e' stata chiesta cosi': «un monoblocco con tutti gli
   angoli/spigoli smussati».
-- **Lo spessore del lembo della faccia**: sta su, sulle alette, come un
-  foglio un po' spesso che si piega - zero in cima, dove il lembo e' ancora
-  la faccia che gira sullo spigolo, piu' spesso verso la base (fino a 0,9
-  mm, `SPESSORE_LEMBO`), e di nuovo zero entro 3 mm dalla punta
-  (`PUNTA_LEMBO`), che finisce sullo spigolo tondo della base. I suoi due
-  bordi in diagonale hanno lo spessore a vista; sul bordo della testata lo
-  spessore e' zero, e i raccordi restano tutti di 1,5 mm. Chiesto dopo il
+- **Lo spessore delle alette**: stanno su, sul lembo della faccia, come un
+  foglio un po' spesso che si piega - zero in cima, piu' spesse verso la
+  base (fino a 0,9 mm, `SPESSORE_ALETTE`), e di nuovo zero entro 2,5 mm dal
+  bordo della testata (`BORDO_ALETTE`), dove l'aletta e' il foglio che gira
+  sullo spigolo del suo fianco o della base. I loro bordi in diagonale
+  hanno lo spessore a vista (fino a circa 0,8 mm, vicino alla base); sul
+  bordo della testata lo spessore e' zero, e i raccordi restano tutti di
+  1,5 mm. Chiesto dopo il
   monoblocco piatto: «fai in modo che si veda di piu' lo spessore delle
   pieghe, lasciando invariati gli smussi; piu' spesse le alette verso la
   base e meno sugli angoli smussati».
