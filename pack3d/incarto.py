@@ -467,11 +467,12 @@ def maglia(p, origine_mm, px_mm, misura_tex):
                 ns = -ns
             q = s0 + t * es + g * ns
             return float(q[0]), float(q[1])
+        # il fondo: la fascia 0 arriva dal retro (u = B allo spigolo), la 4
+        # dal fronte (u = 0). La meta' si prende dalla fascia, non da u: sul
+        # taglio u cade fra le due, e per un arrotondamento il raccordo
+        # prendeva la grafica dall'altro capo del foglio
         u = e + a / 2.0 + d3
-        if p.fuori_sopra:
-            y = l1 - (B - u) if u >= B - fa[0] else l4 + u
-        else:
-            y = l4 + u if u <= fa[4] else l1 - (B - u)
+        y = l1 - (B - u) if i == 0 else l4 + u
         return tb - (Lf - f_), y
 
     # la testata piana, dentro i raccordi: il trapezio rientrato di rt, e su
@@ -561,6 +562,18 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     y_s = cerca(lambda y: lato(bordo(y)[0], Cas, P3), lambda ya, yb: l2 <= ya and yb <= l4)
     y_p = cerca(lambda y: bordo(y)[0][0] - e_apice, sul_fondo)
     quote = sorted(set(quote) | {y_d, y_s, y_p})
+    # a meta' di ogni spigolo tondo il raccordo passa da un lembo all'altro:
+    # li' la riga e' doppia, coi due lembi, e fra le due non c'e' niente. Con
+    # una riga sola i triangoli fra un lembo e l'altro prendevano la grafica
+    # da due punti lontani del foglio, e sull'angolo arrivava un pezzo del
+    # bianco della faccia («c'e' un buco bianco sul lato»)
+    voci = []
+    for y in quote:
+        cambio = [k for k in range(1, 5) if abs(y - yk[k]) < 1e-9]
+        if cambio:
+            voci += [(y, cambio[0] - 1), (y, cambio[0])]
+        else:
+            voci.append((y, bordo(y)[2]))
 
     V, UV, T = [], [], []
 
@@ -581,11 +594,14 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     # quota; il raccordo va dal bordo della testata piana (F) al corpo
     righe = []
     giro = []                   # (e, f) del bordo della testata, quota per quota
-    for y in quote:
+    al_giro = {}                # la quota -> il suo posto nel giro
+    for y, banda in voci:
         p0, _n = profilo(y)
         xt = testata(y)
-        (eF, fF), q, banda = bordo(y)
-        giro.append((eF, fF))
+        (eF, fF), q, _b = bordo(y)
+        if y not in al_giro:
+            al_giro[y] = len(giro)
+            giro.append((eF, fF))
         riga = []
         lati = []
         for te in teste:
@@ -610,7 +626,10 @@ def maglia(p, origine_mm, px_mm, misura_tex):
             riga.append((np.array([x - P / 2.0, p0[0], p0[1]]), uv(x, y)))
         riga.extend(destra_[::-1])
         righe.append([nuovo(qv, tv) for qv, tv in riga])
-    for r0, r1 in zip(righe[:-1], righe[1:]):
+    for k in range(len(righe) - 1):
+        if voci[k][0] == voci[k + 1][0]:
+            continue                    # la riga doppia: la cucitura dei lembi
+        r0, r1 = righe[k], righe[k + 1]
         for c in range(len(r0) - 1):
             T.append((r0[c], r0[c + 1], r1[c + 1]))
             T.append((r0[c], r1[c + 1], r1[c]))
@@ -621,7 +640,7 @@ def maglia(p, origine_mm, px_mm, misura_tex):
     # punta; a ventaglio dal suo centro, con la grafica del lembo della zona.
     # Il primo e l'ultimo punto del giro sono lo stesso (il taglio del fondo)
     giro = giro[:-1]
-    i_d, i_s, i_p = (quote.index(y) for y in (y_d, y_s, y_p))
+    i_d, i_s, i_p = (al_giro[y] for y in (y_d, y_s, y_p))
 
     def arco(da, a_):
         """I punti del giro da `da` ad `a_` compresi, andando avanti."""
