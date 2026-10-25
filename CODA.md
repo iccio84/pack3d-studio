@@ -4,7 +4,8 @@ Queste sono le istruzioni per la sessione di Claude Code che prende i casi
 nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
 rilascio della settimana sta in RILASCIO.md, la mappa del codice in MAPPA.md,
 il perche' delle regole del codice in REGOLE.md, la ricetta per una forma
-nuova in FORME.md.
+nuova in FORME.md. I gadget non passano dalla coda: le loro regole sono in
+GADGET.md.
 
 ## Prima di tutto: risparmiare
 
@@ -88,6 +89,8 @@ cartoncino, e' un cartotecnico e si costruisce.
     `contesto.opzioni`), `viste_modello.jpg` (il modello respinto; manca se
     la costruzione si e' fermata, e l'errore e' in `motivo`), `stato.json`
     (la storia degli stati per chi l'ha caricato), le foto delle sue note.
+    Un incarto ha in piu' l'immagine del prodotto da incartare,
+    `prodotto_<nome>.jpg` (o `.png`, `.webp`), accanto al PDF.
   - Una **issue aperta per ogni caso**, `Caso nuovo <codice>: <file>`. Arriva
     solo se chi ha caricato il PDF l'ha **mandato** dalla pagina.
   - `contatti/<codice>.json`: l'email di chi ha mandato il caso. **Non

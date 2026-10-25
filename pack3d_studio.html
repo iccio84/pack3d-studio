@@ -366,6 +366,9 @@
            line-height:1.35;color:var(--foreground)}
   .carte{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
   .carte.due{grid-template-columns:repeat(auto-fit,minmax(220px,1fr));margin-bottom:14px}
+  /* le famiglie sono sei: tre per riga, due sul telefono */
+  #famiglie .carte{grid-template-columns:repeat(3,1fr)}
+  @media (max-width:600px){#famiglie .carte{grid-template-columns:repeat(2,1fr)}}
   .solo-flowpack[hidden]{display:none}
   .carte[hidden]{display:none}
   .carte button{display:flex;flex-direction:column;align-items:flex-start;gap:6px;
@@ -395,6 +398,9 @@
   #params .griglia, #passo .griglia, #strappo .griglia, #pellicola .griglia, #gelato .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
+  /* la regola qui sopra pesa piu' di .griglia[hidden]: i campi del passo
+     restano nascosti finche' manca la sottoscelta */
+  #passo .griglia[hidden]{display:none}
   .fld{display:flex;flex-direction:column;gap:7px}
   .fld[hidden]{display:none}
   .fld > label{font-size:10px;font-weight:500;letter-spacing:.1em;
@@ -541,6 +547,7 @@
       <button type="button" data-f="carton"><b>Cartotecnico</b><span>Astuccio o scatola</span></button>
       <button type="button" data-f="vassoio"><b>Vassoio</b><span>Vassoi espositori e display, realizzati vuoti</span></button>
       <button type="button" data-f="riempimento"><b>Riempimenti</b><span>Un vassoio o un display con dentro le CU</span></button>
+      <button type="button" data-f="incarto"><b>Incarti</b><span>Un foglio che avvolge il prodotto: chiuso a pieghe o avvolto</span></button>
     </div>
   </div>
 
@@ -557,6 +564,10 @@
     <div id="cu-scelta" class="carte due" role="group" aria-label="Il pack (CU)" hidden>
       <button type="button" data-u="flowpack" aria-pressed="false"><b>CU: Flowpack</b><span>Pack con saldature e pinne laterali</span></button>
       <button type="button" data-u="carton" aria-pressed="false"><b>CU: Astuccio</b><span>Pack cartotecnico composto da un solo elemento, che si chiude da solo</span></button>
+    </div>
+    <div id="incarto-scelta" class="carte due" role="group" aria-label="Come si chiude l'incarto" hidden>
+      <button type="button" data-i="pieghe" aria-pressed="false"><b>A pieghe</b><span>Il foglio avvolge il prodotto e si chiude con le pieghe sulle testate. Esempio: le barrette</span></button>
+      <button type="button" data-i="avvolto" aria-pressed="false"><b>Avvolto</b><span>Il foglio avvolge tutto il prodotto, chiuso attorno a lui. Esempio: l&rsquo;ovetto con la sorpresa. Ancora da costruire: il caso va a chi corregge il codice</span></button>
     </div>
     <div class="griglia" id="passo-campi" hidden>
       <div class="fld" id="parti-fld" hidden>
@@ -669,6 +680,7 @@
   <div class="row">
     <span class="tit">Strumenti</span>
     <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
+    <input id="file-img" type="file" accept="image/jpeg,image/png,image/webp" hidden>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="texture-btn" type="button" style="display:none">Scarica texture</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
@@ -2492,11 +2504,28 @@ const FAMIGLIE = {
                      + 'con dentro le CU desiderate: flowpack o astucci.',
                 slot: ['Inserisci il pack (CU) desiderato',
                        'Inserisci il vassoio o il display desiderato']},
+  // un foglio che avvolge un prodotto: la misura finale del 3D dipende anche
+  // dal prodotto, quindi oltre al PDF si chiede la sua immagine
+  incarto: {nome: 'Incarti',
+            descr: 'Un foglio di carta, alluminio o plastica che avvolge un prodotto: '
+                 + 'si chiude con le pieghe (le barrette) o lo avvolge tutto (tipo l\u2019ovetto). '
+                 + 'La misura finale del 3D dipende anche dal prodotto: oltre al PDF dello '
+                 + 'steso serve un\u2019immagine del prodotto da incartare.',
+            slot: ['Il PDF dello steso (il foglio aperto)',
+                   'L\u2019immagine del prodotto da incartare'],
+            tipi: ['pdf', 'img']},
 };
 // queste partono da sole appena c'e' il PDF: nessun'altra domanda prima
 const DA_SOLE = ['flowpack', 'pouch', 'vassoio'];
 // la famiglia scelta, astuccio o scatola, e i PDF caricati, uno per posto
 let famiglia = null, carto = null, slots = [], slotAttivo = -1;
+// come si chiude l'incarto: 'pieghe' o 'avvolto'
+let chiusura = null;
+const incartoSceltaEl = document.getElementById('incarto-scelta');
+const fileImgEl = document.getElementById('file-img');
+const isImg = f => /^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name);
+/** Che file va nel posto k: 'pdf', o 'img' per l'immagine del prodotto. */
+const tipoSlot = k => ((famiglia && FAMIGLIE[famiglia].tipi) || [])[k] || 'pdf';
 // il pack (CU) del riempimento: 'flowpack' o 'carton' (l'astuccio); e, se
 // l'astuccio ha l'apertura a strappo, se se ne vuole la fustella modellata
 let cuScelta = null, cuIncisioni = null;
@@ -2516,6 +2545,7 @@ function nomiSlot(){
 function pronto(){
   if (!slots.length || slots.some(x => !x)) return false;
   if (famiglia === 'riempimento') return !!cuScelta && (cuScelta !== 'carton' || !!spessoreScelto);
+  if (famiglia === 'incarto') return !!chiusura;
   return famiglia !== 'carton' || (!!carto && !!spessoreScelto);
 }
 
@@ -2526,14 +2556,14 @@ function partiDigitate(){
 }
 
 function mostraFamiglie(){
-  famiglia = null; carto = null; slots = []; slotAttivo = -1;
+  famiglia = null; carto = null; chiusura = null; slots = []; slotAttivo = -1;
   passoEl.classList.remove('on');
   famiglieEl.classList.add('on');
 }
 
 function scegliFamiglia(f){
   if (!FAMIGLIE[f]) return;
-  famiglia = f; carto = null; slotAttivo = -1; cuScelta = null;
+  famiglia = f; carto = null; slotAttivo = -1; cuScelta = null; chiusura = null;
   slots = FAMIGLIE[f].slot.map(() => null);
   partiEl.value = '';
   scegliSpessore(0);
@@ -2551,6 +2581,13 @@ function scegliCarto(c){
   disegnaPasso();
   statoPasso();
   if (c === 'scatola') partiEl.focus();
+}
+
+/** Come si chiude l'incarto: a pieghe (le barrette) o avvolto (l'ovetto). */
+function scegliChiusura(i){
+  chiusura = i;
+  disegnaPasso();
+  statoPasso();
 }
 
 /** Il pack (CU) del riempimento: flowpack o astuccio. */
@@ -2572,7 +2609,11 @@ function disegnaPasso(){
   cuSceltaEl.hidden = !r;
   cuSceltaEl.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.u === cuScelta)));
-  passoCampi.hidden = c && !carto;
+  const inc = famiglia === 'incarto';
+  incartoSceltaEl.hidden = !inc;
+  incartoSceltaEl.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.i === chiusura)));
+  passoCampi.hidden = (c && !carto) || (inc && !chiusura);
   partiFld.hidden = !(c && carto === 'scatola');
   spessoreFld.hidden = !((c && carto) || (r && cuScelta === 'carton'));
   const nomi = nomiSlot();
@@ -2582,16 +2623,18 @@ function disegnaPasso(){
     if (x) li.className = 'pieno';
     const cosa = document.createElement('span');
     cosa.className = 'cosa'; cosa.textContent = nomi[k];
+    const img = tipoSlot(k) === 'img';
     const nome = document.createElement('span');
-    nome.className = 'nome'; nome.textContent = x ? x.name : 'nessun PDF';
+    nome.className = 'nome'; nome.textContent = x ? x.name : (img ? 'nessuna immagine' : 'nessun PDF');
     const bt = document.createElement('button');
-    bt.type = 'button'; bt.textContent = x ? 'Cambia PDF' : 'Carica PDF';
+    bt.type = 'button';
+    bt.textContent = img ? (x ? 'Cambia immagine' : 'Carica immagine') : (x ? 'Cambia PDF' : 'Carica PDF');
     bt.onclick = () => apriFile(k);
     li.append(cosa, nome, bt);
     slotEl.appendChild(li);
   });
   // le famiglie da un PDF partono da sole: Continua serve solo per riprovare
-  continuaBtn.hidden = (c && !carto) || (DA_SOLE.includes(famiglia) && !pronto());
+  continuaBtn.hidden = (c && !carto) || (inc && !chiusura) || (DA_SOLE.includes(famiglia) && !pronto());
   continuaBtn.disabled = !pronto();
 }
 
@@ -2601,6 +2644,10 @@ function statoPasso(errore){
   const mancano = slots.filter(x => !x).length;
   let t;
   if (famiglia === 'carton' && !carto) t = 'Cartotecnico: astuccio o scatola?';
+  else if (famiglia === 'incarto' && !chiusura) t = 'Incarti: si chiude a pieghe o \u00e8 avvolto?';
+  else if (famiglia === 'incarto' && mancano)
+    t = 'Incarti: carica ' + [!slots[0] ? 'il PDF dello steso' : '',
+                              !slots[1] ? 'l\u2019immagine del prodotto' : ''].filter(Boolean).join(' e ');
   else if (famiglia === 'riempimento' && !cuScelta) t = 'Riempimenti: il pack (CU) \u00e8 un flowpack o un astuccio?';
   else if (famiglia === 'riempimento' && cuScelta === 'carton' && !spessoreScelto)
     t = 'Scegli lo spessore della carta dell\u2019astuccio: 1, 2 o 3';
@@ -2615,8 +2662,19 @@ function statoPasso(errore){
 /** La finestra dei file per il posto k: si apre solo da un clic. */
 function apriFile(k){
   slotAttivo = k;
+  if (tipoSlot(k) === 'img'){ fileImgEl.click(); return; }
   fileEl.multiple = famiglia === 'carton' && carto === 'scatola';
   fileEl.click();
+}
+
+/** L'immagine del prodotto, rimpicciolita come la foto della nota: i byte
+ *  della JPEG. */
+async function immagineRidotta(f){
+  const url = await fotoRidotta(f);
+  const bin = atob(url.slice(url.indexOf(',') + 1));
+  const b = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) b[i] = bin.charCodeAt(i);
+  return b.buffer;
 }
 
 /** I file scelti o trascinati: nel posto scelto, poi nei posti vuoti. Un
@@ -2642,24 +2700,49 @@ async function riceviFile(lista){
   if (!passoEl.classList.contains('on')){
     setStatus('Per cambiare i PDF premi Annulla e ricomincia','err'); return;
   }
-  if (!files.every(isPdf)){ setStatus('Solo file PDF','err'); return; }
+  const inc = famiglia === 'incarto';
+  if (!files.every(f => isPdf(f) || (inc && isImg(f)))){
+    setStatus(inc ? 'Solo il PDF dello steso e un\u2019immagine JPEG, PNG o WebP del prodotto'
+                  : 'Solo file PDF', 'err');
+    return;
+  }
   if (famiglia === 'carton' && !carto){ statoPasso(true); return; }
+  if (inc && !chiusura){ statoPasso(true); return; }
   if (!slots.length){ statoPasso(true); return; }
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
-  let k = k0 >= 0 ? k0 : slots.findIndex(x => !x);
+  // ogni file nel posto del suo tipo (il PDF, o l'immagine del prodotto):
+  // il primo nel posto scelto se e' del suo tipo, poi nei posti vuoti
+  const vuoto = (t, da) => {
+    const dopo = slots.findIndex((y, i) => !y && i > da && tipoSlot(i) === t);
+    return dopo >= 0 ? dopo : slots.findIndex((y, i) => !y && tipoSlot(i) === t);
+  };
+  const tipoFile = f => isPdf(f) ? 'pdf' : 'img';
+  const t0 = tipoFile(files[0]);
+  let k = k0 >= 0 && tipoSlot(k0) === t0 ? k0 : vuoto(t0, -1);
   if (k < 0 && slots.length === 1) k = 0;
   if (k < 0){
-    setStatus('I PDF ci sono tutti: per cambiarne uno usa il suo tasto','err'); return;
+    setStatus(inc ? 'C\u2019\u00e8 gi\u00e0: per cambiarlo usa il suo tasto'
+                  : 'I PDF ci sono tutti: per cambiarne uno usa il suo tasto','err'); return;
   }
-  const letti = await Promise.all(files.map(async f => ({name: f.name, buf: await f.arrayBuffer()})));
-  let messi = 0;
-  for (const x of letti){
-    if (k < 0) break;
-    slots[k] = x; messi++;
-    const dopo = slots.findIndex((y, i) => !y && i > k);
-    k = dopo >= 0 ? dopo : slots.findIndex(y => !y);
+  let letti;
+  try{
+    letti = await Promise.all(files.map(async f => isPdf(f)
+      ? {name: f.name, buf: await f.arrayBuffer()}
+      : {name: f.name, buf: await immagineRidotta(f), img: true}));
+  }catch(err){ setStatus(testoErrore(err), 'err'); return; }
+  let messi = 0, ultimo = -1;
+  for (const [n, x] of letti.entries()){
+    const t = x.img ? 'img' : 'pdf';
+    const kk = n === 0 ? k : vuoto(t, ultimo);
+    if (kk < 0 || tipoSlot(kk) !== t) continue;
+    slots[kk] = x; messi++; ultimo = kk;
   }
   disegnaPasso();
+  if (messi < letti.length && inc){
+    setStatus('Incarti: un PDF e un\u2019immagine. ' + (letti.length - messi)
+              + (letti.length - messi === 1 ? ' file in pi\u00f9 non l\u2019ho preso' : ' file in pi\u00f9 non li ho presi'), 'err');
+    return;
+  }
   if (messi < letti.length){
     setStatus('Il pack ha ' + slots.length + ' PDF: ' + (letti.length - messi)
               + (letti.length - messi === 1 ? ' in più non l’ho preso' : ' in più non li ho presi'), 'err');
@@ -2673,19 +2756,30 @@ async function riceviFile(lista){
 async function avanti(){
   if (!famiglia || !passoEl.classList.contains('on')) return;
   if (!pronto()){ statoPasso(true); return; }
-  pending = {buf: slots[0].buf, bufs: slots.map(x => x.buf), name: slots[0].name,
-             nomi: slots.map(x => x.name)};
+  // i PDF da una parte, l'immagine del prodotto (gli incarti) dall'altra
+  const pdf = slots.filter((x, k) => tipoSlot(k) === 'pdf');
+  const img = slots.find((x, k) => tipoSlot(k) === 'img');
+  pending = {buf: pdf[0].buf, bufs: pdf.map(x => x.buf), name: pdf[0].name,
+             nomi: pdf.map(x => x.name), prodotto: img || null};
   setTitolo(pending.nomi.join(' + '));
   setMeta([]);
   passoEl.classList.remove('on');
   if (famiglia === 'riempimento') return riempimentoAvanti();
+  if (famiglia === 'incarto') return procedi('incarto', {chiusura});
   if (famiglia === 'carton')
     return procedi('carton', {pezzi: slots.length, spessore: spessoreScelto});
   return procedi(famiglia, {});
 }
 
-/** Il corpo della richiesta: un PDF, o piu' PDF di fila con le lunghezze. */
+/** Il corpo della richiesta: un PDF, o piu' PDF di fila con le lunghezze;
+ *  l'immagine del prodotto da incartare, se c'e', in coda (`prodotto`). */
 function corpo(p){
+  if (p.prodotto){
+    const bufs = p.bufs.concat([p.prodotto.buf]);
+    return {buf: new Blob(bufs, {type:'application/pdf'}),
+            parti: bufs.map(b => b.byteLength),
+            prodotto: {nome: encodeURIComponent(p.prodotto.name), tipo: 'image/jpeg'}};
+  }
   if (p.bufs.length < 2) return {buf: p.buf};
   return {buf: new Blob(p.bufs, {type:'application/pdf'}),
           parti: p.bufs.map(b => b.byteLength)};
@@ -2735,10 +2829,13 @@ function scegliSpessore(n){
 async function procedi(kind, extra){
   const c = corpo(pending);
   const opts = Object.assign({kind, parti: c.parti, nomi: nomiPdf(pending)}, extra);
+  if (c.prodotto) opts.prodotto = c.prodotto;
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
-    if (kind === 'flowpack'){
+    // l'incarto a triangolo e' un film, ma non ha pinne ne' rigonfiamento:
+    // si costruisce subito
+    if (kind === 'flowpack' && info.kind !== 'incarto'){
       document.getElementById('teeth').value = '';
       document.getElementById('params-tit').textContent = 'Opzioni del flowpack';
       quantiFld.hidden = true;
@@ -2974,11 +3071,14 @@ setFase('vuoto');
 document.getElementById('riprova').onclick = cercaBackend;
 cercaBackend();
 fileEl.onchange = e => { riceviFile(e.target.files); e.target.value=''; };
+fileImgEl.onchange = e => { riceviFile(e.target.files); e.target.value=''; };
+fileImgEl.addEventListener('cancel', () => { slotAttivo = -1; });
 // se la finestra dei file si chiude senza scegliere, il posto non resta in attesa
 fileEl.addEventListener('cancel', () => { slotAttivo = -1; });
 famiglieEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliFamiglia(b.dataset.f); });
 cartoEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCarto(b.dataset.c); });
 cuSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCu(b.dataset.u); });
+incartoSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliChiusura(b.dataset.i); });
 cuFustella.querySelectorAll('button').forEach(b => {
   b.onclick = () => {
     cuIncisioni = Number(b.dataset.i);
