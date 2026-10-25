@@ -4000,8 +4000,10 @@ SPALLA_SU_CALO = float(os.environ.get("PACK3D_SPALLA", "1.7"))
 PINNA_SALDATA_MM = 0.04
 # Le nervature delle ganasce sulla pinna alla saldatura piena (3/3): quanto
 # si alza il film sulla cresta. La scala della pagina va da 0 (pinna liscia)
-# a 3.
-NERVATURA_MM = 0.32
+# a 3, e il 3 e' il rigato di prima: tarato sul B-ready, al centro della pinna
+# le righe hanno lo stesso contrasto (9,4 contro 8,6; con 0,32 mm sull'onda
+# fitta erano 14,4).
+NERVATURA_MM = 0.15
 
 MAX_UPLOAD = 60 * 1024 * 1024
 # Uno, e non e' un numero da tarare sulla macchina: pdfium non e' thread-safe
