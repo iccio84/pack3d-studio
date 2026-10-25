@@ -2257,6 +2257,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         wrinkle_mm=par["wrinkle_mm"], giro=_giro_film(knots, G, fp0),
         spalla_sul_film=True, griglia=True)
     tg = 2 * (ng // (nv + 1) - 1) * nv
+    v_denti = UV[ng:, 1].copy()
 
     if knots:
         ks, kf = knots
@@ -2337,6 +2338,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     else:
         V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0,
                                      u_tubo=UV[:ng].reshape(-1, nv + 1, 2)[:, :, 0])
+        UV[ng:] = fpk.falda_sui_denti(UV[ng:], v_denti, fp, G, nv)
         Vm = np.vstack([V, V2])
         UVm = np.vstack([UV, UV2])
         Tm = np.vstack([T, T2 + len(V)])
