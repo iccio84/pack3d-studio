@@ -670,6 +670,11 @@
       <p class="note">1: pinne chiuse, alte quanto il pack. 3: pinne molto aperte, effetto farfalla.</p>
     </div>
     <div class="fld solo-flowpack">
+      <label for="saldatura">Saldatura delle pinne <b id="saldaturaval">Piena 3/3</b></label>
+      <input id="saldatura" type="range" min="0" max="3" step="1" value="3">
+      <p class="note">Le righe che le ganasce lasciano sulle pinne. 0: pinne lisce, senza righe. 3: righe ben marcate.</p>
+    </div>
+    <div class="fld solo-flowpack">
       <label class="auto"><input id="scatola" type="checkbox"> Il film avvolge una scatola</label>
       <p class="note">Un multipack in astuccio, una vaschetta, un blister: le pinne restano larghe quanto il pack.</p>
     </div>
@@ -3173,6 +3178,7 @@ document.getElementById('go').onclick = async () => {
               nomi: nomiPdf(pending),
               scatola: document.getElementById('scatola').checked,
               pinne: Number(document.getElementById('pinne').value),
+              saldatura: Number(document.getElementById('saldatura').value),
               soft:  document.getElementById('softauto').checked
                        ? 'auto'
                        : Number(document.getElementById('soft').value)};
@@ -3357,6 +3363,8 @@ resize();
   var box = document.getElementById('scatola');
   var pin = document.getElementById('pinne');
   var pinVal = document.getElementById('pinneval');
+  var sal = document.getElementById('saldatura');
+  var salVal = document.getElementById('saldaturaval');
   function riempi(el) {
     var min = Number(el.min || 0), max = Number(el.max || 100);
     var f = max > min ? (Number(el.value) - min) / (max - min) : 0;
@@ -3367,9 +3375,15 @@ resize();
     riempi(pin);
     pinVal.textContent = (v === 1 ? 'Chiuse' : v === 2 ? 'Intermedie' : 'Aperte') + ' ' + v + '/3';
   }
+  function mostraSaldatura() {
+    var v = Number(sal.value);
+    riempi(sal);
+    salVal.textContent = ['Assente', 'Leggera', 'Media', 'Piena'][v] + ' ' + v + '/3';
+  }
   slider.addEventListener('input', mostra);
   auto.addEventListener('change', mostra);
   pin.addEventListener('input', mostraPinne);
+  sal.addEventListener('input', mostraSaldatura);
   // un film su scatola e' rigido per costruzione e non svasa: si propongono
   // rigonfiamento 1 e pinne 1, ma restano modificabili perche' la scatola puo'
   // non riempire tutta la sezione
@@ -3380,6 +3394,7 @@ resize();
   });
   mostra();
   mostraPinne();
+  mostraSaldatura();
 })();
 </script>
 </body>

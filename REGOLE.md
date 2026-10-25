@@ -418,7 +418,7 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 
 | famiglia | cosa chiede, in ordine | dove |
 |---|---|---|
-| **Flowpack** - pack con saldature e pinne laterali | il PDF; dopo lo studio della fustella: il **numero dei denti** della zigrinatura, digitato e senza valore proposto (0 = pinne lisce); il **rigonfiamento**, da 1 (molto rigido, effetto sottovuoto) a 10 (molto gonfio, per prodotti tondeggianti o con aria), o "Scegli tu" e lo sceglie Claude guardando l'artwork; l'**apertura delle pinne**, da 1 (chiuse, alte quanto il pack) a 3 (molto aperte, a farfalla), che non si deduce dal rigonfiamento; se il **film avvolge una scatola** | pannello `params`; `gonfiore()`, `controllo.rigonfiamento`, `build_flowpack` |
+| **Flowpack** - pack con saldature e pinne laterali | il PDF; dopo lo studio della fustella: il **numero dei denti** della zigrinatura, digitato e senza valore proposto (0 = pinne lisce); il **rigonfiamento**, da 1 (molto rigido, effetto sottovuoto) a 10 (molto gonfio, per prodotti tondeggianti o con aria), o "Scegli tu" e lo sceglie Claude guardando l'artwork; l'**apertura delle pinne**, da 1 (chiuse, alte quanto il pack) a 3 (molto aperte, a farfalla), che non si deduce dal rigonfiamento; la **saldatura delle pinne**, da 0 (pinne lisce) a 3 (le righe delle ganasce ben marcate, di serie); se il **film avvolge una scatola** | pannello `params`; `gonfiore()`, `controllo.rigonfiamento`, `build_flowpack` |
 | **Pouch** - fondo a soffietto ed estremita' saldata | il PDF, e si costruisce | `build_pouch` |
 | **Cartotecnico** | **astuccio** (un solo elemento che si chiude da solo) o **scatola** (due o piu' elementi, per esempio base piu' coperchio); lo **spessore della carta**, da 1 a 3; l'astuccio un PDF, la scatola **di quante parti** e' fatta e poi **esattamente quei PDF**, uno per parte. Dopo lo studio, se l'astuccio ha un'**apertura a strappo**: chiuso - e allora se si vuole la **fustella dell'apertura modellata** - o aperto, e allora di **quanti gradi** si apre il coperchio. Se ha una finestra, la **pellicola** | passo `carto`, `parti`, `spessore`; pannelli `strappo` e `pellicola`; `pezzi`, `spessore`, `apertura`, `incisioni`, `pellicola` nell'intestazione |
 | **Vassoio** - contenitore espositivo per le CU, display con plancia compresi, realizzati vuoti | il PDF, e si costruisce | `build_vassoio`, `build_plancia` |
@@ -4896,10 +4896,32 @@ Verifica: perimetro + 2 falde deve dare la larghezza del nastro.
 
 Regole di forma, da applicare senza chiedere:
 
-- denti **equilateri**, contati sul **bordo della pinna** e non sul perimetro
-  della sezione: base = bordo / numero denti, altezza = base x V3/2. Il taglio
-  agisce solo sul bordo esterno, l'interno resta piano con le nervature delle
-  ganasce;
+- denti contati sul **bordo della pinna** e non sul perimetro della sezione:
+  base = bordo / numero denti, altezza = **2/3 dell'equilatero** (base x
+  V3/2 x 2/3), con la punta e la gola **appena smussate**. Il taglio agisce
+  solo sul bordo esterno, l'interno resta piano con le nervature delle
+  ganasce. Il bordo dentato e' una striscia a parte, oltre la griglia, con
+  l'anello della pinna suddiviso finche' ogni dente ha almeno 16 punti: con
+  i vertici della griglia un dente di 5 mm ne aveva 6, e la punta cadeva fra
+  due, mozzata (`flowpack.PUNTI_PER_DENTE`);
+- la pinna e' **saldata**: i due strati del film si toccano (fra le facce
+  0,08 mm, `PINNA_SALDATA_MM`, perche' un viewer a doppia faccia non le
+  confonda), e le nervature delle ganasce li ondulano **insieme**. Prima
+  restava il 3,5% del mezzo spessore e le nervature spingevano i due strati
+  in fuori: la pinna usciva aperta, col bordo doppio. Quanto si vedono le
+  nervature lo sceglie l'utente, **saldatura da 0 a 3** (`NERVATURA_MM` a 3);
+- le nervature sono un'**onda morbida** (passo 1,4 mm) che parte piana dalla
+  saldatura, con almeno **sei stazioni per nervatura**: con tre l'onda usciva
+  a gradini e il bordo della pinna, visto di taglio, seghettato. Si spengono
+  nei **3 mm prima delle pieghe** ai lati della pinna (`BORDO_LISCIO`): accese
+  fino alla piega il bordo usciva ondulato come una seconda fila di denti,
+  spente in 1,2 mm facevano una tacca a ogni cresta. Il bordo dentato
+  comincia su una cresta, dove l'onda e' piana e la cucitura non si vede;
+- **niente gradino fra pack e pinna**: tutto quello che il corpo ha e la
+  pinna no - la pancia, le grinze - si spegne sulla spalla e alla saldatura
+  vale zero. Accese fino all'ultimo anello davano sul bordo un gradino di
+  qualche decimo di millimetro, diverso in ogni angolo come le grinze (sul
+  B-ready da 0,26 a 0,43 mm);
 - la **pinna longitudinale segue la forma del pack**, costruita come superficie
   offset della sezione; se troppo complessa va eliminata;
 - **pinne laterali verso l'alto**;

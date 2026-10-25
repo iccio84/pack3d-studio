@@ -1297,6 +1297,15 @@ def pinne_da_agente(params):
         return None
 
 
+def saldatura_scelta(opts):
+    """La saldatura delle pinne 0-3 scelta nella pagina: quanto si vedono le
+    nervature delle ganasce. Se non la dice, 3: le nervature di sempre."""
+    try:
+        return max(0, min(3, int(opts.get("saldatura", 3))))
+    except (TypeError, ValueError):
+        return 3
+
+
 def _rss():
     """La memoria che il processo sta usando adesso, in MB. 0 se non si sa."""
     try:
@@ -1939,7 +1948,7 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None, materiali_dich=None,
-                   materiali_ai=None):
+                   materiali_ai=None, saldatura=3):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -1948,9 +1957,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
        cresce e la larghezza cala. Alzare solo lo spessore inventa film.
     2. La grafica si mappa **per pannello**, usando gli spigoli della sezione
        come nodi: con l'arco uniforme ogni fascia scivola.
-    3. Le pinne portano la **zigrinatura** a triangoli equilateri, contata sul
-       bordo della pinna.
+    3. Le pinne portano la **zigrinatura** - denti alti 2/3 dell'equilatero,
+       smussati - contata sul bordo della pinna.
     4. Le pinne non restano **mai a filo**: si aprono a farfalla verso la punta.
+
+    Le pinne sono saldate, i due strati uniti; `saldatura` (0-3) dice quanto
+    si vedono le nervature delle ganasce: 0 nessuna, 3 piene.
     """
     import math
     par = gonfiore(soft)
@@ -2213,7 +2225,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # come fa un prodotto morbido che il film tira giu' sugli spigoli: la
     # saldatura resta dov'e' e con lei tutte le linee del DT. Con una scatola
     # no: li' la sezione la tiene la scatola fino alla sua faccia.
-    calo = 0.5 * scala * fp.T * (1.0 - FLAT_END)
+    # sulla pinna saldata resta, dello spessore, solo il filo fra i due strati
+    flat_end = min(1.0, PINNA_SALDATA_MM / max(0.5 * scala * fp.T, 1e-6))
+    calo = 0.5 * scala * fp.T * (1.0 - flat_end)
     spalla = rastremo
     # mai oltre meta' del mezzo corpo: una sezione piena deve restare
     voluta = min(SPALLA_SU_CALO * calo, fp.L / 4.0)
@@ -2228,15 +2242,21 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # calcolano prima della mesh perche' servono anche a lei: nella gola e
     # nella pinna il giro si rimisura sul film, e il film lo dicono i nodi.
     knots = _panel_knots(Ps, d, G, fp0)
-    V, UV, T = fpk.build_mesh(
+    saldatura = max(0, min(3, int(saldatura)))
+    # Dopo la griglia (righe di nv + 1 vertici, le prime `ng`, e i suoi `tg`
+    # triangoli) c'e' il bordo dentato: chi rilegge la mesh a righe guarda
+    # solo la griglia.
+    V, UV, T, ng = fpk.build_mesh(
         fp, nu=nu, nv=nv, sec_exp=n_sez, sec_thickness=scala * fp.T,
         width_end=fin_open / sw,
-        taper=spalla, flat_end=FLAT_END, flare_pow=3.0, soft=True,
+        taper=spalla, flat_end=flat_end, flare_pow=3.0, soft=True,
         serration=teeth > 0, serr_teeth=max(int(teeth), 1),
         fin_stations=36 if quality == "alta" else 26,
-        bulge=par["bulge"], crimp_period=1.4, crimp_mm=0.32,
+        bulge=par["bulge"], crimp_period=1.4,
+        crimp_mm=NERVATURA_MM * saldatura / 3.0,
         wrinkle_mm=par["wrinkle_mm"], giro=_giro_film(knots, G, fp0),
-        spalla_sul_film=True)
+        spalla_sul_film=True, griglia=True)
+    tg = 2 * (ng // (nv + 1) - 1) * nv
 
     if knots:
         ks, kf = knots
@@ -2268,9 +2288,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # il film sulle testate: pinne e spalle non sono un piano, e la grafica ci
     # deve cadere come ci cade il film. Dopo i nodi e il riporto sullo steso,
     # perche' e' il film vero che si misura.
-    dente = (fin_open / max(int(teeth), 1)) * math.sqrt(3.0) / 2.0 if teeth > 0 else 0.0
-    avvisi_sez.append(verifica.testate_flowpack(V, UV, T, fp, spalla, dente,
-                                                ap >= 3.0)[1])
+    dente = fpk.altezza_dente(fin_open / max(int(teeth), 1)) if teeth > 0 else 0.0
+    avvisi_sez.append(verifica.testate_flowpack(V[:ng], UV[:ng], T[:tg], fp,
+                                                spalla, dente, ap >= 3.0)[1])
     # PRIMA della mappatura: le UV sono il DT steso, e se le testate non
     # cadono sulle sue linee la grafica andra' fuori posto comunque la si
     # mappi. E le misure del disegno contro le quote che il file scrive.
@@ -2304,11 +2324,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     if miniatura:
         avvisi_sez.append(miniatura)
 
-    grid = V.reshape(-1, nv + 1, 3)
+    grid = V[:ng].reshape(-1, nv + 1, 3)
     # (4) le pinne restano saldate e piatte: nessuna manipolazione dei lembi.
     # Quello che le rende "aperte" e' che il loro bordo e' PIU' ALTO della
     # sezione del pack, e a questo pensa width_end.
-    V = grid.reshape(-1, 3)
 
     if fp.pillow:
         # a sovrapposizione non c'e' niente da appoggiare sul retro: il lembo
@@ -2317,7 +2336,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         Vm, UVm, Tm = V, UV, T
     else:
         V2, UV2, T2 = fin_on_surface(grid, fp, G, nv, gap=0.5, fade=10.0,
-                                     u_tubo=UV.reshape(-1, nv + 1, 2)[:, :, 0])
+                                     u_tubo=UV[:ng].reshape(-1, nv + 1, 2)[:, :, 0])
         Vm = np.vstack([V, V2])
         UVm = np.vstack([UV, UV2])
         Tm = np.vstack([T, T2 + len(V)])
@@ -2373,7 +2392,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # e' quello del DT, cioe' dell'analisi: se l'agente ha cambiato la sezione
     # e' proprio lo spostamento che si vuole vedere.
     avvisi_sez.append(verifica.fronte_flowpack(
-        V, UV, nv, analisi if analisi is not None else fp0,
+        V[:ng], UV[:ng], nv, analisi if analisi is not None else fp0,
         tex, foglio, dpi_tex / 72.0)[1])
     # Il modello finito si gira attorno alla normale del fronte perche' il
     # marchio si legga orizzontale e dritto: il tubo si costruisce coricato,
@@ -2381,7 +2400,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # Dopo le verifiche, che il giro attorno al fronte non tocca: il centro
     # del fronte resta al centro e la sua normale davanti.
     marchio = verifica.giro_del_marchio(
-        V, UV, nv, analisi if analisi is not None else fp0, verso_fronte)
+        V[:ng], UV[:ng], nv, analisi if analisi is not None else fp0, verso_fronte)
     if marchio:
         Vm = verifica.gira_attorno_al_fronte(Vm, marchio)
         avvisi_sez.append(
@@ -2413,8 +2432,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                " a tubo piatto" if fp.piatto else "", soft), sez,
             "corpo %.1f mm, pinne %.1f" % (fp0.L, fp.end_fin),
             ("pinne lisce" if teeth == 0 else
-             "%d denti equilateri, base %.2f altezza %.2f mm"
-             % (teeth, base, base * math.sqrt(3) / 2)),
+             "%d denti smussati, base %.2f altezza %.2f mm (2/3 "
+             "dell'equilatero)" % (teeth, base, fpk.altezza_dente(base))),
+            "saldatura delle pinne %d/3%s" % (
+                saldatura, ": senza nervature" if saldatura == 0 else ""),
             "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
 
 
@@ -2548,8 +2569,8 @@ def dichiarazione(kind, pezzi):
 # la restituisce /api/ping (vedi pack3d/versione.py).
 VERSIONE = versione.impronta(HERE)
 
-OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "scatola", "pezzi",
-                "spessore", "apertura", "pellicola", "quality", "materiali",
+OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
+                "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
                 "quanti", "incisioni", "cu", "gelato", "chiusura")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
@@ -3828,7 +3849,8 @@ class Handler(BaseHTTPRequestHandler):
                                     pdfs, info, uscita, quanti,
                                     (int(opts.get("teeth", 20)), str(soft), case_fp, q,
                                      sezione_da_agente(opts.get("params")),
-                                     scatola, pinne, lastre, col_riq, mat, mat_ai), q)
+                                     scatola, pinne, lastre, col_riq, mat, mat_ai,
+                                     saldatura_scelta(opts)), q)
                         else:
                             soft, scatola, pinne, mat = parametri_flowpack(pdf, nomi[0])
 
@@ -3837,7 +3859,8 @@ class Handler(BaseHTTPRequestHandler):
                                     pdf, uscita, int(opts.get("teeth", 20)),
                                     str(soft), case, q,
                                     sezione_da_agente(opts.get("params")),
-                                    scatola, pinne, lastre, col_riq, mat, mat_ai)
+                                    scatola, pinne, lastre, col_riq, mat, mat_ai,
+                                    saldatura_scelta(opts))
                         avvisi = costruisci(aree, out)
                         if mat_ai and not opts.get("materiali"):
                             # col caso in coda, perche' la routine lo rifaccia
@@ -3968,9 +3991,19 @@ GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 # cioe' 48 gradi, e il film ci si stende stirato di 1,2 in modo uniforme
 # (misurato sul bollino del Paradiso: era 2,5 in media e 3,7 di punta).
 SPALLA_SU_CALO = float(os.environ.get("PACK3D_SPALLA", "1.7"))
-# Quanto resta dello spessore sulla pinna: e' il parametro di build_mesh, qui
-# perche' serve anche a calcolare il calo.
-FLAT_END = 0.035
+# La pinna e' saldata: i due strati del film si toccano. Fra le loro facce si
+# lasciano pochi centesimi di millimetro, quanto basta perche' un viewer che
+# disegna anche le facce posteriori non le confonda. Prima restava il 3,5%
+# del mezzo spessore, quasi un millimetro sul B-ready piu' le nervature che
+# spingevano i due strati in fuori: la pinna usciva aperta, col bordo doppio.
+# E' meta' della distanza fra i due strati, in mm.
+PINNA_SALDATA_MM = 0.04
+# Le nervature delle ganasce sulla pinna alla saldatura piena (3/3): quanto
+# si alza il film sulla cresta. La scala della pagina va da 0 (pinna liscia)
+# a 3, e il 3 e' il rigato di prima: tarato sul B-ready, al centro della pinna
+# le righe hanno lo stesso contrasto (9,4 contro 8,6; con 0,32 mm sull'onda
+# fitta erano 14,4).
+NERVATURA_MM = 0.15
 
 MAX_UPLOAD = 60 * 1024 * 1024
 # Uno, e non e' un numero da tarare sulla macchina: pdfium non e' thread-safe

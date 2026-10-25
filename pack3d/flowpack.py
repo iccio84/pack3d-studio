@@ -440,6 +440,67 @@ def _stendi_spalla(verts, uvs, u, half, taper):
         uvs[sel, :, 0] = u0 + (u1 - u0) * f
 
 
+# La zigrinatura. Il dente e' piu' basso dell'equilatero, 2/3 della sua
+# altezza, e ha la punta e la gola appena smussate, come lo lascia la lama
+# delle ganasce. Lo smusso e' la deviazione di una gaussiana, in frazioni di
+# dente, con cui si ammorbidisce il profilo a V.
+DENTE_ALTEZZA = 2.0 / 3.0
+DENTE_SMUSSO = 0.04
+# Sul bordo i vertici dell'anello sono pochi: sul B-ready un dente di 5 mm
+# ne aveva 6, e la punta cadeva fra due vertici, mozzata. Il bordo dentato si
+# fa allora a parte, con l'anello della pinna suddiviso finche' ogni dente ne
+# ha almeno tanti; e comincia un po' prima della gola, perche' anche il dente
+# piu' corto abbia una striscia di film.
+PUNTI_PER_DENTE = 16
+DENTE_MARGINE = 0.3
+# Le nervature si spengono nei tanti mm prima delle pieghe ai lati della
+# pinna. Accese fino alla piega il bordo usciva ondulato, come una seconda fila
+# di denti; spente in poco piu' di un millimetro, la discesa verso la piega
+# faceva una tacca a ogni cresta
+BORDO_LISCIO = 3.0
+
+
+def altezza_dente(base):
+    """Quanto entra nella pinna un dente largo `base` (mm)."""
+    return base * math.sqrt(3.0) / 2.0 * DENTE_ALTEZZA
+
+
+_PROFILI = {}
+
+
+def _profilo_dente(fase, smusso=DENTE_SMUSSO):
+    """Quanto taglia il dente, da 0 in punta (fase intera) a 1 in gola."""
+    tab = _PROFILI.get(smusso)
+    if tab is None:
+        n = 2048
+        x = np.arange(n) / n
+        p = 2.0 * np.minimum(x, 1.0 - x)
+        if smusso > 0:
+            k = np.minimum(np.arange(n), n - np.arange(n)) / n
+            g = np.exp(-0.5 * (k / smusso) ** 2)
+            p = np.real(np.fft.ifft(np.fft.fft(p) * np.fft.fft(g / g.sum())))
+        # di nuovo da 0 a 1: lo smusso arrotonda, non accorcia il dente
+        p = (p - p.min()) / (p.max() - p.min())
+        tab = _PROFILI[smusso] = (np.r_[x, 1.0], np.r_[p, p[0]])
+    return np.interp(np.mod(fase, 1.0), *tab)
+
+
+def _cuci(basso, alto, pb, pa):
+    """Triangoli fra due file di vertici con passi diversi, girati come quelli
+    della griglia (`basso` e' la fila a u minore). `pb` e `pa` sono il
+    parametro lungo la fila, crescente, con gli stessi estremi."""
+    tris = []
+    i = j = 0
+    while i < len(basso) - 1 or j < len(alto) - 1:
+        if j == len(alto) - 1 or (i < len(basso) - 1 and pb[i + 1] <= pa[j + 1]):
+            tris.append((basso[i], basso[i + 1], alto[j]))
+            i += 1
+        else:
+            tris.append((basso[i], alto[j + 1], alto[j]))
+            j += 1
+    return tris
+
+
 def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                taper: float = 24.0, flat_end: float = 0.035, width_end: float = 0.93,
                section_w=None,
@@ -450,7 +511,7 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
                sec_exp: float = 0.0, sec_thickness=None, soft: bool = False,
                soft_r: float = 0.0, soft_n: float = 3.0, flare_pow: float = 2.0,
                wrinkle_mm: float = 0.0, wrinkle_v: float = 3.0, wrinkle_u: float = 2.5,
-               giro=None, spalla_sul_film: bool = False):
+               giro=None, spalla_sul_film: bool = False, griglia: bool = False):
     """Mesh del flowpack con UV riferite allo steso.
 
     u percorre la lunghezza (comprese le pinne di testa), v il perimetro. Dove
@@ -464,6 +525,13 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
     gola e nella pinna i vertici si rimettono sull'anello misurandoli sul
     film, vedi `_GiroSulFilm`. `spalla_sul_film` fa la stessa cosa lungo il
     passo, sulla spalla: vedi `_stendi_spalla`.
+
+    La pinna e' saldata: i due strati stanno a `flat_end` di mezzo spessore
+    l'uno dall'altro, e le nervature delle ganasce (`crimp_mm`, zero per una
+    saldatura liscia) li ondulano insieme. Con i denti contati
+    (`serr_teeth`) il bordo dentato si aggiunge dopo la griglia, piu' fitto;
+    con `griglia` si restituisce anche quanti vertici sono della griglia
+    (righe di nv + 1, le prime), per chi la rilegge a righe.
     """
     if soft_r > 0:
         P, d, section_w = soft_section_fit(fp, soft_r, soft_n)
@@ -487,24 +555,48 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
 
     half = fp.L / 2.0
     total = half + fp.end_fin
-    # sezioni fitte dentro le pinne: il dente e' profondo circa 1,6 mm e con il
-    # passo del corpo verrebbe fuori a gradini invece che a punta
-    body = np.linspace(-half, half, nu + 1)
-    fin = np.linspace(half, total, max(fin_stations, 2) + 1)[1:]
-    u = np.concatenate([-fin[::-1], body, fin])
-
-    # zigzag della zigrinatura sul bordo esterno delle pinne
-    if serration and serr_teeth > 0:
+    dentellata = serration and serr_teeth > 0
+    hy = float(np.max(np.abs(sec_pinna[:, 0] * width_end)))   # mezzo bordo
+    u_denti = total
+    if dentellata:
         # Il dente va contato sul bordo della pinna, non sul perimetro della
         # sezione: la pinna e' schiacciata, quindi il suo bordo misura due
-        # volte l'apertura. Passo e altezza danno triangoli equilateri.
-        y_fin = sec_pinna[:, 0] * width_end
-        hy = float(np.max(np.abs(y_fin)))
+        # volte l'apertura.
         base = 2.0 * hy / serr_teeth
-        depth = base * math.sqrt(3.0) / 2.0
-        phase = (y_fin + hy) / base
-        saw = 2.0 * np.abs(phase - np.floor(phase + 0.5))
-        trim = depth * saw
+        depth = altezza_dente(base)
+        # la griglia si ferma poco prima della gola dei denti: da li' in fuori
+        # il bordo dentato, fatto a parte. Su una cresta delle nervature, dove
+        # l'onda e' piana: li' la cucitura fra le due maglie non si vede
+        u_denti = max(total - depth - DENTE_MARGINE, half + 0.25 * fp.end_fin)
+        k_ = math.floor((u_denti - half) / (0.5 * crimp_period))
+        if crimp_mm > 0 and k_ >= 1 and k_ * 0.5 * crimp_period >= 0.25 * fp.end_fin:
+            u_denti = half + k_ * 0.5 * crimp_period
+    # sezioni fitte dentro le pinne: sei per nervatura, se no l'onda esce a
+    # gradini e il bordo della pinna, visto di taglio, seghettato
+    n_pinna = max(fin_stations, 2)
+    if crimp_mm > 0:
+        n_pinna = max(n_pinna, int(math.ceil((u_denti - half) / (crimp_period / 6.0))))
+    body = np.linspace(-half, half, nu + 1)
+    fin = np.linspace(half, u_denti, n_pinna + 1)[1:]
+    u = np.concatenate([-fin[::-1], body, fin])
+
+    def nervatura(a, y):
+        # nervature delle ganasce: sono loro a dare alla pinna il grigio
+        # rigato che la stacca dal fondo, altrimenti resta bianco su bianco.
+        # Sulla pinna saldata ondulano i due strati insieme, con un'onda
+        # morbida che dalla saldatura parte da zero e piana: niente gradino ne'
+        # piega col corpo. Verso le pieghe dei lati si spengono, e il bordo
+        # della pinna resta dritto invece di uscire a tacche
+        if crimp_mm <= 0:
+            return np.zeros(np.broadcast(np.asarray(a), np.asarray(y)).shape)
+        s = np.asarray(a, float) - half
+        onda = 0.5 * (1.0 - np.cos(2.0 * np.pi * s / crimp_period))
+        b = np.clip((hy - np.abs(np.asarray(y, float))) / BORDO_LISCIO, 0.0, 1.0)
+        return crimp_mm * onda * b * b * (3.0 - 2.0 * b)
+
+    # zigzag della zigrinatura sul bordo esterno delle pinne
+    if dentellata:
+        trim = np.zeros_like(v)
     elif serration and serr_period > 0:
         phase = (v * G) / serr_period
         saw = 2.0 * np.abs(phase - np.floor(phase + 0.5))
@@ -544,13 +636,13 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
             # restano dritte
             sec_i = sec_pinna if a > half else sul_film.anello(sy, sz, k)
             nrm_i = normali(sec_i)
-        if a > half and crimp_mm > 0:
-            # nervature delle ganasce: sono loro a dare alla pinna il grigio
-            # rigato che la stacca dal fondo, altrimenti resta bianco su bianco
-            ridge = abs(np.sin(np.pi * (a - half) / crimp_period))
-            sz += (crimp_mm / max(fp.T / 2.0, 1e-6)) * ridge
+        # La pancia e le grinze si spengono sulla spalla e alla saldatura non
+        # ci sono piu': restavano accese fino all'ultimo anello del corpo, e
+        # la pinna, che non le ha, cominciava con un gradino - qualche decimo
+        # di millimetro sul bordo, diverso in ogni angolo come le grinze
+        spegni = 1.0 - k * k
         # leggera pancia al centro
-        sw = 1.0 + bulge * (1.0 - (ui / max(total, 1e-6)) ** 2)
+        sw = 1.0 + bulge * (1.0 - (ui / max(total, 1e-6)) ** 2) * spegni
         uu = ui
         if a > half:                       # dentro la pinna: taglio a zigzag
             # il taglio tocca solo il bordo: l'interno della pinna resta piano,
@@ -558,11 +650,13 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
             uu = np.sign(ui) * np.minimum(a, total - trim)
         yy = sec_i[:, 0] * sy * (sw if a <= half else 1.0)
         zz = sec_i[:, 1] * sz * (sw if a <= half else 1.0)
+        if a > half:
+            zz = zz + nervatura(a, yy)
         if wrinkle_mm > 0 and a <= half:
             # il film e' lasco e si increspa soprattutto verso le saldature.
             # La grinza va data lungo la normale del contorno: spostando in
             # verticale si schiaccerebbe la sezione e la grafica ne risentirebbe.
-            g = (a / max(half, 1e-6)) ** 2
+            g = (a / max(half, 1e-6)) ** 2 * spegni
             ph = 2.0 * np.pi * ui / max(fp.L, 1e-6)
             wob = (np.sin(2.0 * np.pi * wrinkle_v * v + 1.7 * ph)
                    + 0.6 * np.sin(2.0 * np.pi * wrinkle_v * 1.9 * v - 1.1 * ph)
@@ -591,6 +685,53 @@ def build_mesh(fp: Flowpack, nu: int = 72, nv: int = 108, corner_r: float = 3.5,
             # posteriori, ed e' cosi' che la grafica appare capovolta e riflessa
             tris.append((a_, c_, b_))
             tris.append((a_, e_, c_))
+    n_griglia = len(V)
+
+    if dentellata:
+        # Il bordo dentato, oltre l'ultimo anello della griglia: lo stesso
+        # anello della pinna, coi lati divisi in `m` finche' ogni dente ha i
+        # suoi punti; ogni colonna arriva fino al taglio del dente che la
+        # attraversa. Una fila di cucitura lega l'anello rado a quello fitto,
+        # senza vertici a T. I due strati hanno la stessa y, quindi lo stesso
+        # dente: il taglio passa per la pinna saldata tutta intera.
+        rC = sec_pinna * np.array([width_end, flat_end])
+        lati = np.linalg.norm(np.diff(rC, axis=0), axis=1)
+        passo = float(np.median(lati[lati > 1e-9])) if np.any(lati > 1e-9) else base
+        m = max(1, int(math.ceil(PUNTI_PER_DENTE * passo / base)))
+        t = np.arange(m) / m
+        fitto = lambda c: np.r_[(c[:-1, None] + (c[1:] - c[:-1])[:, None] * t).ravel(), c[-1]]
+        Yf, Zf, vf = fitto(rC[:, 0]), fitto(rC[:, 1]), fitto(v)
+        # (su una pinna corta per i suoi denti la griglia si ferma prima della
+        # gola: la colonna non torna indietro, al piu' si accorcia il dente)
+        a_fine = np.maximum(total - depth * _profilo_dente((Yf + hy) / base),
+                            u_denti + 0.05)
+        righe = max(6, int(math.ceil((total - u_denti) / (crimp_period / 6.0))))
+        s = np.arange(1, righe + 1)[:, None] / righe
+        A = u_denti + s * (a_fine - u_denti)[None, :]           # righe x colonne
+        Vd, UVd, file_ = [], [], {}
+        for lato in (1.0, -1.0):
+            P = np.stack([lato * A, np.broadcast_to(Yf, A.shape),
+                          Zf[None, :] + nervatura(A, Yf[None, :])], 2)
+            Q = np.stack([(lato * A + total) / (2 * total), np.broadcast_to(vf, A.shape)], 2)
+            primo = n_griglia + sum(len(x) for x in Vd)
+            Vd.append(P.reshape(-1, 3))
+            UVd.append(Q.reshape(-1, 2))
+            file_[lato] = [primo + r * len(vf) + np.arange(len(vf)) for r in range(righe)]
+        Vd, UVd = np.vstack(Vd), np.vstack(UVd)
+        rada = np.arange(nv + 1)
+        dt = []
+        for lato in (1.0, -1.0):
+            # le file in ordine di u crescente, come le righe della griglia
+            anello = (len(u) - 1 if lato > 0 else 0) * (nv + 1) + rada
+            fila = [anello] + file_[lato] if lato > 0 else file_[lato][::-1] + [anello]
+            par = [v if len(f) == nv + 1 else vf for f in fila]
+            for f0, f1, p0, p1 in zip(fila, fila[1:], par, par[1:]):
+                dt += _cuci(f0, f1, p0, p1)
+        V = np.vstack([V, Vd])
+        UV = np.vstack([UV, UVd])
+        tris += dt
+    if griglia:
+        return V, UV, np.array(tris, np.int32), n_griglia
     return V, UV, np.array(tris, np.int32)
 
 
