@@ -58,8 +58,9 @@ combinazione funziona.
    Poi il passo della famiglia, con un posto per ogni PDF (solo PDF, tranne
    l'immagine del prodotto degli incarti):
    - **Flowpack**: il PDF, poi le domande obbligatorie - numero dei denti
-     della zigrinatura, rigonfiamento, apertura delle pinne - e la casella
-     per dire se il film avvolge una scatola;
+     della zigrinatura, rigonfiamento, apertura delle pinne - la saldatura
+     delle pinne (da 0, lisce, a 3, le righe delle ganasce piene) e la
+     casella per dire se il film avvolge una scatola;
    - **Pouch** e **Vassoio** (display compresi): il PDF, e il modello parte;
    - **Cartotecnico**: astuccio o scatola e lo spessore della carta;
      l'astuccio un PDF, la scatola di quante parti e' fatta e un PDF per

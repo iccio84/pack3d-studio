@@ -71,8 +71,8 @@ coperchio sollevato sulla sua cerniera e la scatola appoggiata sul retro. Un pac
 le finestre - il ballotin, l'astuccio col retro aperto fra due falde - fa
 chiedere se ci va la pellicola trasparente, che di solito c'e' ma non
 sempre. Se il DT ha la lastra dell'embossing, marchi e disegni escono in
-rilievo. Per i flowpack vengono chieste zigrinatura e tipo di gonfiore prima
-di costruire.
+rilievo. Per i flowpack vengono chieste zigrinatura, tipo di gonfiore,
+apertura e saldatura delle pinne prima di costruire.
 
 Il **riempimento** mette insieme due PDF, il pack (CU: un flowpack o un astuccio)
 e il vassoio o il display: costruisce i due modelli, chiede quanti pack
