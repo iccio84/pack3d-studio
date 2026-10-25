@@ -870,6 +870,21 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
     half = fp.L / 2.0
     nu = grid.shape[0]
 
+    # La falda si stacca dal tubo lungo la normale dell'anello, verso fuori.
+    # Lungo il raggio, come si faceva, sul corpo e' quasi lo stesso; ma sulla
+    # pinna l'anello e' piatto e il raggio va di lato: la falda restava sul
+    # film, e con le nervature della pinna saldata gli passava sopra e sotto
+    # a righe - sotto la falda il film ha le tacche della fotocellula.
+    nvr = grid.shape[1] - 1          # l'anello e' chiuso: l'ultimo e' il primo
+
+    def normali(ring):
+        t = ring[(np.arange(nvr) + 1) % nvr] - ring[(np.arange(nvr) - 1) % nvr]
+        n = np.stack([t[:, 1], -t[:, 0]], 1)
+        n /= np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-12)
+        return np.vstack([n, n[:1]])
+    mezzo = grid[nu // 2, :, 1:]
+    verso = 1.0 if float(np.sum(normali(mezzo) * mezzo)) >= 0 else -1.0
+
     V = np.zeros((nu, jmax + 1, 3))
     UV = np.zeros((nu, jmax + 1, 2))
     for i in range(nu):
@@ -881,12 +896,10 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
         # marrone uscivano a puntini. Un ventesimo di millimetro non si vede
         # e decide chi sta sopra.
         lift = max(gap * (t * t * (3 - 2 * t)), FALDA_SOPRA)
+        nr = verso * normali(grid[i, :, 1:])
         for j in range(jmax + 1):
             p = grid[i, j]
-            n = np.array([0.0, p[1], p[2]])
-            nn = np.linalg.norm(n)
-            n = n / nn if nn > 1e-9 else np.array([0.0, 0.0, -1.0])
-            V[i, j] = p + lift * n
+            V[i, j] = p + lift * np.array([0.0, nr[j, 0], nr[j, 1]])
             s = j / nv * G                      # arco dalla cucitura
             UV[i, j] = (grid[i, j, 0] - grid[0, 0, 0]) / (grid[-1, 0, 0] - grid[0, 0, 0]), \
                        (g1 - y0s + s / PT2MM) / web
@@ -905,6 +918,25 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
             tris.append((a_, c_, b_))
             tris.append((a_, e_, c_))
     return Vf, UVf, np.array(tris, np.int32)
+
+
+def falda_sui_denti(UV, v, fp: Flowpack, G: float, nv: int):
+    """Il bordo dentato sotto la falda, con la grafica della falda.
+
+    La falda (`fin_on_surface`) segue la griglia, e la griglia si ferma
+    prima dei denti: li', sulla striscia della falda, si vedeva il film che
+    lei copre - la zona coperta, con le tacche della fotocellula. Nella
+    saldatura la falda e' schiacciata col retro e tagliata dagli stessi
+    denti: quelle colonne del bordo dentato prendono la sua grafica, con la
+    stessa regola. `v` e' il parametro del giro dei vertici, prima dei nodi
+    e del riporto sullo steso."""
+    jmax = max(2, int(round(fp.side_fin / G * nv)))
+    y0s, web = fp.sheet[1], fp.sheet[3] - fp.sheet[1]
+    g1 = fp.girth_span[1]
+    out = UV.copy()
+    sotto = v <= jmax / nv + 1e-9
+    out[sotto, 1] = (g1 - y0s + v[sotto] * G / PT2MM) / web
+    return out
 
 
 def _collapse_guides(vals, max_gap=8.0, tol=0.6):

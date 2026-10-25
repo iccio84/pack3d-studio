@@ -4917,6 +4917,13 @@ Regole di forma, da applicare senza chiedere:
   fino alla piega il bordo usciva ondulato come una seconda fila di denti,
   spente in 1,2 mm facevano una tacca a ogni cresta. Il bordo dentato
   comincia su una cresta, dove l'onda e' piana e la cucitura non si vede;
+- la **falda** si stacca dal tubo lungo la **normale dell'anello**, non lungo
+  il raggio: sulla pinna l'anello e' piatto e il raggio va di lato, la falda
+  restava sul film e con le nervature gli passava sopra e sotto a righe. E
+  sul **bordo dentato**, che la griglia della falda non raggiunge, le colonne
+  sotto la falda prendono la **grafica della falda** (`falda_sui_denti`):
+  senza, li' si vedeva la zona coperta del film - sul Paradiso le tacche
+  nere della fotocellula, sul Yogurette il bianco al posto del marrone;
 - **niente gradino fra pack e pinna**: tutto quello che il corpo ha e la
   pinna no - la pancia, le grinze - si spegne sulla spalla e alla saldatura
   vale zero. Accese fino all'ultimo anello davano sul bordo un gradino di
