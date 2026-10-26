@@ -218,6 +218,7 @@ class Prodotto:
     rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
     accorcia: float = 1.0   # quanto e' stato accorciato lungo l'asse lungo: vedi `accorcia`
     schiaccia: float = 1.0  # quanto e' stato schiacciato nello spessore: vedi `schiaccia`
+    cuscino: tuple = ()     # premuto fra i vicini, (a0, b0, n0, a1, b1): vedi `pressa`
 
 
 def misura_prodotto(J, B, rigido=False):
@@ -470,6 +471,85 @@ def schiaccia(vano, p, quanti, posa):
     return None
 
 
+def _superellisse(a, b, n, m=2048):
+    """I punti della superellisse di semiassi a, b ed esponente n, e la
+    frazione di giro di ognuno, dal centro del fianco +a."""
+    t = np.linspace(0.0, 2.0 * np.pi, m + 1)
+    ct, st = np.cos(t), np.sin(t)
+    C = np.stack([a * np.sign(ct) * np.abs(ct) ** (2.0 / n),
+                  b * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
+    s = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(C, axis=0), axis=1))])
+    return t, C, s / s[-1], float(s[-1])
+
+
+def _risolvi(f, obiettivo, lo, hi):
+    """x in [lo, hi] con f(x) = obiettivo, per f crescente."""
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        if f(mid) < obiettivo:
+            lo = mid
+        else:
+            hi = mid
+    return 0.5 * (lo + hi)
+
+
+N_TESO = 3.0    # sotto, la sezione e' gia' un cuscino: non c'e' film da spostare
+
+
+def pressa(p, V):
+    """Il flowpack PREMUTO fra i vicini nel display pieno: `Prodotto`, o None.
+
+    Gonfio, il flowpack a pinna ha la faccia larga quanto il DT e il film che
+    gli spigoli tondi lasciano nello spessore (`flowpack.sezione_rigonfiata`):
+    36 x 24,2 il T1 del caso 838cbae0ac, sul DT 36 x 19,5. In fila nel display, faccia
+    contro faccia, l'aria non sta piu' nello spessore: i vicini lo riportano
+    a quello del prodotto, il film teso sul DT (meta' giro meno la faccia), e
+    il film, che non si allunga, va di lato. La sezione diventa un cuscino,
+    l'ellisse con lo stesso giro: quel T1 49,6 x 20,2. Il caso 838cbae0ac, il
+    display da 150 x 247 mm: gonfi ci stavano 4 file da 9, chi l'ha caricato
+    li ha 3 per fila in 12 file, larghi come il passo, e cosi' viene.
+
+    Il giro si legge sulla maglia, a meta' corpo; l'esponente della
+    superellisse e' quello che con quei semiassi da' quel giro. None per un
+    astuccio, per una sezione gia' tonda (tubo piatto, a sovrapposizione) o
+    se lo spessore non cala."""
+    if p.rigido:
+        return None
+    from scipy.spatial import ConvexHull
+    lungo, largo, spesso = p.assi
+    x = V[:, lungo] - p.centro[lungo]
+    S = V[np.abs(x) < max(2.0, 0.03 * p.lungo)][:, (largo, spesso)]
+    if len(S) < 8:
+        return None
+    giro = float(ConvexHull(S).area)
+    a0, b0 = p.largo / 2.0, p.spesso / 2.0
+    if giro <= _superellisse(a0, b0, 2.0)[3]:
+        return None
+    n0 = _risolvi(lambda n: _superellisse(a0, b0, n)[3], giro, 2.0, 60.0)
+    t1 = giro / 2.0 - p.largo
+    if n0 < N_TESO or t1 <= 0.0 or t1 >= 0.97 * p.spesso:
+        return None
+    b1 = t1 / 2.0
+    a1 = _risolvi(lambda a: _superellisse(a, b1, 2.0)[3], giro, b1, giro)
+    return replace(p, largo=2.0 * a1, spesso=t1, largo_pinne=p.largo_pinne * a1 / a0,
+                   cuscino=(a0, b0, n0, a1, b1))
+
+
+def _a_cuscino(u, v, cuscino):
+    """La sezione (u lungo il largo, v lungo lo spessore, dal centro) portata
+    sul cuscino a giro fermo: ogni punto va dove sta la stessa frazione di
+    giro, e la grafica non si stira lungo il giro. La distanza dal centro, in
+    unita' della sezione, resta: le spalle e le pinne seguono."""
+    a0, b0, n0, a1, b1 = cuscino
+    t, C0, f0, _ = _superellisse(a0, b0, n0)
+    _, C1, f1, _ = _superellisse(a1, b1, 2.0)
+    fi0 = np.unwrap(np.arctan2(C0[:, 1] / b0, C0[:, 0] / a0))
+    fi = np.mod(np.arctan2(v / b0, u / a0), 2.0 * np.pi)
+    tt = np.interp(np.interp(fi, fi0, f0), f1, t)
+    r = (np.abs(u / a0) ** n0 + np.abs(v / b0) ** n0) ** (1.0 / n0)
+    return r * a1 * np.cos(tt), r * b1 * np.sin(tt)
+
+
 def capienza(vano, p):
     d = scegli(vano, p, None)
     return d.capienza if d else 0
@@ -550,6 +630,15 @@ def adatta(P, N, p, d):
         P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * p.schiaccia
         if N is not None:
             N[:, spesso] = N[:, spesso] / p.schiaccia
+    # 0. premuto fra i vicini nel display pieno: vedi `pressa`
+    if p.cuscino:
+        a0, b0, _, a1, b1 = p.cuscino
+        u, v = _a_cuscino(P[:, largo] - p.centro[largo], P[:, spesso] - p.centro[spesso],
+                          p.cuscino)
+        P[:, largo], P[:, spesso] = p.centro[largo] + u, p.centro[spesso] + v
+        if N is not None:
+            N[:, largo] = N[:, largo] * a0 / a1
+            N[:, spesso] = N[:, spesso] * b0 / b1
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
     # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
@@ -629,6 +718,15 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
         raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) %s "
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
+    if quanti is None and d.posa == "frontali":
+        q = pressa(p, vertici(Jp, Bp))
+        dq = scegli(vano, q, None) if q is not None else None
+        if dq is not None and dq.posa == "frontali" and dq.capienza >= d.capienza:
+            accorciato.append("%s, gonfio, e' %.1f x %.1f mm: nel display pieno, faccia "
+                              "contro faccia, i vicini lo premono a %.1f di spessore e il "
+                              "film va di lato, a giro fermo: %.1f x %.1f"
+                              % (cosa, p.largo, p.spesso, q.spesso, q.largo, q.spesso))
+            p, d = q, dq
     if quanti is not None and d.capienza < quanti:
         q = schiaccia(vano, p, quanti, d.posa)
         if q is not None:

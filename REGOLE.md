@@ -6305,6 +6305,38 @@ viene strecciata.»
   (lungo/2 - corpo/2)) e resta distesa e aperta, con la sua zigrinatura.
   Frontali le punte si piegano verso il dietro come prima.
 
+### Nel display pieno il flowpack e' premuto: il film va di lato
+
+Il caso 838cbae0ac, un display sagomato col fondo di 150,4 x 247,0 mm e il
+flowpack T1 dentro, pieno (senza `quanti`). Gonfio, il T1 e' 36 x 24,2 (giro
+111, sul DT 36 x 19,5) e nel vano ne stavano 4 file da 9. «Il vassoio
+contiene 3 pack per 12 file. Inoltre il T1 e' sbagliato»: nella foto del
+pack vero i flowpack stanno faccia contro faccia, larghi quasi come un terzo
+del vassoio e sottili.
+
+- **Causa**: il rigonfiamento mette nello spessore il film che gli spigoli
+  tondi lasciano (*Il rigonfiamento va nello spessore*). Da solo e' giusto;
+  in fila, faccia contro faccia, l'aria non puo' stare nello spessore: i
+  vicini lo premono, e il film, che non si allunga, va di lato.
+- **Regola** (`riempimento.pressa`): nel display **pieno**, coi pezzi
+  **frontali**, il flowpack a pinna si preme. Lo spessore torna quello del
+  prodotto, il film teso sul DT: meta' giro meno la faccia (111/2 - 36 =
+  19,5). La sezione diventa il cuscino con lo stesso giro, un'ellisse: il T1
+  49,6 x 20,2 (il giro letto sulla maglia a meta' corpo). La disposizione si
+  rifa' col pezzo premuto e si tiene se ce ne stanno almeno quanti gonfi:
+  3 file da 12 (148,4 / 49,6 e 245 / 20,2, col 2% di sempre), 36 pezzi.
+- **La grafica non si stira lungo il giro**: ogni punto della sezione va
+  dove sul cuscino sta la stessa frazione di giro (`_a_cuscino`), alla
+  stessa distanza dal centro in unita' della sezione, cosi' spalle e pinne
+  seguono. Il fronte di 36 mm resta 36 mm di film al centro della faccia, e
+  il resto della faccia e' il fianco che si e' aperto: il marchio prende
+  quattro quinti della faccia, come nella foto.
+- **Non si preme**: con `quanti` (il display fatto per il suo numero ha la
+  sua regola, *Il display e' fatto per il suo numero*, e `schiaccia`), un
+  astuccio, una sezione gia' tonda (esponente sotto 3: tubo piatto, a
+  sovrapposizione), uno spessore che cala meno del 3%, o se premuti ne
+  stanno meno che gonfi.
+
 ## La texture e' lo steso
 
 La texture di ogni modello e' **lo steso del PDF**: la grafica pulita - senza
