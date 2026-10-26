@@ -56,6 +56,7 @@ class ScatolaPlancia:
     vT: float           # cima della plancia (verso il fronte)
     vM: float           # la riga di mezzo
     vH: float           # la cerniera
+    taglio: tuple = ()  # il bordo alto del fronte dentro la finestra: (u, v)
 
     @property
     def W(self):
@@ -227,6 +228,48 @@ def _scatola(H, V, vF, vB, uL, uR, Hs):
     return (fronte, fondo, pl_u, buco_u, vT, vM, vH)
 
 
+def _taglio(tratti, p):
+    """Il bordo alto del fronte dove la plancia ci entra: [(u, v)] da una
+    fessura esterna all'altra, o () se la plancia comincia sul bordo del
+    coperchio.
+
+    I tagli della cima della plancia proseguono dentro il fronte (le spalle,
+    la presa per il dito): alzata la plancia, quel pezzo di fronte va via
+    con lei. A ogni u fra le fessure esterne il fronte resta fin dove arriva
+    il taglio piu' lontano dal coperchio (v piu' piccola): li' passa il
+    contorno esterno, e nella presa per il dito il suo arco. Si leggono i
+    tratti, nessuna forma cucita. Vedi REGOLE.md, *Il display a scatola*."""
+    b0, b1 = p.buco_u
+    alto, basso = p.vF - 1.0, p.vF - p.fronte + 2.0
+    seg = []
+    for t in tratti:
+        for a, b in zip(t[:-1], t[1:]):
+            if abs(b[0] - a[0]) < 1e-6:
+                continue
+            if max(a[1], b[1]) < basso or min(a[1], b[1]) > alto:
+                continue
+            if max(a[0], b[0]) < b0 or min(a[0], b[0]) > b1:
+                continue
+            seg.append((a, b))
+    if not seg:
+        return ()
+    us = sorted({float(u) for a, b in seg for u in (a[0], b[0]) if b0 < u < b1}
+                | set(np.linspace(b0, b1, int((b1 - b0) / 2.0) + 2)[1:-1].tolist()))
+    us = [b0 + 0.05] + [u for u in us if b0 + 0.05 < u < b1 - 0.05] + [b1 - 0.05]
+    out = []
+    for u in us:
+        vv = []
+        for a, b in seg:
+            if min(a[0], b[0]) <= u <= max(a[0], b[0]):
+                v = a[1] + (b[1] - a[1]) * (u - a[0]) / (b[0] - a[0])
+                if basso <= v <= alto:
+                    vv.append(v)
+        out.append((u, min(vv) if vv else p.vF))
+    if all(v >= p.vF for _, v in out):
+        return ()
+    return tuple(out)
+
+
 def riconosci(pdf, page_no=0):
     """Il display a scatola, o None se la fustella non e' la sua."""
     from .ballotin import tratti_fustella
@@ -237,15 +280,18 @@ def riconosci(pdf, page_no=0):
     lo, hi = tutti.min(axis=0), tutti.max(axis=0)
     c = tuple(((lo + hi) / 2).tolist())
     for k in range(4):
-        H, V = _righe([_ruota(p, k, c) for p in tratti])
+        girati = [_ruota(p, k, c) for p in tratti]
+        H, V = _righe(girati)
         f = _leggi(H, V)
         if f is None:
             continue
         uL, uR, vF, vB, Hs, fronte, fondo, pl_u, buco_u, vT, vM, vH = f
         regione = (lo[0] / PT2MM, lo[1] / PT2MM, hi[0] / PT2MM, hi[1] / PT2MM)
-        return ScatolaPlancia(regione=regione, giro=k, centro=c, uL=uL, uR=uR,
-                              vF=vF, vB=vB, H=Hs, fronte=fronte, fondo=fondo,
-                              pl_u=pl_u, buco_u=buco_u, vT=vT, vM=vM, vH=vH)
+        sp = ScatolaPlancia(regione=regione, giro=k, centro=c, uL=uL, uR=uR,
+                            vF=vF, vB=vB, H=Hs, fronte=fronte, fondo=fondo,
+                            pl_u=pl_u, buco_u=buco_u, vT=vT, vM=vM, vH=vH)
+        sp.taglio = _taglio(girati, sp)
+        return sp
     return None
 
 
@@ -339,21 +385,38 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
              [(u0, v1), (u0, v0), (u1, v0), (u1, v1)], (0, 1, 0),
              coste=coste)
 
-    # il fronte: si piega giu' dal bordo del coperchio. Se la plancia parte
-    # dentro il fronte, li' il fronte ha la tacca
+    # il fronte: si piega giu' dal bordo del coperchio. Dove la plancia
+    # parte dentro il fronte, fra le fessure esterne il suo bordo alto segue
+    # i tagli della fustella (`_taglio`): le spalle, e al centro la presa per
+    # il dito. Alzata la plancia, quel pezzo di fronte va via con lei
     def Yf(v):
         return H - (p.vF - v) * H / p.fronte
 
-    vt = min(p.vT, p.vF)
-    quad([(X(p.uL), 0, D / 2), (X(p.uR), 0, D / 2), (X(p.uR), Yf(vt), D / 2),
-          (X(p.uL), Yf(vt), D / 2)],
-         [(p.uL, p.vF - p.fronte), (p.uR, p.vF - p.fronte), (p.uR, vt), (p.uL, vt)],
-         (0, 0, 1))
-    if vt < p.vF:
+    v0 = p.vF - p.fronte
+    taglio = list(p.taglio)
+    if not taglio and p.vT < p.vF:
+        # la cima della plancia dritta dentro il fronte: la tacca
+        taglio = [(b0 + 0.05, p.vT), (b1 - 0.05, p.vT)]
+    if taglio:
         for u0, u1 in ((p.uL, b0), (b1, p.uR)):
-            quad([(X(u0), Yf(vt), D / 2), (X(u1), Yf(vt), D / 2),
+            quad([(X(u0), 0, D / 2), (X(u1), 0, D / 2),
                   (X(u1), H, D / 2), (X(u0), H, D / 2)],
-                 [(u0, vt), (u1, vt), (u1, p.vF), (u0, p.vF)], (0, 0, 1))
+                 [(u0, v0), (u1, v0), (u1, p.vF), (u0, p.vF)], (0, 0, 1),
+                 coste=((1,) if u1 == b0 else (3,)))
+        for (ua, va), (ub, vb) in zip(taglio[:-1], taglio[1:]):
+            quad([(X(ua), 0, D / 2), (X(ub), 0, D / 2),
+                  (X(ub), Yf(vb), D / 2), (X(ua), Yf(va), D / 2)],
+                 [(ua, v0), (ub, v0), (ub, vb), (ua, va)], (0, 0, 1),
+                 coste=(2,))
+        # da una fessura esterna al taglio: la riga sotto il primo e l'ultimo
+        for ue, (ut, vt_) in ((b0, taglio[0]), (b1, taglio[-1])):
+            quad([(X(ue), 0, D / 2), (X(ut), 0, D / 2),
+                  (X(ut), Yf(vt_), D / 2), (X(ue), Yf(vt_), D / 2)],
+                 [(ue, v0), (ut, v0), (ut, vt_), (ue, vt_)], (0, 0, 1))
+    else:
+        quad([(X(p.uL), 0, D / 2), (X(p.uR), 0, D / 2), (X(p.uR), H, D / 2),
+              (X(p.uL), H, D / 2)],
+             [(p.uL, v0), (p.uR, v0), (p.uR, p.vF), (p.uL, p.vF)], (0, 0, 1))
 
     # i fianchi, giu' dai lati del coperchio
     for fuori_u, piega_u in ((p.uL - H, p.uL), (p.uR + H, p.uR)):

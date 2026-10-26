@@ -20,7 +20,10 @@ La disposizione la decide il vano del vassoio:
 - i pack stanno frontali: la faccia stampata verso il davanti del vassoio e il
   marchio dritto, come stanno nel loro modello, in file dal davanti al fondo e
   a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
-  Sdraiati, la faccia in su, solo se in piedi non ci stanno.
+  Sdraiati, la faccia in su, solo se in piedi non ci stanno, o se i pezzi
+  contati frontali vengono a strati diversi e sdraiati fanno una griglia
+  piena (`_griglia`, il T15: 5 x 3); sdraiati si inclinano all'indietro
+  quanto lascia l'aria sopra la pila (`inclina`).
 
 Poi il flowpack si adatta al vano, una volta per tutti i pezzi: le pinne si
 stringono quanto il passo fra due pezzi, perche' due pinne sovrapposte sullo
@@ -42,6 +45,8 @@ COMPRIME = 0.02             # quanto si schiaccia un pezzo gonfio fra i vicini
 PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
+INCLINA_MAX = math.radians(15.0)   # sdraiati, inclinati all'indietro al massimo cosi'
+INCLINA_MIN = math.radians(3.0)    # sotto, non si inclinano
 
 
 # --------------------------------------------------------------------------- #
@@ -268,6 +273,8 @@ class Disposizione:
     n: tuple
     passo: tuple
     piega: float
+    inclina: float = 0.0    # sdraiati: radianti all'indietro, il davanti alzato
+    pila: float = 0.0       # inclinati: l'altezza della pila, in mm
 
     @property
     def capienza(self):
@@ -359,7 +366,8 @@ def scegli(vano, p, quanti):
     if not cand:
         return None
     if cand[0].posa == "frontali":
-        return cand[0]
+        g = None if quanti is None else _griglia(cand, quanti)
+        return g or cand[0]
     if quanti is None:
         return max(cand, key=lambda d: d.capienza)
     buone = [d for d in cand if d.capienza >= quanti]
@@ -367,6 +375,55 @@ def scegli(vano, p, quanti):
         return max(cand, key=lambda d: d.capienza)
     buone.sort(key=lambda d: (-(-quanti // d.per_strato), -d.per_strato))
     return buone[0]
+
+
+def _griglia(cand, quanti):
+    """Il display e' fatto per il suo numero: `quanti` pezzi stanno in una
+    griglia piena, a per strato e s strati. Se frontali vengono a strati
+    diversi (15: 8 e 7) e una posa sdraiata li mette in strati tutti uguali
+    e pieni (15: 5 x 3), si prende quella, con meno strati. La disposizione
+    torna con i pezzi di uno strato allargati su tutto il vano. None se
+    frontali vanno gia' bene, o se nessuna posa fa la griglia."""
+    fr = cand[0]
+    if len(set(_strati(fr, quanti))) <= 1 and quanti <= fr.capienza:
+        return None
+    migliore = None
+    for d in cand[1:]:
+        nx, ny, nz = d.n
+        for s in range(1, ny + 1):
+            if quanti % s:
+                continue
+            a = quanti // s
+            for gx in range(min(nx, a), 0, -1):
+                if a % gx or a // gx > nz:
+                    continue
+                gz = a // gx
+                if migliore is None or (s, -a) < (migliore[0], -migliore[1]):
+                    migliore = (s, a, d, gx, gz)
+                break
+    if migliore is None:
+        return None
+    s, a, d, gx, gz = migliore
+    lx, lz = d.passo[0] * d.n[0], d.passo[2] * d.n[2]
+    return Disposizione(d.posa, d.dove + ", %d x %d" % (a, s), d.R, (gx, d.n[1], gz),
+                        (lx / gx, d.passo[1], lz / gz), d.piega)
+
+
+def inclina(vano, p, d, quanti):
+    """Sdraiati, i pezzi si inclinano ALL'INDIETRO: il davanti si alza,
+    come stanno in un display, e la faccia guarda chi passa. Quanto lo dice
+    l'aria sopra la pila: il davanti si alza fin dove arriva il vano, al
+    massimo 15 gradi; sotto i 3 non si inclinano. Frontali stanno dritti.
+    Torna l'angolo, in radianti."""
+    if d.posa != "sdraiati":
+        return 0.0
+    pila = len(_strati(d, quanti)) * d.passo[1]
+    aria = vano.per_asse[1] - pila - GIOCO
+    lz = _misura(p, int(np.argmax(np.abs(d.R[2, :]))))
+    if aria <= 0 or lz <= 0:
+        return 0.0
+    a = min(INCLINA_MAX, math.asin(min(1.0, aria / lz)))
+    return a if a >= INCLINA_MIN else 0.0
 
 
 def accorcia(vano, p):
@@ -458,6 +515,18 @@ def pose(vano, p, d, quanti, V_prodotto):
         for r, f in posti:
             x, z = dove(r, f)
             out.append((R, np.array([x, y, z])))
+    if d.inclina:
+        # all'indietro sul bordo dietro del fondo: il davanti si alza. Poi la
+        # pila torna nel vano: poggia sul fondo, al centro della profondita'
+        c, s_ = math.cos(d.inclina), math.sin(d.inclina)
+        Rt = np.array([[1.0, 0.0, 0.0], [0.0, c, s_], [0.0, -s_, c]])
+        perno = np.array([0.0, vano.fondo, vano.z0])
+        out = [(Rt @ Rk, perno + Rt @ (t - perno)) for Rk, t in out]
+        tutti = np.vstack([(V_prodotto - p.centro) @ Rk.T + t for Rk, t in out])
+        lo, hi = tutti.min(0), tutti.max(0)
+        sp = np.array([0.0, vano.fondo - lo[1],
+                       (vano.z0 + vano.z1) / 2.0 - (lo[2] + hi[2]) / 2.0])
+        out = [(Rk, t + sp) for Rk, t in out]
     return out
 
 
@@ -490,8 +559,22 @@ def adatta(P, N, p, d):
         P[:, largo] = c + (P[:, largo] - c) * f
     # 2. le punte che uscirebbero, piegate sullo spessore come il film vero
     meta = d.passo[d.asse(lungo)] / 2.0 - GIOCO
+    if d.inclina and d.asse(lungo) == 2:
+        # inclinata, in profondita' la pila prende la lunghezza per il
+        # coseno e la sua altezza per il seno
+        meta = (meta - 0.5 * max(d.pila, p.spesso) * math.sin(d.inclina)) / math.cos(d.inclina)
     piegate = 0
-    if p.lungo / 2.0 > meta > fine:
+    if p.lungo / 2.0 > meta > fine and d.posa == "sdraiati":
+        # sdraiati la punta piegata in su stava davanti alla faccia come un
+        # gradino, e la pinna sembrava chiusa: il film invece si accartoccia
+        # in lunghezza, e la pinna resta aperta, distesa e piu' corta
+        k = (meta - fine) / (p.lungo / 2.0 - fine)
+        m = np.abs(x) > fine
+        P[m, lungo] = p.centro[lungo] + np.sign(x[m]) * (fine + (np.abs(x[m]) - fine) * k)
+        if N is not None:
+            N[m, lungo] = N[m, lungo] / k
+        piegate = 2
+    elif p.lungo / 2.0 > meta > fine:
         c_sp = p.centro[spesso]
         verso = d.piega
         cs, sn = math.cos(PIEGA_PINNA), math.sin(PIEGA_PINNA)
@@ -514,7 +597,11 @@ def adatta(P, N, p, d):
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
-def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
+class NonCiStanno(ValueError):
+    """`componi(esatti=True)`: i pezzi chiesti nel vano non ci stanno tutti."""
+
+
+def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, esatti=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -548,8 +635,13 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
     massimo = d.capienza
+    if esatti and (accorciato or (quanti is not None and quanti > massimo)):
+        raise NonCiStanno("riempimento: %s pezzi chiesti, ce ne stanno %d"
+                          % (quanti, massimo))
     if quanti is None or quanti > massimo:
         quanti = massimo
+    d.inclina = 0.0 if rigido else inclina(vano, p, d, quanti)
+    d.pila = len(_strati(d, quanti)) * d.passo[1]
     # il pezzo poggia col corpo: le pinne, piu' larghe, si stringono prima
     Vp = vertici(Jp, Bp)
     if not rigido:
@@ -657,12 +749,12 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
         return len(J["nodes"]) - 1
 
     scena = J["scenes"][J.get("scene", 0)]["nodes"]
-    q = _quaternione(R)
-    for k, (_R, t) in enumerate(poste):
+    for k, (Rk, t) in enumerate(poste):
         figli = [copia(r) for r in radici]
+        q = _quaternione(Rk)
         # t e' dove va il centro del prodotto: il nodo sposta prima il centro
         # nell'origine
-        tt = t - R @ p.centro
+        tt = t - Rk @ p.centro
         J["nodes"].append({"name": "pezzo %d" % (k + 1), "children": figli,
                            "rotation": [float(v) for v in q],
                            "translation": [float(v) / 1000.0 for v in tt]})
@@ -697,7 +789,12 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
                   "%d per strato (%d x %d), %s: ce ne stanno fino a %d"
                   % (d.per_strato, d.n[2], d.n[0], strati, d.capienza),
                   "sdraiati perche' in piedi, con la faccia verso il davanti, nel vano non "
-                  "ci stanno"]
+                  "ci stanno" if not d.dove.endswith(" x %d" % len(conti)) else
+                  "sdraiati perche' frontali %d non fanno strati uguali, e cosi' fanno una "
+                  "griglia piena" % quanti]
+        if d.inclina:
+            righe.append("inclinati all'indietro di %.0f gradi, il davanti alzato: tanto "
+                         "lascia l'aria sopra la pila" % math.degrees(d.inclina))
     righe.append("vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
                  % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso,
                     p.corpo))
@@ -708,8 +805,9 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     if rigido:
         return scrivi(J, bytes(B)), righe
     if piegate:
-        righe.append("pinne piu' lunghe del posto del pezzo: le punte si piegano %s"
-                     % ("verso il dietro" if d.posa == "frontali" else "in su contro la parete"))
+        righe.append("pinne piu' lunghe del posto del pezzo: %s"
+                     % ("le punte si piegano verso il dietro" if d.posa == "frontali" else
+                        "si accorciano, accartocciate in lunghezza, e restano aperte"))
     passo = d.passo[d.asse(p.assi[1])]
     if p.largo_pinne > passo:
         righe.append("pinne piu' larghe del passo fra due pezzi (%.1f contro %.1f): si "

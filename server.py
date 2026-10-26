@@ -1231,6 +1231,25 @@ def quanti_pezzi(valore):
     return n
 
 
+# nel riempimento il flowpack sale di tanti livelli di rigonfiamento
+GONFIO_DISPLAY = 3
+
+
+def gonfio_nel_display(soft):
+    """Il rigonfiamento del flowpack dentro un vassoio o un display: quello
+    scelto piu' `GONFIO_DISPLAY` livelli, fino a 10. Da solo il flowpack si
+    vede di piatto; nel display sta pieno fra i vicini, e al livello scelto
+    per il pezzo singolo usciva sgonfio (il T15: «devono essere piu'
+    gonfi»). Torna il livello come testo, come lo vuole `build_flowpack`."""
+    liv = FASCE.get(str(soft).strip().lower())
+    if liv is None:
+        try:
+            liv = float(soft)
+        except (TypeError, ValueError):
+            liv = 5.0
+    return "%g" % min(10.0, float(liv) + GONFIO_DISPLAY)
+
+
 def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
                       carta=None, incisioni=True):
     """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
@@ -1240,20 +1259,42 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     `carta` e la fustella dell'apertura a strappo se `incisioni`."""
     from pack3d import riempimento
     astuccio = info.get("cu") == "carton"
+
+    def leggi_file(f):
+        with open(f, "rb") as fh:
+            return fh.read()
+
     with tempfile.TemporaryDirectory() as td:
         gv = os.path.join(td, "vassoio.glb")
         gf = os.path.join(td, "pack.glb")
         av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality)
+        glb_v = leggi_file(gv)
+        fatto = None
         if astuccio:
             av_f = build_carton(pdfs[info["flowpack"]], gf, quality, carta=carta,
                                 incisioni=incisioni)
-        else:
+        elif quanti is not None:
+            # nel display il flowpack e' pieno e stretto fra i vicini: piu'
+            # gonfio di quello da solo (vedi `gonfio_nel_display`), ma non a
+            # costo di pezzi: se gonfio non ci stanno tutti quelli chiesti,
+            # torna al rigonfiamento scelto
+            gonfio = gonfio_nel_display(flowpack[1])
+            av_f = build_flowpack(pdfs[info["flowpack"]], gf, flowpack[0], gonfio,
+                                  *flowpack[2:])
+            try:
+                fatto = riempimento.componi(glb_v, leggi_file(gf), quanti,
+                                            esatti=True)
+                av_f = ["nel display piu' gonfio di %d livelli: rigonfiamento %s "
+                        "invece di %s" % (GONFIO_DISPLAY, gonfio, flowpack[1])] + list(av_f)
+            except riempimento.NonCiStanno:
+                fatto = None
+        if not astuccio and fatto is None:
             av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
-        with open(gv, "rb") as fh:
-            glb_v = fh.read()
-        with open(gf, "rb") as fh:
-            glb_f = fh.read()
-    glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio)
+            if quanti is not None:
+                av_f = ["piu' gonfio nel display non ci stavano tutti: rigonfiamento "
+                        "scelto, %s" % flowpack[1]] + list(av_f)
+        glb_f = leggi_file(gf)
+    glb, righe = fatto or riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio)
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)

@@ -3143,8 +3143,39 @@ specchiato.
 Nel GLB la plancia e' il nodo `plancia`, coi suoi triangoli per ultimi,
 accanto al nodo `display`: il riempimento misura il vano senza di lei (*I
 riempimenti*, *Il display si misura senza la plancia*). Sul T15 il vano e'
-189 x 137,5, alto 70,5: quindici flowpack in due file, frontali, che si
-vedono dalla finestra.
+189 x 137,5, alto 70,5: quindici flowpack sdraiati per il lungo, 5 x 3,
+inclinati di 10 gradi all'indietro (*I riempimenti*, *Il display e' fatto per
+il suo numero*).
+
+### Il fronte e' fustellato: segue i tagli della plancia
+
+Il caso c5b98dfbee, seconda prova: «il fronte deve essere fustellato e non
+dritto (guardare DT)». Sul DT il contorno della plancia non si ferma sul bordo
+del coperchio: le fessure esterne salgono nel pannello del fronte (5,6 mm),
+girano in una spalla tonda (raggio 9) e salgono in diagonale verso il centro
+(da 16 a 23 mm dentro il fronte); al centro un arco largo 20 mm, la presa per
+il dito, arriva a 32 mm. Parallelo, 3 mm piu' dentro, c'e' il contorno interno
+della plancia, e sotto l'arco della presa un secondo arco (a 26 mm): la presa
+e' un buco nel fronte, non una linguetta della plancia. Il modello faceva il
+fronte dritto, alto quanto la scatola, e il pezzo dentro il contorno restava
+li'.
+
+**Regola.** Alzata la plancia, il pezzo di fronte dentro il contorno va via
+con lei. Il bordo alto del fronte fra le fessure esterne si legge dai tratti
+della fustella (`scatola_plancia._taglio`, nel campo `taglio`): a ogni u fra
+le fessure (ogni 2 mm circa, e su ogni vertice dei tratti) il taglio piu'
+lontano dal coperchio (v piu' piccola) fra quelli dentro il pannello del
+fronte, a piu' di 1 mm dal bordo del coperchio (la cordonatura del bordo sta
+a 0,5 mm e non conta). Cosi' passa il contorno esterno, e nella presa il suo
+arco. Fuori dalle fessure esterne il fronte resta alto quanto la scatola; il
+bordo tagliato ha la costa. Nessuna forma cucita: se la plancia comincia sul
+bordo del coperchio non c'e' taglio e il fronte resta dritto; se la cima e'
+una riga dritta dentro il fronte esce la tacca di prima. Sul T15: 226 punti,
+il fronte alto 71,5 ai lati, 65 dove la fessura entra, 49 vicino al centro,
+40 in fondo alla presa.
+
+La plancia resta un rettangolo fino alla cima delle fessure interne: la sua
+parte nel fronte, con la stampa capovolta, scende davanti nella finestra.
 
 ### Dove entra
 
@@ -3155,8 +3186,9 @@ cambiano strada.
 
 ### Cosa manca
 
-- La cima della plancia e la linguetta per il dito sono tonde sul DT; nel
-  modello la plancia e' un rettangolo fra le fessure interne.
+- La cima della plancia segue il contorno interno sul DT (le spalle, e
+  l'arco sopra la presa); nel modello la plancia e' un rettangolo fra le
+  fessure interne, fino alla loro cima. Il fronte invece segue i tagli.
 - Il retro e le sue falde incollate sono un pannello solo, alto quanto la
   scatola: sul T15 sono bianchi, dentro e fuori.
 - Il display T10 dello stesso prodotto (caso e1b3cc77a7) e' disegnato
@@ -6013,7 +6045,9 @@ strati: anche loro 40, ma da davanti si vedeva solo il bordo del film, e il
 vassoio vero non si riempie cosi'. Sdraiati si va solo se frontali non ci
 stanno in pianta - il pack piu' largo del vassoio, o piu' profondo - e lo si
 dice: piu' alto delle pareti non basta, sta in piedi e sporge. Di taglio, con
-la faccia verso i fianchi, mai.
+la faccia verso i fianchi, mai. Un'eccezione: i pezzi contati che frontali non fanno
+strati uguali e sdraiati fanno una griglia piena (*Il display e' fatto per il
+suo numero*).
 
 ### Quanti ne stanno
 
@@ -6114,6 +6148,62 @@ riquadro del controllo.
 - Le CU che non sono flowpack ne' astucci: pouch, coppe, scatole in piu' pezzi.
 - L'astuccio aperto dentro l'espositore.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
+
+### Il display e' fatto per il suo numero: la griglia piena
+
+Il caso c5b98dfbee, display a scatola T15 (191 x 139,5 x 71,5; vano 189 x
+137,5, alto 70,5) con flowpack 150 x 35 x 14,6 (pinne comprese; corpo 117).
+Chi l'ha caricato: «in totale ci devono essere 15 CU (5X3 Flowpack)». Frontali
+ne stavano 20, due strati da 10, e i 15 chiesti venivano 8 e 7: dall'alto se
+ne vedevano 8, e le file sfalsate dei due strati facevano i gradini.
+
+**Regola** (`riempimento._griglia`). Un display e' fatto per il numero che
+porta. Se si chiedono N pezzi e frontali vengono a strati diversi, si cerca
+una posa sdraiata che li metta in una **griglia piena**: a per strato, s
+strati, a x s = N, con a che sta in pianta (gx non piu' di quanti ne stanno
+di traverso, gz non piu' di quanti in profondita') e s non piu' degli strati
+che stanno in altezza; vince quella con meno strati. I pezzi di uno strato si
+allargano su tutto il vano (passo = lato / gx). Sul T15: sdraiati per il
+lungo del vano, 5 di traverso (passo 37,8) e 3 strati: 5 x 3, e da davanti si
+contano le 15 testate. Il 3 x 5 (sdraiati per il largo, 3 file di 5 strati)
+perde: piu' strati, e da davanti si vede la prima pila sola. Frontali a
+strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
+2 file da 13.
+
+### Sdraiati, si inclinano all'indietro
+
+«Ruotali leggermente all'indietro in modo che risultino un po' inclinati.»
+Sdraiati, la pila si inclina **all'indietro** sul bordo dietro del fondo: il
+davanti si alza e la faccia stampata guarda chi passa (`riempimento.inclina`,
+`Disposizione.inclina`). Quanto lo dice l'aria sopra la pila: sin(angolo) =
+(alto del vano - strati x spessore - 0,6) / misura del pezzo in profondita',
+al massimo 15 gradi, sotto i 3 niente. Poi la pila torna nel vano: poggia sul
+fondo e sta al centro della profondita', e le pinne si contano sulla pila
+inclinata (in profondita' lunghezza x coseno + altezza della pila x seno).
+Sul T15: (70,5 - 3 x 14,6 - 0,6) / 150 -> 10 gradi; i pezzi vanno da 1 a
+62,8 mm in altezza, a 1,9 mm dal fronte e dal retro, e sotto il piede della
+plancia (65,8 mm) la pila arriva a 45,7. Frontali stanno dritti, come prima.
+
+### Nel display il flowpack e' piu' gonfio, con le pinne aperte
+
+«I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
+aperte e senza gradini.»
+
+- **Piu' gonfio** (`server.gonfio_nel_display`, `GONFIO_DISPLAY`): nel
+  riempimento coi pezzi contati il flowpack si costruisce al rigonfiamento
+  scelto **piu' 3 livelli** (fino a 10), perche' nel display sta pieno fra i
+  vicini. Ma non a costo di pezzi: se piu' gonfio i pezzi chiesti non ci
+  stanno tutti, o va accorciato (`componi(esatti=True)` alza `NonCiStanno`),
+  si rifa' al livello scelto e lo si dice. Pieno (quanti vuoto) resta al
+  livello scelto. Sul T15: 5 -> 8, sezione 33,7 x 13,5 invece di 32,2 x 12,9.
+  Un display da 40 a 8 dava 21 pezzi, uno da 26 ne dava 24: tornano a 5,
+  e il GLB e' quello di prima. Costa una costruzione del flowpack in piu'.
+- **Pinne aperte, senza gradini**: sdraiati, le punte che uscivano dal posto
+  del pezzo si piegavano di 80 gradi in su e stavano davanti alla faccia come
+  un gradino, la pinna chiusa. Ora il film si **accartoccia in lunghezza**: la
+  pinna oltre il corpo si accorcia quanto basta (per (meta - corpo/2) /
+  (lungo/2 - corpo/2)) e resta distesa e aperta, con la sua zigrinatura.
+  Frontali le punte si piegano verso il dietro come prima.
 
 ## La texture e' lo steso
 
