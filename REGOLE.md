@@ -2134,6 +2134,17 @@ secondi. Due sessioni partite insieme
 possono puntare allo stesso caso: quella che trova il lucchetto prende il
 caso libero dopo.
 
+**I file del caso arrivano tutti, o la issue lo dice.** Un caso a due pezzi
+(un vassoio espositore e il suo flowpack) e' arrivato nel registro col solo
+PDF del flowpack: i file vanno su uno dopo l'altro, un commit ciascuno, e un
+errore sul secondo (un 409 perche' il ramo era appena andato avanti, un 5xx,
+la rete che cade sul PDF grosso) finiva solo nel log dello Space, mentre la
+issue elencava i due PDF come se ci fossero. La sessione non aveva il pezzo
+da guardare. Regola: `coda._metti_file` riprova tre volte (dopo 2 e 4
+secondi) sui 409, sui 5xx e sugli errori di rete; il 422 (c'era gia') vale
+come caricato; un file che non arriva lo stesso e' scritto nella issue,
+«File non arrivati nel registro», e il caso si fa ricaricare.
+
 ### Chi lavora la coda, e il parco che la protegge
 
 Una sessione automatica di Claude Code guarda la coda e, se c'e' un caso

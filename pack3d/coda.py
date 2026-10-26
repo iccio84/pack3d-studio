@@ -168,6 +168,33 @@ def _carica(cod, *args):
             evento.set()
 
 
+def _metti_file(repo, percorso, messaggio, dati, prove=3):
+    """Mette un file nel registro. True se c'e' (anche se c'era gia').
+
+    I file di un caso vanno su uno dopo l'altro, un commit ciascuno: un 409
+    (il ramo e' appena andato avanti), un 5xx o la rete che cade su un PDF
+    grosso lo perdevano, e il caso restava con un pezzo solo. Si riprova."""
+    corpo = {"message": messaggio, "content": base64.b64encode(dati).decode("ascii")}
+    for k in range(prove):
+        try:
+            _richiesta("PUT", "/repos/%s/contents/%s" % (repo, percorso), corpo, timeout=180)
+            return True
+        except urllib.error.HTTPError as e:
+            # 422: c'e' gia' (stesso caso caricato prima, stesso giorno)
+            if e.code == 422:
+                print("coda: %s c'era gia' (HTTP 422)" % percorso, file=sys.stderr)
+                return True
+            errore = "HTTP %s" % e.code
+            if e.code != 409 and e.code < 500:
+                break
+        except (OSError, ValueError) as e:
+            errore = str(e)
+        if k + 1 < prove:
+            time.sleep(2 * (k + 1))
+    print("coda: %s non caricato (%s)" % (percorso, errore), file=sys.stderr)
+    return False
+
+
 def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     repo = os.environ["PACK3D_CODA_REPO"].strip().strip("/")
     # gia' chiesto da `metti`, e in cassa: qui e' la cintura con le bretelle
@@ -195,23 +222,23 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
         file.append(("viste_modello.jpg", viste))
     file.append(("verdetto.json", json.dumps(dict(verdetto, codice=cod, contesto=contesto),
                                              ensure_ascii=False, indent=2).encode("utf-8")))
-    caricati = []
+    caricati, mancanti = [], []
     for nome, dati in file:
-        try:
-            _richiesta("PUT", "/repos/%s/contents/%s/%s" % (repo, cartella, nome),
-                       {"message": "Caso nuovo %s: %s" % (cod, nome),
-                        "content": base64.b64encode(dati).decode("ascii")}, timeout=180)
+        if _metti_file(repo, "%s/%s" % (cartella, nome),
+                       "Caso nuovo %s: %s" % (cod, nome), dati):
             caricati.append(nome)
-        except urllib.error.HTTPError as e:
-            # 422: c'e' gia' (stesso caso caricato prima, stesso giorno)
-            if e.code != 422:
-                print("coda: %s non caricato (HTTP %s)" % (nome, e.code), file=sys.stderr)
-        except (OSError, ValueError) as e:
-            print("coda: %s non caricato (%s)" % (nome, e), file=sys.stderr)
+        else:
+            mancanti.append(nome)
+    corpo = _corpo_issue(cod, nomi, verdetto, contesto, cartella)
+    if mancanti:
+        # Un PDF che non arriva nel registro lascia la sessione senza il pezzo
+        # da guardare, e la issue li elencava tutti lo stesso: lo dice qui.
+        corpo += ("\n\n**File non arrivati nel registro:** %s. Senza, il caso "
+                  "non si ricostruisce: vanno ricaricati." % ", ".join(mancanti))
     try:
         issue = _richiesta("POST", "/repos/%s/issues" % repo, {
             "title": "Caso nuovo %s: %s" % (cod, ", ".join(nomi))[:250],
-            "body": _corpo_issue(cod, nomi, verdetto, contesto, cartella)})
+            "body": corpo})
         print("coda: caso %s in %s, issue %s, file %s"
               % (cod, repo, issue.get("html_url", "?"), ", ".join(caricati)), file=sys.stderr)
     except (OSError, ValueError) as e:
