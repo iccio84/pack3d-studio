@@ -55,7 +55,7 @@ sono in GADGET.md.
 | vassoio espositore | `vassoio.py` |
 | display con plancia | `plancia.py` |
 <<<<<<< HEAD
-| display a scatola (chiusa, la plancia ricavata dal coperchio) | `scatola_plancia.py`, montato in `server.build_scatola_plancia` |
+| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py`, montato in `server.build_scatola_plancia` |
 =======
 | display con la plancia dentro il coperchio | `sportello.py`; costruito da `build_plancia` con `forma=sportello` |
 >>>>>>> origin/coda-settimana
