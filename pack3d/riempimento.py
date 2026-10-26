@@ -22,8 +22,9 @@ La disposizione la decide il vano del vassoio:
   a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
   Sdraiati, la faccia in su, solo se in piedi non ci stanno, o se i pezzi
   contati frontali vengono a strati diversi e sdraiati fanno una griglia
-  piena (`_griglia`, il T15: 5 x 3); sdraiati si inclinano all'indietro
-  quanto lascia l'aria sopra la pila (`inclina`).
+  piena (`_griglia`, il T15: 5 x 3). Sdraiati stanno in piano: inclinati
+  all'indietro la faccia non tornava piu' col DT (il T15: «annullare
+  l'inclinazione»).
 
 Poi il flowpack si adatta al vano, una volta per tutti i pezzi: le pinne si
 stringono quanto il passo fra due pezzi, perche' due pinne sovrapposte sullo
@@ -45,8 +46,6 @@ COMPRIME = 0.02             # quanto si schiaccia un pezzo gonfio fra i vicini
 PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
-INCLINA_MAX = math.radians(15.0)   # sdraiati, inclinati all'indietro al massimo cosi'
-INCLINA_MIN = math.radians(3.0)    # sotto, non si inclinano
 
 
 # --------------------------------------------------------------------------- #
@@ -273,8 +272,6 @@ class Disposizione:
     n: tuple
     passo: tuple
     piega: float
-    inclina: float = 0.0    # sdraiati: radianti all'indietro, il davanti alzato
-    pila: float = 0.0       # inclinati: l'altezza della pila, in mm
 
     @property
     def capienza(self):
@@ -409,23 +406,6 @@ def _griglia(cand, quanti):
                         (lx / gx, d.passo[1], lz / gz), d.piega)
 
 
-def inclina(vano, p, d, quanti):
-    """Sdraiati, i pezzi si inclinano ALL'INDIETRO: il davanti si alza,
-    come stanno in un display, e la faccia guarda chi passa. Quanto lo dice
-    l'aria sopra la pila: il davanti si alza fin dove arriva il vano, al
-    massimo 15 gradi; sotto i 3 non si inclinano. Frontali stanno dritti.
-    Torna l'angolo, in radianti."""
-    if d.posa != "sdraiati":
-        return 0.0
-    pila = len(_strati(d, quanti)) * d.passo[1]
-    aria = vano.per_asse[1] - pila - GIOCO
-    lz = _misura(p, int(np.argmax(np.abs(d.R[2, :]))))
-    if aria <= 0 or lz <= 0:
-        return 0.0
-    a = min(INCLINA_MAX, math.asin(min(1.0, aria / lz)))
-    return a if a >= INCLINA_MIN else 0.0
-
-
 def accorcia(vano, p):
     """Il flowpack ACCORCIATO quanto basta per stare nel vano, con la sua
     disposizione: `(prodotto, disposizione)`, o None.
@@ -515,18 +495,6 @@ def pose(vano, p, d, quanti, V_prodotto):
         for r, f in posti:
             x, z = dove(r, f)
             out.append((R, np.array([x, y, z])))
-    if d.inclina:
-        # all'indietro sul bordo dietro del fondo: il davanti si alza. Poi la
-        # pila torna nel vano: poggia sul fondo, al centro della profondita'
-        c, s_ = math.cos(d.inclina), math.sin(d.inclina)
-        Rt = np.array([[1.0, 0.0, 0.0], [0.0, c, s_], [0.0, -s_, c]])
-        perno = np.array([0.0, vano.fondo, vano.z0])
-        out = [(Rt @ Rk, perno + Rt @ (t - perno)) for Rk, t in out]
-        tutti = np.vstack([(V_prodotto - p.centro) @ Rk.T + t for Rk, t in out])
-        lo, hi = tutti.min(0), tutti.max(0)
-        sp = np.array([0.0, vano.fondo - lo[1],
-                       (vano.z0 + vano.z1) / 2.0 - (lo[2] + hi[2]) / 2.0])
-        out = [(Rk, t + sp) for Rk, t in out]
     return out
 
 
@@ -559,10 +527,6 @@ def adatta(P, N, p, d):
         P[:, largo] = c + (P[:, largo] - c) * f
     # 2. le punte che uscirebbero, piegate sullo spessore come il film vero
     meta = d.passo[d.asse(lungo)] / 2.0 - GIOCO
-    if d.inclina and d.asse(lungo) == 2:
-        # inclinata, in profondita' la pila prende la lunghezza per il
-        # coseno e la sua altezza per il seno
-        meta = (meta - 0.5 * max(d.pila, p.spesso) * math.sin(d.inclina)) / math.cos(d.inclina)
     piegate = 0
     if p.lungo / 2.0 > meta > fine and d.posa == "sdraiati":
         # sdraiati la punta piegata in su stava davanti alla faccia come un
@@ -597,11 +561,7 @@ def adatta(P, N, p, d):
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
-class NonCiStanno(ValueError):
-    """`componi(esatti=True)`: i pezzi chiesti nel vano non ci stanno tutti."""
-
-
-def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, esatti=False):
+def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -635,13 +595,8 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, esatti=False):
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
     massimo = d.capienza
-    if esatti and (accorciato or (quanti is not None and quanti > massimo)):
-        raise NonCiStanno("riempimento: %s pezzi chiesti, ce ne stanno %d"
-                          % (quanti, massimo))
     if quanti is None or quanti > massimo:
         quanti = massimo
-    d.inclina = 0.0 if rigido else inclina(vano, p, d, quanti)
-    d.pila = len(_strati(d, quanti)) * d.passo[1]
     # il pezzo poggia col corpo: le pinne, piu' larghe, si stringono prima
     Vp = vertici(Jp, Bp)
     if not rigido:
@@ -792,9 +747,6 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, esatti=False):
                   "ci stanno" if not d.dove.endswith(" x %d" % len(conti)) else
                   "sdraiati perche' frontali %d non fanno strati uguali, e cosi' fanno una "
                   "griglia piena" % quanti]
-        if d.inclina:
-            righe.append("inclinati all'indietro di %.0f gradi, il davanti alzato: tanto "
-                         "lascia l'aria sopra la pila" % math.degrees(d.inclina))
     righe.append("vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
                  % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso,
                     p.corpo))

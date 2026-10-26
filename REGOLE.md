@@ -3144,7 +3144,7 @@ Nel GLB la plancia e' il nodo `plancia`, coi suoi triangoli per ultimi,
 accanto al nodo `display`: il riempimento misura il vano senza di lei (*I
 riempimenti*, *Il display si misura senza la plancia*). Sul T15 il vano e'
 189 x 137,5, alto 70,5: quindici flowpack sdraiati per il lungo, 5 x 3,
-inclinati di 10 gradi all'indietro (*I riempimenti*, *Il display e' fatto per
+in piano (*I riempimenti*, *Il display e' fatto per
 il suo numero*).
 
 ### Il fronte e' fustellato: segue i tagli della plancia
@@ -6170,34 +6170,32 @@ perde: piu' strati, e da davanti si vede la prima pila sola. Frontali a
 strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
 2 file da 13.
 
-### Sdraiati, si inclinano all'indietro
+### Sdraiati, stanno in piano
 
-«Ruotali leggermente all'indietro in modo che risultino un po' inclinati.»
-Sdraiati, la pila si inclina **all'indietro** sul bordo dietro del fondo: il
-davanti si alza e la faccia stampata guarda chi passa (`riempimento.inclina`,
-`Disposizione.inclina`). Quanto lo dice l'aria sopra la pila: sin(angolo) =
-(alto del vano - strati x spessore - 0,6) / misura del pezzo in profondita',
-al massimo 15 gradi, sotto i 3 niente. Poi la pila torna nel vano: poggia sul
-fondo e sta al centro della profondita', e le pinne si contano sulla pila
-inclinata (in profondita' lunghezza x coseno + altezza della pila x seno).
-Sul T15: (70,5 - 3 x 14,6 - 0,6) / 150 -> 10 gradi; i pezzi vanno da 1 a
-62,8 mm in altezza, a 1,9 mm dal fronte e dal retro, e sotto il piede della
-plancia (65,8 mm) la pila arriva a 45,7. Frontali stanno dritti, come prima.
+Il T15 al primo «Non approvo» chiedeva i pezzi «leggermente inclinati
+all'indietro», e la pila si inclinava sul bordo dietro del fondo di quanto
+lasciava l'aria sopra (10 gradi). Al secondo: «Annullare l'inclinazione».
+Sdraiati, i pezzi stanno **in piano** sul fondo, come nel DT del display;
+l'inclinazione non c'e' piu' (ne' `riempimento.inclina` ne' il perno sul
+bordo dietro). Frontali stanno dritti, come sempre.
 
-### Nel display il flowpack e' piu' gonfio, con le pinne aperte
+### Nel display il flowpack resta quello del DT, con le pinne aperte
 
 «I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
-aperte e senza gradini.»
+aperte e senza gradini.» E dopo: «Il T1 non corrisponde al DT. La grafica
+viene strecciata.»
 
-- **Piu' gonfio** (`server.gonfio_nel_display`, `GONFIO_DISPLAY`): nel
-  riempimento coi pezzi contati il flowpack si costruisce al rigonfiamento
-  scelto **piu' 3 livelli** (fino a 10), perche' nel display sta pieno fra i
-  vicini. Ma non a costo di pezzi: se piu' gonfio i pezzi chiesti non ci
-  stanno tutti, o va accorciato (`componi(esatti=True)` alza `NonCiStanno`),
-  si rifa' al livello scelto e lo si dice. Pieno (quanti vuoto) resta al
-  livello scelto. Sul T15: 5 -> 8, sezione 33,7 x 13,5 invece di 32,2 x 12,9.
-  Un display da 40 a 8 dava 21 pezzi, uno da 26 ne dava 24: tornano a 5,
-  e il GLB e' quello di prima. Costa una costruzione del flowpack in piu'.
+- **Al rigonfiamento scelto, non di piu'**: per il primo «Non approvo» il
+  flowpack nel display si costruiva 3 livelli piu' gonfio (5 -> 8). Ma il
+  rigonfiamento tiene il perimetro e arrotonda la sezione, che si allarga:
+  sul T15 33,7 x 13,5 invece dei 30 x 12 del DT (32,2 x 12,9 al livello 5),
+  e la grafica del fronte, misurata in mm per unita' di texture a meta' del
+  corpo, si stira dell'8,5% rispetto al pezzo quasi squadrato (livello 1),
+  contro il 2% del livello 5. Il T1 non tornava piu' col suo DT. Nel display
+  il flowpack si costruisce **al livello scelto, come da solo**: il gonfio in
+  piu' (`GONFIO_DISPLAY`, `componi(esatti=True)`) non c'e' piu'. Chi lo vuole
+  piu' gonfio sceglie il livello. Tenere la taglia del DT a forma piu' tonda
+  (scala 1) non serve: la faccia a meta' corpo si stira di piu', non di meno.
 - **Pinne aperte, senza gradini**: sdraiati, le punte che uscivano dal posto
   del pezzo si piegavano di 80 gradi in su e stavano davanti alla faccia come
   un gradino, la pinna chiusa. Ora il film si **accartoccia in lunghezza**: la
