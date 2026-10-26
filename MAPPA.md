@@ -53,6 +53,7 @@ sono in GADGET.md.
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
 | incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `server.build_incarto` |
 | vassoio espositore | `vassoio.py` |
+| vassoio sagomato (pareti oblique o con incavi, il fondo fra quattro cordonature; si prova per ultimo) | `vassoio.riconosci_sagomato` |
 | display con plancia | `plancia.py` |
 <<<<<<< HEAD
 | display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py`, montato in `server.build_scatola_plancia` |

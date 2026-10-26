@@ -480,8 +480,10 @@ def vassoio(V, UV, T, parti, v, d, lato_tex, px_mm_tex, coda):
     X = [x * PT2MM for x in xs]
     Y = [y * PT2MM for y in ys]
     # la linea esterna di ogni parete sul DT, e da che parte sta
-    esterni = {"ovest": (0, X[0], -1), "est": (0, X[5], +1),
-               "nord": (1, Y[0], -1), "sud": (1, Y[3], +1)}
+    # la prima e l'ultima riga: sul vassoio sagomato la griglia ne ha di
+    # piu', vedi `vassoio.riconosci_sagomato`
+    esterni = {"ovest": (0, X[0], -1), "est": (0, X[-1], +1),
+               "nord": (1, Y[0], -1), "sud": (1, Y[-1], +1)}
     righe, ok, peggio = [], True, 0.0
     for nome, (asse, linea, lato) in esterni.items():
         if nome not in parti:

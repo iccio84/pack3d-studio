@@ -51,6 +51,10 @@ class Vassoio:
     pareti: dict          # {"nord": alt, "est": alt, "sud": alt, "ovest": alt}
     riquadri: dict        # {nome: (x0, y0, x1, y1) in punti PDF}
     warnings: list = field(default_factory=list)
+    # le quattro pieghe del fondo (sx, dx, sopra, sotto), in punti PDF: solo
+    # il vassoio sagomato, vedi `riconosci_sagomato`; sugli altri le prende
+    # `sagoma_e_creste` dalla griglia
+    pieghe: tuple = None
 
     @property
     def dims_mm(self):
@@ -107,7 +111,83 @@ def riconosci(d):
     return v
 
 
-def riconosci_sulla_tavola(pdf):
+# La cordonatura di un vassoio sagomato: su un cartoncino ondulato le due righe
+# stanno piu' lontane che su un solid board. Sul display da 36 pezzi del caso
+# 838cbae0ac sono 7,6 mm sui fianchi e 2,0 sulle testate.
+CORDONATURA_LARGA = 10.0
+
+
+def _asse_sagomato(t):
+    """Su un asse della griglia: `(fondo0, fondo1, piega0, piega1)` in punti,
+    o None. Il fondo e' la luce piu' larga, e ai suoi due lati ci sono due
+    cordonature - due righe vicine, larghe uguali entro un millimetro. La
+    piega sta a meta' della cordonatura, come in `misure_blocco`."""
+    luci = _fasce(t)
+    if len(luci) < 3:
+        return None
+    i = max(range(len(luci)), key=luci.__getitem__)
+    if i == 0 or i == len(luci) - 1:
+        return None
+    a, b = luci[i - 1], luci[i + 1]
+    if max(a, b) > CORDONATURA_LARGA or abs(a - b) > 1.0:
+        return None
+    return t[i], t[i + 1], (t[i - 1] + t[i]) / 2.0, (t[i + 1] + t[i + 2]) / 2.0
+
+
+def riconosci_sagomato(d):
+    """`Vassoio` dalla fustella di un vassoio SAGOMATO, o None.
+
+    Il vassoio di `riconosci` ha le pareti rettangolari e la griglia di cinque
+    colonne e tre fasce. Il display da 36 pezzi del caso 838cbae0ac no: i fianchi sono
+    trapezi - 51 mm al fronte e 76 al retro - il fronte ha un incavo in mezzo
+    e le alette sono sagomate, e ogni capo obliquo, ogni gradino aggiunge una
+    riga alla griglia: sette colonne e otto fasce. Le cordonature, poi, sono
+    di 7,6 mm, oltre i 6 del solid board.
+
+    Quello che resta di un vassoio e' il FONDO: la luce piu' larga della
+    griglia nei due versi, chiusa su tutti e quattro i lati da una
+    cordonatura - due righe vicine, larghe uguali sui due lati opposti. Le
+    pareti vanno dalla piega alla riga piu' esterna; la loro forma - gli
+    obliqui, gli incavi - non si legge dalla griglia ma dalla sagoma della
+    stampa, come su ogni vassoio (`sagoma_e_creste`). Si prova solo dopo
+    `riconosci`, la plancia e la scatola: i casi che quelli leggono non
+    cambiano strada.
+    """
+    xs = sorted({round(v, 2) for v in getattr(d, "xs", [])})
+    ys = sorted({round(v, 2) for v in getattr(d, "ys", [])})
+    cx, cy = _asse_sagomato(xs), _asse_sagomato(ys)
+    if cx is None or cy is None:
+        return None
+    fx0, fx1, cL, cR = cx
+    fy0, fy1, cT, cB = cy
+    pareti = {"nord": (cT - ys[0]) * PT2MM, "est": (xs[-1] - cR) * PT2MM,
+              "sud": (ys[-1] - cB) * PT2MM, "ovest": (cL - xs[0]) * PT2MM}
+    fondo_w, fondo_h = (cR - cL) * PT2MM, (cB - cT) * PT2MM
+    if min(pareti.values()) < PARETE_MINIMA:
+        return None
+    if (fondo_w <= max(pareti["ovest"], pareti["est"]) * 0.5
+            or fondo_h <= max(pareti["nord"], pareti["sud"]) * 0.5):
+        return None
+    # come in `riconosci`: sulle colonne il riquadro del fianco si ferma alla
+    # cordonatura e `misure_blocco` prende la meta'; sulle fasce la piega e'
+    # il bordo del fondo
+    riquadri = {
+        "fondo": (fx0, cT, fx1, cB),
+        "ovest": (xs[0], cT, 2 * cL - fx0, cB),
+        "est":   (2 * cR - fx1, cT, xs[-1], cB),
+        "nord":  (fx0, ys[0], fx1, cT),
+        "sud":   (fx0, cB, fx1, ys[-1]),
+    }
+    v = Vassoio(fondo_w=round(fondo_w, 1), fondo_h=round(fondo_h, 1),
+                pareti={k: round(a, 1) for k, a in pareti.items()},
+                riquadri=riquadri, pieghe=(cL, cR, cT, cB))
+    v.warnings.append(
+        "vassoio sagomato: le pareti prendono la forma dalla stampa, alte al "
+        "piu' %s mm" % ", ".join("%.1f" % a for a in sorted(v.pareti.values())))
+    return v
+
+
+def riconosci_sulla_tavola(pdf, sagomato=False):
     """`(pdf, dieline estratta, Vassoio o None, giro, avviso)`.
 
     `riconosci` legge la griglia in un verso solo - cinque colonne e tre
@@ -116,11 +196,12 @@ def riconosci_sulla_tavola(pdf):
     prova il foglio girato di un quarto (`artwork.pagina_girata`), prima di
     dire che non e' un vassoio. Mezzo giro non serve: il vassoio si legge
     uguale, e quale testata va davanti lo decide `testata_davanti` dalle
-    altezze.
+    altezze. Con `sagomato` la griglia si legge con `riconosci_sagomato`.
     """
     from . import artwork, dieline
+    leggi = riconosci_sagomato if sagomato else riconosci
     d = dieline.extract(pdf)
-    v = riconosci(d)
+    v = leggi(d)
     if v is not None:
         return pdf, d, v, 0, None
     for giro in (90, 270):
@@ -128,12 +209,13 @@ def riconosci_sulla_tavola(pdf):
         if girato == pdf:
             break
         d2 = dieline.extract(girato)
-        v2 = riconosci(d2)
+        v2 = leggi(d2)
         if v2 is not None:
             return girato, d2, v2, giro, (
                 "foglio girato di %d gradi: sulla tavola la griglia del "
-                "vassoio - cinque colonne e tre fasce - stava di traverso"
-                % giro)
+                "vassoio - %s - stava di traverso"
+                % (giro, "il fondo fra le cordonature" if sagomato
+                   else "cinque colonne e tre fasce"))
     return pdf, d, None, 0, None
 
 
@@ -745,7 +827,7 @@ def _foglio(a):
     return np.isin(lab, bordo[bordo > 0])
 
 
-def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None):
+def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None, v=None):
     """`(sagoma, creste, resa)` per costruire il vassoio.
 
     La sagoma della cartotecnica **non viene dal tracciato**. La penna della
@@ -791,6 +873,10 @@ def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None):
                         "la fustella ne misura %.1f x %.1f: la stampa non arriva "
                         "al taglio, oppure e' chiara e si confonde col foglio"
                         % (mis + dt))
+    if v is not None and v.pieghe is not None:
+        # il vassoio sagomato: le pieghe le ha gia' trovate la griglia
+        creste = tuple(int(round(c * scala)) for c in v.pieghe)
+        return sagoma, creste, resa
     gx = sorted({round(t, 1) for t in d.xs})
     gy = sorted({round(t, 1) for t in d.ys})
     creste = (int(round((gx[1] + gx[2]) / 2 * scala)),
