@@ -211,6 +211,7 @@ class Prodotto:
     largo_pinne: float
     fronte: int             # +1 se la faccia stampata guarda il verso + dello spessore
     rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
+    accorcia: float = 1.0   # quanto e' stato accorciato lungo l'asse lungo: vedi `accorcia`
 
 
 def misura_prodotto(J, B, rigido=False):
@@ -368,6 +369,41 @@ def scegli(vano, p, quanti):
     return buone[0]
 
 
+def accorcia(vano, p):
+    """Il flowpack ACCORCIATO quanto basta per stare nel vano, con la sua
+    disposizione: `(prodotto, disposizione)`, o None.
+
+    Serve quando il corpo e' piu' lungo di ogni lato del vano e non c'e' posa
+    in cui stia: il caso e1b3cc77a7, un flowpack con 119 mm di corpo in una
+    scatola da 79 x 109 mm. Chi l'ha caricato ha chiesto di schiacciarlo
+    finche' non entra: il film si accartoccia, e nel modello il pezzo si
+    accorcia lungo il suo asse lungo, pinne e corpo insieme, fino al lato del
+    vano su cui va. Le pose si provano nell'ordine di sempre - frontali, poi
+    sdraiati - e vince la prima in cui, accorciato, il pezzo ci sta: cosi'
+    si espone come gli altri riempimenti, anche se costa accorciarlo di piu'.
+    Un astuccio non si schiaccia."""
+    if p.rigido:
+        return None
+    lungo = p.assi[0]
+    lati = vano.per_asse
+    # il lato del vano su cui va l'asse lungo: frontali come sta nel suo
+    # modello, sdraiati per il largo o per il lungo del vassoio
+    for posa, a in (("frontali", lungo), ("sdraiati", 0), ("sdraiati", 2)):
+        if lati[a] >= p.corpo or lati[a] <= 0:
+            continue
+        # il corpo un poco piu' corto del lato: le punte delle pinne si
+        # piegano contro la parete a `GIOCO` da lei (`adatta`), e con il corpo
+        # lungo quanto il lato non c'era dove piegarle, e uscivano dal vano
+        k = (lati[a] - 4.0 * GIOCO) / p.corpo
+        q = Prodotto(p.assi, p.centro, p.lungo * k, p.corpo * k, p.largo,
+                     p.spesso, p.largo_pinne, p.fronte, p.rigido,
+                     p.accorcia * k)
+        for d in disposizioni(vano, q):
+            if d.posa == posa and d.asse(lungo) == a:
+                return q, d
+    return None
+
+
 def capienza(vano, p):
     d = scegli(vano, p, None)
     return d.capienza if d else 0
@@ -437,6 +473,11 @@ def adatta(P, N, p, d):
     lungo, largo, spesso = p.assi
     P = P.copy()
     N = N.copy() if N is not None else None
+    # 0. accorciato, se nel vano non stava in nessuna posa: vedi `accorcia`
+    if p.accorcia != 1.0:
+        P[:, lungo] = p.centro[lungo] + (P[:, lungo] - p.centro[lungo]) * p.accorcia
+        if N is not None:
+            N[:, lungo] = N[:, lungo] / p.accorcia
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
     # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
@@ -492,6 +533,16 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
     d = scegli(vano, p, quanti)
+    accorciato = []
+    if d is None:
+        q = accorcia(vano, p)
+        if q is not None:
+            corpo = p.corpo
+            p, d = q
+            accorciato = ["%s ha il corpo lungo %.0f mm e nel vano (%.0f x %.0f x %.0f mm) "
+                          "non ci sta in nessuna posa: l'ho accorciato, pinne e corpo "
+                          "schiacciati, a %.0f mm di corpo (%.0f%%)"
+                          % ((cosa, corpo) + vano.lati + (p.corpo, 100.0 * p.accorcia))]
     if d is None:
         raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) %s "
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
@@ -621,7 +672,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
         u = sorted(set(Jv.get(chiave, [])) | set(Jp.get(chiave, [])))
         if u:
             J[chiave] = u
-    righe = []
+    righe = list(accorciato)
     if chiesti is not None and chiesti > quanti:
         righe.append("ne hai chiesti %d, ma %s nel vassoio ce ne stanno al massimo %d: "
                      "ne ho messi %d" % (chiesti, d.posa, massimo, quanti))

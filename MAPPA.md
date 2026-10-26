@@ -54,6 +54,7 @@ sono in GADGET.md.
 | incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `server.build_incarto` |
 | vassoio espositore | `vassoio.py` |
 | display con plancia | `plancia.py` |
+| display con la plancia dentro il coperchio | `sportello.py`; costruito da `build_plancia` con `forma=sportello` |
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |
 | pouch | `pouch.py` |
