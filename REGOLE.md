@@ -2144,6 +2144,11 @@ da guardare. Regola: `coda._metti_file` riprova tre volte (dopo 2 e 4
 secondi) sui 409, sui 5xx e sugli errori di rete; il 422 (c'era gia') vale
 come caricato; un file che non arriva lo stesso e' scritto nella issue,
 «File non arrivati nel registro», e il caso si fa ricaricare.
+Ricaricarlo pero' non bastava: gli stessi PDF danno lo stesso codice, la
+issue era ancora aperta e lo Space si fermava a «gia' in coda» senza
+caricare niente. Regola: col caso gia' in coda, `coda._completa` mette nella
+cartella della issue i PDF che non ci sono, lo scrive sulla issue, toglie
+`da-guardare` e rilancia la routine.
 
 ### Chi lavora la coda, e il parco che la protegge
 

@@ -195,6 +195,40 @@ def _metti_file(repo, percorso, messaggio, dati, prove=3):
     return False
 
 
+def _completa(repo, cod, issue, blocchi, nomi):
+    """Lo stesso caso rimandato, con la issue ancora aperta: mette nella sua
+    cartella i PDF che non c'erano. Un PDF perso al primo invio si ripara
+    mandando di nuovo il caso: prima il secondo invio si fermava qui, senza
+    caricare niente, e il PDF mancante non arrivava mai."""
+    m = re.search(r"casi/\d{4}-\d{2}-\d{2}_%s" % re.escape(cod), str(issue.get("body") or ""))
+    if not m or not isinstance(issue.get("number"), int):
+        return
+    cartella = m.group(0)
+    try:
+        ci = _richiesta("GET", "/repos/%s/contents/%s" % (repo, cartella))
+    except (OSError, ValueError) as e:
+        print("coda: cartella del caso %s non letta (%s)" % (cod, e), file=sys.stderr)
+        return
+    presenti = {f.get("name") for f in (ci if isinstance(ci, list) else [])
+                if isinstance(f, dict)}
+    arrivati = [n for n, b in zip(nomi, blocchi) if _nome_file(n) not in presenti
+                and _metti_file(repo, "%s/%s" % (cartella, _nome_file(n)),
+                                "Caso nuovo %s: %s" % (cod, _nome_file(n)), b)]
+    if not arrivati:
+        return
+    try:
+        _richiesta("POST", "/repos/%s/issues/%d/comments" % (repo, issue["number"]),
+                   {"body": "**File arrivati col nuovo invio:** %s." % ", ".join(arrivati)})
+    except (OSError, ValueError) as e:
+        print("coda: commento del caso %s non scritto (%s)" % (cod, e), file=sys.stderr)
+    # fermo per il PDF che mancava: adesso c'e', e il caso torna libero
+    try:
+        _richiesta("DELETE", "/repos/%s/issues/%d/labels/da-guardare" % (repo, issue["number"]))
+    except (OSError, ValueError):
+        pass
+    avvia_routine(cod, issue.get("html_url", ""))
+
+
 def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     repo = os.environ["PACK3D_CODA_REPO"].strip().strip("/")
     # gia' chiesto da `metti`, e in cassa: qui e' la cintura con le bretelle
@@ -212,6 +246,7 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     if gia:
         print("coda: caso %s gia' in coda, issue %s" % (cod, gia[0].get("html_url", "?")),
               file=sys.stderr)
+        _completa(repo, cod, gia[0], blocchi, nomi)
         # chi lo ricarica vuole le domande anche lui
         _salva_email(cod, email)
         return
