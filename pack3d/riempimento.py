@@ -218,7 +218,6 @@ class Prodotto:
     rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
     accorcia: float = 1.0   # quanto e' stato accorciato lungo l'asse lungo: vedi `accorcia`
     schiaccia: float = 1.0  # quanto e' stato schiacciato nello spessore: vedi `schiaccia`
-    cuscino: tuple = ()     # premuto fra i vicini, (a0, b0, n0, a1, b1): vedi `pressa`
 
 
 def misura_prodotto(J, B, rigido=False):
@@ -317,9 +316,12 @@ def _disposizione(vano, p, posa, dove, R, piega):
             # il T10 nel suo vassoio da 40 mm. Le pareti tengono il piede
             n[-1] = 1
         # in altezza gli strati si appoggiano uno sull'altro; di lato e in
-        # profondita' si allargano su tutto il vano
+        # profondita' si allargano su tutto il vano. Piu' alto delle pareti,
+        # sopra non c'e' niente contro cui piegare le punte: il posto e' il
+        # pezzo intero, e le pinne restano com'erano (sul caso 838cbae0ac i
+        # T1 in piedi piegavano 0,6 mm di punta per niente)
         passo.append(lati[a] / max(n[-1], 1) if a != 1
-                     else _misura(p, j) if _misura(p, j) > lati[1]
+                     else _misura(p, j) + 2.0 * GIOCO if _misura(p, j) > lati[1]
                      else min(_misura(p, j), lati[1] / max(n[-1], 1)))
     if min(n) < 1:
         return None
@@ -357,15 +359,18 @@ def disposizioni(vano, p):
     return out
 
 
-def scegli(vano, p, quanti):
+def scegli(vano, p, quanti, per_fila=None):
     """La disposizione per `quanti` pezzi (None: pieno), o None se il prodotto
     non ci sta in nessuna posa. Frontali sempre, se in piedi ci stanno: se ne
     chiedi di piu', si mettono quelli che ci stanno. Sdraiati, quella che li
-    tiene tutti con meno strati, o la piu' capiente."""
+    tiene tutti con meno strati, o la piu' capiente. `per_fila`: quanti pezzi
+    affiancati nel largo, se chi l'ha caricato lo dice (`_per_fila`)."""
     cand = disposizioni(vano, p)
     if not cand:
         return None
     if cand[0].posa == "frontali":
+        if per_fila and per_fila < cand[0].n[0]:
+            return _per_fila(vano, cand[0], per_fila)
         g = None if quanti is None else _griglia(cand, quanti)
         return g or cand[0]
     if quanti is None:
@@ -375,6 +380,22 @@ def scegli(vano, p, quanti):
         return max(cand, key=lambda d: d.capienza)
     buone.sort(key=lambda d: (-(-quanti // d.per_strato), -d.per_strato))
     return buone[0]
+
+
+def _per_fila(vano, d, per_fila):
+    """La disposizione frontale con `per_fila` pezzi affiancati nel largo,
+    allargati su tutto il vano, invece di quanti ce ne stanno.
+
+    Il pack non si allarga per riempire il posto: in un riempimento il CU e'
+    il suo modello, e il vassoio vero lo dice chi l'ha caricato. Il caso
+    838cbae0ac: il T1 largo 37,1 (45,7 sulle pinne) nel vano da 148,4 ci
+    starebbe 4 per fila, e il vassoio vero ne ha 3 per fila in 12 file.
+    Diventava 3 x 12 allargando il T1 a 49,6: «protuberanze e grafiche
+    stirate». Ora le file sono 3, a passo 49,5, e il T1 resta largo com'e'."""
+    lx = vano.per_asse[0]
+    return Disposizione(d.posa, d.dove + ", %d per fila" % per_fila, d.R,
+                        (per_fila, d.n[1], d.n[2]), (lx / per_fila, d.passo[1], d.passo[2]),
+                        d.piega)
 
 
 def _griglia(cand, quanti):
@@ -444,7 +465,7 @@ def accorcia(vano, p):
     return None
 
 
-def schiaccia(vano, p, quanti, posa):
+def schiaccia(vano, p, quanti, posa, per_fila=None):
     """Il flowpack SCHIACCIATO nello spessore quanto basta perche' ci stiano
     i `quanti` pezzi chiesti, con la sua disposizione: `(prodotto,
     disposizione)`, o None.
@@ -465,128 +486,10 @@ def schiaccia(vano, p, quanti, posa):
     while k > 1.0 - SCHIACCIA_MAX + 1e-9:
         k -= 0.005
         q = replace(p, spesso=p.spesso * k, schiaccia=p.schiaccia * k)
-        d = scegli(vano, q, quanti)
+        d = scegli(vano, q, quanti, per_fila)
         if d is not None and d.posa == posa and d.capienza >= quanti:
             return q, d
     return None
-
-
-def _superellisse(a, b, n, m=2048):
-    """I punti della superellisse di semiassi a, b ed esponente n, e la
-    frazione di giro di ognuno, dal centro del fianco +a."""
-    t = np.linspace(0.0, 2.0 * np.pi, m + 1)
-    ct, st = np.cos(t), np.sin(t)
-    C = np.stack([a * np.sign(ct) * np.abs(ct) ** (2.0 / n),
-                  b * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
-    s = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(C, axis=0), axis=1))])
-    return t, C, s / s[-1], float(s[-1])
-
-
-def _risolvi(f, obiettivo, lo, hi):
-    """x in [lo, hi] con f(x) = obiettivo, per f crescente."""
-    for _ in range(60):
-        mid = 0.5 * (lo + hi)
-        if f(mid) < obiettivo:
-            lo = mid
-        else:
-            hi = mid
-    return 0.5 * (lo + hi)
-
-
-N_TESO = 3.0    # sotto, la sezione e' gia' un cuscino: non c'e' film da spostare
-
-
-def pressa(p, V):
-    """Il flowpack PREMUTO fra i vicini nel display pieno: `Prodotto`, o None.
-
-    Gonfio, il flowpack a pinna ha la faccia larga quanto il DT e il film che
-    gli spigoli tondi lasciano nello spessore (`flowpack.sezione_rigonfiata`):
-    36 x 24,2 il T1 del caso 838cbae0ac, sul DT 36 x 19,5. In fila nel display, faccia
-    contro faccia, l'aria non sta piu' nello spessore: i vicini lo riportano
-    a quello del prodotto, il film teso sul DT (meta' giro meno la faccia), e
-    il film, che non si allunga, va di lato. La sezione diventa un cuscino,
-    l'ellisse con lo stesso giro: quel T1 49,6 x 20,2. Le misure sono quelle
-    del cuscino, la forma resta quella del pezzo (`adatta`). Il caso 838cbae0ac, il
-    display da 150 x 247 mm: gonfi ci stavano 4 file da 9, chi l'ha caricato
-    li ha 3 per fila in 12 file, larghi come il passo, e cosi' viene.
-
-    Il giro si legge sulla maglia, a meta' corpo; l'esponente della
-    superellisse e' quello che con quei semiassi da' quel giro. None per un
-    astuccio, per una sezione gia' tonda (tubo piatto, a sovrapposizione) o
-    se lo spessore non cala."""
-    if p.rigido:
-        return None
-    from scipy.spatial import ConvexHull
-    lungo, largo, spesso = p.assi
-    x = V[:, lungo] - p.centro[lungo]
-    S = V[np.abs(x) < max(2.0, 0.03 * p.lungo)][:, (largo, spesso)]
-    if len(S) < 8:
-        return None
-    giro = float(ConvexHull(S).area)
-    a0, b0 = p.largo / 2.0, p.spesso / 2.0
-    if giro <= _superellisse(a0, b0, 2.0)[3]:
-        return None
-    n0 = _risolvi(lambda n: _superellisse(a0, b0, n)[3], giro, 2.0, 60.0)
-    t1 = giro / 2.0 - p.largo
-    if n0 < N_TESO or t1 <= 0.0 or t1 >= 0.97 * p.spesso:
-        return None
-    b1 = t1 / 2.0
-    a1 = _risolvi(lambda a: _superellisse(a, b1, 2.0)[3], giro, b1, giro)
-    return replace(p, largo=2.0 * a1, spesso=t1, largo_pinne=p.largo_pinne * a1 / a0,
-                   cuscino=(a0, b0, n0, a1, b1))
-
-
-def fronte_vero(P, P2, UV, p):
-    """Le UV del flowpack premuto (`pressa`) col fronte a misura vera.
-
-    Premuto fra i vicini il pezzo e' quello del suo modello scalato nel largo
-    (`adatta`), e la grafica con lui: sul caso 838cbae0ac il T1 largo 49,6
-    invece di 37,1 aveva marchio e barretta stirati del 34%, «deformi». Chi
-    l'ha caricato lo vuole come nella sua foto: largo fino a toccare i vicini,
-    ma col fronte della sua misura, dritto e centrato, e ai lati il fondo dei
-    fianchi.
-
-    Il film si legge sulle UV: sul fronte piatto del modello la grafica e'
-    affine nella lunghezza e nel giro, con la coordinata del giro uguale alla
-    distanza dal centro del fronte (`flowpack`, la grafica sul film). Per ogni
-    vertice phi e' il suo film dal centro del fronte, e il largo lo ha portato
-    a k * phi (k misurato vertice per vertice, perche' le pinne si stringono
-    di piu'). Fino a mezzo fronte (meta' del largo di prima) la grafica va a
-    misura vera, phi' = k * phi; da li' al centro del fianco (un quarto di
-    giro) il film che resta si allarga sullo spazio che resta; oltre, retro e
-    fianchi dietro, resta com'era. Le UV si spostano solo lungo il giro."""
-    lungo, largo, spesso = p.assi
-    a0, b0, n0 = p.cuscino[:3]
-    x = P[:, lungo] - p.centro[lungo]
-    y0 = P[:, largo] - p.centro[largo]
-    y1 = P2[:, largo] - p.centro[largo]
-    z = (P[:, spesso] - p.centro[spesso]) * p.fronte
-    # la grafica sul fronte piatto, a meta' corpo: UV = A + x e + y g
-    m = (z > 0.5 * b0) & (np.abs(y0) < 0.6 * a0) & (np.abs(x) < 0.4 * p.corpo)
-    if m.sum() < 12:
-        return UV
-    M = np.column_stack([np.ones(int(m.sum())), x[m], y0[m]])
-    coef, *_ = np.linalg.lstsq(M, UV[m], rcond=None)
-    A, e, g = coef
-    base = np.column_stack([e, g])
-    if abs(np.linalg.det(base)) < 1e-12:
-        return UV
-    phi = np.linalg.solve(base, (UV - A).T)[1]
-    k = np.where(np.abs(y0) > 0.5, y1 / np.where(np.abs(y0) > 0.5, y0, 1.0),
-                 a0 and p.largo / (2.0 * a0))
-    k = np.clip(k, 1.0, None)
-    meta = a0
-    quarto = _superellisse(a0, b0, n0)[3] / 4.0
-    f = np.abs(phi)
-    nuovo = f.copy()
-    vero = k * f <= meta
-    nuovo[vero] = (k * f)[vero]
-    resto = ~vero & (f < quarto)
-    if resto.any():
-        f0 = meta / k[resto]
-        t = (f[resto] - f0) / np.maximum(quarto - f0, 1e-6)
-        nuovo[resto] = meta + t * (quarto - meta)
-    return UV + ((np.sign(phi) * nuovo - phi)[:, None]) * g[None, :]
 
 
 def capienza(vano, p):
@@ -669,19 +572,6 @@ def adatta(P, N, p, d):
         P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * p.schiaccia
         if N is not None:
             N[:, spesso] = N[:, spesso] / p.schiaccia
-    # 0. premuto fra i vicini nel display pieno: vedi `pressa`. Il pezzo e'
-    # quello del suo modello, scalato nel largo e nello spessore: la sezione
-    # resta la sua. Portato sul cuscino a giro fermo (838cbae0ac) i fianchi
-    # bianchi venivano sul fronte e la barretta si storceva: «deformi», per
-    # chi l'ha caricato. La grafica del fronte la rimette a misura vera
-    # `fronte_vero`, sulle UV
-    if p.cuscino:
-        a0, b0, _, a1, b1 = p.cuscino
-        P[:, largo] = p.centro[largo] + (P[:, largo] - p.centro[largo]) * a1 / a0
-        P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * b1 / b0
-        if N is not None:
-            N[:, largo] = N[:, largo] * a0 / a1
-            N[:, spesso] = N[:, spesso] * b0 / b1
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
     # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
@@ -728,7 +618,7 @@ def adatta(P, N, p, d):
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
-def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
+def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -746,7 +636,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     vano = misura_vassoio(Jv, Bv)
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
-    d = scegli(vano, p, quanti)
+    d = scegli(vano, p, quanti, per_fila)
     accorciato = []
     if d is None:
         q = accorcia(vano, p)
@@ -761,17 +651,8 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
         raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) %s "
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
-    if quanti is None and d.posa == "frontali":
-        q = pressa(p, vertici(Jp, Bp))
-        dq = scegli(vano, q, None) if q is not None else None
-        if dq is not None and dq.posa == "frontali" and dq.capienza >= d.capienza:
-            accorciato.append("%s, gonfio, e' %.1f x %.1f mm: nel display pieno, faccia "
-                              "contro faccia, i vicini lo premono a %.1f di spessore e il "
-                              "film va di lato, a giro fermo: %.1f x %.1f"
-                              % (cosa, p.largo, p.spesso, q.spesso, q.largo, q.spesso))
-            p, d = q, dq
     if quanti is not None and d.capienza < quanti:
-        q = schiaccia(vano, p, quanti, d.posa)
+        q = schiaccia(vano, p, quanti, d.posa, per_fila)
         if q is not None:
             spesso = p.spesso
             p, d = q
@@ -848,10 +729,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
             P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
             Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
             P2, N2, piegate = adatta(P, Nn, p, d)
-            UV2 = None
-            if p.cuscino and "TEXCOORD_0" in a:
-                UV2 = fronte_vero(P, P2, _dati(Jp, Bp, a["TEXCOORD_0"]).astype(float), p)
-            for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2), ("TEXCOORD_0", UV2)):
+            for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2)):
                 if arr is None:
                     continue
                 if nome == "NORMAL":
@@ -862,15 +740,14 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
                                          "byteLength": arr.nbytes, "target": 34962})
                 B.extend(arr.tobytes())
                 acc = {"bufferView": len(J["bufferViews"]) - 1, "componentType": 5126,
-                       "count": len(arr), "type": "VEC2" if nome == "TEXCOORD_0" else "VEC3"}
+                       "count": len(arr), "type": "VEC3"}
                 if nome == "POSITION":
                     acc["min"] = arr.min(0).tolist()
                     acc["max"] = arr.max(0).tolist()
                 J["accessors"].append(acc)
                 a[nome] = len(J["accessors"]) - 1
-            rifatti = {"POSITION", "NORMAL"} | ({"TEXCOORD_0"} if UV2 is not None else set())
             for k, v in list(a.items()):
-                if k not in rifatti:
+                if k not in ("POSITION", "NORMAL"):
                     a[k] = v + sposta["accessors"]
             if "indices" in prim:
                 prim["indices"] += sposta["accessors"]

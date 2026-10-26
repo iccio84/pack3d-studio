@@ -1246,8 +1246,23 @@ def quanti_pezzi(valore):
     return n
 
 
+def per_fila_scelti(valore):
+    """Quanti pezzi affiancati per fila nel largo del vassoio, se chi l'ha
+    caricato lo dice, o None: allora quanti ce ne stanno. Il pack non si
+    allarga per riempire il posto (`riempimento._per_fila`)."""
+    if valore in (None, "", 0, "0"):
+        return None
+    try:
+        n = int(valore)
+    except (TypeError, ValueError):
+        raise ValueError("Pezzi per fila va digitato come numero intero")
+    if n < 1 or n > 200:
+        raise ValueError("Pezzi per fila: da 1 a 200")
+    return n
+
+
 def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
-                      carta=None, incisioni=True):
+                      carta=None, incisioni=True, per_fila=None):
     """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
     famiglia, poi `quanti` pezzi messi nel vano (None: pieno). Il flowpack
     con `flowpack`, gli argomenti di `build_flowpack` dopo il PDF e il file
@@ -1271,7 +1286,8 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             glb_v = fh.read()
         with open(gf, "rb") as fh:
             glb_f = fh.read()
-    glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio)
+    glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio,
+                                     per_fila=per_fila)
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)
@@ -2683,7 +2699,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "incisioni", "cu", "gelato", "chiusura")
+                "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -3787,6 +3803,7 @@ class Handler(BaseHTTPRequestHandler):
                     con_gelato = gelato.gusto(opts.get("gelato"))
                     chiusura = chiusura_incarto(opts.get("chiusura"))
                     quanti = quanti_pezzi(opts.get("quanti"))
+                    per_fila = per_fila_scelti(opts.get("per_fila"))
                     cu = cu_riempimento(opts.get("cu"))
                 except ValueError as e:
                     return self._send(400, str(e))
@@ -3981,7 +3998,8 @@ class Handler(BaseHTTPRequestHandler):
                             def costruisci(lastre, uscita):
                                 return build_riempimento(
                                     pdfs, info, uscita, quanti, quality=q,
-                                    carta=carta, incisioni=con_incisioni)
+                                    carta=carta, incisioni=con_incisioni,
+                                    per_fila=per_fila)
                         elif info["kind"] == "riempimento":
                             # un vassoio coi suoi flowpack: due costruzioni e
                             # un GLB solo, vedi `pack3d.riempimento`
@@ -3996,7 +4014,7 @@ class Handler(BaseHTTPRequestHandler):
                                     (int(opts.get("teeth", 20)), str(soft), case_fp, q,
                                      sezione_da_agente(opts.get("params")),
                                      scatola, pinne, lastre, col_riq, mat, mat_ai,
-                                     saldatura_scelta(opts)), q)
+                                     saldatura_scelta(opts)), q, per_fila=per_fila)
                         else:
                             soft, scatola, pinne, mat = parametri_flowpack(pdf, nomi[0])
 

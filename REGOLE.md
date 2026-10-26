@@ -6314,66 +6314,57 @@ viene strecciata.»
   (lungo/2 - corpo/2)) e resta distesa e aperta, con la sua zigrinatura.
   Frontali le punte si piegano verso il dietro come prima.
 
-### Nel display pieno il flowpack e' premuto: il film va di lato
+### Nel riempimento il CU resta il suo modello: si schiaccia, non si allarga
 
-Il caso 838cbae0ac, un display sagomato col fondo di 150,4 x 247,0 mm e il
-flowpack T1 dentro, pieno (senza `quanti`). Gonfio, il T1 e' 36 x 24,2 (giro
-111, sul DT 36 x 19,5) e nel vano ne stavano 4 file da 9. «Il vassoio
-contiene 3 pack per 12 file. Inoltre il T1 e' sbagliato»: nella foto del
-pack vero i flowpack stanno faccia contro faccia, larghi quasi come un terzo
-del vassoio e sottili.
+Il caso 838cbae0ac, un display sagomato col fondo di 150,4 x 247,0 mm e 36
+flowpack T1, 3 per fila in 12 file. Il T1 al rigonfiamento 5 e' 37,1 x 25,4
+mm (45,7 sulle pinne all'apertura 2): nel vano ne stanno 4 per fila, e 12
+file da 25,4 fanno 305 mm contro 245.
 
-- **Causa**: il rigonfiamento mette nello spessore il film che gli spigoli
-  tondi lasciano (*Il rigonfiamento va nello spessore*). Da solo e' giusto;
-  in fila, faccia contro faccia, l'aria non puo' stare nello spessore: i
-  vicini lo premono, e il film, che non si allunga, va di lato.
-- **Regola** (`riempimento.pressa`): nel display **pieno**, coi pezzi
-  **frontali**, il flowpack a pinna si preme. Lo spessore torna quello del
-  prodotto, il film teso sul DT: meta' giro meno la faccia (111/2 - 36 =
-  19,5). La sezione diventa il cuscino con lo stesso giro, un'ellisse: il T1
-  49,6 x 20,2 (il giro letto sulla maglia a meta' corpo). La disposizione si
-  rifa' col pezzo premuto e si tiene se ce ne stanno almeno quanti gonfi:
-  3 file da 12 (148,4 / 49,6 e 245 / 20,2, col 2% di sempre), 36 pezzi.
-- **La forma e' quella del pezzo**: il premuto e' il flowpack del suo
-  modello, scalato nel largo (49,6 / 36) e nello spessore (20,2 / 24,2), la
-  sezione sua e la grafica del fronte su tutta la faccia. Al primo giro la
-  sezione andava sul cuscino a frazione di giro ferma (`_a_cuscino`): il
-  fronte di 36 mm restava 36 mm al centro, ai lati della faccia venivano i
-  fianchi bianchi e la barretta si storceva. «I T1 sono completamente
-  deformi, lontani dal modello approvato»: nelle foto di chi l'ha caricato il
-  T1 e' quello approvato da solo, largo un terzo del vassoio, col marchio e
-  la barretta dritti su tutta la faccia. Dal cuscino si prendono solo le
-  misure.
-- **Il fronte a misura vera** (`riempimento.fronte_vero`). Scalato nel largo,
-  il T1 aveva marchio e barretta stirati del 34%: di nuovo «deformi», e il
-  caso eliminato dall'app dopo tre tentativi. Ripreso a mano, chi l'ha
-  caricato ha scelto i pack che si toccano, come nella sua foto, col fronte
-  della sua misura, dritto e centrato, e ai lati il fondo dei fianchi. La
-  forma resta quella scalata; si spostano le UV, solo lungo il giro. Il film
-  si legge sulle UV - sul fronte piatto sono affini nella lunghezza e nel
-  giro, e la coordinata del giro e' la distanza dal centro del fronte - e
-  ogni vertice, portato dal largo da phi a k phi (k suo, perche' le pinne si
-  stringono di piu'), prende fino a mezzo fronte (meta' del largo di prima,
-  18,5 mm) la grafica di k phi: misura vera. Da li' al centro del fianco (un
-  quarto di giro) il film che resta si allarga sullo spazio che resta; oltre,
-  retro e fianchi dietro restano come scalati. Vale anche sulle spalle e
-  sulle pinne, dove gli anelli non si contano: le UV non ne hanno bisogno.
-  Gli altri riempimenti del parco non sono premuti e restano uguali al byte.
+La routine ci ha provato tre volte, e tre volte ha cambiato il T1:
+- 4 file da 9, il T1 come da solo: «il vassoio contiene 3 pack per 12
+  file»;
+- premuto fra i vicini a cuscino, un'ellisse 49,6 x 20,2 a giro fermo
+  (`pressa`): la grafica stretta al centro, i fianchi bianchi sul fronte;
+- lo stesso cuscino col T1 scalato nel largo: marchio e barretta stirati
+  del 34%. Poi, ripreso a mano, le UV spostate per rimettere il fronte a
+  misura vera.
+
+Chi l'ha caricato: «quando si costruisce un vassoio con riempimento i CU
+(flowpack, cartotecnici, incarti) non devono mai essere modificati»; nel
+T1 premuto vedeva «protuberanze e grafiche stirate». E poi: «essendo dei
+flowpack si possono schiacciare, ma senza modificare la mappatura».
+
+**Regola.**
+- Il CU e' il modello che si costruisce da solo con le sue scelte -
+  zigrinatura, rigonfiamento, apertura delle pinne, che si chiedono come per
+  un flowpack - e nel vassoio si posa. Non si allarga, non si scala nel
+  largo, le sue UV non si toccano. `pressa`, il cuscino e il fronte
+  rimappato non ci sono piu'.
+- Un flowpack si puo' **schiacciare** fra i vicini come il film vero, a UV
+  ferme: nello spessore (`schiaccia`, al massimo del 25%), le pinne strette
+  al passo, le punte piegate contro una parete. Sul caso: 25,4 -> 20,8 mm
+  (82%), 3 per fila in 12 file. Il fronte e' quello del T1 da solo.
+- **Quanti per fila** li dice chi l'ha caricato (`per_fila`, opzione del
+  caso; `riempimento._per_fila`): il pack non si allarga per riempire il
+  posto, le file si allargano sul vano e fra un pack e l'altro resta l'aria.
+  Senza, quanti ce ne stanno.
+- Piu' alto delle pareti, sopra non c'e' niente contro cui piegare le
+  punte: il posto in altezza e' il pezzo intero e le pinne restano com'erano
+  (i T1 in piedi piegavano 0,6 mm di punta per niente).
 - **Le aree riservate del T1**: l'area dell'EAN e quella del lotto, due
   riquadri pieni di PANTONE 3405 C e 346 C senza didascalia leggibile (la
   scritta EAN e' in curve), si vedevano verdi sui fianchi. Guardate lastra
-  per lastra - ognuna dipinge solo il suo riquadro - e confermate a occhio,
-  stanno nelle opzioni del caso nel parco (`params.parametri_costruzione.
-  aree_riservate`, come fa l'agente): sul pack vero li' c'e' l'etichetta
-  bianca, e il film resta bianco. Per numero di Pantone non si tolgono mai
-  (*Le aree riservate che il file scrive, ma non nomina*): una regola sulla
-  forma - una tinta che dipinge solo uno o due rettangoli pieni - provata
-  sui 44 PDF del parco prendeva anche grafica vera.
-- **Non si preme**: con `quanti` (il display fatto per il suo numero ha la
-  sua regola, *Il display e' fatto per il suo numero*, e `schiaccia`), un
-  astuccio, una sezione gia' tonda (esponente sotto 3: tubo piatto, a
-  sovrapposizione), uno spessore che cala meno del 3%, o se premuti ne
-  stanno meno che gonfi.
+  per lastra - ognuna dipinge solo il suo riquadro - e confermate a occhio
+  da chi l'ha caricato («bianco, come l'etichetta»), stanno nelle opzioni del
+  caso nel parco (`params.parametri_costruzione.aree_riservate`, come fa
+  l'agente). Per numero di Pantone non si tolgono mai (*Le aree riservate
+  che il file scrive, ma non nomina*): una regola sulla forma - una tinta
+  che dipinge solo uno o due rettangoli pieni - provata sui 44 PDF del parco
+  prendeva anche grafica vera.
+
+Gli altri riempimenti e i vassoi del parco restano identici al byte a quelli
+pubblicati.
 
 ## La texture e' lo steso
 
