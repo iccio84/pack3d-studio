@@ -789,9 +789,14 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             return build_scatola_plancia(sorgente, sp, out_glb, quality,
                                          lastre_extra, colata_riquadro,
                                          n_pagine)
-        raise ValueError("non e' un vassoio: la griglia della fustella non ha "
-                         "cinque colonne e tre fasce, e non e' un display con "
-                         "plancia")
+        # per ultimo il vassoio sagomato, le pareti con gli obliqui e gli
+        # incavi: vedi `vassoio.riconosci_sagomato`
+        pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(sorgente,
+                                                                sagomato=True)
+        if v is None:
+            raise ValueError("non e' un vassoio: la griglia della fustella "
+                             "non ha cinque colonne e tre fasce, e non e' un "
+                             "display con plancia")
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
@@ -804,7 +809,7 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     px_mm = 4.0
     avvisi_sagoma = []
     sagoma, creste, _resa = vassoio.sagoma_e_creste(pdf, d, px_mm,
-                                                    note=avvisi_sagoma)
+                                                    note=avvisi_sagoma, v=v)
     if sagoma is None:
         raise ValueError("vassoio: non si riconosce l'impronta della "
                          "cartotecnica sul foglio")
@@ -2946,6 +2951,15 @@ def _analyze_pdf(pdf, kind=None, domande=False):
             if sp is not None:
                 return dict(kind="vassoio", title="Display a scatola",
                             meta=scatola_plancia.dichiara(sp))
+        if v is None and kind == "vassoio":
+            # per ultimo il vassoio sagomato, come in `build_vassoio`
+            try:
+                _p, _g, v, _gr, giro_v = vassoio.riconosci_sulla_tavola(
+                    pdf, sagomato=True)
+            except Exception:
+                v = None
+            finally:
+                dl.scarta_resa()
         if v is None and kind == "vassoio":
             # La dichiarazione deve valere anche quando dice di NO. Senza
             # questo ramo "vassoio" scivolava fino in fondo alla funzione e

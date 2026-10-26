@@ -2736,6 +2736,34 @@ retro tutta la larghezza, e ogni parete scende fino al piano del fondo, entro
 spigolo, mancano 1.50 mm". Sul Milch-Schnitte e sul Tronky: 0,00 mm, e il
 blocco del Tronky e' lo stesso al centesimo nei quattro versi del foglio.
 
+### Il vassoio sagomato: il fondo fra quattro cordonature
+
+Il caso 838cbae0ac, un display da 36 pezzi per un riempimento, non si
+costruiva: "dei due PDF nessuno si legge come vassoio espositore". La griglia
+della fustella aveva 7 colonne e 8 fasce invece di 5 e 3, perche' le pareti
+non sono rettangoli: i fianchi sono trapezi (51 mm al fronte, 76 al retro),
+il fronte ha un incavo in mezzo (51 agli angoli, 41 al centro) e ogni capo
+obliquo, ogni gradino aggiunge una riga. E le cordonature dei fianchi sono
+7,6 mm, oltre i 6 di `CORDONATURA_MAX`: e' un ondulato, non un solid board.
+
+La regola (`vassoio.riconosci_sagomato`): di un vassoio resta sempre il
+**fondo**, la luce piu' larga della griglia nei due versi, chiusa su tutti e
+quattro i lati da una **cordonatura** - due righe vicine, fino a 10 mm
+(`CORDONATURA_LARGA`), larghe uguali entro un millimetro sui lati opposti. La
+piega sta a meta' della cordonatura; ogni parete va dalla sua piega alla riga
+piu' esterna, e la sua forma - obliqui, incavi, alette sagomate - la da' la
+sagoma della stampa, come su ogni vassoio. Sul caso: fondo 150,4 x 247,0,
+pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
+
+- Si prova **per ultimo**, dichiarato vassoio (o riempimento): dopo la
+  griglia stretta, la plancia, lo sportello e la scatola. I casi che quelli
+  leggono non cambiano strada.
+- Le cordonature servono **su tutti e quattro i lati**: senza, anche un
+  flowpack ha una luce piu' larga delle altre, e nel riempimento tutti e due
+  i PDF si leggevano come vassoio.
+- La verifica delle pareti prende la prima e l'ultima riga della griglia,
+  non la sesta e la quarta: sul sagomato le righe sono di piu'.
+
 ## Display con plancia
 
 La quarta famiglia, e sta accanto al vassoio: una scatola che arriva CHIUSA e
