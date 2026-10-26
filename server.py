@@ -1198,6 +1198,16 @@ def analisi_riempimento(pdfs, cu="flowpack"):
         except Exception:
             letti.append(None)
     vassoi = [k for k, l in enumerate(letti) if l is not None]
+    if len(vassoi) == 2:
+        # Il vassoio sagomato si prova per ultimo, quando gli altri hanno
+        # rifiutato (`vassoio.riconosci_sagomato`): se l'altro PDF si legge
+        # come vassoio prima di lui, il vassoio e' quello, e il sagomato e' il
+        # pack. Il film del flowpack del display da 26 ha un fondo chiuso da
+        # quattro coppie di righe e si leggeva come vassoio sagomato: il
+        # riempimento, che si costruiva, si fermava su «tutti e due».
+        forti = [k for k in vassoi if not letti[k].get("sagomato")]
+        if len(forti) == 1:
+            vassoi = forti
     if len(vassoi) != 1:
         raise ValueError("riempimento: dei due PDF %s" % (
             "nessuno si legge come vassoio espositore" if not vassoi else
@@ -2951,6 +2961,7 @@ def _analyze_pdf(pdf, kind=None, domande=False):
             if sp is not None:
                 return dict(kind="vassoio", title="Display a scatola",
                             meta=scatola_plancia.dichiara(sp))
+        sagomato = False
         if v is None and kind == "vassoio":
             # per ultimo il vassoio sagomato, come in `build_vassoio`
             try:
@@ -2960,6 +2971,7 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                 v = None
             finally:
                 dl.scarta_resa()
+            sagomato = v is not None
         if v is None and kind == "vassoio":
             # La dichiarazione deve valere anche quando dice di NO. Senza
             # questo ramo "vassoio" scivolava fino in fondo alla funzione e
@@ -2984,7 +2996,7 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                 "questa fustella "
                 "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
         if v is not None:
-            return dict(kind="vassoio", title="Vassoio espositore",
+            return dict(kind="vassoio", title="Vassoio espositore", sagomato=sagomato,
                         meta=["vassoio espositore",
                               "fondo %.1f x %.1f mm, pareti %s mm"
                               % (v.fondo_w, v.fondo_h,

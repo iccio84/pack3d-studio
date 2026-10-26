@@ -2763,6 +2763,15 @@ pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
   i PDF si leggevano come vassoio.
 - La verifica delle pareti prende la prima e l'ultima riga della griglia,
   non la sesta e la quarta: sul sagomato le righe sono di piu'.
+- **Nel riempimento perde con un vassoio letto prima**
+  (`server.analisi_riempimento`). Le quattro cordonature non bastavano: il
+  film del flowpack del display da 26 del parco ha un fondo chiuso da
+  quattro coppie di righe, si leggeva come vassoio sagomato, e il
+  riempimento, che si costruiva, si fermava su «tutti e due si leggono come
+  vassoi». Se tutti e due i PDF si leggono come vassoio e uno solo e' letto
+  prima del sagomato (griglia, plancia, sportello, scatola), il vassoio e'
+  quello e l'altro e' il pack. Il display da 26 torna identico al byte a
+  quello pubblicato; i tre vassoi del parco non cambiano.
 
 ## Display con plancia
 
@@ -6335,6 +6344,31 @@ del vassoio e sottili.
   T1 e' quello approvato da solo, largo un terzo del vassoio, col marchio e
   la barretta dritti su tutta la faccia. Dal cuscino si prendono solo le
   misure.
+- **Il fronte a misura vera** (`riempimento.fronte_vero`). Scalato nel largo,
+  il T1 aveva marchio e barretta stirati del 34%: di nuovo «deformi», e il
+  caso eliminato dall'app dopo tre tentativi. Ripreso a mano, chi l'ha
+  caricato ha scelto i pack che si toccano, come nella sua foto, col fronte
+  della sua misura, dritto e centrato, e ai lati il fondo dei fianchi. La
+  forma resta quella scalata; si spostano le UV, solo lungo il giro. Il film
+  si legge sulle UV - sul fronte piatto sono affini nella lunghezza e nel
+  giro, e la coordinata del giro e' la distanza dal centro del fronte - e
+  ogni vertice, portato dal largo da phi a k phi (k suo, perche' le pinne si
+  stringono di piu'), prende fino a mezzo fronte (meta' del largo di prima,
+  18,5 mm) la grafica di k phi: misura vera. Da li' al centro del fianco (un
+  quarto di giro) il film che resta si allarga sullo spazio che resta; oltre,
+  retro e fianchi dietro restano come scalati. Vale anche sulle spalle e
+  sulle pinne, dove gli anelli non si contano: le UV non ne hanno bisogno.
+  Gli altri riempimenti del parco non sono premuti e restano uguali al byte.
+- **Le aree riservate del T1**: l'area dell'EAN e quella del lotto, due
+  riquadri pieni di PANTONE 3405 C e 346 C senza didascalia leggibile (la
+  scritta EAN e' in curve), si vedevano verdi sui fianchi. Guardate lastra
+  per lastra - ognuna dipinge solo il suo riquadro - e confermate a occhio,
+  stanno nelle opzioni del caso nel parco (`params.parametri_costruzione.
+  aree_riservate`, come fa l'agente): sul pack vero li' c'e' l'etichetta
+  bianca, e il film resta bianco. Per numero di Pantone non si tolgono mai
+  (*Le aree riservate che il file scrive, ma non nomina*): una regola sulla
+  forma - una tinta che dipinge solo uno o due rettangoli pieni - provata
+  sui 44 PDF del parco prendeva anche grafica vera.
 - **Non si preme**: con `quanti` (il display fatto per il suo numero ha la
   sua regola, *Il display e' fatto per il suo numero*, e `schiaccia`), un
   astuccio, una sezione gia' tonda (esponente sotto 3: tubo piatto, a

@@ -536,6 +536,59 @@ def pressa(p, V):
                    cuscino=(a0, b0, n0, a1, b1))
 
 
+def fronte_vero(P, P2, UV, p):
+    """Le UV del flowpack premuto (`pressa`) col fronte a misura vera.
+
+    Premuto fra i vicini il pezzo e' quello del suo modello scalato nel largo
+    (`adatta`), e la grafica con lui: sul caso 838cbae0ac il T1 largo 49,6
+    invece di 37,1 aveva marchio e barretta stirati del 34%, «deformi». Chi
+    l'ha caricato lo vuole come nella sua foto: largo fino a toccare i vicini,
+    ma col fronte della sua misura, dritto e centrato, e ai lati il fondo dei
+    fianchi.
+
+    Il film si legge sulle UV: sul fronte piatto del modello la grafica e'
+    affine nella lunghezza e nel giro, con la coordinata del giro uguale alla
+    distanza dal centro del fronte (`flowpack`, la grafica sul film). Per ogni
+    vertice phi e' il suo film dal centro del fronte, e il largo lo ha portato
+    a k * phi (k misurato vertice per vertice, perche' le pinne si stringono
+    di piu'). Fino a mezzo fronte (meta' del largo di prima) la grafica va a
+    misura vera, phi' = k * phi; da li' al centro del fianco (un quarto di
+    giro) il film che resta si allarga sullo spazio che resta; oltre, retro e
+    fianchi dietro, resta com'era. Le UV si spostano solo lungo il giro."""
+    lungo, largo, spesso = p.assi
+    a0, b0, n0 = p.cuscino[:3]
+    x = P[:, lungo] - p.centro[lungo]
+    y0 = P[:, largo] - p.centro[largo]
+    y1 = P2[:, largo] - p.centro[largo]
+    z = (P[:, spesso] - p.centro[spesso]) * p.fronte
+    # la grafica sul fronte piatto, a meta' corpo: UV = A + x e + y g
+    m = (z > 0.5 * b0) & (np.abs(y0) < 0.6 * a0) & (np.abs(x) < 0.4 * p.corpo)
+    if m.sum() < 12:
+        return UV
+    M = np.column_stack([np.ones(int(m.sum())), x[m], y0[m]])
+    coef, *_ = np.linalg.lstsq(M, UV[m], rcond=None)
+    A, e, g = coef
+    base = np.column_stack([e, g])
+    if abs(np.linalg.det(base)) < 1e-12:
+        return UV
+    phi = np.linalg.solve(base, (UV - A).T)[1]
+    k = np.where(np.abs(y0) > 0.5, y1 / np.where(np.abs(y0) > 0.5, y0, 1.0),
+                 a0 and p.largo / (2.0 * a0))
+    k = np.clip(k, 1.0, None)
+    meta = a0
+    quarto = _superellisse(a0, b0, n0)[3] / 4.0
+    f = np.abs(phi)
+    nuovo = f.copy()
+    vero = k * f <= meta
+    nuovo[vero] = (k * f)[vero]
+    resto = ~vero & (f < quarto)
+    if resto.any():
+        f0 = meta / k[resto]
+        t = (f[resto] - f0) / np.maximum(quarto - f0, 1e-6)
+        nuovo[resto] = meta + t * (quarto - meta)
+    return UV + ((np.sign(phi) * nuovo - phi)[:, None]) * g[None, :]
+
+
 def capienza(vano, p):
     d = scegli(vano, p, None)
     return d.capienza if d else 0
@@ -618,9 +671,10 @@ def adatta(P, N, p, d):
             N[:, spesso] = N[:, spesso] / p.schiaccia
     # 0. premuto fra i vicini nel display pieno: vedi `pressa`. Il pezzo e'
     # quello del suo modello, scalato nel largo e nello spessore: la sezione
-    # resta la sua e la grafica del fronte riempie la faccia. Portato sul
-    # cuscino a giro fermo (838cbae0ac) i fianchi bianchi venivano sul fronte
-    # e la barretta si storceva: «deformi», per chi l'ha caricato
+    # resta la sua. Portato sul cuscino a giro fermo (838cbae0ac) i fianchi
+    # bianchi venivano sul fronte e la barretta si storceva: «deformi», per
+    # chi l'ha caricato. La grafica del fronte la rimette a misura vera
+    # `fronte_vero`, sulle UV
     if p.cuscino:
         a0, b0, _, a1, b1 = p.cuscino
         P[:, largo] = p.centro[largo] + (P[:, largo] - p.centro[largo]) * a1 / a0
@@ -794,7 +848,10 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
             P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
             Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
             P2, N2, piegate = adatta(P, Nn, p, d)
-            for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2)):
+            UV2 = None
+            if p.cuscino and "TEXCOORD_0" in a:
+                UV2 = fronte_vero(P, P2, _dati(Jp, Bp, a["TEXCOORD_0"]).astype(float), p)
+            for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2), ("TEXCOORD_0", UV2)):
                 if arr is None:
                     continue
                 if nome == "NORMAL":
@@ -805,14 +862,15 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
                                          "byteLength": arr.nbytes, "target": 34962})
                 B.extend(arr.tobytes())
                 acc = {"bufferView": len(J["bufferViews"]) - 1, "componentType": 5126,
-                       "count": len(arr), "type": "VEC3"}
+                       "count": len(arr), "type": "VEC2" if nome == "TEXCOORD_0" else "VEC3"}
                 if nome == "POSITION":
                     acc["min"] = arr.min(0).tolist()
                     acc["max"] = arr.max(0).tolist()
                 J["accessors"].append(acc)
                 a[nome] = len(J["accessors"]) - 1
+            rifatti = {"POSITION", "NORMAL"} | ({"TEXCOORD_0"} if UV2 is not None else set())
             for k, v in list(a.items()):
-                if k not in ("POSITION", "NORMAL"):
+                if k not in rifatti:
                     a[k] = v + sposta["accessors"]
             if "indices" in prim:
                 prim["indices"] += sposta["accessors"]
