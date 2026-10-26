@@ -3174,6 +3174,18 @@ una riga dritta dentro il fronte esce la tacca di prima. Sul T15: 226 punti,
 il fronte alto 71,5 ai lati, 65 dove la fessura entra, 49 vicino al centro,
 40 in fondo alla presa.
 
+**I ponticelli non si leggono come taglio** (`scatola_plancia._senza_ponticelli`).
+Un taglio a strappo e' interrotto da ponticelli, meno di un millimetro di
+cartone che tiene la plancia finche' non la si strappa. Nel ponticello il
+contorno esterno non c'e', e il taglio piu' lontano dal coperchio diventava
+la riga dietro: sul T15 l'arco della presa ne ha due, a 6,5 mm dal centro,
+larghi 0,7 mm, e li' il fronte risaliva da 29 a 24 mm dal bordo. Erano due
+spuntoni sottili di cartone dentro la presa, «due linee sulla parte
+fustellata del fronte». Una corsa di campioni piu' vicina al coperchio di
+quelli che la chiudono di oltre 1 mm, su non piu' di 2 mm, e' un ponticello:
+il bordo ci passa dritto. Sul T15 cambiano 4 campioni su 226, i due
+ponticelli, e nient'altro.
+
 La plancia resta un rettangolo fino alla cima delle fessure interne: la sua
 parte nel fronte, con la stampa capovolta, scende davanti nella finestra.
 

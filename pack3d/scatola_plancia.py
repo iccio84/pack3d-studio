@@ -37,6 +37,9 @@ BUCO = 4.0
 TOL = 1.6
 # la cerniera e' tratteggiata: almeno tanti pezzi
 TRATTI_CERNIERA = 5
+# i ponticelli di un taglio a strappo: interruzioni non piu' larghe di tanto
+# (mm), dove il taglio si salta e si legge la riga dietro
+PONTICELLO = 2.0
 
 
 @dataclass
@@ -267,7 +270,37 @@ def _taglio(tratti, p):
         out.append((u, min(vv) if vv else p.vF))
     if all(v >= p.vF for _, v in out):
         return ()
-    return tuple(out)
+    return _senza_ponticelli(out)
+
+
+def _senza_ponticelli(out, largo=PONTICELLO, salto=1.0):
+    """Il profilo del taglio senza i ponticelli.
+
+    Un taglio a strappo ha dei ponticelli, interruzioni di meno di un
+    millimetro che tengono la plancia attaccata finche' non la si strappa.
+    Nel ponticello il taglio piu' lontano dal coperchio non c'e', e `_taglio`
+    prendeva la riga dietro di lui: sul T15, ai due lati della presa per il
+    dito, a 6,5 mm dal centro, il fronte saliva per 0,7 mm da 29 a 24 mm dal
+    bordo, due spuntoni sottili di cartone dentro la presa. Una corsa di
+    campioni piu' vicina al coperchio di quelli che la chiudono, di piu' di
+    `salto`, su non piu' di `largo` mm, e' un ponticello: il taglio ci passa
+    dritto, fra i due campioni che la chiudono."""
+    u = [a for a, _ in out]
+    v = [b for _, b in out]
+    i = 1
+    while i < len(v) - 1:
+        j = i
+        while j < len(v) and u[j] - u[i - 1] <= largo and v[j] > v[i - 1] + salto:
+            j += 1
+        if (i < j < len(v) and u[j] - u[i - 1] <= largo
+                and min(v[i:j]) > v[j] + salto):
+            for k in range(i, j):
+                t = (u[k] - u[i - 1]) / ((u[j] - u[i - 1]) or 1.0)
+                v[k] = v[i - 1] + (v[j] - v[i - 1]) * t
+            i = j
+        else:
+            i += 1
+    return tuple(zip(u, v))
 
 
 def riconosci(pdf, page_no=0):
