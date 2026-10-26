@@ -5082,42 +5082,25 @@ scende da 10 (rettangolo, livello 1) a 2 (ellisse, livello 10), e il perimetro
 torna quello del film. Gonfiare aumentando le dimensioni e' il modo sbagliato:
 fa crescere il perimetro e la grafica non torna piu'.
 
-**Il rigonfiamento va nello spessore** (`flowpack.sezione_rigonfiata`). A
-pinna la larghezza la tiene il prodotto, ed e' la faccia del DT: `a = W/2`, e
-lo spessore e' quello che riporta il perimetro al film. Il film che la forma
-tonda lascia libero agli spigoli va nello spessore, come in un pack pieno.
-Prima si teneva fermo il rapporto larghezza/spessore del DT e si riscalava
-tutto, e gonfiando il pack si **allargava**: il flowpack 30 x 12 del display
-T15 usciva 33,7 x 13,5 al livello 8, con la faccia stirata («la grafica viene
-strecciata»), mentre la foto del pack vero, mandata da chi l'ha caricato, lo
-mostra spesso quasi due terzi della larghezza. Ora lo stesso 30 x 12 esce 30 x
-14,1 al livello 1, 30 x 15,3 al 5 e 30 x 19,7 al 9 (31,6 x 21,3 a meta' corpo,
-con la pancia), e quello scelto e' il 9. Sul parco: larghezze come il DT, gli
-spessori da 2 a 12 mm in piu' (il multipack piu' grande 68,8 -> 81,2, una
-barretta 46 x 16 -> 43 x 19,4), i quattro tubi piatti identici al byte, e il
-pack con la scatola dentro, che non si gonfia, con le misure di prima.
+**Il rigonfiamento resta nel rapporto del DT: provato nello spessore, e
+tolto.** Il 26 ottobre il rigonfiamento a pinna ha tenuto la larghezza della
+faccia del DT (`a = W/2`) e mandato nello spessore il film che gli spigoli
+tondi lasciano, con la grafica sul giro dalla distanza dal centro del fronte
+invece che per pannello: il B-ready del display T15, «piu' gonfio come
+l'immagine», veniva 30 x 19,7 al livello 9. E' uscito col rilascio del 26
+ottobre e lo stesso giorno e' stato tolto: sul KP T1 la faccia passava da
+40,1 a 37,1 mm e la grafica del fronte da +6% a +2% sull'artwork, e chi
+l'ha caricato, accanto al T1 approvato, vedeva «la e di Kinder schiacciata».
+Il T1 approvato e' la misura: si torna al rapporto larghezza/spessore del DT
+e alla mappatura per pannello, e i flowpack del parco tornano identici al
+byte a quelli approvati prima del rilascio. Chi vuole un pack piu' spesso
+sceglie il livello, e la faccia si allarga con lui.
 
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi
 ridistribuiscono il film. Con la mappatura per arco ogni fascia scivola — su
 Kinder Bueno T2 lo scarto era 18,51 mm, il 12,7% del giro.
-
-**A pinna, la grafica sul film dal centro del fronte.** Col rigonfiamento
-nello spessore gli spigoli non sono piu' le pieghe del film: i fianchi si
-alzano oltre il loro pannello e il fronte tondo e' piu' corto del suo. Sul
-flowpack 30 x 12 al livello 9 gli spigoli stanno a 14,5 | 27,5 | 14,5 contro
-i pannelli 12 | 30 | 12, e portarci sopra le pieghe stampate stringeva il
-fronte dell'8% e stirava i fianchi del 21%. Il film non si allunga: ogni punto
-sta sul giro alla sua distanza dal **centro del fronte** (`y = 0`, `z > 0`),
-e li' si ancora la cucitura (`superellipse_section`), a retro + fianco + meta'
-fronte del film prima, nel punto esatto del segmento - a esponente alto la
-superellisse ha sulle facce piatte i punti radi, anche 5 mm l'uno
-dall'altro, e il vertice piu' vicino ruotava la grafica di 3,3 mm. Lo
-scivolamento di 18,51 mm era l'origine sbagliata, non l'arco: ancorato al
-fronte, l'arco non scivola. Gli spigoli restano per la verifica qui sotto (le
-pieghe stampate cadono entro 0,4-1,6 mm da loro) e la rotazione di 2 mm che
-segnalavano tre casi del parco sparisce. Il tubo piatto resta mappato sulle sue due pieghe.
 
 **Attenzione ai filtri troppo aggressivi sui dati in ingresso.** Una cordonatura
 puo' sfuggire perche' il suo segmento sta sotto la soglia di peso, e allora
