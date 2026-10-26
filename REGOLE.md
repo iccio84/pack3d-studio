@@ -2763,6 +2763,15 @@ pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
   i PDF si leggevano come vassoio.
 - La verifica delle pareti prende la prima e l'ultima riga della griglia,
   non la sesta e la quarta: sul sagomato le righe sono di piu'.
+- **Nel riempimento perde con un vassoio letto prima**
+  (`server.analisi_riempimento`). Le quattro cordonature non bastavano: il
+  film del flowpack del display da 26 del parco ha un fondo chiuso da
+  quattro coppie di righe, si leggeva come vassoio sagomato, e il
+  riempimento, che si costruiva, si fermava su «tutti e due si leggono come
+  vassoi». Se tutti e due i PDF si leggono come vassoio e uno solo e' letto
+  prima del sagomato (griglia, plancia, sportello, scatola), il vassoio e'
+  quello e l'altro e' il pack. Il display da 26 torna identico al byte a
+  quello pubblicato; i tre vassoi del parco non cambiano.
 
 ## Display con plancia
 
@@ -5073,42 +5082,26 @@ scende da 10 (rettangolo, livello 1) a 2 (ellisse, livello 10), e il perimetro
 torna quello del film. Gonfiare aumentando le dimensioni e' il modo sbagliato:
 fa crescere il perimetro e la grafica non torna piu'.
 
-**Il rigonfiamento va nello spessore** (`flowpack.sezione_rigonfiata`). A
-pinna la larghezza la tiene il prodotto, ed e' la faccia del DT: `a = W/2`, e
-lo spessore e' quello che riporta il perimetro al film. Il film che la forma
-tonda lascia libero agli spigoli va nello spessore, come in un pack pieno.
-Prima si teneva fermo il rapporto larghezza/spessore del DT e si riscalava
-tutto, e gonfiando il pack si **allargava**: il flowpack 30 x 12 del display
-T15 usciva 33,7 x 13,5 al livello 8, con la faccia stirata («la grafica viene
-strecciata»), mentre la foto del pack vero, mandata da chi l'ha caricato, lo
-mostra spesso quasi due terzi della larghezza. Ora lo stesso 30 x 12 esce 30 x
-14,1 al livello 1, 30 x 15,3 al 5 e 30 x 19,7 al 9 (31,6 x 21,3 a meta' corpo,
-con la pancia), e quello scelto e' il 9. Sul parco: larghezze come il DT, gli
-spessori da 2 a 12 mm in piu' (il multipack piu' grande 68,8 -> 81,2, una
-barretta 46 x 16 -> 43 x 19,4), i quattro tubi piatti identici al byte, e il
-pack con la scatola dentro, che non si gonfia, con le misure di prima.
+**Il rigonfiamento resta nel rapporto del DT: provato nello spessore, e
+tolto.** Il 26 ottobre il rigonfiamento a pinna ha tenuto la larghezza della
+faccia del DT (`a = W/2`) e mandato nello spessore il film che gli spigoli
+tondi lasciano, con la grafica sul giro dalla distanza dal centro del fronte
+invece che per pannello: il flowpack del display T15, «piu' gonfio come
+l'immagine», veniva 30 x 19,7 al livello 9. E' uscito col rilascio del 26
+ottobre e lo stesso giorno e' stato tolto: sul T1 del vassoio da 36 la
+faccia passava da 40,1 a 37,1 mm e la grafica del fronte da +6% a +2%
+sull'artwork, e chi l'ha caricato, accanto al T1 approvato, vedeva una
+lettera del marchio schiacciata.
+Il T1 approvato e' la misura: si torna al rapporto larghezza/spessore del DT
+e alla mappatura per pannello, e i flowpack del parco tornano identici al
+byte a quelli approvati prima del rilascio. Chi vuole un pack piu' spesso
+sceglie il livello, e la faccia si allarga con lui.
 
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi
 ridistribuiscono il film. Con la mappatura per arco ogni fascia scivola — su
 Kinder Bueno T2 lo scarto era 18,51 mm, il 12,7% del giro.
-
-**A pinna, la grafica sul film dal centro del fronte.** Col rigonfiamento
-nello spessore gli spigoli non sono piu' le pieghe del film: i fianchi si
-alzano oltre il loro pannello e il fronte tondo e' piu' corto del suo. Sul
-flowpack 30 x 12 al livello 9 gli spigoli stanno a 14,5 | 27,5 | 14,5 contro
-i pannelli 12 | 30 | 12, e portarci sopra le pieghe stampate stringeva il
-fronte dell'8% e stirava i fianchi del 21%. Il film non si allunga: ogni punto
-sta sul giro alla sua distanza dal **centro del fronte** (`y = 0`, `z > 0`),
-e li' si ancora la cucitura (`superellipse_section`), a retro + fianco + meta'
-fronte del film prima, nel punto esatto del segmento - a esponente alto la
-superellisse ha sulle facce piatte i punti radi, anche 5 mm l'uno
-dall'altro, e il vertice piu' vicino ruotava la grafica di 3,3 mm. Lo
-scivolamento di 18,51 mm era l'origine sbagliata, non l'arco: ancorato al
-fronte, l'arco non scivola. Gli spigoli restano per la verifica qui sotto (le
-pieghe stampate cadono entro 0,4-1,6 mm da loro) e la rotazione di 2 mm che
-segnalavano tre casi del parco sparisce. Il tubo piatto resta mappato sulle sue due pieghe.
 
 **Attenzione ai filtri troppo aggressivi sui dati in ingresso.** Una cordonatura
 puo' sfuggire perche' il suo segmento sta sotto la soglia di peso, e allora
@@ -6132,18 +6125,18 @@ Lungo ogni asse del vano si conta quanti pezzi ci stanno:
   (`COMPRIME`).
 
 **Il display fatto per N pezzi li tiene tutti** (`riempimento.schiaccia`).
-Col rigonfiamento nello spessore il flowpack e' piu' spesso, e il rilascio
-lo ha trovato sul parco: il vassoio da 40 ne teneva 38 (20,5 mm invece di
-17), il display da 26 ne teneva 20 (20 invece di 16,5). Il display e' fatto
+Nata col rigonfiamento nello spessore, che faceva il flowpack piu' spesso e
+il vassoio da 40 ne teneva 38, il display da 26 ne teneva 20; tolto quel
+rigonfiamento, quei due ci stanno di nuovo senza schiacciarsi, e la regola
+resta per il vassoio da 36 del caso 838cbae0ac. Il display e' fatto
 per il suo numero, e i flowpack pieni d'aria ci stanno stretti: se i pezzi
 chiesti non ci stanno, il flowpack si schiaccia nello spessore a passi di
 mezzo per cento finche' ci stanno, nella stessa posa che aveva (frontali
 restano frontali: al primo passo il vassoio da 40 trovava sdraiati una
 griglia 8 x 5), al massimo del 25% (`SCHIACCIA_MAX`). Oltre, il pezzo e'
-davvero troppo grande e se ne mettono meno, come prima. Sul parco: 40 in 2
-file da 20 a 19,5 mm (95%), 26 in 2 file da 13 a 16,6 mm (83%), come prima
-del rigonfiamento nello spessore. Un astuccio non si schiaccia; i
-riempimenti senza un numero chiesto non cambiano.
+davvero troppo grande e se ne mettono meno, come prima. Sul vassoio da 36: il
+T1 da 22,2 a 20,7 mm (94%), 3 per fila in 12 file. Un astuccio non si
+schiaccia; i riempimenti senza un numero chiesto non cambiano.
 
 ### Strati uguali, file su tutta la profondita'
 
@@ -6255,11 +6248,12 @@ perde: piu' strati, e da davanti si vede la prima pila sola. Frontali a
 strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
 2 file da 13.
 
-Col flowpack spesso come il pack vero (livello 9, 21,3 mm a meta' corpo) la
-griglia e' una sola: 5 strati non entrano nei 70,5 mm del vano, 3 si' (64).
-E' la misura per cui e' fatta la scatola. Con i pezzi sottili di prima (13,9
-mm) entrava anche il 3 x 5, e una regola che lo preferiva perche' il pezzo ci
-stava intero e' stata provata e tolta: non serviva piu' a nessun caso.
+Al livello 9, scelto da chi l'ha caricato con la foto del pack vero, il
+flowpack e' 34,8 x 13,9 (36,6 x 15,1 a meta' corpo): 5 strati non entrano
+nei 70,5 mm del vano e la griglia e' una sola, 5 x 3 per il lungo in 3
+strati. Una regola che preferiva il 3 x 5 perche' il pezzo ci stava intero
+e' stata provata e tolta; anche il rigonfiamento nello spessore (30 x 19,7)
+e' stato provato e tolto (*Il rigonfiamento resta nel rapporto del DT*).
 
 ### Sdraiati, stanno in piano
 
@@ -6283,10 +6277,11 @@ interseca con il display. Se un pezzo ruotato non sta nel vano, non si ruota.
 aperte e senza gradini.» E dopo: «Il T1 non corrisponde al DT. La grafica
 viene strecciata.»
 
-- **Gonfio nello spessore**: con la foto del pack vero, «e' piu' gonfio,
-  come l'immagine», il livello e' passato a 9 e il rigonfiamento va
-  nello spessore (*Il rigonfiamento va nello spessore*): 30 x 19,7, la faccia
-  larga come il DT. Quello che segue e' la storia di prima.
+- **Il livello 9**: con la foto del pack vero, «e' piu' gonfio, come
+  l'immagine», il livello e' passato a 9: 34,8 x 13,9 nel rapporto del DT.
+  Il rigonfiamento nello spessore, che lo faceva 30 x 19,7, e' stato tolto
+  (*Il rigonfiamento resta nel rapporto del DT*). Quello che segue e' la
+  storia di prima.
 - **Al rigonfiamento scelto, non di piu'**: per il primo «Non approvo» il
   flowpack nel display si costruiva 3 livelli piu' gonfio (5 -> 8). Ma il
   rigonfiamento tiene il perimetro e arrotonda la sezione, che si allarga:
@@ -6305,41 +6300,58 @@ viene strecciata.»
   (lungo/2 - corpo/2)) e resta distesa e aperta, con la sua zigrinatura.
   Frontali le punte si piegano verso il dietro come prima.
 
-### Nel display pieno il flowpack e' premuto: il film va di lato
+### Nel riempimento il CU resta il suo modello: si schiaccia, non si allarga
 
-Il caso 838cbae0ac, un display sagomato col fondo di 150,4 x 247,0 mm e il
-flowpack T1 dentro, pieno (senza `quanti`). Gonfio, il T1 e' 36 x 24,2 (giro
-111, sul DT 36 x 19,5) e nel vano ne stavano 4 file da 9. «Il vassoio
-contiene 3 pack per 12 file. Inoltre il T1 e' sbagliato»: nella foto del
-pack vero i flowpack stanno faccia contro faccia, larghi quasi come un terzo
-del vassoio e sottili.
+Il caso 838cbae0ac, un display sagomato col fondo di 150,4 x 247,0 mm e 36
+flowpack T1, 3 per fila in 12 file. Il T1 al rigonfiamento 5 e' 40,1 x 22,2
+mm (47,1 sulle pinne all'apertura 2): nel vano ne stanno 3 per fila, e 12
+file da 22,2 fanno 266 mm contro 245. (Col rigonfiamento nello spessore,
+poi tolto, era 37,1 x 25,4 e ne stavano 4 per fila.)
 
-- **Causa**: il rigonfiamento mette nello spessore il film che gli spigoli
-  tondi lasciano (*Il rigonfiamento va nello spessore*). Da solo e' giusto;
-  in fila, faccia contro faccia, l'aria non puo' stare nello spessore: i
-  vicini lo premono, e il film, che non si allunga, va di lato.
-- **Regola** (`riempimento.pressa`): nel display **pieno**, coi pezzi
-  **frontali**, il flowpack a pinna si preme. Lo spessore torna quello del
-  prodotto, il film teso sul DT: meta' giro meno la faccia (111/2 - 36 =
-  19,5). La sezione diventa il cuscino con lo stesso giro, un'ellisse: il T1
-  49,6 x 20,2 (il giro letto sulla maglia a meta' corpo). La disposizione si
-  rifa' col pezzo premuto e si tiene se ce ne stanno almeno quanti gonfi:
-  3 file da 12 (148,4 / 49,6 e 245 / 20,2, col 2% di sempre), 36 pezzi.
-- **La forma e' quella del pezzo**: il premuto e' il flowpack del suo
-  modello, scalato nel largo (49,6 / 36) e nello spessore (20,2 / 24,2), la
-  sezione sua e la grafica del fronte su tutta la faccia. Al primo giro la
-  sezione andava sul cuscino a frazione di giro ferma (`_a_cuscino`): il
-  fronte di 36 mm restava 36 mm al centro, ai lati della faccia venivano i
-  fianchi bianchi e la barretta si storceva. «I T1 sono completamente
-  deformi, lontani dal modello approvato»: nelle foto di chi l'ha caricato il
-  T1 e' quello approvato da solo, largo un terzo del vassoio, col marchio e
-  la barretta dritti su tutta la faccia. Dal cuscino si prendono solo le
-  misure.
-- **Non si preme**: con `quanti` (il display fatto per il suo numero ha la
-  sua regola, *Il display e' fatto per il suo numero*, e `schiaccia`), un
-  astuccio, una sezione gia' tonda (esponente sotto 3: tubo piatto, a
-  sovrapposizione), uno spessore che cala meno del 3%, o se premuti ne
-  stanno meno che gonfi.
+La routine ci ha provato tre volte, e tre volte ha cambiato il T1:
+- 4 file da 9, il T1 come da solo: «il vassoio contiene 3 pack per 12
+  file»;
+- premuto fra i vicini a cuscino, un'ellisse 49,6 x 20,2 a giro fermo
+  (`pressa`): la grafica stretta al centro, i fianchi bianchi sul fronte;
+- lo stesso cuscino col T1 scalato nel largo: marchio e barretta stirati
+  del 34%. Poi, ripreso a mano, le UV spostate per rimettere il fronte a
+  misura vera.
+
+Chi l'ha caricato: «quando si costruisce un vassoio con riempimento i CU
+(flowpack, cartotecnici, incarti) non devono mai essere modificati»; nel
+T1 premuto vedeva «protuberanze e grafiche stirate». E poi: «essendo dei
+flowpack si possono schiacciare, ma senza modificare la mappatura».
+
+**Regola.**
+- Il CU e' il modello che si costruisce da solo con le sue scelte -
+  zigrinatura, rigonfiamento, apertura delle pinne, che si chiedono come per
+  un flowpack - e nel vassoio si posa. Non si allarga, non si scala nel
+  largo, le sue UV non si toccano. `pressa`, il cuscino e il fronte
+  rimappato non ci sono piu'.
+- Un flowpack si puo' **schiacciare** fra i vicini come il film vero, a UV
+  ferme: nello spessore (`schiaccia`, al massimo del 25%), le pinne strette
+  al passo, le punte piegate contro una parete. Sul caso: 22,2 -> 20,7 mm
+  (94%), 3 per fila in 12 file. Il fronte e' quello del T1 da solo.
+- **Quanti per fila** li dice chi l'ha caricato (`per_fila`, opzione del
+  caso; `riempimento._per_fila`): il pack non si allarga per riempire il
+  posto, le file si allargano sul vano e fra un pack e l'altro resta l'aria.
+  Senza, quanti ce ne stanno.
+- Piu' alto delle pareti, sopra non c'e' niente contro cui piegare le
+  punte: il posto in altezza e' il pezzo intero e le pinne restano com'erano
+  (i T1 in piedi piegavano 0,6 mm di punta per niente).
+- **Le aree riservate del T1**: l'area dell'EAN e quella del lotto, due
+  riquadri pieni di PANTONE 3405 C e 346 C senza didascalia leggibile (la
+  scritta EAN e' in curve), si vedevano verdi sui fianchi. Guardate lastra
+  per lastra - ognuna dipinge solo il suo riquadro - e confermate a occhio
+  da chi l'ha caricato («bianco, come l'etichetta»), stanno nelle opzioni del
+  caso nel parco (`params.parametri_costruzione.aree_riservate`, come fa
+  l'agente). Per numero di Pantone non si tolgono mai (*Le aree riservate
+  che il file scrive, ma non nomina*): una regola sulla forma - una tinta
+  che dipinge solo uno o due rettangoli pieni - provata sui 44 PDF del parco
+  prendeva anche grafica vera.
+
+Gli altri riempimenti e i vassoi del parco restano identici al byte a quelli
+pubblicati.
 
 ## La texture e' lo steso
 
