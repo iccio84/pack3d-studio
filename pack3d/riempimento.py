@@ -22,8 +22,7 @@ La disposizione la decide il vano del vassoio:
   a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
   Sdraiati, la faccia in su, solo se in piedi non ci stanno, o se i pezzi
   contati frontali vengono a strati diversi e sdraiati fanno una griglia
-  piena (`_griglia`, il T15: 3 per strato e 5 strati, per il largo, dove
-  il flowpack sta intero). Sdraiati stanno in piano: inclinati
+  piena (`_griglia`, il T15: 5 x 3). Sdraiati stanno in piano: inclinati
   all'indietro la faccia non tornava piu' col DT (il T15: «annullare
   l'inclinazione»).
 
@@ -364,7 +363,7 @@ def scegli(vano, p, quanti):
     if not cand:
         return None
     if cand[0].posa == "frontali":
-        g = None if quanti is None else _griglia(cand, quanti, p)
+        g = None if quanti is None else _griglia(cand, quanti)
         return g or cand[0]
     if quanti is None:
         return max(cand, key=lambda d: d.capienza)
@@ -375,25 +374,19 @@ def scegli(vano, p, quanti):
     return buone[0]
 
 
-def _griglia(cand, quanti, p):
+def _griglia(cand, quanti):
     """Il display e' fatto per il suo numero: `quanti` pezzi stanno in una
     griglia piena, a per strato e s strati. Se frontali vengono a strati
     diversi (15: 8 e 7) e una posa sdraiata li mette in strati tutti uguali
-    e pieni (15: 3 x 5), si prende quella. Prima la griglia in cui il pezzo
-    sta intero (`_intero`), poi quella con meno strati: il T15 per il lungo
-    faceva 5 x 3, ma i 150 mm del flowpack nei 137,5 del vano si
-    accartocciavano e le pinne, larghe 42 mm su un passo di 37,8, si
-    stringevano; per il largo, 3 per strato e 5 strati, sta intero, con le
-    pinne aperte e il marchio dritto verso chi guarda. La disposizione torna
-    con i pezzi di uno strato allargati su tutto il vano. None se frontali
-    vanno gia' bene, o se nessuna posa fa la griglia."""
+    e pieni (15: 5 x 3), si prende quella, con meno strati. La disposizione
+    torna con i pezzi di uno strato allargati su tutto il vano. None se
+    frontali vanno gia' bene, o se nessuna posa fa la griglia."""
     fr = cand[0]
     if len(set(_strati(fr, quanti))) <= 1 and quanti <= fr.capienza:
         return None
     migliore = None
     for d in cand[1:]:
         nx, ny, nz = d.n
-        lx, lz = d.passo[0] * nx, d.passo[2] * nz
         for s in range(1, ny + 1):
             if quanti % s:
                 continue
@@ -402,27 +395,15 @@ def _griglia(cand, quanti, p):
                 if a % gx or a // gx > nz:
                     continue
                 gz = a // gx
-                chiave = (not _intero(d, p, (lx / gx, lz / gz)), s, -a)
-                if migliore is None or chiave < migliore[0]:
-                    migliore = (chiave, s, a, d, gx, gz)
+                if migliore is None or (s, -a) < (migliore[0], -migliore[1]):
+                    migliore = (s, a, d, gx, gz)
                 break
     if migliore is None:
         return None
-    _, s, a, d, gx, gz = migliore
+    s, a, d, gx, gz = migliore
     lx, lz = d.passo[0] * d.n[0], d.passo[2] * d.n[2]
     return Disposizione(d.posa, d.dove + ", %d x %d" % (a, s), d.R, (gx, d.n[1], gz),
                         (lx / gx, d.passo[1], lz / gz), d.piega)
-
-
-def _intero(d, p, passi):
-    """True se, a quei passi in pianta (lungo X e lungo Z della scena), il
-    pezzo sta intero: la lunghezza con le pinne entro il suo posto, e le
-    pinne aperte entro il passo fra due pezzi. Se no le pinne si
-    accartocciano e si stringono (`adatta`)."""
-    lungo, largo, _ = p.assi
-    passo = {0: passi[0], 2: passi[1]}
-    return (passo.get(d.asse(lungo), p.lungo) >= p.lungo
-            and passo.get(d.asse(largo), p.largo_pinne) >= p.largo_pinne)
 
 
 def accorcia(vano, p):
