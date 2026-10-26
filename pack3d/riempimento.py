@@ -388,10 +388,10 @@ def _per_fila(vano, d, per_fila):
 
     Il pack non si allarga per riempire il posto: in un riempimento il CU e'
     il suo modello, e il vassoio vero lo dice chi l'ha caricato. Il caso
-    838cbae0ac: il T1 largo 37,1 (45,7 sulle pinne) nel vano da 148,4 ci
-    starebbe 4 per fila, e il vassoio vero ne ha 3 per fila in 12 file.
-    Diventava 3 x 12 allargando il T1 a 49,6: «protuberanze e grafiche
-    stirate». Ora le file sono 3, a passo 49,5, e il T1 resta largo com'e'."""
+    838cbae0ac ha 3 per fila in 12 file nel vano da 148,4. Prima diventava 3
+    x 12 allargando il T1 a 49,6: «protuberanze e grafiche stirate». Ora le
+    file sono 3, a passo 49,5, e il T1 resta largo com'e' (40,1, 47,1 sulle
+    pinne): fra un pack e l'altro resta l'aria."""
     lx = vano.per_asse[0]
     return Disposizione(d.posa, d.dove + ", %d per fila" % per_fila, d.R,
                         (per_fila, d.n[1], d.n[2]), (lx / per_fila, d.passo[1], d.passo[2]),

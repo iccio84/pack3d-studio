@@ -5086,11 +5086,12 @@ fa crescere il perimetro e la grafica non torna piu'.
 tolto.** Il 26 ottobre il rigonfiamento a pinna ha tenuto la larghezza della
 faccia del DT (`a = W/2`) e mandato nello spessore il film che gli spigoli
 tondi lasciano, con la grafica sul giro dalla distanza dal centro del fronte
-invece che per pannello: il B-ready del display T15, «piu' gonfio come
+invece che per pannello: il flowpack del display T15, «piu' gonfio come
 l'immagine», veniva 30 x 19,7 al livello 9. E' uscito col rilascio del 26
-ottobre e lo stesso giorno e' stato tolto: sul KP T1 la faccia passava da
-40,1 a 37,1 mm e la grafica del fronte da +6% a +2% sull'artwork, e chi
-l'ha caricato, accanto al T1 approvato, vedeva «la e di Kinder schiacciata».
+ottobre e lo stesso giorno e' stato tolto: sul T1 del vassoio da 36 la
+faccia passava da 40,1 a 37,1 mm e la grafica del fronte da +6% a +2%
+sull'artwork, e chi l'ha caricato, accanto al T1 approvato, vedeva una
+lettera del marchio schiacciata.
 Il T1 approvato e' la misura: si torna al rapporto larghezza/spessore del DT
 e alla mappatura per pannello, e i flowpack del parco tornano identici al
 byte a quelli approvati prima del rilascio. Chi vuole un pack piu' spesso
@@ -6248,7 +6249,7 @@ strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
 2 file da 13.
 
 Al livello 9, scelto da chi l'ha caricato con la foto del pack vero, il
-B-ready e' 34,8 x 13,9 (36,6 x 15,1 a meta' corpo): 5 strati non entrano
+flowpack e' 34,8 x 13,9 (36,6 x 15,1 a meta' corpo): 5 strati non entrano
 nei 70,5 mm del vano e la griglia e' una sola, 5 x 3 per il lungo in 3
 strati. Una regola che preferiva il 3 x 5 perche' il pezzo ci stava intero
 e' stata provata e tolta; anche il rigonfiamento nello spessore (30 x 19,7)
