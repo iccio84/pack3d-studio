@@ -505,7 +505,8 @@ def pressa(p, V):
     contro faccia, l'aria non sta piu' nello spessore: i vicini lo riportano
     a quello del prodotto, il film teso sul DT (meta' giro meno la faccia), e
     il film, che non si allunga, va di lato. La sezione diventa un cuscino,
-    l'ellisse con lo stesso giro: quel T1 49,6 x 20,2. Il caso 838cbae0ac, il
+    l'ellisse con lo stesso giro: quel T1 49,6 x 20,2. Le misure sono quelle
+    del cuscino, la forma resta quella del pezzo (`adatta`). Il caso 838cbae0ac, il
     display da 150 x 247 mm: gonfi ci stavano 4 file da 9, chi l'ha caricato
     li ha 3 per fila in 12 file, larghi come il passo, e cosi' viene.
 
@@ -533,21 +534,6 @@ def pressa(p, V):
     a1 = _risolvi(lambda a: _superellisse(a, b1, 2.0)[3], giro, b1, giro)
     return replace(p, largo=2.0 * a1, spesso=t1, largo_pinne=p.largo_pinne * a1 / a0,
                    cuscino=(a0, b0, n0, a1, b1))
-
-
-def _a_cuscino(u, v, cuscino):
-    """La sezione (u lungo il largo, v lungo lo spessore, dal centro) portata
-    sul cuscino a giro fermo: ogni punto va dove sta la stessa frazione di
-    giro, e la grafica non si stira lungo il giro. La distanza dal centro, in
-    unita' della sezione, resta: le spalle e le pinne seguono."""
-    a0, b0, n0, a1, b1 = cuscino
-    t, C0, f0, _ = _superellisse(a0, b0, n0)
-    _, C1, f1, _ = _superellisse(a1, b1, 2.0)
-    fi0 = np.unwrap(np.arctan2(C0[:, 1] / b0, C0[:, 0] / a0))
-    fi = np.mod(np.arctan2(v / b0, u / a0), 2.0 * np.pi)
-    tt = np.interp(np.interp(fi, fi0, f0), f1, t)
-    r = (np.abs(u / a0) ** n0 + np.abs(v / b0) ** n0) ** (1.0 / n0)
-    return r * a1 * np.cos(tt), r * b1 * np.sin(tt)
 
 
 def capienza(vano, p):
@@ -630,12 +616,15 @@ def adatta(P, N, p, d):
         P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * p.schiaccia
         if N is not None:
             N[:, spesso] = N[:, spesso] / p.schiaccia
-    # 0. premuto fra i vicini nel display pieno: vedi `pressa`
+    # 0. premuto fra i vicini nel display pieno: vedi `pressa`. Il pezzo e'
+    # quello del suo modello, scalato nel largo e nello spessore: la sezione
+    # resta la sua e la grafica del fronte riempie la faccia. Portato sul
+    # cuscino a giro fermo (838cbae0ac) i fianchi bianchi venivano sul fronte
+    # e la barretta si storceva: «deformi», per chi l'ha caricato
     if p.cuscino:
         a0, b0, _, a1, b1 = p.cuscino
-        u, v = _a_cuscino(P[:, largo] - p.centro[largo], P[:, spesso] - p.centro[spesso],
-                          p.cuscino)
-        P[:, largo], P[:, spesso] = p.centro[largo] + u, p.centro[spesso] + v
+        P[:, largo] = p.centro[largo] + (P[:, largo] - p.centro[largo]) * a1 / a0
+        P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * b1 / b0
         if N is not None:
             N[:, largo] = N[:, largo] * a0 / a1
             N[:, spesso] = N[:, spesso] * b0 / b1

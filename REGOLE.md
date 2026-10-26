@@ -6325,12 +6325,16 @@ del vassoio e sottili.
   49,6 x 20,2 (il giro letto sulla maglia a meta' corpo). La disposizione si
   rifa' col pezzo premuto e si tiene se ce ne stanno almeno quanti gonfi:
   3 file da 12 (148,4 / 49,6 e 245 / 20,2, col 2% di sempre), 36 pezzi.
-- **La grafica non si stira lungo il giro**: ogni punto della sezione va
-  dove sul cuscino sta la stessa frazione di giro (`_a_cuscino`), alla
-  stessa distanza dal centro in unita' della sezione, cosi' spalle e pinne
-  seguono. Il fronte di 36 mm resta 36 mm di film al centro della faccia, e
-  il resto della faccia e' il fianco che si e' aperto: il marchio prende
-  quattro quinti della faccia, come nella foto.
+- **La forma e' quella del pezzo**: il premuto e' il flowpack del suo
+  modello, scalato nel largo (49,6 / 36) e nello spessore (20,2 / 24,2), la
+  sezione sua e la grafica del fronte su tutta la faccia. Al primo giro la
+  sezione andava sul cuscino a frazione di giro ferma (`_a_cuscino`): il
+  fronte di 36 mm restava 36 mm al centro, ai lati della faccia venivano i
+  fianchi bianchi e la barretta si storceva. «I T1 sono completamente
+  deformi, lontani dal modello approvato»: nelle foto di chi l'ha caricato il
+  T1 e' quello approvato da solo, largo un terzo del vassoio, col marchio e
+  la barretta dritti su tutta la faccia. Dal cuscino si prendono solo le
+  misure.
 - **Non si preme**: con `quanti` (il display fatto per il suo numero ha la
   sua regola, *Il display e' fatto per il suo numero*, e `schiaccia`), un
   astuccio, una sezione gia' tonda (esponente sotto 3: tubo piatto, a
