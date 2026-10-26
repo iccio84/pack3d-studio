@@ -63,7 +63,7 @@ sono in GADGET.md.
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |
 | pouch | `pouch.py` |
-| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, GLB composto); in `server.py` `analisi_riempimento` e `build_riempimento` |
+| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il flowpack premuto nel display pieno, GLB composto); in `server.py` `analisi_riempimento` e `build_riempimento` |
 
 ## La grafica e le misure
 
