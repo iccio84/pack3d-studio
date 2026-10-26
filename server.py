@@ -2031,10 +2031,14 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
 
-    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: lo spessore
-       cresce e la larghezza cala. Alzare solo lo spessore inventa film.
-    2. La grafica si mappa **per pannello**, usando gli spigoli della sezione
-       come nodi: con l'arco uniforme ogni fascia scivola.
+    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: la
+       larghezza resta la faccia del DT e lo spessore cresce. Alzare lo
+       spessore senza arrotondare inventa film; arrotondare riscalando tutto
+       allarga il pack invece di gonfiarlo.
+    2. La grafica sta sul giro **alla sua distanza dal centro del fronte**,
+       come il film, che non si allunga; gli spigoli della sezione servono a
+       verificare che le pieghe stampate ci cadano vicino. Il tubo piatto,
+       che spigoli non ne ha, si mappa sulle sue due pieghe.
     3. Le pinne portano la **zigrinatura** - denti alti 2/3 dell'equilatero,
        smussati - contata sul bordo della pinna.
     4. Le pinne non restano **mai a filo**: si aprono a farfalla verso la punta.
@@ -2220,9 +2224,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                           "(livello %g)" % (100.0 * pienezza, liv))
     else:
         # A pinna la sezione va dal rettangolo teso sul prodotto all'ellisse
-        # piena d'aria, tenendo fermi il rapporto larghezza/spessore MISURATO
-        # nello steso e il perimetro del film. La scala che serve a tornare sul
-        # perimetro gonfia il pack in entrambe le direzioni.
+        # piena, tenendo fermi la larghezza della faccia del DT e il perimetro
+        # del film: il film che gli spigoli tondi lasciano va nello spessore
+        # (`sezione_rigonfiata`), e `scala` e' lo spessore in unita' di T.
         n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
         scala = fpk.sezione_rigonfiata(fp, n_sez)
     if scatola:
@@ -2320,6 +2324,16 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # calcolano prima della mesh perche' servono anche a lei: nella gola e
     # nella pinna il giro si rimisura sul film, e il film lo dicono i nodi.
     knots = _panel_knots(Ps, d, G, fp0)
+    spigoli = knots
+    if knots and not fp0.tubo_piatto:
+        # A pinna gli spigoli servono solo alla verifica: la grafica sta sul
+        # giro alla sua distanza dal centro del fronte, dove la mette la
+        # cucitura (`superellipse_section`). Portare le pieghe stampate sugli
+        # spigoli stirava le fasce appena la sezione si arrotonda: il
+        # flowpack 30 x 12 al livello 9 ha gli spigoli a 14,5 | 27,5 | 14,5
+        # contro i pannelli 12 | 30 | 12, il fronte stretto dell'8% e i
+        # fianchi stirati del 21%.
+        knots = (list(knots[1]), list(knots[1]))
     saldatura = max(0, min(3, int(saldatura)))
     # Dopo la griglia (righe di nv + 1 vertici, le prime `ng`, e i suoi `tg`
     # triangoli) c'e' il bordo dentato: chi rilegge la mesh a righe guarda
@@ -2337,8 +2351,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     tg = 2 * (ng // (nv + 1) - 1) * nv
     v_denti = UV[ng:, 1].copy()
 
-    if knots:
-        ks, kf = knots
+    if spigoli:
+        ks, kf = spigoli
         # La regola dice di verificare il modello mappato contro l'AW con una
         # misura, fascia per fascia, prima di finalizzare. Qui si puo' fare da
         # soli: lo scarto fra dove cade lo spigolo sulla sezione e dove lo
@@ -2362,6 +2376,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             avvisi_sez.append("mappatura verificata: rotazione %.1f mm, spigoli "
                               "entro %.1f mm su un giro di %.1f"
                               % (rotazione, peggio, G))
+        ks, kf = knots
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
     # il film sulle testate: pinne e spalle non sono un piano, e la grafica ci
@@ -2506,7 +2521,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                "%.1f sul retro)" % (2.0 * semiasse, fp.T, G, fp.side_fin))
     else:
         sez = ("sezione %.1f x %.1f (perimetro %.1f invariato)"
-               % (scala * fp.W, scala * fp.T, G))
+               % (sw, scala * fp.T, G))
     return ["flowpack%s, rigonfiamento %s"
             % (" a sovrapposizione" if fp.pillow else
                " a tubo piatto" if fp.piatto else "", soft), sez,
@@ -2516,7 +2531,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
              "dell'equilatero)" % (teeth, base, fpk.altezza_dente(base))),
             "saldatura delle pinne %d/3%s" % (
                 saldatura, ": senza nervature" if saldatura == 0 else ""),
-            "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
+            "mappatura per pannello" if knots and fp0.tubo_piatto else
+            "mappatura sul film, dal centro del fronte" if knots else
+            "mappatura per arco"] + avvisi_sez
 
 
 def _giro_film(knots, G, fp):
