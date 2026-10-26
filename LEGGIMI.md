@@ -102,8 +102,11 @@ casella **Scegli tu** che passa la decisione all'AI in base al prodotto.
 Il livello cambia la **forma** della sezione, non la sua taglia: il perimetro e'
 fissato dal foglio stampato, quindi a parita' di steso un pack piu' morbido non
 e' piu' grande, e' piu' tondo. La sezione e' una superellisse il cui esponente
-scende da 10 (rettangolo) a 2 (ellisse), riscalata perche' il perimetro torni
-quello del film.
+scende da 10 (rettangolo) a 2 (ellisse): la larghezza resta quella della
+faccia nel DT e il film che gli spigoli tondi lasciano va nello **spessore**,
+come in un pack pieno. Un flowpack 30 x 12 esce 30 x 15,3 al livello 5 e 30 x
+19,7 al livello 9. La grafica sta sul giro alla sua distanza dal centro del
+fronte, come il film, che non si allunga.
 
 Gli altri parametri si interpolano su tre ancore:
 
