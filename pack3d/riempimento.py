@@ -20,7 +20,11 @@ La disposizione la decide il vano del vassoio:
 - i pack stanno frontali: la faccia stampata verso il davanti del vassoio e il
   marchio dritto, come stanno nel loro modello, in file dal davanti al fondo e
   a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
-  Sdraiati, la faccia in su, solo se in piedi non ci stanno.
+  Sdraiati, la faccia in su, solo se in piedi non ci stanno, o se i pezzi
+  contati frontali vengono a strati diversi e sdraiati fanno una griglia
+  piena (`_griglia`, il T15: 5 x 3). Sdraiati stanno in piano: inclinati
+  all'indietro la faccia non tornava piu' col DT (il T15: «annullare
+  l'inclinazione»).
 
 Poi il flowpack si adatta al vano, una volta per tutti i pezzi: le pinne si
 stringono quanto il passo fra due pezzi, perche' due pinne sovrapposte sullo
@@ -359,7 +363,8 @@ def scegli(vano, p, quanti):
     if not cand:
         return None
     if cand[0].posa == "frontali":
-        return cand[0]
+        g = None if quanti is None else _griglia(cand, quanti)
+        return g or cand[0]
     if quanti is None:
         return max(cand, key=lambda d: d.capienza)
     buone = [d for d in cand if d.capienza >= quanti]
@@ -367,6 +372,38 @@ def scegli(vano, p, quanti):
         return max(cand, key=lambda d: d.capienza)
     buone.sort(key=lambda d: (-(-quanti // d.per_strato), -d.per_strato))
     return buone[0]
+
+
+def _griglia(cand, quanti):
+    """Il display e' fatto per il suo numero: `quanti` pezzi stanno in una
+    griglia piena, a per strato e s strati. Se frontali vengono a strati
+    diversi (15: 8 e 7) e una posa sdraiata li mette in strati tutti uguali
+    e pieni (15: 5 x 3), si prende quella, con meno strati. La disposizione
+    torna con i pezzi di uno strato allargati su tutto il vano. None se
+    frontali vanno gia' bene, o se nessuna posa fa la griglia."""
+    fr = cand[0]
+    if len(set(_strati(fr, quanti))) <= 1 and quanti <= fr.capienza:
+        return None
+    migliore = None
+    for d in cand[1:]:
+        nx, ny, nz = d.n
+        for s in range(1, ny + 1):
+            if quanti % s:
+                continue
+            a = quanti // s
+            for gx in range(min(nx, a), 0, -1):
+                if a % gx or a // gx > nz:
+                    continue
+                gz = a // gx
+                if migliore is None or (s, -a) < (migliore[0], -migliore[1]):
+                    migliore = (s, a, d, gx, gz)
+                break
+    if migliore is None:
+        return None
+    s, a, d, gx, gz = migliore
+    lx, lz = d.passo[0] * d.n[0], d.passo[2] * d.n[2]
+    return Disposizione(d.posa, d.dove + ", %d x %d" % (a, s), d.R, (gx, d.n[1], gz),
+                        (lx / gx, d.passo[1], lz / gz), d.piega)
 
 
 def accorcia(vano, p):
@@ -491,7 +528,17 @@ def adatta(P, N, p, d):
     # 2. le punte che uscirebbero, piegate sullo spessore come il film vero
     meta = d.passo[d.asse(lungo)] / 2.0 - GIOCO
     piegate = 0
-    if p.lungo / 2.0 > meta > fine:
+    if p.lungo / 2.0 > meta > fine and d.posa == "sdraiati":
+        # sdraiati la punta piegata in su stava davanti alla faccia come un
+        # gradino, e la pinna sembrava chiusa: il film invece si accartoccia
+        # in lunghezza, e la pinna resta aperta, distesa e piu' corta
+        k = (meta - fine) / (p.lungo / 2.0 - fine)
+        m = np.abs(x) > fine
+        P[m, lungo] = p.centro[lungo] + np.sign(x[m]) * (fine + (np.abs(x[m]) - fine) * k)
+        if N is not None:
+            N[m, lungo] = N[m, lungo] / k
+        piegate = 2
+    elif p.lungo / 2.0 > meta > fine:
         c_sp = p.centro[spesso]
         verso = d.piega
         cs, sn = math.cos(PIEGA_PINNA), math.sin(PIEGA_PINNA)
@@ -657,12 +704,12 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
         return len(J["nodes"]) - 1
 
     scena = J["scenes"][J.get("scene", 0)]["nodes"]
-    q = _quaternione(R)
-    for k, (_R, t) in enumerate(poste):
+    for k, (Rk, t) in enumerate(poste):
         figli = [copia(r) for r in radici]
+        q = _quaternione(Rk)
         # t e' dove va il centro del prodotto: il nodo sposta prima il centro
         # nell'origine
-        tt = t - R @ p.centro
+        tt = t - Rk @ p.centro
         J["nodes"].append({"name": "pezzo %d" % (k + 1), "children": figli,
                            "rotation": [float(v) for v in q],
                            "translation": [float(v) / 1000.0 for v in tt]})
@@ -697,7 +744,9 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
                   "%d per strato (%d x %d), %s: ce ne stanno fino a %d"
                   % (d.per_strato, d.n[2], d.n[0], strati, d.capienza),
                   "sdraiati perche' in piedi, con la faccia verso il davanti, nel vano non "
-                  "ci stanno"]
+                  "ci stanno" if not d.dove.endswith(" x %d" % len(conti)) else
+                  "sdraiati perche' frontali %d non fanno strati uguali, e cosi' fanno una "
+                  "griglia piena" % quanti]
     righe.append("vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
                  % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso,
                     p.corpo))
@@ -708,8 +757,9 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     if rigido:
         return scrivi(J, bytes(B)), righe
     if piegate:
-        righe.append("pinne piu' lunghe del posto del pezzo: le punte si piegano %s"
-                     % ("verso il dietro" if d.posa == "frontali" else "in su contro la parete"))
+        righe.append("pinne piu' lunghe del posto del pezzo: %s"
+                     % ("le punte si piegano verso il dietro" if d.posa == "frontali" else
+                        "si accorciano, accartocciate in lunghezza, e restano aperte"))
     passo = d.passo[d.asse(p.assi[1])]
     if p.largo_pinne > passo:
         righe.append("pinne piu' larghe del passo fra due pezzi (%.1f contro %.1f): si "
