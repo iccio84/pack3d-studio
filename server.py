@@ -38,7 +38,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
                     prisma, folding, exporters, gelato, incarto, materiali, nero,
-                    plancia,
+                    plancia, scatola_plancia,
                     pouch, lamina, rilievo, sportello, strati, tubo, vassoio,
                     verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
@@ -781,6 +781,14 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
                                  quality, lastre_extra, colata_riquadro,
                                  n_pagine, forma=sportello)
+        # lo sportello disegnato come fustella in CAD, a fessure e cerniera
+        # tratteggiata, che `pack3d.sportello` sulla griglia non vede: vedi
+        # `pack3d.scatola_plancia`
+        sp = scatola_plancia.riconosci(sorgente)
+        if sp is not None:
+            return build_scatola_plancia(sorgente, sp, out_glb, quality,
+                                         lastre_extra, colata_riquadro,
+                                         n_pagine)
         raise ValueError("non e' un vassoio: la griglia della fustella non ha "
                          "cinque colonne e tre fasce, e non e' un display con "
                          "plancia")
@@ -940,6 +948,58 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
         meta.insert(0, pagine)
     return (meta + avvisi_tex + verifiche
             + ([riscontro] if riscontro else []))
+
+
+def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
+                          colata_riquadro=None, n_pagine=1, carta=None):
+    """Il display a scatola: la scatola chiusa con la plancia alzata dal
+    coperchio e la finestra da cui si vede il prodotto. Vedi
+    `pack3d.scatola_plancia`.
+
+    Come la scatola a punta: la texture e' il DT intero, pulito, e ogni pezzo
+    della maglia prende la grafica dal suo posto sul foglio; sotto, le strisce
+    del rovescio. Nel GLB la plancia e' un nodo a parte, come nel display con
+    plancia: il riempimento misura il vano senza di lei."""
+    dpi, tmax = risoluzione(quality)
+    conti = {}
+    clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                            regione=p.regione, conti=conti)
+    deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+    avvisi = []
+    pagine = avviso_pagine(n_pagine)
+    if pagine:
+        avvisi.append(pagine)
+    fuori = artwork.avviso_fuori_dt(conti)
+    if fuori:
+        avvisi.append(fuori)
+    avvisi.extend(artwork.avvisi_gda(conti))
+    rgb = avviso_quadricromia(clean, regione=p.regione)
+    if rgb:
+        avvisi.append(rgb)
+    if lastre:
+        avvisi.append("lastre tecniche e coperture tolte per nome: %s"
+                      % ", ".join(lastre))
+    m = 1.0 / PT2MM
+    x0, y0, x1, y1 = p.regione
+    x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+    lato_pt = max(x1 - x0, y1 - y0)
+    dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+    tex = folding.rasterize_panels(
+        clean, {"dt": Panel(x0, y0, x1, y1, "dt")}, dpi=dpi_tex, inset_px=0,
+        clean=True, note=avvisi, nero_deciso=deciso_nero,
+        colata_riquadro=colata_riquadro)["dt"]
+    scala = dpi_tex / 72.0
+    origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
+    tela = ballotin.con_interno(tex)
+    V, UV, T, inizio = scatola_plancia.maglia(p, origine, scala / PT2MM,
+                                               tela.size, spessore=carta)
+    tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
+                                             TINTE_BALLOTIN)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
+                             parti=[("display", 0, inizio),
+                                    ("plancia", inizio, len(T))],
+                             tinte=tinte)
+    return scatola_plancia.dichiara(p) + avvisi
 
 
 def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
@@ -2856,6 +2916,16 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                     return dict(kind="vassoio", title="Display con plancia",
                                 meta=sportello.dichiara(sp)
                                 + ([giro_s] if giro_s else []))
+        if v is None and kind == "vassoio":
+            # la scatola che resta chiusa, con la plancia ricavata dal
+            # coperchio (`pack3d.scatola_plancia`): si prova solo dichiarata
+            try:
+                sp = scatola_plancia.riconosci(pdf)
+            except Exception:
+                sp = None
+            if sp is not None:
+                return dict(kind="vassoio", title="Display a scatola",
+                            meta=scatola_plancia.dichiara(sp))
         if v is None and kind == "vassoio":
             # La dichiarazione deve valere anche quando dice di NO. Senza
             # questo ramo "vassoio" scivolava fino in fondo alla funzione e

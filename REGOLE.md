@@ -3056,6 +3056,114 @@ alle sue zone dove i tratti non si chiudono.
 dove stanno i pack piu' alti delle pareti (il caso: 33 mm su 26,5), che la
 attraversano.
 
+## Il display a scatola
+
+La stessa forma della *plancia dentro il coperchio* qui sopra, disegnata
+come fustella in CAD: una scatola che arriva chiusa e che **resta chiusa**. Nel
+coperchio due fessure lungo i fianchi e la cima sul fronte staccano un
+pannello attaccato solo a una cordonatura tratteggiata verso il retro: si
+alza sulla cerniera, si piega a meta' e fa la plancia; nel coperchio resta la
+finestra da cui si vede il prodotto. Il caso e' c5b98dfbee, un display T15
+con quindici flowpack, dichiarato *Riempimenti* (`pack3d/scatola_plancia.py`,
+`server.build_scatola_plancia`).
+
+Prima non si costruiva: ne' vassoio (la griglia ha 9 colonne e 16 fasce) ne'
+display con plancia (non c'e' un coperchio che diventa plancia: il coperchio
+resta), e il riempimento si fermava con «dei due PDF nessuno si legge come
+vassoio espositore». Lo sportello (`pack3d.sportello`) non lo vede: cerca i
+fianchi dello sportello a pochi mm da quelli del coperchio e la linguetta
+dentro il fronte sulla griglia, e qui le fessure stanno a 23 mm dai fianchi
+e la griglia della fustella CAD ha 16 fasce. I due moduli si provano uno
+dopo l'altro, prima lo sportello. Non e' una famiglia nuova: e' un cartotecnico, un
+modulo nuovo dentro il display.
+
+### La firma in fustella
+
+Si legge dai tratti della penna della fustella (`ballotin.tratti_fustella`),
+righe orizzontali e verticali unite in corse (pezzi a meno di 4 mm: la
+cerniera tratteggiata e' una corsa sola di 25 pezzi). Nel telaio di lettura il
+fronte sta in alto; il foglio si prova nei quattro versi sulla tavola, e la
+firma non dipende da dove sta "su" nel PDF. Devono tornare tutte:
+
+- il **bordo dietro del coperchio** e' una riga sola da un fianco all'altro
+  (sul T15 334 mm = 71,5 + 191 + 71,5). Quello davanti no: le fessure della
+  plancia lo interrompono, e il suo posto lo danno i fianchi;
+- i **fianchi**: il bordo fuori e la piega, tutti e due dal bordo davanti al
+  bordo dietro del coperchio, alla stessa distanza dai due lati: e' l'altezza
+  della scatola (71,5);
+- il **fronte**: una riga larga quanto il coperchio, fra l'85 e il 115%
+  dell'altezza sopra il coperchio (72,5);
+- il **fondo**: l'ultima riga intera della colonna oltre il retro, e la riga
+  prima di lei lontana quanto il coperchio e' profondo, fra il 93 e il 105%
+  (138 contro 139,5). Fra il coperchio e il fondo c'e' il retro con le sue
+  falde incollate (98 mm sul T15); il modello ne usa l'altezza della scatola;
+- la **plancia**: due coppie di fessure verticali dentro la colonna,
+  simmetriche attorno al centro entro 3 mm e lunghe almeno il 40% del
+  coperchio; la coppia interna e' il bordo della plancia (139 mm), quella
+  esterna il bordo della finestra (145);
+- la **cerniera**: una riga di almeno cinque tratti fra le fessure, verso il
+  retro (a 20,2 mm dal bordo dietro);
+- la **riga di mezzo**: una riga intera da fessura a fessura fra la cima della
+  plancia e la cerniera (60 mm dalla cerniera, 65,6 dalla cima).
+
+Le misure sono quelle quotate sul DT: 191, 139,5, 71,5, 105 = 32,5 + 72,5.
+
+### Come si alza: la stampa lo dice
+
+Un pannello che si alza ruotando sul lato lontano mostra la faccia di sopra a
+chi sta **dietro** (la lezione del Tronky, *Perche' proprio questa piega*). La
+cerniera e' verso il retro, quindi alzata la plancia mostra la stampa al
+retro, col fronte del foglio in alto. Sul DT la meta' verso la cerniera ha la
+scritta dritta e quella verso il fronte la scritta capovolta, e la piega che
+le fa leggere tutte e due e' una sola: la meta' verso la cerniera sta in
+piedi, dritta per chi sta dietro; la meta' verso il fronte si ripiega **in
+avanti** sulla riga di mezzo e scende davanti, dritta per chi guarda. E' la
+piega del Tronky. Il piede della parte davanti (5,7 mm piu' lunga, la parte
+che stava nel fronte, con la linguetta per il dito) scende nella finestra,
+dove non tocca niente. Alzata dietro, la parte davanti sarebbe entrata nel
+coperchio dietro la cerniera.
+
+### Il solido
+
+Telaio della scatola: fronte +Z, cima +Y, fondo a Y = 0. Il foglio si guarda
+dalla parte stampata col fronte in alto, quindi la destra di chi sta davanti
+e' la sinistra del foglio: X = centro - u. Alla prima prova il fronte usciva
+specchiato.
+
+- coperchio a Y = H, attorno alla finestra: due strisce sui fianchi e quella
+  dietro la cerniera;
+- fronte giu' dal bordo davanti, la sua altezza sul foglio portata a H; se la
+  plancia comincia nel fronte, li' il fronte ha la tacca;
+- fianchi giu' dai lati del coperchio, retro giu' dal bordo dietro, fondo dal
+  retro al fronte;
+- la plancia: la parte dietro in piedi sulla cerniera, quella davanti due
+  spessori piu' avanti, rovescio contro rovescio. Ogni pezzo ha il rovescio e
+  i bordi liberi la costa (`ballotin.con_interno`).
+
+Nel GLB la plancia e' il nodo `plancia`, coi suoi triangoli per ultimi,
+accanto al nodo `display`: il riempimento misura il vano senza di lei (*I
+riempimenti*, *Il display si misura senza la plancia*). Sul T15 il vano e'
+189 x 137,5, alto 70,5: quindici flowpack in due file, frontali, che si
+vedono dalla finestra.
+
+### Dove entra
+
+Solo dichiarato: nel vassoio dichiarato (e quindi nel riempimento), dopo il
+vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
+(`server._analyze_pdf`, `build_vassoio`). I casi del parco che passavano non
+cambiano strada.
+
+### Cosa manca
+
+- La cima della plancia e la linguetta per il dito sono tonde sul DT; nel
+  modello la plancia e' un rettangolo fra le fessure interne.
+- Il retro e le sue falde incollate sono un pannello solo, alto quanto la
+  scatola: sul T15 sono bianchi, dentro e fuori.
+- Il display T10 dello stesso prodotto (caso e1b3cc77a7) e' disegnato
+  diverso e passa dallo sportello: la firma di qui non lo vede, e va bene.
+  Le due firme leggono la stessa forma da due disegni: se ne arriva un
+  terzo, vale la pena di farne una sola.
+
 ## Astucci
 
 `dieline.py` isola il tratto della fustella scegliendo la penna che accumula
