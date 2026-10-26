@@ -38,9 +38,9 @@ except ImportError as e:                       # messaggio utile, non uno stack 
 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
                     prisma, folding, exporters, gelato, incarto, materiali, nero,
-                    plancia,
-                    pouch, lamina, rilievo, strati, tubo, vassoio, verifica,
-                    versione)
+                    plancia, scatola_plancia,
+                    pouch, lamina, rilievo, sportello, strati, tubo, vassoio,
+                    verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
@@ -774,6 +774,21 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
                                  quality, lastre_extra, colata_riquadro,
                                  n_pagine)
+        # o la scatola con la plancia ricavata DENTRO il coperchio, lo
+        # sportello perforato che si alza sul retro: `pack3d.sportello`
+        pdf, d, p, gradi, giro = sportello.riconosci_sulla_tavola(sorgente)
+        if p is not None:
+            return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
+                                 quality, lastre_extra, colata_riquadro,
+                                 n_pagine, forma=sportello)
+        # lo sportello disegnato come fustella in CAD, a fessure e cerniera
+        # tratteggiata, che `pack3d.sportello` sulla griglia non vede: vedi
+        # `pack3d.scatola_plancia`
+        sp = scatola_plancia.riconosci(sorgente)
+        if sp is not None:
+            return build_scatola_plancia(sorgente, sp, out_glb, quality,
+                                         lastre_extra, colata_riquadro,
+                                         n_pagine)
         raise ValueError("non e' un vassoio: la griglia della fustella non ha "
                          "cinque colonne e tre fasce, e non e' un display con "
                          "plancia")
@@ -857,8 +872,13 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
 
 
 def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
-                  lastre_extra=(), colata_riquadro=None, n_pagine=1):
+                  lastre_extra=(), colata_riquadro=None, n_pagine=1,
+                  forma=plancia):
     """Il display con plancia APERTO a espositore: vedi `pack3d.plancia`.
+
+    `forma` e' il modulo che legge i pezzi e li piega: `pack3d.plancia`, o
+    `pack3d.sportello` per la plancia ricavata dentro il coperchio. La
+    texture, i nodi e il GLB sono gli stessi.
 
     `pdf`, `d` e `p` sono gia' quelli di `plancia.riconosci_sulla_tavola`,
     nel verso in cui la griglia si legge; `sorgente` il file a pagina unica,
@@ -873,7 +893,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     dpi, tmax = risoluzione(quality)
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     px_mm = 4.0
-    pz = plancia.pezzi(pdf, p, d, px_mm)
+    pz = forma.pezzi(pdf, p, d, px_mm)
     rx0, ry0, rx1, ry1 = pz.riquadro()
     # lo steso, la texture del GLB, e' il DT con un millimetro attorno: lo
     # stesso foglio, oltre i pezzi della maglia (`pack3d.steso`)
@@ -891,14 +911,17 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     # taglio si misurano sull'altezza che la texture ha davvero
     steso = vassoio.con_coda(tex["steso"])
     parti = {}
-    V, UV, T = plancia.mesh(p, pz, px_mm, alt_texture=steso.height,
-                            parti=parti)
-    _ok, verifiche = verifica.plancia(V, UV, T, parti, p, pz, steso.size,
-                                      dpi_tex / 25.4, vassoio.CODA)
-    verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
-    # e le misure del disegno contro le quote scritte: confermano, non
-    # costruiscono
-    riscontro = quotature.riscontro_plancia(pdf, p, d)
+    V, UV, T = forma.mesh(p, pz, px_mm, alt_texture=steso.height,
+                          parti=parti)
+    verifiche, riscontro = [], None
+    if forma is plancia:
+        _ok, verifiche = verifica.plancia(V, UV, T, parti, p, pz, steso.size,
+                                          dpi_tex / 25.4, vassoio.CODA)
+        verifiche += verifica.blocco(V, UV, T, parti, steso.size,
+                                     vassoio.CODA)[1]
+        # e le misure del disegno contro le quote scritte: confermano, non
+        # costruiscono
+        riscontro = quotature.riscontro_plancia(pdf, p, d)
     # Il display e' un blocco unico e la plancia un elemento a se': due nodi
     # nel GLB, sugli stessi vertici e la stessa texture. La plancia e' stesa
     # per ultima, quindi i suoi triangoli stanno in fondo.
@@ -915,7 +938,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
                              parti=[("display", 0, inizio),
                                     ("plancia", inizio, len(T))], tinte=tinte)
-    meta = plancia.dichiara(p) + [
+    meta = forma.dichiara(p) + [
         "%d vertici sui tratti della fustella, cartoncino %.1f mm"
         % (len(V), vassoio.SPESSORE)]
     if giro:
@@ -925,6 +948,58 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
         meta.insert(0, pagine)
     return (meta + avvisi_tex + verifiche
             + ([riscontro] if riscontro else []))
+
+
+def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
+                          colata_riquadro=None, n_pagine=1, carta=None):
+    """Il display a scatola: la scatola chiusa con la plancia alzata dal
+    coperchio e la finestra da cui si vede il prodotto. Vedi
+    `pack3d.scatola_plancia`.
+
+    Come la scatola a punta: la texture e' il DT intero, pulito, e ogni pezzo
+    della maglia prende la grafica dal suo posto sul foglio; sotto, le strisce
+    del rovescio. Nel GLB la plancia e' un nodo a parte, come nel display con
+    plancia: il riempimento misura il vano senza di lei."""
+    dpi, tmax = risoluzione(quality)
+    conti = {}
+    clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
+                                            regione=p.regione, conti=conti)
+    deciso_nero = nero.spia(clean, 0, dpi / 72.0)
+    avvisi = []
+    pagine = avviso_pagine(n_pagine)
+    if pagine:
+        avvisi.append(pagine)
+    fuori = artwork.avviso_fuori_dt(conti)
+    if fuori:
+        avvisi.append(fuori)
+    avvisi.extend(artwork.avvisi_gda(conti))
+    rgb = avviso_quadricromia(clean, regione=p.regione)
+    if rgb:
+        avvisi.append(rgb)
+    if lastre:
+        avvisi.append("lastre tecniche e coperture tolte per nome: %s"
+                      % ", ".join(lastre))
+    m = 1.0 / PT2MM
+    x0, y0, x1, y1 = p.regione
+    x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
+    lato_pt = max(x1 - x0, y1 - y0)
+    dpi_tex = min(dpi, tmax * 72.0 / lato_pt) if lato_pt > 0 else dpi
+    tex = folding.rasterize_panels(
+        clean, {"dt": Panel(x0, y0, x1, y1, "dt")}, dpi=dpi_tex, inset_px=0,
+        clean=True, note=avvisi, nero_deciso=deciso_nero,
+        colata_riquadro=colata_riquadro)["dt"]
+    scala = dpi_tex / 72.0
+    origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
+    tela = ballotin.con_interno(tex)
+    V, UV, T, inizio = scatola_plancia.maglia(p, origine, scala / PT2MM,
+                                               tela.size, spessore=carta)
+    tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
+                                             TINTE_BALLOTIN)
+    exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
+                             parti=[("display", 0, inizio),
+                                    ("plancia", inizio, len(T))],
+                             tinte=tinte)
+    return scatola_plancia.dichiara(p) + avvisi
 
 
 def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
@@ -1173,6 +1248,9 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             av_f = build_carton(pdfs[info["flowpack"]], gf, quality, carta=carta,
                                 incisioni=incisioni)
         else:
+            # al rigonfiamento scelto, come da solo: piu' gonfio la sezione si
+            # allarga a perimetro costante e la grafica del fronte si stira
+            # (il T15 al livello 8: «il T1 non corrisponde al DT»)
             av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
         with open(gv, "rb") as fh:
             glb_v = fh.read()
@@ -1953,10 +2031,14 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
 
-    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: lo spessore
-       cresce e la larghezza cala. Alzare solo lo spessore inventa film.
-    2. La grafica si mappa **per pannello**, usando gli spigoli della sezione
-       come nodi: con l'arco uniforme ogni fascia scivola.
+    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: la
+       larghezza resta la faccia del DT e lo spessore cresce. Alzare lo
+       spessore senza arrotondare inventa film; arrotondare riscalando tutto
+       allarga il pack invece di gonfiarlo.
+    2. La grafica sta sul giro **alla sua distanza dal centro del fronte**,
+       come il film, che non si allunga; gli spigoli della sezione servono a
+       verificare che le pieghe stampate ci cadano vicino. Il tubo piatto,
+       che spigoli non ne ha, si mappa sulle sue due pieghe.
     3. Le pinne portano la **zigrinatura** - denti alti 2/3 dell'equilatero,
        smussati - contata sul bordo della pinna.
     4. Le pinne non restano **mai a filo**: si aprono a farfalla verso la punta.
@@ -2142,9 +2224,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                           "(livello %g)" % (100.0 * pienezza, liv))
     else:
         # A pinna la sezione va dal rettangolo teso sul prodotto all'ellisse
-        # piena d'aria, tenendo fermi il rapporto larghezza/spessore MISURATO
-        # nello steso e il perimetro del film. La scala che serve a tornare sul
-        # perimetro gonfia il pack in entrambe le direzioni.
+        # piena, tenendo fermi la larghezza della faccia del DT e il perimetro
+        # del film: il film che gli spigoli tondi lasciano va nello spessore
+        # (`sezione_rigonfiata`), e `scala` e' lo spessore in unita' di T.
         n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
         scala = fpk.sezione_rigonfiata(fp, n_sez)
     if scatola:
@@ -2242,6 +2324,16 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # calcolano prima della mesh perche' servono anche a lei: nella gola e
     # nella pinna il giro si rimisura sul film, e il film lo dicono i nodi.
     knots = _panel_knots(Ps, d, G, fp0)
+    spigoli = knots
+    if knots and not fp0.tubo_piatto:
+        # A pinna gli spigoli servono solo alla verifica: la grafica sta sul
+        # giro alla sua distanza dal centro del fronte, dove la mette la
+        # cucitura (`superellipse_section`). Portare le pieghe stampate sugli
+        # spigoli stirava le fasce appena la sezione si arrotonda: il
+        # flowpack 30 x 12 al livello 9 ha gli spigoli a 14,5 | 27,5 | 14,5
+        # contro i pannelli 12 | 30 | 12, il fronte stretto dell'8% e i
+        # fianchi stirati del 21%.
+        knots = (list(knots[1]), list(knots[1]))
     saldatura = max(0, min(3, int(saldatura)))
     # Dopo la griglia (righe di nv + 1 vertici, le prime `ng`, e i suoi `tg`
     # triangoli) c'e' il bordo dentato: chi rilegge la mesh a righe guarda
@@ -2259,8 +2351,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     tg = 2 * (ng // (nv + 1) - 1) * nv
     v_denti = UV[ng:, 1].copy()
 
-    if knots:
-        ks, kf = knots
+    if spigoli:
+        ks, kf = spigoli
         # La regola dice di verificare il modello mappato contro l'AW con una
         # misura, fascia per fascia, prima di finalizzare. Qui si puo' fare da
         # soli: lo scarto fra dove cade lo spigolo sulla sezione e dove lo
@@ -2284,6 +2376,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             avvisi_sez.append("mappatura verificata: rotazione %.1f mm, spigoli "
                               "entro %.1f mm su un giro di %.1f"
                               % (rotazione, peggio, G))
+        ks, kf = knots
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
     # il film sulle testate: pinne e spalle non sono un piano, e la grafica ci
@@ -2428,7 +2521,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                "%.1f sul retro)" % (2.0 * semiasse, fp.T, G, fp.side_fin))
     else:
         sez = ("sezione %.1f x %.1f (perimetro %.1f invariato)"
-               % (scala * fp.W, scala * fp.T, G))
+               % (sw, scala * fp.T, G))
     return ["flowpack%s, rigonfiamento %s"
             % (" a sovrapposizione" if fp.pillow else
                " a tubo piatto" if fp.piatto else "", soft), sez,
@@ -2438,7 +2531,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
              "dell'equilatero)" % (teeth, base, fpk.altezza_dente(base))),
             "saldatura delle pinne %d/3%s" % (
                 saldatura, ": senza nervature" if saldatura == 0 else ""),
-            "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
+            "mappatura per pannello" if knots and fp0.tubo_piatto else
+            "mappatura sul film, dal centro del fronte" if knots else
+            "mappatura per arco"] + avvisi_sez
 
 
 def _giro_film(knots, G, fp):
@@ -2828,6 +2923,29 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                 return dict(kind="vassoio", title="Display con plancia",
                             meta=plancia.dichiara(pl)
                             + ([giro_p] if giro_p else []))
+            if kind == "vassoio":
+                # la plancia ricavata dentro il coperchio (`pack3d.sportello`):
+                # solo dichiarato, la prova gira il foglio e costa
+                try:
+                    _p, _g, sp, _gr, giro_s = sportello.riconosci_sulla_tavola(pdf)
+                except Exception:
+                    sp = None
+                finally:
+                    dl.scarta_resa()
+                if sp is not None:
+                    return dict(kind="vassoio", title="Display con plancia",
+                                meta=sportello.dichiara(sp)
+                                + ([giro_s] if giro_s else []))
+        if v is None and kind == "vassoio":
+            # la scatola che resta chiusa, con la plancia ricavata dal
+            # coperchio (`pack3d.scatola_plancia`): si prova solo dichiarata
+            try:
+                sp = scatola_plancia.riconosci(pdf)
+            except Exception:
+                sp = None
+            if sp is not None:
+                return dict(kind="vassoio", title="Display a scatola",
+                            meta=scatola_plancia.dichiara(sp))
         if v is None and kind == "vassoio":
             # La dichiarazione deve valere anche quando dice di NO. Senza
             # questo ramo "vassoio" scivolava fino in fondo alla funzione e

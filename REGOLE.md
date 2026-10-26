@@ -2987,6 +2987,227 @@ nessuna feritoia. Il fronte resta intero: il DT ci disegna una V perforata
 dal bordo alto al mezzo tondo da 12 mm, ma il montaggio confermato non la
 strappa, e il modello non la toglie.
 
+### La plancia dentro il coperchio
+
+Il caso e1b3cc77a7, un display per dieci flowpack (`pack3d/sportello.py`).
+Arriva come una scatola chiusa bassa - coperchio stampato, quattro pareti,
+fondo bianco - e si apre da uno **sportello perforato tutto dentro il
+coperchio**: il lato dritto sulla cordonatura del retro, che fa da cerniera,
+i fianchi lungo i fianchi del coperchio a 1,8 mm da loro, gli angoli
+smussati, e davanti una linguetta che sconfina nella parete del fronte,
+l'attacco per il dito. Una riga lo attraversa a meta'. Non e' la plancia del
+Tronky ne' quella sul retro: li' il coperchio e' un pannello oltre una
+parete, e si stacca intero; qui il coperchio resta e la plancia e' un pezzo
+ritagliato dentro di lui.
+
+**Come si apre**, confermato da chi l'ha caricato («la meta' con la scritta
+dritta si alza, piegata sulla riga di mezzo»): lo sportello si alza sulla
+cerniera del retro, e la meta' davanti si ripiega sulla riga verso chi
+guarda. La plancia sta in piedi sul retro, alta mezzo sportello (55,6 mm),
+con la meta' davanti stampata verso chi guarda - la scritta che sul foglio
+e' dritta resta dritta - e la meta' dietro verso il retro, dove la scritta
+che sul foglio e' capovolta si legge dritta. La linguetta finisce dentro la
+scatola, dietro il prodotto. Del coperchio resta la cornice: gli angoli
+fuori dallo sportello e le strisce lungo i fianchi.
+
+**La firma** (`sportello.riconosci`), tutte, nel verso col retro in alto -
+`riconosci_sulla_tavola` gira il foglio di un quarto, mezzo e tre quarti:
+
+- il coperchio, un rettangolo di righe di almeno 40 mm, con una parete su
+  ogni lato;
+- il fondo, un pannello largo 0,9-1,1 il coperchio, chiuso in testa da due
+  righe sulle righe del coperchio, oltre la parete di UN fianco solo, a non
+  piu' di 0,75 della larghezza del coperchio. Le righe non sono per forza di
+  fila: dentro il fondo del caso c'e' il riquadro della colla, e la
+  cordonatura in mezzo alla parete est piu' il riquadro facevano un «fondo»
+  largo 81,2 mm, piu' giusto di quello vero (80,6). Per questo il pannello
+  deve essere chiuso in testa, e fra i lati liberi possibili vince quello
+  che fa il fondo piu' simile al coperchio;
+- la riga di mezzo, una sola, fra il 35 e il 65 per cento della lunghezza,
+  lunga 0,9 della larghezza;
+- i fianchi dello sportello, due righe a meno di 5 mm dai fianchi del
+  coperchio, lunghe almeno meta' del coperchio, attraverso la riga;
+- il fronte: tratti dentro la parete sud, lontani 2 mm dai bordi e nel 60
+  per cento di mezzo (la linguetta); la parete nord non ne ha.
+
+Si prova solo dichiarato vassoio, e solo dopo il vassoio e la plancia:
+`build_vassoio` e `_analyze_pdf` ci arrivano quando gli altri due hanno
+rifiutato il foglio.
+
+**Il solido** (`sportello.mesh`, costruito da `build_plancia` con
+`forma=sportello`: stessa texture, stessi due nodi `display` e `plancia`).
+L'altezza della scatola e' la **mediana** delle quattro pareti: sul caso
+ovest 26,8, nord 26,1, sud 26,2 e est 32,9 - la parete est porta una
+cordonatura in piu' a meta' - e la scatola e' alta 26,5; ogni parete si
+stende su quell'altezza, e una che ne differisce di piu' di 1,5 mm si dice
+negli avvisi. Il fondo sta a Y = 0, girato sotto dal fianco del suo lato. Le
+alette, le falde incollate e la linguetta di chiusura stanno dentro la
+scatola chiusa e non si stendono.
+
+**I pezzi** vengono dai tratti, come nella plancia, ma le pareti e il fondo
+sono il cartone nei **riquadri della griglia**, non zone intere: le
+cordonature si fermano a mezzo millimetro dagli angoli, e il fianco est, il
+fondo e le sue falde erano una zona sola. Anche lo sportello si taglia
+sulla griglia - fra i suoi fianchi, e diviso dalla riga - perche' la
+striscia fra il fianco del coperchio e quello dello sportello si attaccava
+alle sue zone dove i tratti non si chiudono.
+
+**Cosa manca**: le alette dentro la scatola; la cornice del coperchio sta
+dove stanno i pack piu' alti delle pareti (il caso: 33 mm su 26,5), che la
+attraversano.
+
+## Il display a scatola
+
+La stessa forma della *plancia dentro il coperchio* qui sopra, disegnata
+come fustella in CAD: una scatola che arriva chiusa e che **resta chiusa**. Nel
+coperchio due fessure lungo i fianchi e la cima sul fronte staccano un
+pannello attaccato solo a una cordonatura tratteggiata verso il retro: si
+alza sulla cerniera, si piega a meta' e fa la plancia; nel coperchio resta la
+finestra da cui si vede il prodotto. Il caso e' c5b98dfbee, un display T15
+con quindici flowpack, dichiarato *Riempimenti* (`pack3d/scatola_plancia.py`,
+`server.build_scatola_plancia`).
+
+Prima non si costruiva: ne' vassoio (la griglia ha 9 colonne e 16 fasce) ne'
+display con plancia (non c'e' un coperchio che diventa plancia: il coperchio
+resta), e il riempimento si fermava con «dei due PDF nessuno si legge come
+vassoio espositore». Lo sportello (`pack3d.sportello`) non lo vede: cerca i
+fianchi dello sportello a pochi mm da quelli del coperchio e la linguetta
+dentro il fronte sulla griglia, e qui le fessure stanno a 23 mm dai fianchi
+e la griglia della fustella CAD ha 16 fasce. I due moduli si provano uno
+dopo l'altro, prima lo sportello. Non e' una famiglia nuova: e' un cartotecnico, un
+modulo nuovo dentro il display.
+
+### La firma in fustella
+
+Si legge dai tratti della penna della fustella (`ballotin.tratti_fustella`),
+righe orizzontali e verticali unite in corse (pezzi a meno di 4 mm: la
+cerniera tratteggiata e' una corsa sola di 25 pezzi). Nel telaio di lettura il
+fronte sta in alto; il foglio si prova nei quattro versi sulla tavola, e la
+firma non dipende da dove sta "su" nel PDF. Devono tornare tutte:
+
+- il **bordo dietro del coperchio** e' una riga sola da un fianco all'altro
+  (sul T15 334 mm = 71,5 + 191 + 71,5). Quello davanti no: le fessure della
+  plancia lo interrompono, e il suo posto lo danno i fianchi;
+- i **fianchi**: il bordo fuori e la piega, tutti e due dal bordo davanti al
+  bordo dietro del coperchio, alla stessa distanza dai due lati: e' l'altezza
+  della scatola (71,5);
+- il **fronte**: una riga larga quanto il coperchio, fra l'85 e il 115%
+  dell'altezza sopra il coperchio (72,5);
+- il **fondo**: l'ultima riga intera della colonna oltre il retro, e la riga
+  prima di lei lontana quanto il coperchio e' profondo, fra il 93 e il 105%
+  (138 contro 139,5). Fra il coperchio e il fondo c'e' il retro con le sue
+  falde incollate (98 mm sul T15); il modello ne usa l'altezza della scatola;
+- la **plancia**: due coppie di fessure verticali dentro la colonna,
+  simmetriche attorno al centro entro 3 mm e lunghe almeno il 40% del
+  coperchio; la coppia interna e' il bordo della plancia (139 mm), quella
+  esterna il bordo della finestra (145);
+- la **cerniera**: una riga di almeno cinque tratti fra le fessure, verso il
+  retro (a 20,2 mm dal bordo dietro);
+- la **riga di mezzo**: una riga intera da fessura a fessura fra la cima della
+  plancia e la cerniera (60 mm dalla cerniera, 65,6 dalla cima).
+
+Le misure sono quelle quotate sul DT: 191, 139,5, 71,5, 105 = 32,5 + 72,5.
+
+### Come si alza: la stampa lo dice
+
+Un pannello che si alza ruotando sul lato lontano mostra la faccia di sopra a
+chi sta **dietro** (la lezione del Tronky, *Perche' proprio questa piega*). La
+cerniera e' verso il retro, quindi alzata la plancia mostra la stampa al
+retro, col fronte del foglio in alto. Sul DT la meta' verso la cerniera ha la
+scritta dritta e quella verso il fronte la scritta capovolta, e la piega che
+le fa leggere tutte e due e' una sola: la meta' verso la cerniera sta in
+piedi, dritta per chi sta dietro; la meta' verso il fronte si ripiega **in
+avanti** sulla riga di mezzo e scende davanti, dritta per chi guarda. E' la
+piega del Tronky. Il piede della parte davanti (5,7 mm piu' lunga, la parte
+che stava nel fronte, con la linguetta per il dito) scende nella finestra,
+dove non tocca niente. Alzata dietro, la parte davanti sarebbe entrata nel
+coperchio dietro la cerniera.
+
+### Il solido
+
+Telaio della scatola: fronte +Z, cima +Y, fondo a Y = 0. Il foglio si guarda
+dalla parte stampata col fronte in alto, quindi la destra di chi sta davanti
+e' la sinistra del foglio: X = centro - u. Alla prima prova il fronte usciva
+specchiato.
+
+- coperchio a Y = H, attorno alla finestra: due strisce sui fianchi e quella
+  dietro la cerniera;
+- fronte giu' dal bordo davanti, la sua altezza sul foglio portata a H; se la
+  plancia comincia nel fronte, li' il fronte ha la tacca;
+- fianchi giu' dai lati del coperchio, retro giu' dal bordo dietro, fondo dal
+  retro al fronte;
+- la plancia: la parte dietro in piedi sulla cerniera, quella davanti due
+  spessori piu' avanti, rovescio contro rovescio. Ogni pezzo ha il rovescio e
+  i bordi liberi la costa (`ballotin.con_interno`).
+
+Nel GLB la plancia e' il nodo `plancia`, coi suoi triangoli per ultimi,
+accanto al nodo `display`: il riempimento misura il vano senza di lei (*I
+riempimenti*, *Il display si misura senza la plancia*). Sul T15 il vano e'
+189 x 137,5, alto 70,5: quindici flowpack sdraiati per il lungo, 5 x 3,
+in piano (*I riempimenti*, *Il display e' fatto per
+il suo numero*).
+
+### Il fronte e' fustellato: segue i tagli della plancia
+
+Il caso c5b98dfbee, seconda prova: «il fronte deve essere fustellato e non
+dritto (guardare DT)». Sul DT il contorno della plancia non si ferma sul bordo
+del coperchio: le fessure esterne salgono nel pannello del fronte (5,6 mm),
+girano in una spalla tonda (raggio 9) e salgono in diagonale verso il centro
+(da 16 a 23 mm dentro il fronte); al centro un arco largo 20 mm, la presa per
+il dito, arriva a 32 mm. Parallelo, 3 mm piu' dentro, c'e' il contorno interno
+della plancia, e sotto l'arco della presa un secondo arco (a 26 mm): la presa
+e' un buco nel fronte, non una linguetta della plancia. Il modello faceva il
+fronte dritto, alto quanto la scatola, e il pezzo dentro il contorno restava
+li'.
+
+**Regola.** Alzata la plancia, il pezzo di fronte dentro il contorno va via
+con lei. Il bordo alto del fronte fra le fessure esterne si legge dai tratti
+della fustella (`scatola_plancia._taglio`, nel campo `taglio`): a ogni u fra
+le fessure (ogni 2 mm circa, e su ogni vertice dei tratti) il taglio piu'
+lontano dal coperchio (v piu' piccola) fra quelli dentro il pannello del
+fronte, a piu' di 1 mm dal bordo del coperchio (la cordonatura del bordo sta
+a 0,5 mm e non conta). Cosi' passa il contorno esterno, e nella presa il suo
+arco. Fuori dalle fessure esterne il fronte resta alto quanto la scatola; il
+bordo tagliato ha la costa. Nessuna forma cucita: se la plancia comincia sul
+bordo del coperchio non c'e' taglio e il fronte resta dritto; se la cima e'
+una riga dritta dentro il fronte esce la tacca di prima. Sul T15: 226 punti,
+il fronte alto 71,5 ai lati, 65 dove la fessura entra, 49 vicino al centro,
+40 in fondo alla presa.
+
+**I ponticelli non si leggono come taglio** (`scatola_plancia._senza_ponticelli`).
+Un taglio a strappo e' interrotto da ponticelli, meno di un millimetro di
+cartone che tiene la plancia finche' non la si strappa. Nel ponticello il
+contorno esterno non c'e', e il taglio piu' lontano dal coperchio diventava
+la riga dietro: sul T15 l'arco della presa ne ha due, a 6,5 mm dal centro,
+larghi 0,7 mm, e li' il fronte risaliva da 29 a 24 mm dal bordo. Erano due
+spuntoni sottili di cartone dentro la presa, «due linee sulla parte
+fustellata del fronte». Una corsa di campioni piu' vicina al coperchio di
+quelli che la chiudono di oltre 1 mm, su non piu' di 2 mm, e' un ponticello:
+il bordo ci passa dritto. Sul T15 cambiano 4 campioni su 226, i due
+ponticelli, e nient'altro.
+
+La plancia resta un rettangolo fino alla cima delle fessure interne: la sua
+parte nel fronte, con la stampa capovolta, scende davanti nella finestra.
+
+### Dove entra
+
+Solo dichiarato: nel vassoio dichiarato (e quindi nel riempimento), dopo il
+vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
+(`server._analyze_pdf`, `build_vassoio`). I casi del parco che passavano non
+cambiano strada.
+
+### Cosa manca
+
+- La cima della plancia segue il contorno interno sul DT (le spalle, e
+  l'arco sopra la presa); nel modello la plancia e' un rettangolo fra le
+  fessure interne, fino alla loro cima. Il fronte invece segue i tagli.
+- Il retro e le sue falde incollate sono un pannello solo, alto quanto la
+  scatola: sul T15 sono bianchi, dentro e fuori.
+- Il display T10 dello stesso prodotto (caso e1b3cc77a7) e' disegnato
+  diverso e passa dallo sportello: la firma di qui non lo vede, e va bene.
+  Le due firme leggono la stessa forma da due disegni: se ne arriva un
+  terzo, vale la pena di farne una sola.
+
 ## Astucci
 
 `dieline.py` isola il tratto della fustella scegliendo la penna che accumula
@@ -4820,15 +5041,46 @@ nuova, non un parametro.
 **Il rigonfiamento cambia la forma, non la taglia.** Il perimetro e' fissato dal
 foglio stampato: a parita' di steso un pack piu' morbido non e' piu' grande, e'
 piu' tondo. La sezione e' una superellisse `|y/a|^n + |z/b|^n = 1` con n che
-scende da 10 (rettangolo, livello 1) a 2 (ellisse, livello 10), riscalata in
-modo che il perimetro torni quello del film. Gonfiare aumentando le dimensioni
-e' il modo sbagliato: fa crescere il perimetro e la grafica non torna piu'.
+scende da 10 (rettangolo, livello 1) a 2 (ellisse, livello 10), e il perimetro
+torna quello del film. Gonfiare aumentando le dimensioni e' il modo sbagliato:
+fa crescere il perimetro e la grafica non torna piu'.
+
+**Il rigonfiamento va nello spessore** (`flowpack.sezione_rigonfiata`). A
+pinna la larghezza la tiene il prodotto, ed e' la faccia del DT: `a = W/2`, e
+lo spessore e' quello che riporta il perimetro al film. Il film che la forma
+tonda lascia libero agli spigoli va nello spessore, come in un pack pieno.
+Prima si teneva fermo il rapporto larghezza/spessore del DT e si riscalava
+tutto, e gonfiando il pack si **allargava**: il flowpack 30 x 12 del display
+T15 usciva 33,7 x 13,5 al livello 8, con la faccia stirata («la grafica viene
+strecciata»), mentre la foto del pack vero, mandata da chi l'ha caricato, lo
+mostra spesso quasi due terzi della larghezza. Ora lo stesso 30 x 12 esce 30 x
+14,1 al livello 1, 30 x 15,3 al 5 e 30 x 19,7 al 9 (31,6 x 21,3 a meta' corpo,
+con la pancia), e quello scelto e' il 9. Sul parco: larghezze come il DT, gli
+spessori da 2 a 12 mm in piu' (il multipack piu' grande 68,8 -> 81,2, una
+barretta 46 x 16 -> 43 x 19,4), i quattro tubi piatti identici al byte, e il
+pack con la scatola dentro, che non si gonfia, con le misure di prima.
 
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi
 ridistribuiscono il film. Con la mappatura per arco ogni fascia scivola — su
 Kinder Bueno T2 lo scarto era 18,51 mm, il 12,7% del giro.
+
+**A pinna, la grafica sul film dal centro del fronte.** Col rigonfiamento
+nello spessore gli spigoli non sono piu' le pieghe del film: i fianchi si
+alzano oltre il loro pannello e il fronte tondo e' piu' corto del suo. Sul
+flowpack 30 x 12 al livello 9 gli spigoli stanno a 14,5 | 27,5 | 14,5 contro
+i pannelli 12 | 30 | 12, e portarci sopra le pieghe stampate stringeva il
+fronte dell'8% e stirava i fianchi del 21%. Il film non si allunga: ogni punto
+sta sul giro alla sua distanza dal **centro del fronte** (`y = 0`, `z > 0`),
+e li' si ancora la cucitura (`superellipse_section`), a retro + fianco + meta'
+fronte del film prima, nel punto esatto del segmento - a esponente alto la
+superellisse ha sulle facce piatte i punti radi, anche 5 mm l'uno
+dall'altro, e il vertice piu' vicino ruotava la grafica di 3,3 mm. Lo
+scivolamento di 18,51 mm era l'origine sbagliata, non l'arco: ancorato al
+fronte, l'arco non scivola. Gli spigoli restano per la verifica qui sotto (le
+pieghe stampate cadono entro 0,4-1,6 mm da loro) e la rotazione di 2 mm che
+segnalavano tre casi del parco sparisce. Il tubo piatto resta mappato sulle sue due pieghe.
 
 **Attenzione ai filtri troppo aggressivi sui dati in ingresso.** Una cordonatura
 puo' sfuggire perche' il suo segmento sta sotto la soglia di peso, e allora
@@ -5836,7 +6088,9 @@ strati: anche loro 40, ma da davanti si vedeva solo il bordo del film, e il
 vassoio vero non si riempie cosi'. Sdraiati si va solo se frontali non ci
 stanno in pianta - il pack piu' largo del vassoio, o piu' profondo - e lo si
 dice: piu' alto delle pareti non basta, sta in piedi e sporge. Di taglio, con
-la faccia verso i fianchi, mai.
+la faccia verso i fianchi, mai. Un'eccezione: i pezzi contati che frontali non fanno
+strati uguali e sdraiati fanno una griglia piena (*Il display e' fatto per il
+suo numero*).
 
 ### Quanti ne stanno
 
@@ -5848,6 +6102,20 @@ Lungo ogni asse del vano si conta quanti pezzi ci stanno:
   stia il corpo;
 - **lungo gli altri due**, un pezzo gonfio si schiaccia del 2% fra i vicini
   (`COMPRIME`).
+
+**Il display fatto per N pezzi li tiene tutti** (`riempimento.schiaccia`).
+Col rigonfiamento nello spessore il flowpack e' piu' spesso, e il rilascio
+lo ha trovato sul parco: il vassoio da 40 ne teneva 38 (20,5 mm invece di
+17), il display da 26 ne teneva 20 (20 invece di 16,5). Il display e' fatto
+per il suo numero, e i flowpack pieni d'aria ci stanno stretti: se i pezzi
+chiesti non ci stanno, il flowpack si schiaccia nello spessore a passi di
+mezzo per cento finche' ci stanno, nella stessa posa che aveva (frontali
+restano frontali: al primo passo il vassoio da 40 trovava sdraiati una
+griglia 8 x 5), al massimo del 25% (`SCHIACCIA_MAX`). Oltre, il pezzo e'
+davvero troppo grande e se ne mettono meno, come prima. Sul parco: 40 in 2
+file da 20 a 19,5 mm (95%), 26 in 2 file da 13 a 16,6 mm (83%), come prima
+del rigonfiamento nello spessore. Un astuccio non si schiaccia; i
+riempimenti senza un numero chiesto non cambiano.
 
 ### Strati uguali, file su tutta la profondita'
 
@@ -5879,7 +6147,32 @@ Lungo ogni asse del vano si conta quanti pezzi ci stanno:
   adattato: con le pinne larghe la barretta frontale stava 5 mm sopra il
   fondo.
 
-Il corpo non si tocca: e' quello che si vede.
+Il corpo non si tocca: e' quello che si vede. Con una sola eccezione, qui
+sotto.
+
+### Se non ci sta in nessuna posa, il flowpack si accorcia
+
+Il caso e1b3cc77a7: un flowpack con 119 mm di corpo (150 di passo) in un
+display da 81 x 111 x 26 mm, vano 79 x 109 x 25,5. Nessun lato del vano
+tiene il corpo, e il riempimento si fermava con «non ci sta in nessuna
+posa». Chi l'ha caricato ha confermato le misure del display e ha chiesto
+di schiacciare il flowpack finche' non entra.
+
+La regola (`riempimento.accorcia`): se nessuna posa tiene il corpo, il
+flowpack si **accorcia lungo il suo asse lungo**, pinne e corpo insieme,
+fino al lato del vano su cui va, meno quattro volte il gioco (2,4 mm): le
+punte delle pinne si piegano contro la parete a 0,6 mm da lei, e col corpo
+lungo quanto il lato non c'era dove piegarle, e uscivano dalle pareti. Le
+pose si provano nell'ordine di sempre - frontali, poi sdraiati per il largo e
+per il lungo - e vince la prima in cui il pezzo accorciato ci sta: si
+espone come gli altri riempimenti, anche se costa accorciarlo di piu'. Sul
+caso: frontali, corpo da 119 a 77 mm (64 per cento), 8 pezzi in fila dal
+davanti al fondo, alti 33 mm su pareti da 25,5 (sporgono, come sopra). Le
+altre due misure non cambiano. Un astuccio non si accorcia mai.
+
+Il riempimento lo dice nella prima riga, con le misure: e' una scelta di
+chi l'ha chiesto, non la misura del pack. Sul parco cambiano solo i casi
+che prima si fermavano: dove una posa c'e', la strada e' quella di prima.
 
 ### Il GLB: il flowpack una volta, un nodo per pezzo
 
@@ -5912,6 +6205,77 @@ riquadro del controllo.
 - Le CU che non sono flowpack ne' astucci: pouch, coppe, scatole in piu' pezzi.
 - L'astuccio aperto dentro l'espositore.
 - Il vassoio coi separatori: oggi il vano e' uno solo.
+
+### Il display e' fatto per il suo numero: la griglia piena
+
+Il caso c5b98dfbee, display a scatola T15 (191 x 139,5 x 71,5; vano 189 x
+137,5, alto 70,5) con flowpack 150 x 35 x 14,6 (pinne comprese; corpo 117).
+Chi l'ha caricato: «in totale ci devono essere 15 CU (5X3 Flowpack)». Frontali
+ne stavano 20, due strati da 10, e i 15 chiesti venivano 8 e 7: dall'alto se
+ne vedevano 8, e le file sfalsate dei due strati facevano i gradini.
+
+**Regola** (`riempimento._griglia`). Un display e' fatto per il numero che
+porta. Se si chiedono N pezzi e frontali vengono a strati diversi, si cerca
+una posa sdraiata che li metta in una **griglia piena**: a per strato, s
+strati, a x s = N, con a che sta in pianta (gx non piu' di quanti ne stanno
+di traverso, gz non piu' di quanti in profondita') e s non piu' degli strati
+che stanno in altezza; vince quella con meno strati. I pezzi di uno strato si
+allargano su tutto il vano (passo = lato / gx). Sul T15: sdraiati per il
+lungo del vano, 5 di traverso (passo 37,8) e 3 strati: 5 x 3, e da davanti si
+contano le 15 testate. Il 3 x 5 (sdraiati per il largo, 3 file di 5 strati)
+perde: piu' strati, e da davanti si vede la prima pila sola. Frontali a
+strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
+2 file da 13.
+
+Col flowpack spesso come il pack vero (livello 9, 21,3 mm a meta' corpo) la
+griglia e' una sola: 5 strati non entrano nei 70,5 mm del vano, 3 si' (64).
+E' la misura per cui e' fatta la scatola. Con i pezzi sottili di prima (13,9
+mm) entrava anche il 3 x 5, e una regola che lo preferiva perche' il pezzo ci
+stava intero e' stata provata e tolta: non serviva piu' a nessun caso.
+
+### Sdraiati, stanno in piano
+
+Il T15 al primo «Non approvo» chiedeva i pezzi «leggermente inclinati
+all'indietro», e la pila si inclinava sul bordo dietro del fondo di quanto
+lasciava l'aria sopra (10 gradi). Al secondo: «Annullare l'inclinazione».
+Sdraiati, i pezzi stanno **in piano** sul fondo, come nel DT del display;
+l'inclinazione non c'e' piu' (ne' `riempimento.inclina` ne' il perno sul
+bordo dietro). Frontali stanno dritti, come sempre.
+
+Dopo, coi pezzi spessi 21,3 mm, la rotazione di 10 gradi e' stata chiesta di
+nuovo e provata nei due versi. Ruotata, la pila prende in altezza la
+lunghezza per il seno: 113 x sin 10 = 19,6 mm in piu', 82 mm contro i 70,5 del
+vano, e i pezzi passavano nel coperchio e nella cornice della finestra. Chi
+l'ha caricato ha risposto di non inclinare: inclinato, il flowpack si
+interseca con il display. Se un pezzo ruotato non sta nel vano, non si ruota.
+
+### Nel display il flowpack resta quello del DT, con le pinne aperte
+
+«I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
+aperte e senza gradini.» E dopo: «Il T1 non corrisponde al DT. La grafica
+viene strecciata.»
+
+- **Gonfio nello spessore**: con la foto del pack vero, «e' piu' gonfio,
+  come l'immagine», il livello e' passato a 9 e il rigonfiamento va
+  nello spessore (*Il rigonfiamento va nello spessore*): 30 x 19,7, la faccia
+  larga come il DT. Quello che segue e' la storia di prima.
+- **Al rigonfiamento scelto, non di piu'**: per il primo «Non approvo» il
+  flowpack nel display si costruiva 3 livelli piu' gonfio (5 -> 8). Ma il
+  rigonfiamento tiene il perimetro e arrotonda la sezione, che si allarga:
+  sul T15 33,7 x 13,5 invece dei 30 x 12 del DT (32,2 x 12,9 al livello 5),
+  e la grafica del fronte, misurata in mm per unita' di texture a meta' del
+  corpo, si stira dell'8,5% rispetto al pezzo quasi squadrato (livello 1),
+  contro il 2% del livello 5. Il T1 non tornava piu' col suo DT. Nel display
+  il flowpack si costruisce **al livello scelto, come da solo**: il gonfio in
+  piu' (`GONFIO_DISPLAY`, `componi(esatti=True)`) non c'e' piu'. Chi lo vuole
+  piu' gonfio sceglie il livello. Tenere la taglia del DT a forma piu' tonda
+  (scala 1) non serve: la faccia a meta' corpo si stira di piu', non di meno.
+- **Pinne aperte, senza gradini**: sdraiati, le punte che uscivano dal posto
+  del pezzo si piegavano di 80 gradi in su e stavano davanti alla faccia come
+  un gradino, la pinna chiusa. Ora il film si **accartoccia in lunghezza**: la
+  pinna oltre il corpo si accorcia quanto basta (per (meta - corpo/2) /
+  (lungo/2 - corpo/2)) e resta distesa e aperta, con la sua zigrinatura.
+  Frontali le punte si piegano verso il dietro come prima.
 
 ## La texture e' lo steso
 

@@ -20,7 +20,7 @@ sono in GADGET.md.
   immagine del prodotto la separa dal PDF `_separa_prodotto`, all'inizio di
   `do_POST`, e va col caso (`blocchi_caso`).
 - `server.py`, `build_carton`, `build_vassoio`, `build_plancia`,
-  `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
+  `build_scatola_plancia`, `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
   `build_tubo`, `build_incarto`,
   `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/verifica.py`: le verifiche della costruzione, nell'ordine in cui si
@@ -54,6 +54,11 @@ sono in GADGET.md.
 | incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `server.build_incarto` |
 | vassoio espositore | `vassoio.py` |
 | display con plancia | `plancia.py` |
+<<<<<<< HEAD
+| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py`, montato in `server.build_scatola_plancia` |
+=======
+| display con la plancia dentro il coperchio | `sportello.py`; costruito da `build_plancia` con `forma=sportello` |
+>>>>>>> origin/coda-settimana
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |
 | pouch | `pouch.py` |
