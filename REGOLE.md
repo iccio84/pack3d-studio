@@ -2987,9 +2987,79 @@ nessuna feritoia. Il fronte resta intero: il DT ci disegna una V perforata
 dal bordo alto al mezzo tondo da 12 mm, ma il montaggio confermato non la
 strappa, e il modello non la toglie.
 
+### La plancia dentro il coperchio
+
+Il caso e1b3cc77a7, un display per dieci flowpack (`pack3d/sportello.py`).
+Arriva come una scatola chiusa bassa - coperchio stampato, quattro pareti,
+fondo bianco - e si apre da uno **sportello perforato tutto dentro il
+coperchio**: il lato dritto sulla cordonatura del retro, che fa da cerniera,
+i fianchi lungo i fianchi del coperchio a 1,8 mm da loro, gli angoli
+smussati, e davanti una linguetta che sconfina nella parete del fronte,
+l'attacco per il dito. Una riga lo attraversa a meta'. Non e' la plancia del
+Tronky ne' quella sul retro: li' il coperchio e' un pannello oltre una
+parete, e si stacca intero; qui il coperchio resta e la plancia e' un pezzo
+ritagliato dentro di lui.
+
+**Come si apre**, confermato da chi l'ha caricato («la meta' con la scritta
+dritta si alza, piegata sulla riga di mezzo»): lo sportello si alza sulla
+cerniera del retro, e la meta' davanti si ripiega sulla riga verso chi
+guarda. La plancia sta in piedi sul retro, alta mezzo sportello (55,6 mm),
+con la meta' davanti stampata verso chi guarda - la scritta che sul foglio
+e' dritta resta dritta - e la meta' dietro verso il retro, dove la scritta
+che sul foglio e' capovolta si legge dritta. La linguetta finisce dentro la
+scatola, dietro il prodotto. Del coperchio resta la cornice: gli angoli
+fuori dallo sportello e le strisce lungo i fianchi.
+
+**La firma** (`sportello.riconosci`), tutte, nel verso col retro in alto -
+`riconosci_sulla_tavola` gira il foglio di un quarto, mezzo e tre quarti:
+
+- il coperchio, un rettangolo di righe di almeno 40 mm, con una parete su
+  ogni lato;
+- il fondo, un pannello largo 0,9-1,1 il coperchio, chiuso in testa da due
+  righe sulle righe del coperchio, oltre la parete di UN fianco solo, a non
+  piu' di 0,75 della larghezza del coperchio. Le righe non sono per forza di
+  fila: dentro il fondo del caso c'e' il riquadro della colla, e la
+  cordonatura in mezzo alla parete est piu' il riquadro facevano un «fondo»
+  largo 81,2 mm, piu' giusto di quello vero (80,6). Per questo il pannello
+  deve essere chiuso in testa, e fra i lati liberi possibili vince quello
+  che fa il fondo piu' simile al coperchio;
+- la riga di mezzo, una sola, fra il 35 e il 65 per cento della lunghezza,
+  lunga 0,9 della larghezza;
+- i fianchi dello sportello, due righe a meno di 5 mm dai fianchi del
+  coperchio, lunghe almeno meta' del coperchio, attraverso la riga;
+- il fronte: tratti dentro la parete sud, lontani 2 mm dai bordi e nel 60
+  per cento di mezzo (la linguetta); la parete nord non ne ha.
+
+Si prova solo dichiarato vassoio, e solo dopo il vassoio e la plancia:
+`build_vassoio` e `_analyze_pdf` ci arrivano quando gli altri due hanno
+rifiutato il foglio.
+
+**Il solido** (`sportello.mesh`, costruito da `build_plancia` con
+`forma=sportello`: stessa texture, stessi due nodi `display` e `plancia`).
+L'altezza della scatola e' la **mediana** delle quattro pareti: sul caso
+ovest 26,8, nord 26,1, sud 26,2 e est 32,9 - la parete est porta una
+cordonatura in piu' a meta' - e la scatola e' alta 26,5; ogni parete si
+stende su quell'altezza, e una che ne differisce di piu' di 1,5 mm si dice
+negli avvisi. Il fondo sta a Y = 0, girato sotto dal fianco del suo lato. Le
+alette, le falde incollate e la linguetta di chiusura stanno dentro la
+scatola chiusa e non si stendono.
+
+**I pezzi** vengono dai tratti, come nella plancia, ma le pareti e il fondo
+sono il cartone nei **riquadri della griglia**, non zone intere: le
+cordonature si fermano a mezzo millimetro dagli angoli, e il fianco est, il
+fondo e le sue falde erano una zona sola. Anche lo sportello si taglia
+sulla griglia - fra i suoi fianchi, e diviso dalla riga - perche' la
+striscia fra il fianco del coperchio e quello dello sportello si attaccava
+alle sue zone dove i tratti non si chiudono.
+
+**Cosa manca**: le alette dentro la scatola; la cornice del coperchio sta
+dove stanno i pack piu' alti delle pareti (il caso: 33 mm su 26,5), che la
+attraversano.
+
 ## Il display a scatola
 
-Il terzo display: una scatola che arriva chiusa e che **resta chiusa**. Nel
+La stessa forma della *plancia dentro il coperchio* qui sopra, disegnata
+come fustella in CAD: una scatola che arriva chiusa e che **resta chiusa**. Nel
 coperchio due fessure lungo i fianchi e la cima sul fronte staccano un
 pannello attaccato solo a una cordonatura tratteggiata verso il retro: si
 alza sulla cerniera, si piega a meta' e fa la plancia; nel coperchio resta la
@@ -3000,7 +3070,11 @@ con quindici flowpack, dichiarato *Riempimenti* (`pack3d/scatola_plancia.py`,
 Prima non si costruiva: ne' vassoio (la griglia ha 9 colonne e 16 fasce) ne'
 display con plancia (non c'e' un coperchio che diventa plancia: il coperchio
 resta), e il riempimento si fermava con «dei due PDF nessuno si legge come
-vassoio espositore». Non e' una famiglia nuova: e' un cartotecnico, un
+vassoio espositore». Lo sportello (`pack3d.sportello`) non lo vede: cerca i
+fianchi dello sportello a pochi mm da quelli del coperchio e la linguetta
+dentro il fronte sulla griglia, e qui le fessure stanno a 23 mm dai fianchi
+e la griglia della fustella CAD ha 16 fasce. I due moduli si provano uno
+dopo l'altro, prima lo sportello. Non e' una famiglia nuova: e' un cartotecnico, un
 modulo nuovo dentro il display.
 
 ### La firma in fustella
@@ -3075,7 +3149,7 @@ vedono dalla finestra.
 ### Dove entra
 
 Solo dichiarato: nel vassoio dichiarato (e quindi nel riempimento), dopo il
-vassoio e il display con plancia, quando tutti e due hanno rifiutato
+vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
 (`server._analyze_pdf`, `build_vassoio`). I casi del parco che passavano non
 cambiano strada.
 
@@ -3085,8 +3159,10 @@ cambiano strada.
   modello la plancia e' un rettangolo fra le fessure interne.
 - Il retro e le sue falde incollate sono un pannello solo, alto quanto la
   scatola: sul T15 sono bianchi, dentro e fuori.
-- Il display T10 dello stesso prodotto (caso e1b3cc77a7) e' disegnato senza
-  fustella in CAD: la firma non lo vede.
+- Il display T10 dello stesso prodotto (caso e1b3cc77a7) e' disegnato
+  diverso e passa dallo sportello: la firma di qui non lo vede, e va bene.
+  Le due firme leggono la stessa forma da due disegni: se ne arriva un
+  terzo, vale la pena di farne una sola.
 
 ## Astucci
 
@@ -5980,7 +6056,32 @@ Lungo ogni asse del vano si conta quanti pezzi ci stanno:
   adattato: con le pinne larghe la barretta frontale stava 5 mm sopra il
   fondo.
 
-Il corpo non si tocca: e' quello che si vede.
+Il corpo non si tocca: e' quello che si vede. Con una sola eccezione, qui
+sotto.
+
+### Se non ci sta in nessuna posa, il flowpack si accorcia
+
+Il caso e1b3cc77a7: un flowpack con 119 mm di corpo (150 di passo) in un
+display da 81 x 111 x 26 mm, vano 79 x 109 x 25,5. Nessun lato del vano
+tiene il corpo, e il riempimento si fermava con «non ci sta in nessuna
+posa». Chi l'ha caricato ha confermato le misure del display e ha chiesto
+di schiacciare il flowpack finche' non entra.
+
+La regola (`riempimento.accorcia`): se nessuna posa tiene il corpo, il
+flowpack si **accorcia lungo il suo asse lungo**, pinne e corpo insieme,
+fino al lato del vano su cui va, meno quattro volte il gioco (2,4 mm): le
+punte delle pinne si piegano contro la parete a 0,6 mm da lei, e col corpo
+lungo quanto il lato non c'era dove piegarle, e uscivano dalle pareti. Le
+pose si provano nell'ordine di sempre - frontali, poi sdraiati per il largo e
+per il lungo - e vince la prima in cui il pezzo accorciato ci sta: si
+espone come gli altri riempimenti, anche se costa accorciarlo di piu'. Sul
+caso: frontali, corpo da 119 a 77 mm (64 per cento), 8 pezzi in fila dal
+davanti al fondo, alti 33 mm su pareti da 25,5 (sporgono, come sopra). Le
+altre due misure non cambiano. Un astuccio non si accorcia mai.
+
+Il riempimento lo dice nella prima riga, con le misure: e' una scelta di
+chi l'ha chiesto, non la misura del pack. Sul parco cambiano solo i casi
+che prima si fermavano: dove una posa c'e', la strada e' quella di prima.
 
 ### Il GLB: il flowpack una volta, un nodo per pezzo
 

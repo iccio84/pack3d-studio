@@ -39,8 +39,8 @@ except ImportError as e:                       # messaggio utile, non uno stack 
 from pack3d import (artwork, ballotin, coda, controllo, dieline as dl, punta,
                     prisma, folding, exporters, gelato, incarto, materiali, nero,
                     plancia, scatola_plancia,
-                    pouch, lamina, rilievo, strati, tubo, vassoio, verifica,
-                    versione)
+                    pouch, lamina, rilievo, sportello, strati, tubo, vassoio,
+                    verifica, versione)
 # le quote scritte sul file; `quote` qui e' gia' quella di urllib
 from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
@@ -774,8 +774,16 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
                                  quality, lastre_extra, colata_riquadro,
                                  n_pagine)
-        # o la scatola che resta chiusa, con la plancia ricavata dal
-        # coperchio: vedi `pack3d.scatola_plancia`
+        # o la scatola con la plancia ricavata DENTRO il coperchio, lo
+        # sportello perforato che si alza sul retro: `pack3d.sportello`
+        pdf, d, p, gradi, giro = sportello.riconosci_sulla_tavola(sorgente)
+        if p is not None:
+            return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
+                                 quality, lastre_extra, colata_riquadro,
+                                 n_pagine, forma=sportello)
+        # lo sportello disegnato come fustella in CAD, a fessure e cerniera
+        # tratteggiata, che `pack3d.sportello` sulla griglia non vede: vedi
+        # `pack3d.scatola_plancia`
         sp = scatola_plancia.riconosci(sorgente)
         if sp is not None:
             return build_scatola_plancia(sorgente, sp, out_glb, quality,
@@ -864,8 +872,13 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
 
 
 def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
-                  lastre_extra=(), colata_riquadro=None, n_pagine=1):
+                  lastre_extra=(), colata_riquadro=None, n_pagine=1,
+                  forma=plancia):
     """Il display con plancia APERTO a espositore: vedi `pack3d.plancia`.
+
+    `forma` e' il modulo che legge i pezzi e li piega: `pack3d.plancia`, o
+    `pack3d.sportello` per la plancia ricavata dentro il coperchio. La
+    texture, i nodi e il GLB sono gli stessi.
 
     `pdf`, `d` e `p` sono gia' quelli di `plancia.riconosci_sulla_tavola`,
     nel verso in cui la griglia si legge; `sorgente` il file a pagina unica,
@@ -880,7 +893,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     dpi, tmax = risoluzione(quality)
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     px_mm = 4.0
-    pz = plancia.pezzi(pdf, p, d, px_mm)
+    pz = forma.pezzi(pdf, p, d, px_mm)
     rx0, ry0, rx1, ry1 = pz.riquadro()
     # lo steso, la texture del GLB, e' il DT con un millimetro attorno: lo
     # stesso foglio, oltre i pezzi della maglia (`pack3d.steso`)
@@ -898,14 +911,17 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     # taglio si misurano sull'altezza che la texture ha davvero
     steso = vassoio.con_coda(tex["steso"])
     parti = {}
-    V, UV, T = plancia.mesh(p, pz, px_mm, alt_texture=steso.height,
-                            parti=parti)
-    _ok, verifiche = verifica.plancia(V, UV, T, parti, p, pz, steso.size,
-                                      dpi_tex / 25.4, vassoio.CODA)
-    verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
-    # e le misure del disegno contro le quote scritte: confermano, non
-    # costruiscono
-    riscontro = quotature.riscontro_plancia(pdf, p, d)
+    V, UV, T = forma.mesh(p, pz, px_mm, alt_texture=steso.height,
+                          parti=parti)
+    verifiche, riscontro = [], None
+    if forma is plancia:
+        _ok, verifiche = verifica.plancia(V, UV, T, parti, p, pz, steso.size,
+                                          dpi_tex / 25.4, vassoio.CODA)
+        verifiche += verifica.blocco(V, UV, T, parti, steso.size,
+                                     vassoio.CODA)[1]
+        # e le misure del disegno contro le quote scritte: confermano, non
+        # costruiscono
+        riscontro = quotature.riscontro_plancia(pdf, p, d)
     # Il display e' un blocco unico e la plancia un elemento a se': due nodi
     # nel GLB, sugli stessi vertici e la stessa texture. La plancia e' stesa
     # per ultima, quindi i suoi triangoli stanno in fondo.
@@ -922,7 +938,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
                              parti=[("display", 0, inizio),
                                     ("plancia", inizio, len(T))], tinte=tinte)
-    meta = plancia.dichiara(p) + [
+    meta = forma.dichiara(p) + [
         "%d vertici sui tratti della fustella, cartoncino %.1f mm"
         % (len(V), vassoio.SPESSORE)]
     if giro:
@@ -2887,6 +2903,19 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                 return dict(kind="vassoio", title="Display con plancia",
                             meta=plancia.dichiara(pl)
                             + ([giro_p] if giro_p else []))
+            if kind == "vassoio":
+                # la plancia ricavata dentro il coperchio (`pack3d.sportello`):
+                # solo dichiarato, la prova gira il foglio e costa
+                try:
+                    _p, _g, sp, _gr, giro_s = sportello.riconosci_sulla_tavola(pdf)
+                except Exception:
+                    sp = None
+                finally:
+                    dl.scarta_resa()
+                if sp is not None:
+                    return dict(kind="vassoio", title="Display con plancia",
+                                meta=sportello.dichiara(sp)
+                                + ([giro_s] if giro_s else []))
         if v is None and kind == "vassoio":
             # la scatola che resta chiusa, con la plancia ricavata dal
             # coperchio (`pack3d.scatola_plancia`): si prova solo dichiarata
