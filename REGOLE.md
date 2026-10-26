@@ -6138,6 +6138,19 @@ davvero troppo grande e se ne mettono meno, come prima. Sul vassoio da 36: il
 T1 da 22,2 a 20,7 mm (94%), 3 per fila in 12 file. Un astuccio non si
 schiaccia; i riempimenti senza un numero chiesto non cambiano.
 
+**Se lo spessore non basta, di lato** (`riempimento.stringe`). Affiancati, i
+flowpack si schiacciano anche di lato fra i vicini. Il display a scatola da 15
+del caso c5b98dfbee, al rigonfiamento 10 chiesto dal proprietario: il
+flowpack e' largo 38,7 a meta' corpo, e sdraiati nei 189 mm del vano ne
+stavano 4 per strato invece di 5 (il posto e' fino a 38,5, col 2% di
+`COMPRIME`); restavano 8 in piedi, e schiacciarli nello spessore non li
+stringeva. Ora, se lo spessore non basta, la larghezza cala a passi di mezzo
+per cento, a UV ferme, al massimo del 3% (`STRINGE_MAX`): stretta del 7% la
+grafica si vedeva schiacciata (caso 838cbae0ac). Vince la prima disposizione
+che li tiene tutti, in qualunque posa, perche' quella del pezzo largo non li
+teneva. Sul caso: 38,7 -> 38,5 mm (99,5%), 5 x 3 per il lungo in 3 strati.
+Gli altri riempimenti del parco non cambiano.
+
 ### Strati uguali, file su tutta la profondita'
 
 - **Frontali, gli strati sono uguali**: 40 pezzi in strati da 22 al massimo
@@ -6254,6 +6267,9 @@ nei 70,5 mm del vano e la griglia e' una sola, 5 x 3 per il lungo in 3
 strati. Una regola che preferiva il 3 x 5 perche' il pezzo ci stava intero
 e' stata provata e tolta; anche il rigonfiamento nello spessore (30 x 19,7)
 e' stato provato e tolto (*Il rigonfiamento resta nel rapporto del DT*).
+Poi il proprietario ha chiesto il livello 10: 36,5 x 14,6 (38,7 x 15,9 a
+meta' corpo), stretto di lato a 38,5 perche' ne stiano 5 per strato (*Se lo
+spessore non basta, di lato*).
 
 ### Sdraiati, stanno in piano
 

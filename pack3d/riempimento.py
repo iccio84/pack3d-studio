@@ -47,6 +47,7 @@ PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
 SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
+STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
 
 
 # --------------------------------------------------------------------------- #
@@ -218,6 +219,7 @@ class Prodotto:
     rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
     accorcia: float = 1.0   # quanto e' stato accorciato lungo l'asse lungo: vedi `accorcia`
     schiaccia: float = 1.0  # quanto e' stato schiacciato nello spessore: vedi `schiaccia`
+    stringe: float = 1.0    # quanto e' stato stretto di lato: vedi `stringe`
 
 
 def misura_prodotto(J, B, rigido=False):
@@ -492,6 +494,32 @@ def schiaccia(vano, p, quanti, posa, per_fila=None):
     return None
 
 
+def stringe(vano, p, quanti, per_fila=None):
+    """Il flowpack STRETTO DI LATO quanto basta perche' ci stiano i `quanti`
+    pezzi chiesti, con la sua disposizione: `(prodotto, disposizione)`, o
+    None.
+
+    Quando schiacciarlo nello spessore non basta: affiancati, i flowpack si
+    schiacciano anche di lato fra i vicini. Il display a scatola da 15 del
+    caso c5b98dfbee, al rigonfiamento 10: il flowpack e' largo 38,7 a meta'
+    corpo, e sdraiati nei 189 mm del vano ce ne stavano 4 per strato invece
+    di 5 (il posto e' fino a 38,5); restavano 8 in piedi. La larghezza cala a
+    passi di mezzo per cento, al massimo di `STRINGE_MAX`, a UV ferme come lo
+    spessore. Vince la prima disposizione che li tiene tutti, in qualunque
+    posa: quella del pezzo largo non li teneva. Un astuccio non si stringe."""
+    if p.rigido or quanti is None:
+        return None
+    k = 1.0
+    while k > 1.0 - STRINGE_MAX + 1e-9:
+        k -= 0.005
+        q = replace(p, largo=p.largo * k, largo_pinne=p.largo_pinne * k,
+                    stringe=p.stringe * k)
+        d = scegli(vano, q, quanti, per_fila)
+        if d is not None and d.capienza >= quanti:
+            return q, d
+    return None
+
+
 def capienza(vano, p):
     d = scegli(vano, p, None)
     return d.capienza if d else 0
@@ -572,6 +600,11 @@ def adatta(P, N, p, d):
         P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * p.schiaccia
         if N is not None:
             N[:, spesso] = N[:, spesso] / p.schiaccia
+    # 0. stretto di lato, se neanche schiacciato ci stavano: vedi `stringe`
+    if p.stringe != 1.0:
+        P[:, largo] = p.centro[largo] + (P[:, largo] - p.centro[largo]) * p.stringe
+        if N is not None:
+            N[:, largo] = N[:, largo] / p.stringe
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
     # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
@@ -659,6 +692,14 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None)
             accorciato.append("%s, gonfio, e' spesso %.1f mm e i %d pezzi chiesti non ci "
                               "stavano: schiacciato fra i vicini a %.1f mm (%.0f%%)"
                               % (cosa, spesso, quanti, p.spesso, 100.0 * p.schiaccia))
+    if quanti is not None and d.capienza < quanti:
+        q = stringe(vano, p, quanti, per_fila)
+        if q is not None:
+            largo = p.largo
+            p, d = q
+            accorciato.append("%s, gonfio, e' largo %.1f mm e i %d pezzi chiesti non ci "
+                              "stavano: stretto di lato fra i vicini a %.1f mm (%.1f%%)"
+                              % (cosa, largo, quanti, p.largo, 100.0 * p.stringe))
     massimo = d.capienza
     if quanti is None or quanti > massimo:
         quanti = massimo
