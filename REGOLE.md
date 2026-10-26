@@ -6103,6 +6103,20 @@ Lungo ogni asse del vano si conta quanti pezzi ci stanno:
 - **lungo gli altri due**, un pezzo gonfio si schiaccia del 2% fra i vicini
   (`COMPRIME`).
 
+**Il display fatto per N pezzi li tiene tutti** (`riempimento.schiaccia`).
+Col rigonfiamento nello spessore il flowpack e' piu' spesso, e il rilascio
+lo ha trovato sul parco: il vassoio da 40 ne teneva 38 (20,5 mm invece di
+17), il display da 26 ne teneva 20 (20 invece di 16,5). Il display e' fatto
+per il suo numero, e i flowpack pieni d'aria ci stanno stretti: se i pezzi
+chiesti non ci stanno, il flowpack si schiaccia nello spessore a passi di
+mezzo per cento finche' ci stanno, nella stessa posa che aveva (frontali
+restano frontali: al primo passo il vassoio da 40 trovava sdraiati una
+griglia 8 x 5), al massimo del 25% (`SCHIACCIA_MAX`). Oltre, il pezzo e'
+davvero troppo grande e se ne mettono meno, come prima. Sul parco: 40 in 2
+file da 20 a 19,5 mm (95%), 26 in 2 file da 13 a 16,6 mm (83%), come prima
+del rigonfiamento nello spessore. Un astuccio non si schiaccia; i
+riempimenti senza un numero chiesto non cambiano.
+
 ### Strati uguali, file su tutta la profondita'
 
 - **Frontali, gli strati sono uguali**: 40 pezzi in strati da 22 al massimo
