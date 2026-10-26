@@ -36,7 +36,7 @@ from __future__ import annotations
 import json
 import math
 import struct
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 
@@ -46,6 +46,7 @@ COMPRIME = 0.02             # quanto si schiaccia un pezzo gonfio fra i vicini
 PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
+SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
 
 
 # --------------------------------------------------------------------------- #
@@ -216,6 +217,7 @@ class Prodotto:
     fronte: int             # +1 se la faccia stampata guarda il verso + dello spessore
     rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
     accorcia: float = 1.0   # quanto e' stato accorciato lungo l'asse lungo: vedi `accorcia`
+    schiaccia: float = 1.0  # quanto e' stato schiacciato nello spessore: vedi `schiaccia`
 
 
 def misura_prodotto(J, B, rigido=False):
@@ -441,6 +443,33 @@ def accorcia(vano, p):
     return None
 
 
+def schiaccia(vano, p, quanti, posa):
+    """Il flowpack SCHIACCIATO nello spessore quanto basta perche' ci stiano
+    i `quanti` pezzi chiesti, con la sua disposizione: `(prodotto,
+    disposizione)`, o None.
+
+    Un display e' fatto per il suo numero, e i flowpack, pieni d'aria, ci
+    stanno stretti: si schiacciano fra i vicini. Col rigonfiamento nello
+    spessore il flowpack e' piu' spesso di prima, e il vassoio da 40 ne
+    teneva 38 (20,5 mm invece di 17), il display da 26 ne teneva 20 (20
+    invece di 16,5). Lo spessore cala a passi di mezzo per cento finche' ci
+    stanno tutti, al massimo di `SCHIACCIA_MAX`; oltre, il pezzo e' davvero
+    troppo grande e se ne mettono meno, come prima. La posa resta `posa`,
+    quella del pezzo non schiacciato: il vassoio da 40, frontale, al primo
+    mezzo per cento trovava sdraiati una griglia 8 x 5. Un astuccio non si
+    schiaccia."""
+    if p.rigido or quanti is None:
+        return None
+    k = 1.0
+    while k > 1.0 - SCHIACCIA_MAX + 1e-9:
+        k -= 0.005
+        q = replace(p, spesso=p.spesso * k, schiaccia=p.schiaccia * k)
+        d = scegli(vano, q, quanti)
+        if d is not None and d.posa == posa and d.capienza >= quanti:
+            return q, d
+    return None
+
+
 def capienza(vano, p):
     d = scegli(vano, p, None)
     return d.capienza if d else 0
@@ -515,6 +544,12 @@ def adatta(P, N, p, d):
         P[:, lungo] = p.centro[lungo] + (P[:, lungo] - p.centro[lungo]) * p.accorcia
         if N is not None:
             N[:, lungo] = N[:, lungo] / p.accorcia
+    # 0. schiacciato nello spessore, se no i pezzi chiesti non ci stavano:
+    # vedi `schiaccia`
+    if p.schiaccia != 1.0:
+        P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * p.schiaccia
+        if N is not None:
+            N[:, spesso] = N[:, spesso] / p.schiaccia
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
     # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
@@ -594,6 +629,14 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
         raise ValueError("riempimento: nel vano del vassoio (%.0f x %.0f x %.0f mm) %s "
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
+    if quanti is not None and d.capienza < quanti:
+        q = schiaccia(vano, p, quanti, d.posa)
+        if q is not None:
+            spesso = p.spesso
+            p, d = q
+            accorciato.append("%s, gonfio, e' spesso %.1f mm e i %d pezzi chiesti non ci "
+                              "stavano: schiacciato fra i vicini a %.1f mm (%.0f%%)"
+                              % (cosa, spesso, quanti, p.spesso, 100.0 * p.schiaccia))
     massimo = d.capienza
     if quanti is None or quanti > massimo:
         quanti = massimo
