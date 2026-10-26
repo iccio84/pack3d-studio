@@ -3143,9 +3143,9 @@ specchiato.
 Nel GLB la plancia e' il nodo `plancia`, coi suoi triangoli per ultimi,
 accanto al nodo `display`: il riempimento misura il vano senza di lei (*I
 riempimenti*, *Il display si misura senza la plancia*). Sul T15 il vano e'
-189 x 137,5, alto 70,5: quindici flowpack sdraiati per il lungo, 5 x 3,
-in piano (*I riempimenti*, *Il display e' fatto per
-il suo numero*).
+189 x 137,5, alto 70,5: quindici flowpack sdraiati per il largo, 3 per
+strato e 5 strati, interi e in piano (*I riempimenti*, *Il display e' fatto
+per il suo numero*).
 
 ### Il fronte e' fustellato: segue i tagli della plancia
 
@@ -6162,13 +6162,25 @@ porta. Se si chiedono N pezzi e frontali vengono a strati diversi, si cerca
 una posa sdraiata che li metta in una **griglia piena**: a per strato, s
 strati, a x s = N, con a che sta in pianta (gx non piu' di quanti ne stanno
 di traverso, gz non piu' di quanti in profondita') e s non piu' degli strati
-che stanno in altezza; vince quella con meno strati. I pezzi di uno strato si
-allargano su tutto il vano (passo = lato / gx). Sul T15: sdraiati per il
-lungo del vano, 5 di traverso (passo 37,8) e 3 strati: 5 x 3, e da davanti si
-contano le 15 testate. Il 3 x 5 (sdraiati per il largo, 3 file di 5 strati)
-perde: piu' strati, e da davanti si vede la prima pila sola. Frontali a
-strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
-2 file da 13.
+che stanno in altezza. I pezzi di uno strato si allargano su tutto il vano
+(passo = lato / gx). Fra le griglie vince **prima quella in cui il pezzo sta
+intero** (`riempimento._intero`): la lunghezza con le pinne entro il suo
+posto (passo lungo l'asse lungo >= lungo) e le pinne aperte entro il passo
+fra due pezzi (passo lungo la larghezza >= larghezza delle pinne); a parita',
+quella con meno strati. Frontali a strati uguali non cambiano: un display da
+40 resta 2 file da 20, uno da 26 2 file da 13.
+
+Il caso e' passato da tre consegne. La prima regola guardava solo gli
+strati, e vinceva il 5 x 3 per il lungo del vano: 5 di traverso (passo 37,8) e
+3 strati. Ma il flowpack e' lungo 150 mm con le pinne e il vano e' profondo
+137,5: le pinne si accartocciavano di 12,5 mm, e larghe 42 mm su un passo di
+37,8 si stringevano; il marchio, lungo il pezzo, si leggeva di lato. Il
+modello, approvato, e' stato ripreso dal proprietario perche' non
+convinceva. Per il largo il pezzo sta intero: 150 mm sui 189 della
+larghezza, 3 per strato con passo 45,8 sulle pinne da 42, 5 strati da 13,7
+mm (68,5 sui 70,5 di altezza): **3 per strato e 5 strati**, le pinne aperte
+e il marchio dritto verso chi guarda, da davanti e dall'alto. E' la scatola
+fatta per quel numero: alta 5 strati, profonda 3 pezzi, larga un pezzo.
 
 ### Sdraiati, stanno in piano
 
