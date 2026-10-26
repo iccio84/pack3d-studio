@@ -471,15 +471,15 @@ def schiaccia(vano, p, quanti, posa, per_fila=None):
     disposizione)`, o None.
 
     Un display e' fatto per il suo numero, e i flowpack, pieni d'aria, ci
-    stanno stretti: si schiacciano fra i vicini. Col rigonfiamento nello
-    spessore il flowpack e' piu' spesso di prima, e il vassoio da 40 ne
-    teneva 38 (20,5 mm invece di 17), il display da 26 ne teneva 20 (20
-    invece di 16,5). Lo spessore cala a passi di mezzo per cento finche' ci
-    stanno tutti, al massimo di `SCHIACCIA_MAX`; oltre, il pezzo e' davvero
-    troppo grande e se ne mettono meno, come prima. La posa resta `posa`,
-    quella del pezzo non schiacciato: il vassoio da 40, frontale, al primo
-    mezzo per cento trovava sdraiati una griglia 8 x 5. Un astuccio non si
-    schiaccia."""
+    stanno stretti: si schiacciano fra i vicini. Il vassoio da 36 del caso
+    838cbae0ac ha 12 file da 3 in 245 mm, e il T1 al rigonfiamento 5 e'
+    spesso 22,2: 20,7 nel vassoio. Lo spessore cala a passi di mezzo per
+    cento finche' ci stanno tutti, al massimo di `SCHIACCIA_MAX`; oltre, il
+    pezzo e' davvero troppo grande e se ne mettono meno, come prima. La posa
+    resta `posa`, quella del pezzo non schiacciato: col flowpack piu' spesso
+    del rigonfiamento nello spessore, poi tolto, il vassoio da 40, frontale,
+    al primo mezzo per cento trovava sdraiati una griglia 8 x 5. Un astuccio
+    non si schiaccia."""
     if p.rigido or quanti is None:
         return None
     k = 1.0

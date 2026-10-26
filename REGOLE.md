@@ -6124,18 +6124,18 @@ Lungo ogni asse del vano si conta quanti pezzi ci stanno:
   (`COMPRIME`).
 
 **Il display fatto per N pezzi li tiene tutti** (`riempimento.schiaccia`).
-Col rigonfiamento nello spessore il flowpack e' piu' spesso, e il rilascio
-lo ha trovato sul parco: il vassoio da 40 ne teneva 38 (20,5 mm invece di
-17), il display da 26 ne teneva 20 (20 invece di 16,5). Il display e' fatto
+Nata col rigonfiamento nello spessore, che faceva il flowpack piu' spesso e
+il vassoio da 40 ne teneva 38, il display da 26 ne teneva 20; tolto quel
+rigonfiamento, quei due ci stanno di nuovo senza schiacciarsi, e la regola
+resta per il vassoio da 36 del caso 838cbae0ac. Il display e' fatto
 per il suo numero, e i flowpack pieni d'aria ci stanno stretti: se i pezzi
 chiesti non ci stanno, il flowpack si schiaccia nello spessore a passi di
 mezzo per cento finche' ci stanno, nella stessa posa che aveva (frontali
 restano frontali: al primo passo il vassoio da 40 trovava sdraiati una
 griglia 8 x 5), al massimo del 25% (`SCHIACCIA_MAX`). Oltre, il pezzo e'
-davvero troppo grande e se ne mettono meno, come prima. Sul parco: 40 in 2
-file da 20 a 19,5 mm (95%), 26 in 2 file da 13 a 16,6 mm (83%), come prima
-del rigonfiamento nello spessore. Un astuccio non si schiaccia; i
-riempimenti senza un numero chiesto non cambiano.
+davvero troppo grande e se ne mettono meno, come prima. Sul vassoio da 36: il
+T1 da 22,2 a 20,7 mm (94%), 3 per fila in 12 file. Un astuccio non si
+schiaccia; i riempimenti senza un numero chiesto non cambiano.
 
 ### Strati uguali, file su tutta la profondita'
 
@@ -6247,11 +6247,12 @@ perde: piu' strati, e da davanti si vede la prima pila sola. Frontali a
 strati uguali non cambiano: un display da 40 resta 2 file da 20, uno da 26
 2 file da 13.
 
-Col flowpack spesso come il pack vero (livello 9, 21,3 mm a meta' corpo) la
-griglia e' una sola: 5 strati non entrano nei 70,5 mm del vano, 3 si' (64).
-E' la misura per cui e' fatta la scatola. Con i pezzi sottili di prima (13,9
-mm) entrava anche il 3 x 5, e una regola che lo preferiva perche' il pezzo ci
-stava intero e' stata provata e tolta: non serviva piu' a nessun caso.
+Al livello 9, scelto da chi l'ha caricato con la foto del pack vero, il
+B-ready e' 34,8 x 13,9 (36,6 x 15,1 a meta' corpo): 5 strati non entrano
+nei 70,5 mm del vano e la griglia e' una sola, 5 x 3 per il lungo in 3
+strati. Una regola che preferiva il 3 x 5 perche' il pezzo ci stava intero
+e' stata provata e tolta; anche il rigonfiamento nello spessore (30 x 19,7)
+e' stato provato e tolto (*Il rigonfiamento resta nel rapporto del DT*).
 
 ### Sdraiati, stanno in piano
 
@@ -6275,10 +6276,11 @@ interseca con il display. Se un pezzo ruotato non sta nel vano, non si ruota.
 aperte e senza gradini.» E dopo: «Il T1 non corrisponde al DT. La grafica
 viene strecciata.»
 
-- **Gonfio nello spessore**: con la foto del pack vero, «e' piu' gonfio,
-  come l'immagine», il livello e' passato a 9 e il rigonfiamento va
-  nello spessore (*Il rigonfiamento va nello spessore*): 30 x 19,7, la faccia
-  larga come il DT. Quello che segue e' la storia di prima.
+- **Il livello 9**: con la foto del pack vero, «e' piu' gonfio, come
+  l'immagine», il livello e' passato a 9: 34,8 x 13,9 nel rapporto del DT.
+  Il rigonfiamento nello spessore, che lo faceva 30 x 19,7, e' stato tolto
+  (*Il rigonfiamento resta nel rapporto del DT*). Quello che segue e' la
+  storia di prima.
 - **Al rigonfiamento scelto, non di piu'**: per il primo «Non approvo» il
   flowpack nel display si costruiva 3 livelli piu' gonfio (5 -> 8). Ma il
   rigonfiamento tiene il perimetro e arrotonda la sezione, che si allarga:
@@ -6300,9 +6302,10 @@ viene strecciata.»
 ### Nel riempimento il CU resta il suo modello: si schiaccia, non si allarga
 
 Il caso 838cbae0ac, un display sagomato col fondo di 150,4 x 247,0 mm e 36
-flowpack T1, 3 per fila in 12 file. Il T1 al rigonfiamento 5 e' 37,1 x 25,4
-mm (45,7 sulle pinne all'apertura 2): nel vano ne stanno 4 per fila, e 12
-file da 25,4 fanno 305 mm contro 245.
+flowpack T1, 3 per fila in 12 file. Il T1 al rigonfiamento 5 e' 40,1 x 22,2
+mm (47,1 sulle pinne all'apertura 2): nel vano ne stanno 3 per fila, e 12
+file da 22,2 fanno 266 mm contro 245. (Col rigonfiamento nello spessore,
+poi tolto, era 37,1 x 25,4 e ne stavano 4 per fila.)
 
 La routine ci ha provato tre volte, e tre volte ha cambiato il T1:
 - 4 file da 9, il T1 come da solo: «il vassoio contiene 3 pack per 12
@@ -6326,8 +6329,8 @@ flowpack si possono schiacciare, ma senza modificare la mappatura».
   rimappato non ci sono piu'.
 - Un flowpack si puo' **schiacciare** fra i vicini come il film vero, a UV
   ferme: nello spessore (`schiaccia`, al massimo del 25%), le pinne strette
-  al passo, le punte piegate contro una parete. Sul caso: 25,4 -> 20,8 mm
-  (82%), 3 per fila in 12 file. Il fronte e' quello del T1 da solo.
+  al passo, le punte piegate contro una parete. Sul caso: 22,2 -> 20,7 mm
+  (94%), 3 per fila in 12 file. Il fronte e' quello del T1 da solo.
 - **Quanti per fila** li dice chi l'ha caricato (`per_fila`, opzione del
   caso; `riempimento._per_fila`): il pack non si allarga per riempire il
   posto, le file si allargano sul vano e fra un pack e l'altro resta l'aria.
