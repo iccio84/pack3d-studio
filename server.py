@@ -1406,6 +1406,13 @@ def pinne_da_agente(params):
         return None
 
 
+def nello_spessore_scelto(opts):
+    """Il rigonfiamento del flowpack a pinna nello spessore invece che nel
+    rapporto del DT: `"gonfio": "spessore"` fra le opzioni del caso. Una
+    scelta del pack, come il livello (`flowpack.sezione_rigonfiata`)."""
+    return str(opts.get("gonfio", "")).strip().lower() == "spessore"
+
+
 def saldatura_scelta(opts):
     """La saldatura delle pinne 0-3 scelta nella pagina: quanto si vedono le
     nervature delle ganasce. Se non la dice, 3: le nervature di sempre."""
@@ -2057,7 +2064,7 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None, materiali_dich=None,
-                   materiali_ai=None, saldatura=3):
+                   materiali_ai=None, saldatura=3, nello_spessore=False):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -2219,7 +2226,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # partono da forme diverse, e la scala vuol dire cose diverse: qui sotto
     # la pinna, in fondo la sovrapposizione.
     liv = max(1.0, min(10.0, liv))
-    fp = fp0
+    # a pinna il rigonfiamento nello spessore, se e' stato scelto per il pack
+    fp = replace(fp0, nello_spessore=bool(nello_spessore))
     if fp0.tubo_piatto:
         # Un tubo piatto non ha un rapporto larghezza/spessore da tenere fermo:
         # gonfiandosi passa dalla lente al cerchio, e il cerchio e' il massimo
@@ -2351,6 +2359,15 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # calcolano prima della mesh perche' servono anche a lei: nella gola e
     # nella pinna il giro si rimisura sul film, e il film lo dicono i nodi.
     knots = _panel_knots(Ps, d, G, fp0)
+    spigoli = knots
+    if knots and fp.nello_spessore and not fp0.tubo_piatto:
+        # Gonfio nello spessore gli spigoli servono solo alla verifica: la
+        # grafica sta sul giro alla sua distanza dal centro del fronte, dove
+        # la mette la cucitura (`superellipse_section`). Portare le pieghe
+        # stampate sugli spigoli stirava le fasce: il flowpack 30 x 12 al
+        # livello 9 ha gli spigoli a 14,5 | 27,5 | 14,5 contro i pannelli
+        # 12 | 30 | 12, il fronte stretto dell'8% e i fianchi stirati del 21%.
+        knots = (list(knots[1]), list(knots[1]))
     saldatura = max(0, min(3, int(saldatura)))
     # Dopo la griglia (righe di nv + 1 vertici, le prime `ng`, e i suoi `tg`
     # triangoli) c'e' il bordo dentato: chi rilegge la mesh a righe guarda
@@ -2368,8 +2385,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     tg = 2 * (ng // (nv + 1) - 1) * nv
     v_denti = UV[ng:, 1].copy()
 
-    if knots:
-        ks, kf = knots
+    if spigoli:
+        ks, kf = spigoli
         # La regola dice di verificare il modello mappato contro l'AW con una
         # misura, fascia per fascia, prima di finalizzare. Qui si puo' fare da
         # soli: lo scarto fra dove cade lo spigolo sulla sezione e dove lo
@@ -2393,6 +2410,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             avvisi_sez.append("mappatura verificata: rotazione %.1f mm, spigoli "
                               "entro %.1f mm su un giro di %.1f"
                               % (rotazione, peggio, G))
+        ks, kf = knots
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
     # il film sulle testate: pinne e spalle non sono un piano, e la grafica ci
@@ -2536,8 +2554,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         sez = ("sezione a ellisse %.1f x %.1f (giro %.1f invariato, pinna "
                "%.1f sul retro)" % (2.0 * semiasse, fp.T, G, fp.side_fin))
     else:
-        sez = ("sezione %.1f x %.1f (perimetro %.1f invariato)"
-               % (scala * fp.W, scala * fp.T, G))
+        sez = ("sezione %.1f x %.1f (perimetro %.1f invariato%s)"
+               % (sw if fp.nello_spessore else scala * fp.W, scala * fp.T, G,
+                  ", gonfio nello spessore" if fp.nello_spessore else ""))
     return ["flowpack%s, rigonfiamento %s"
             % (" a sovrapposizione" if fp.pillow else
                " a tubo piatto" if fp.piatto else "", soft), sez,
@@ -2547,6 +2566,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
              "dell'equilatero)" % (teeth, base, fpk.altezza_dente(base))),
             "saldatura delle pinne %d/3%s" % (
                 saldatura, ": senza nervature" if saldatura == 0 else ""),
+            "mappatura sul film, dal centro del fronte"
+            if knots and fp.nello_spessore and not fp0.tubo_piatto else
             "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
 
 
@@ -2682,7 +2703,8 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura")
+                "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura",
+                "gonfio")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -3997,7 +4019,8 @@ class Handler(BaseHTTPRequestHandler):
                                     (int(opts.get("teeth", 20)), str(soft), case_fp, q,
                                      sezione_da_agente(opts.get("params")),
                                      scatola, pinne, lastre, col_riq, mat, mat_ai,
-                                     saldatura_scelta(opts)), q, per_fila=per_fila)
+                                     saldatura_scelta(opts),
+                                     nello_spessore_scelto(opts)), q, per_fila=per_fila)
                         else:
                             soft, scatola, pinne, mat = parametri_flowpack(pdf, nomi[0])
 
@@ -4007,7 +4030,7 @@ class Handler(BaseHTTPRequestHandler):
                                     str(soft), case, q,
                                     sezione_da_agente(opts.get("params")),
                                     scatola, pinne, lastre, col_riq, mat, mat_ai,
-                                    saldatura_scelta(opts))
+                                    saldatura_scelta(opts), nello_spessore_scelto(opts))
                         avvisi = costruisci(aree, out)
                         if mat_ai and not opts.get("materiali"):
                             # col caso in coda, perche' la routine lo rifaccia
