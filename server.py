@@ -789,9 +789,14 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             return build_scatola_plancia(sorgente, sp, out_glb, quality,
                                          lastre_extra, colata_riquadro,
                                          n_pagine)
-        raise ValueError("non e' un vassoio: la griglia della fustella non ha "
-                         "cinque colonne e tre fasce, e non e' un display con "
-                         "plancia")
+        # per ultimo il vassoio sagomato, le pareti con gli obliqui e gli
+        # incavi: vedi `vassoio.riconosci_sagomato`
+        pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(sorgente,
+                                                                sagomato=True)
+        if v is None:
+            raise ValueError("non e' un vassoio: la griglia della fustella "
+                             "non ha cinque colonne e tre fasce, e non e' un "
+                             "display con plancia")
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
@@ -804,7 +809,7 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     px_mm = 4.0
     avvisi_sagoma = []
     sagoma, creste, _resa = vassoio.sagoma_e_creste(pdf, d, px_mm,
-                                                    note=avvisi_sagoma)
+                                                    note=avvisi_sagoma, v=v)
     if sagoma is None:
         raise ValueError("vassoio: non si riconosce l'impronta della "
                          "cartotecnica sul foglio")
@@ -1193,6 +1198,16 @@ def analisi_riempimento(pdfs, cu="flowpack"):
         except Exception:
             letti.append(None)
     vassoi = [k for k, l in enumerate(letti) if l is not None]
+    if len(vassoi) == 2:
+        # Il vassoio sagomato si prova per ultimo, quando gli altri hanno
+        # rifiutato (`vassoio.riconosci_sagomato`): se l'altro PDF si legge
+        # come vassoio prima di lui, il vassoio e' quello, e il sagomato e' il
+        # pack. Il film del flowpack del display da 26 ha un fondo chiuso da
+        # quattro coppie di righe e si leggeva come vassoio sagomato: il
+        # riempimento, che si costruiva, si fermava su «tutti e due».
+        forti = [k for k in vassoi if not letti[k].get("sagomato")]
+        if len(forti) == 1:
+            vassoi = forti
     if len(vassoi) != 1:
         raise ValueError("riempimento: dei due PDF %s" % (
             "nessuno si legge come vassoio espositore" if not vassoi else
@@ -1231,8 +1246,23 @@ def quanti_pezzi(valore):
     return n
 
 
+def per_fila_scelti(valore):
+    """Quanti pezzi affiancati per fila nel largo del vassoio, se chi l'ha
+    caricato lo dice, o None: allora quanti ce ne stanno. Il pack non si
+    allarga per riempire il posto (`riempimento._per_fila`)."""
+    if valore in (None, "", 0, "0"):
+        return None
+    try:
+        n = int(valore)
+    except (TypeError, ValueError):
+        raise ValueError("Pezzi per fila va digitato come numero intero")
+    if n < 1 or n > 200:
+        raise ValueError("Pezzi per fila: da 1 a 200")
+    return n
+
+
 def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
-                      carta=None, incisioni=True):
+                      carta=None, incisioni=True, per_fila=None):
     """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
     famiglia, poi `quanti` pezzi messi nel vano (None: pieno). Il flowpack
     con `flowpack`, gli argomenti di `build_flowpack` dopo il PDF e il file
@@ -1256,7 +1286,8 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             glb_v = fh.read()
         with open(gf, "rb") as fh:
             glb_f = fh.read()
-    glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio)
+    glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio,
+                                     per_fila=per_fila)
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)
@@ -2031,14 +2062,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
 
-    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: la
-       larghezza resta la faccia del DT e lo spessore cresce. Alzare lo
-       spessore senza arrotondare inventa film; arrotondare riscalando tutto
-       allarga il pack invece di gonfiarlo.
-    2. La grafica sta sul giro **alla sua distanza dal centro del fronte**,
-       come il film, che non si allunga; gli spigoli della sezione servono a
-       verificare che le pieghe stampate ci cadano vicino. Il tubo piatto,
-       che spigoli non ne ha, si mappa sulle sue due pieghe.
+    1. Gonfiando, la sezione si arrotonda **a perimetro costante**: lo spessore
+       cresce e la larghezza cala. Alzare solo lo spessore inventa film.
+    2. La grafica si mappa **per pannello**, usando gli spigoli della sezione
+       come nodi: con l'arco uniforme ogni fascia scivola.
     3. Le pinne portano la **zigrinatura** - denti alti 2/3 dell'equilatero,
        smussati - contata sul bordo della pinna.
     4. Le pinne non restano **mai a filo**: si aprono a farfalla verso la punta.
@@ -2224,9 +2251,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                           "(livello %g)" % (100.0 * pienezza, liv))
     else:
         # A pinna la sezione va dal rettangolo teso sul prodotto all'ellisse
-        # piena, tenendo fermi la larghezza della faccia del DT e il perimetro
-        # del film: il film che gli spigoli tondi lasciano va nello spessore
-        # (`sezione_rigonfiata`), e `scala` e' lo spessore in unita' di T.
+        # piena d'aria, tenendo fermi il rapporto larghezza/spessore MISURATO
+        # nello steso e il perimetro del film. La scala che serve a tornare sul
+        # perimetro gonfia il pack in entrambe le direzioni.
         n_sez = SEZ_RETTANGOLO + (SEZ_ELLISSE - SEZ_RETTANGOLO) * (liv - 1) / 9.0
         scala = fpk.sezione_rigonfiata(fp, n_sez)
     if scatola:
@@ -2324,16 +2351,6 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # calcolano prima della mesh perche' servono anche a lei: nella gola e
     # nella pinna il giro si rimisura sul film, e il film lo dicono i nodi.
     knots = _panel_knots(Ps, d, G, fp0)
-    spigoli = knots
-    if knots and not fp0.tubo_piatto:
-        # A pinna gli spigoli servono solo alla verifica: la grafica sta sul
-        # giro alla sua distanza dal centro del fronte, dove la mette la
-        # cucitura (`superellipse_section`). Portare le pieghe stampate sugli
-        # spigoli stirava le fasce appena la sezione si arrotonda: il
-        # flowpack 30 x 12 al livello 9 ha gli spigoli a 14,5 | 27,5 | 14,5
-        # contro i pannelli 12 | 30 | 12, il fronte stretto dell'8% e i
-        # fianchi stirati del 21%.
-        knots = (list(knots[1]), list(knots[1]))
     saldatura = max(0, min(3, int(saldatura)))
     # Dopo la griglia (righe di nv + 1 vertici, le prime `ng`, e i suoi `tg`
     # triangoli) c'e' il bordo dentato: chi rilegge la mesh a righe guarda
@@ -2351,8 +2368,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     tg = 2 * (ng // (nv + 1) - 1) * nv
     v_denti = UV[ng:, 1].copy()
 
-    if spigoli:
-        ks, kf = spigoli
+    if knots:
+        ks, kf = knots
         # La regola dice di verificare il modello mappato contro l'AW con una
         # misura, fascia per fascia, prima di finalizzare. Qui si puo' fare da
         # soli: lo scarto fra dove cade lo spigolo sulla sezione e dove lo
@@ -2376,7 +2393,6 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             avvisi_sez.append("mappatura verificata: rotazione %.1f mm, spigoli "
                               "entro %.1f mm su un giro di %.1f"
                               % (rotazione, peggio, G))
-        ks, kf = knots
         UV[:, 1] = np.interp(UV[:, 1] * G, ks, kf) / G
     UV = fpk.remap_to_sheet(UV, fp)
     # il film sulle testate: pinne e spalle non sono un piano, e la grafica ci
@@ -2521,7 +2537,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                "%.1f sul retro)" % (2.0 * semiasse, fp.T, G, fp.side_fin))
     else:
         sez = ("sezione %.1f x %.1f (perimetro %.1f invariato)"
-               % (sw, scala * fp.T, G))
+               % (scala * fp.W, scala * fp.T, G))
     return ["flowpack%s, rigonfiamento %s"
             % (" a sovrapposizione" if fp.pillow else
                " a tubo piatto" if fp.piatto else "", soft), sez,
@@ -2531,9 +2547,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
              "dell'equilatero)" % (teeth, base, fpk.altezza_dente(base))),
             "saldatura delle pinne %d/3%s" % (
                 saldatura, ": senza nervature" if saldatura == 0 else ""),
-            "mappatura per pannello" if knots and fp0.tubo_piatto else
-            "mappatura sul film, dal centro del fronte" if knots else
-            "mappatura per arco"] + avvisi_sez
+            "mappatura per pannello" if knots else "mappatura per arco"] + avvisi_sez
 
 
 def _giro_film(knots, G, fp):
@@ -2668,7 +2682,7 @@ VERSIONE = versione.impronta(HERE)
 
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
-                "quanti", "incisioni", "cu", "gelato", "chiusura")
+                "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura")
 
 # Lo spessore della carta che l'utente dichiara per un cartotecnico, da 1 a 3:
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
@@ -2946,6 +2960,17 @@ def _analyze_pdf(pdf, kind=None, domande=False):
             if sp is not None:
                 return dict(kind="vassoio", title="Display a scatola",
                             meta=scatola_plancia.dichiara(sp))
+        sagomato = False
+        if v is None and kind == "vassoio":
+            # per ultimo il vassoio sagomato, come in `build_vassoio`
+            try:
+                _p, _g, v, _gr, giro_v = vassoio.riconosci_sulla_tavola(
+                    pdf, sagomato=True)
+            except Exception:
+                v = None
+            finally:
+                dl.scarta_resa()
+            sagomato = v is not None
         if v is None and kind == "vassoio":
             # La dichiarazione deve valere anche quando dice di NO. Senza
             # questo ramo "vassoio" scivolava fino in fondo alla funzione e
@@ -2970,7 +2995,7 @@ def _analyze_pdf(pdf, kind=None, domande=False):
                 "questa fustella "
                 "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
         if v is not None:
-            return dict(kind="vassoio", title="Vassoio espositore",
+            return dict(kind="vassoio", title="Vassoio espositore", sagomato=sagomato,
                         meta=["vassoio espositore",
                               "fondo %.1f x %.1f mm, pareti %s mm"
                               % (v.fondo_w, v.fondo_h,
@@ -3761,6 +3786,7 @@ class Handler(BaseHTTPRequestHandler):
                     con_gelato = gelato.gusto(opts.get("gelato"))
                     chiusura = chiusura_incarto(opts.get("chiusura"))
                     quanti = quanti_pezzi(opts.get("quanti"))
+                    per_fila = per_fila_scelti(opts.get("per_fila"))
                     cu = cu_riempimento(opts.get("cu"))
                 except ValueError as e:
                     return self._send(400, str(e))
@@ -3955,7 +3981,8 @@ class Handler(BaseHTTPRequestHandler):
                             def costruisci(lastre, uscita):
                                 return build_riempimento(
                                     pdfs, info, uscita, quanti, quality=q,
-                                    carta=carta, incisioni=con_incisioni)
+                                    carta=carta, incisioni=con_incisioni,
+                                    per_fila=per_fila)
                         elif info["kind"] == "riempimento":
                             # un vassoio coi suoi flowpack: due costruzioni e
                             # un GLB solo, vedi `pack3d.riempimento`
@@ -3970,7 +3997,7 @@ class Handler(BaseHTTPRequestHandler):
                                     (int(opts.get("teeth", 20)), str(soft), case_fp, q,
                                      sezione_da_agente(opts.get("params")),
                                      scatola, pinne, lastre, col_riq, mat, mat_ai,
-                                     saldatura_scelta(opts)), q)
+                                     saldatura_scelta(opts)), q, per_fila=per_fila)
                         else:
                             soft, scatola, pinne, mat = parametri_flowpack(pdf, nomi[0])
 

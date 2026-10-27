@@ -47,6 +47,7 @@ PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
 SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
+STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
 
 
 # --------------------------------------------------------------------------- #
@@ -218,6 +219,7 @@ class Prodotto:
     rigido: bool = False    # un astuccio: niente pinne, e non si schiaccia
     accorcia: float = 1.0   # quanto e' stato accorciato lungo l'asse lungo: vedi `accorcia`
     schiaccia: float = 1.0  # quanto e' stato schiacciato nello spessore: vedi `schiaccia`
+    stringe: float = 1.0    # quanto e' stato stretto di lato: vedi `stringe`
 
 
 def misura_prodotto(J, B, rigido=False):
@@ -316,9 +318,12 @@ def _disposizione(vano, p, posa, dove, R, piega):
             # il T10 nel suo vassoio da 40 mm. Le pareti tengono il piede
             n[-1] = 1
         # in altezza gli strati si appoggiano uno sull'altro; di lato e in
-        # profondita' si allargano su tutto il vano
+        # profondita' si allargano su tutto il vano. Piu' alto delle pareti,
+        # sopra non c'e' niente contro cui piegare le punte: il posto e' il
+        # pezzo intero, e le pinne restano com'erano (sul caso 838cbae0ac i
+        # T1 in piedi piegavano 0,6 mm di punta per niente)
         passo.append(lati[a] / max(n[-1], 1) if a != 1
-                     else _misura(p, j) if _misura(p, j) > lati[1]
+                     else _misura(p, j) + 2.0 * GIOCO if _misura(p, j) > lati[1]
                      else min(_misura(p, j), lati[1] / max(n[-1], 1)))
     if min(n) < 1:
         return None
@@ -356,15 +361,18 @@ def disposizioni(vano, p):
     return out
 
 
-def scegli(vano, p, quanti):
+def scegli(vano, p, quanti, per_fila=None):
     """La disposizione per `quanti` pezzi (None: pieno), o None se il prodotto
     non ci sta in nessuna posa. Frontali sempre, se in piedi ci stanno: se ne
     chiedi di piu', si mettono quelli che ci stanno. Sdraiati, quella che li
-    tiene tutti con meno strati, o la piu' capiente."""
+    tiene tutti con meno strati, o la piu' capiente. `per_fila`: quanti pezzi
+    affiancati nel largo, se chi l'ha caricato lo dice (`_per_fila`)."""
     cand = disposizioni(vano, p)
     if not cand:
         return None
     if cand[0].posa == "frontali":
+        if per_fila and per_fila < cand[0].n[0]:
+            return _per_fila(vano, cand[0], per_fila)
         g = None if quanti is None else _griglia(cand, quanti)
         return g or cand[0]
     if quanti is None:
@@ -374,6 +382,22 @@ def scegli(vano, p, quanti):
         return max(cand, key=lambda d: d.capienza)
     buone.sort(key=lambda d: (-(-quanti // d.per_strato), -d.per_strato))
     return buone[0]
+
+
+def _per_fila(vano, d, per_fila):
+    """La disposizione frontale con `per_fila` pezzi affiancati nel largo,
+    allargati su tutto il vano, invece di quanti ce ne stanno.
+
+    Il pack non si allarga per riempire il posto: in un riempimento il CU e'
+    il suo modello, e il vassoio vero lo dice chi l'ha caricato. Il caso
+    838cbae0ac ha 3 per fila in 12 file nel vano da 148,4. Prima diventava 3
+    x 12 allargando il T1 a 49,6: «protuberanze e grafiche stirate». Ora le
+    file sono 3, a passo 49,5, e il T1 resta largo com'e' (40,1, 47,1 sulle
+    pinne): fra un pack e l'altro resta l'aria."""
+    lx = vano.per_asse[0]
+    return Disposizione(d.posa, d.dove + ", %d per fila" % per_fila, d.R,
+                        (per_fila, d.n[1], d.n[2]), (lx / per_fila, d.passo[1], d.passo[2]),
+                        d.piega)
 
 
 def _griglia(cand, quanti):
@@ -443,29 +467,55 @@ def accorcia(vano, p):
     return None
 
 
-def schiaccia(vano, p, quanti, posa):
+def schiaccia(vano, p, quanti, posa, per_fila=None):
     """Il flowpack SCHIACCIATO nello spessore quanto basta perche' ci stiano
     i `quanti` pezzi chiesti, con la sua disposizione: `(prodotto,
     disposizione)`, o None.
 
     Un display e' fatto per il suo numero, e i flowpack, pieni d'aria, ci
-    stanno stretti: si schiacciano fra i vicini. Col rigonfiamento nello
-    spessore il flowpack e' piu' spesso di prima, e il vassoio da 40 ne
-    teneva 38 (20,5 mm invece di 17), il display da 26 ne teneva 20 (20
-    invece di 16,5). Lo spessore cala a passi di mezzo per cento finche' ci
-    stanno tutti, al massimo di `SCHIACCIA_MAX`; oltre, il pezzo e' davvero
-    troppo grande e se ne mettono meno, come prima. La posa resta `posa`,
-    quella del pezzo non schiacciato: il vassoio da 40, frontale, al primo
-    mezzo per cento trovava sdraiati una griglia 8 x 5. Un astuccio non si
-    schiaccia."""
+    stanno stretti: si schiacciano fra i vicini. Il vassoio da 36 del caso
+    838cbae0ac ha 12 file da 3 in 245 mm, e il T1 al rigonfiamento 5 e'
+    spesso 22,2: 20,7 nel vassoio. Lo spessore cala a passi di mezzo per
+    cento finche' ci stanno tutti, al massimo di `SCHIACCIA_MAX`; oltre, il
+    pezzo e' davvero troppo grande e se ne mettono meno, come prima. La posa
+    resta `posa`, quella del pezzo non schiacciato: col flowpack piu' spesso
+    del rigonfiamento nello spessore, poi tolto, il vassoio da 40, frontale,
+    al primo mezzo per cento trovava sdraiati una griglia 8 x 5. Un astuccio
+    non si schiaccia."""
     if p.rigido or quanti is None:
         return None
     k = 1.0
     while k > 1.0 - SCHIACCIA_MAX + 1e-9:
         k -= 0.005
         q = replace(p, spesso=p.spesso * k, schiaccia=p.schiaccia * k)
-        d = scegli(vano, q, quanti)
+        d = scegli(vano, q, quanti, per_fila)
         if d is not None and d.posa == posa and d.capienza >= quanti:
+            return q, d
+    return None
+
+
+def stringe(vano, p, quanti, per_fila=None):
+    """Il flowpack STRETTO DI LATO quanto basta perche' ci stiano i `quanti`
+    pezzi chiesti, con la sua disposizione: `(prodotto, disposizione)`, o
+    None.
+
+    Quando schiacciarlo nello spessore non basta: affiancati, i flowpack si
+    schiacciano anche di lato fra i vicini. Il display a scatola da 15 del
+    caso c5b98dfbee, al rigonfiamento 10: il flowpack e' largo 38,7 a meta'
+    corpo, e sdraiati nei 189 mm del vano ce ne stavano 4 per strato invece
+    di 5 (il posto e' fino a 38,5); restavano 8 in piedi. La larghezza cala a
+    passi di mezzo per cento, al massimo di `STRINGE_MAX`, a UV ferme come lo
+    spessore. Vince la prima disposizione che li tiene tutti, in qualunque
+    posa: quella del pezzo largo non li teneva. Un astuccio non si stringe."""
+    if p.rigido or quanti is None:
+        return None
+    k = 1.0
+    while k > 1.0 - STRINGE_MAX + 1e-9:
+        k -= 0.005
+        q = replace(p, largo=p.largo * k, largo_pinne=p.largo_pinne * k,
+                    stringe=p.stringe * k)
+        d = scegli(vano, q, quanti, per_fila)
+        if d is not None and d.capienza >= quanti:
             return q, d
     return None
 
@@ -550,6 +600,11 @@ def adatta(P, N, p, d):
         P[:, spesso] = p.centro[spesso] + (P[:, spesso] - p.centro[spesso]) * p.schiaccia
         if N is not None:
             N[:, spesso] = N[:, spesso] / p.schiaccia
+    # 0. stretto di lato, se neanche schiacciato ci stavano: vedi `stringe`
+    if p.stringe != 1.0:
+        P[:, largo] = p.centro[largo] + (P[:, largo] - p.centro[largo]) * p.stringe
+        if N is not None:
+            N[:, largo] = N[:, largo] / p.stringe
     x = P[:, lungo] - p.centro[lungo]
     fine = p.corpo / 2.0
     # 1. le pinne non piu' larghe del passo fra due pezzi: due pinne vicine
@@ -596,7 +651,7 @@ def adatta(P, N, p, d):
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
-def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
+def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -614,7 +669,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
     vano = misura_vassoio(Jv, Bv)
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
-    d = scegli(vano, p, quanti)
+    d = scegli(vano, p, quanti, per_fila)
     accorciato = []
     if d is None:
         q = accorcia(vano, p)
@@ -630,13 +685,21 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False):
                          "(%.0f x %.0f x %.0f mm) non ci sta in nessuna posa"
                          % (vano.lati + (cosa, p.lungo, p.largo, p.spesso)))
     if quanti is not None and d.capienza < quanti:
-        q = schiaccia(vano, p, quanti, d.posa)
+        q = schiaccia(vano, p, quanti, d.posa, per_fila)
         if q is not None:
             spesso = p.spesso
             p, d = q
             accorciato.append("%s, gonfio, e' spesso %.1f mm e i %d pezzi chiesti non ci "
                               "stavano: schiacciato fra i vicini a %.1f mm (%.0f%%)"
                               % (cosa, spesso, quanti, p.spesso, 100.0 * p.schiaccia))
+    if quanti is not None and d.capienza < quanti:
+        q = stringe(vano, p, quanti, per_fila)
+        if q is not None:
+            largo = p.largo
+            p, d = q
+            accorciato.append("%s, gonfio, e' largo %.1f mm e i %d pezzi chiesti non ci "
+                              "stavano: stretto di lato fra i vicini a %.1f mm (%.1f%%)"
+                              % (cosa, largo, quanti, p.largo, 100.0 * p.stringe))
     massimo = d.capienza
     if quanti is None or quanti > massimo:
         quanti = massimo

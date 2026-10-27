@@ -298,70 +298,36 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     # piega - il Kinder Choco Fresh ha tutto il retro da un lato, 42 mm, e la
     # meta' dell'ellisse e' 40,5 - la cucitura va sulla piega; lasciata a 42
     # mm cadeva sul fronte, e il fronte finiva dietro.
-    #
-    # Gonfio, lo spigolo ai 45 gradi non e' piu' la piega del film: la sezione
-    # si ispessisce (`sezione_rigonfiata`) e i fianchi passano il loro
-    # pannello. Il film non si allunga, quindi si ancora al CENTRO DEL FRONTE
-    # (t = pi/2, y = 0 e z > 0): la cucitura sta a retro + fianco + meta'
-    # fronte del film prima di lui. Sul pack squadrato e' lo spigolo meno il
-    # retro, come prima, a meno dei decimi che la superellisse taglia; sul
-    # flowpack 30 x 12 al livello 9 lo spigolo era 1,9 mm piu' in la', e la
-    # grafica ruotava attorno al tubo.
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
-    if fp.tubo_piatto:
-        s0 = (cum[0] - min(fp.back_a, per / 2.0)) % per
-        i0 = int(np.searchsorted(cum, s0)) % len(P)
-        P = np.roll(P, -i0, axis=0)
-    else:
-        tot = fp.back_a + 2.0 * fp.T + fp.W + fp.back_b
-        fronte = (fp.back_a + fp.T + fp.W / 2.0) * per / tot if tot > 0 else per / 2.0
-        s0 = (cum[npts // 4] - fronte) % per
-        # sulle facce piatte la superellisse a esponente alto ha i punti
-        # radi, anche 5 mm l'uno dall'altro: la cucitura si mette nel punto
-        # esatto del segmento, non nel vertice piu' vicino
-        k = min(int(np.searchsorted(cum, s0, side="right")) - 1, len(P) - 1)
-        f = (s0 - cum[k]) / max(dd[k], 1e-12)
-        Q = P[k] + f * (P[(k + 1) % len(P)] - P[k])
-        P = np.vstack([Q[None], np.roll(P, -(k + 1), axis=0)])
+    i_sp = 0 if fp.tubo_piatto else int(round(npts * 7.0 / 8.0)) % npts
+    retro = min(fp.back_a, per / 2.0) if fp.tubo_piatto else fp.back_a
+    s0 = (cum[i_sp] - retro) % per
+    i0 = int(np.searchsorted(cum, s0)) % len(P)
+    P = np.roll(P, -i0, axis=0)
     P = np.vstack([P, P[:1]])           # contorno chiuso
     dd = np.linalg.norm(np.diff(P, axis=0), axis=1)
     d = np.concatenate([[0.0], np.cumsum(dd)])
     return P, d, a
 
 
-def _perimetro_superellisse(a, b, n, npts=1600):
-    t = np.linspace(0.0, 2.0 * np.pi, npts, endpoint=False)
-    ct, st = np.cos(t), np.sin(t)
-    P = np.stack([a * np.sign(ct) * np.abs(ct) ** (2.0 / n),
-                  b * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
-    return float(np.sum(np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)))
-
-
 def sezione_rigonfiata(fp: Flowpack, n: float, npts: int = 1600):
-    """Sezione al livello di rigonfiamento `n`, a steso invariato: torna lo
-    spessore in unita' di `fp.T`.
+    """Sezione al livello di rigonfiamento `n`, a steso invariato.
 
     Il rigonfiamento e' un cambio di forma, non di taglia: la sezione passa dal
-    rettangolo (n alto, pack teso sul prodotto) all'ellisse (n=2, pack pieno)
-    a perimetro del film fermo. La larghezza la tiene il prodotto, ed e' la
-    faccia del DT: il film che la forma tonda lascia libero agli spigoli va
-    nello SPESSORE. Prima teneva fermo il rapporto larghezza/spessore e
-    riscalava tutto: il pack gonfio si allargava invece di ispessirsi -
-    il flowpack 30 x 12 del display T15 al livello 8 33,7 x 13,5, con la
-    faccia stirata, mentre la foto del pack vero lo mostra spesso quasi due
-    terzi della larghezza (al livello 9 ora 30 x 21,3, 31,6 a meta' corpo).
+    rettangolo (n alto, pack teso sul prodotto) all'ellisse (n=2, pack pieno
+    d'aria) tenendo fermi il rapporto larghezza/spessore misurato e il
+    perimetro del film. A parita' di perimetro una forma tonda e' piu' grande
+    di una squadrata, quindi il pack si gonfia in entrambe le direzioni: e' la
+    scala che lo mette in conto, e il perimetro scala con lei.
     """
-    a = fp.W / 2.0
-    lo, hi = 1e-3, fp.girth
-    for _ in range(80):
-        mid = 0.5 * (lo + hi)
-        if _perimetro_superellisse(a, mid, n, npts) < fp.girth:
-            lo = mid
-        else:
-            hi = mid
-    return (lo + hi) / fp.T
+    t = np.linspace(0.0, 2.0 * np.pi, npts, endpoint=False)
+    ct, st = np.cos(t), np.sin(t)
+    P = np.stack([fp.W / 2.0 * np.sign(ct) * np.abs(ct) ** (2.0 / n),
+                  fp.T / 2.0 * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
+    per = float(np.sum(np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)))
+    return fp.girth / per
 
 
 def _incrocio(P, d, asse, segno):
