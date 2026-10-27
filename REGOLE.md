@@ -5097,6 +5097,21 @@ e alla mappatura per pannello, e i flowpack del parco tornano identici al
 byte a quelli approvati prima del rilascio. Chi vuole un pack piu' spesso
 sceglie il livello, e la faccia si allarga con lui.
 
+**Nello spessore, se lo si sceglie per il pack** (`"gonfio": "spessore"`
+fra le opzioni del caso; `Flowpack.nello_spessore`). Il display a scatola da
+15 del caso c5b98dfbee e' fatto per 3 strati del pack vero: 70,5 mm di vano.
+Nel rapporto del DT il flowpack 30 x 12 al livello 10 e' spesso 15,9 a
+meta' corpo, i 3 strati arrivano a 47,7 mm, e lo strato di sopra resta sotto
+il taglio del fronte (49 mm al centro): da davanti i pezzi quasi non si
+vedono, «sono troppo bassi». Nello spessore al livello 9 e' 30 x 19,7 (21,3
+a meta' corpo): 3 strati da 64 mm, sopra il taglio come nel display vero.
+Al livello 10 sarebbe 25,1 a meta' corpo, e 3 strati non ci stanno. Cosi'
+il rigonfiamento nello spessore torna, ma solo per il pack che lo sceglie:
+la regola di prima, con la faccia ferma, la cucitura al centro del fronte e
+gli spigoli solo per la verifica, identica al byte (il display al livello 9
+e' `43cfbbfe`, quello approvato il 26 ottobre). Senza la scelta niente
+cambia: il T1 del vassoio da 36 resta largo 40,1.
+
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi
@@ -6269,7 +6284,9 @@ e' stata provata e tolta; anche il rigonfiamento nello spessore (30 x 19,7)
 e' stato provato e tolto (*Il rigonfiamento resta nel rapporto del DT*).
 Poi il proprietario ha chiesto il livello 10: 36,5 x 14,6 (38,7 x 15,9 a
 meta' corpo), stretto di lato a 38,5 perche' ne stiano 5 per strato (*Se lo
-spessore non basta, di lato*).
+spessore non basta, di lato*). Ma cosi' i pezzi stavano troppo bassi, e alla
+fine il pack ha il rigonfiamento nello spessore, al livello 9 (*Nello
+spessore, se lo si sceglie per il pack*): 3 strati da 21,3 mm, 64 dei 70,5.
 
 ### Sdraiati, stanno in piano
 

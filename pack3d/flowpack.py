@@ -54,6 +54,9 @@ class Flowpack:
     # sheet e girth_span sono in quel telaio, la texture va trasposta anche lei
     ruotato: bool = False
     warnings: list = field(default_factory=list)
+    # a pinna, il rigonfiamento nello SPESSORE invece che nel rapporto del DT:
+    # una scelta del pack, non una regola (`sezione_rigonfiata`)
+    nello_spessore: bool = False
 
     @property
     def pillow(self):
@@ -298,18 +301,45 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     # piega - il Kinder Choco Fresh ha tutto il retro da un lato, 42 mm, e la
     # meta' dell'ellisse e' 40,5 - la cucitura va sulla piega; lasciata a 42
     # mm cadeva sul fronte, e il fronte finiva dietro.
+    #
+    # Gonfio nello spessore (`fp.nello_spessore`), lo spigolo ai 45 gradi non
+    # e' piu' la piega del film: i fianchi passano il loro pannello. Il film
+    # non si allunga, quindi si ancora al CENTRO DEL FRONTE (t = pi/2): la
+    # cucitura sta a retro + fianco + meta' fronte del film prima di lui. Sul
+    # flowpack 30 x 12 al livello 9 lo spigolo era 1,9 mm piu' in la', e la
+    # grafica ruotava attorno al tubo.
     dd = np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)
     cum = np.concatenate([[0.0], np.cumsum(dd)])
     per = cum[-1]
-    i_sp = 0 if fp.tubo_piatto else int(round(npts * 7.0 / 8.0)) % npts
-    retro = min(fp.back_a, per / 2.0) if fp.tubo_piatto else fp.back_a
-    s0 = (cum[i_sp] - retro) % per
-    i0 = int(np.searchsorted(cum, s0)) % len(P)
-    P = np.roll(P, -i0, axis=0)
+    if fp.nello_spessore and not fp.tubo_piatto:
+        tot = fp.back_a + 2.0 * fp.T + fp.W + fp.back_b
+        fronte = (fp.back_a + fp.T + fp.W / 2.0) * per / tot if tot > 0 else per / 2.0
+        s0 = (cum[npts // 4] - fronte) % per
+        # sulle facce piatte la superellisse a esponente alto ha i punti
+        # radi, anche 5 mm l'uno dall'altro: la cucitura si mette nel punto
+        # esatto del segmento, non nel vertice piu' vicino
+        k = min(int(np.searchsorted(cum, s0, side="right")) - 1, len(P) - 1)
+        f = (s0 - cum[k]) / max(dd[k], 1e-12)
+        Q = P[k] + f * (P[(k + 1) % len(P)] - P[k])
+        P = np.vstack([Q[None], np.roll(P, -(k + 1), axis=0)])
+    else:
+        i_sp = 0 if fp.tubo_piatto else int(round(npts * 7.0 / 8.0)) % npts
+        retro = min(fp.back_a, per / 2.0) if fp.tubo_piatto else fp.back_a
+        s0 = (cum[i_sp] - retro) % per
+        i0 = int(np.searchsorted(cum, s0)) % len(P)
+        P = np.roll(P, -i0, axis=0)
     P = np.vstack([P, P[:1]])           # contorno chiuso
     dd = np.linalg.norm(np.diff(P, axis=0), axis=1)
     d = np.concatenate([[0.0], np.cumsum(dd)])
     return P, d, a
+
+
+def _perimetro_superellisse(a, b, n, npts=1600):
+    t = np.linspace(0.0, 2.0 * np.pi, npts, endpoint=False)
+    ct, st = np.cos(t), np.sin(t)
+    P = np.stack([a * np.sign(ct) * np.abs(ct) ** (2.0 / n),
+                  b * np.sign(st) * np.abs(st) ** (2.0 / n)], 1)
+    return float(np.sum(np.linalg.norm(np.diff(np.vstack([P, P[:1]]), axis=0), axis=1)))
 
 
 def sezione_rigonfiata(fp: Flowpack, n: float, npts: int = 1600):
@@ -321,7 +351,26 @@ def sezione_rigonfiata(fp: Flowpack, n: float, npts: int = 1600):
     perimetro del film. A parita' di perimetro una forma tonda e' piu' grande
     di una squadrata, quindi il pack si gonfia in entrambe le direzioni: e' la
     scala che lo mette in conto, e il perimetro scala con lei.
+
+    Con `fp.nello_spessore`, scelto per il pack, la larghezza resta la faccia
+    del DT e il film che la forma tonda lascia libero agli spigoli va nello
+    SPESSORE: il display a scatola da 15 del caso c5b98dfbee e' fatto per 3
+    strati del pack vero, e nel rapporto del DT il flowpack 30 x 12 al livello
+    9 e' spesso 13,9 (3 strati, 45 mm dei 70,5 del vano); nello spessore 19,7
+    (21,3 a meta' corpo, 64 mm). Per tutti i flowpack la regola ha stretto la
+    grafica del T1 approvato del vassoio da 36 (40,1 -> 37,1 mm di faccia), e
+    resta una scelta. Torna lo spessore in unita' di `fp.T`.
     """
+    if fp.nello_spessore and not fp.tubo_piatto:
+        a = fp.W / 2.0
+        lo, hi = 1e-3, fp.girth
+        for _ in range(80):
+            mid = 0.5 * (lo + hi)
+            if _perimetro_superellisse(a, mid, n, npts) < fp.girth:
+                lo = mid
+            else:
+                hi = mid
+        return (lo + hi) / fp.T
     t = np.linspace(0.0, 2.0 * np.pi, npts, endpoint=False)
     ct, st = np.cos(t), np.sin(t)
     P = np.stack([fp.W / 2.0 * np.sign(ct) * np.abs(ct) ** (2.0 / n),
