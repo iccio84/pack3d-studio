@@ -31,6 +31,10 @@ sono in GADGET.md.
   PDF tornano al processo del server. `/api/lavori` dice alla pagina a che
   punto e' in fila, e quanti lavoratori ci sono: uno per vCPU del container
   (`lavoratori.quanti`).
+- `pack3d/stato.py`: un lavoro, una cartella e uno stato. I file temporanei
+  di un'analisi o di una costruzione vanno in `stato.cartella()`, le casse
+  che valgono per un lavoro solo si dichiarano con `stato.per_lavoro`, e
+  `Handler.do_POST` apre il lavoro (`stato.lavoro`) e alla fine butta tutto.
 - `pack3d/dieline.py`, `tratti`: i tratti di una pagina come li da'
   pdfplumber, letti una volta per file e per pagina e tenuti in memoria e su
   disco (`PACK3D_CACHE`), per tutti i lavoratori. Chi vuole i tracciati della

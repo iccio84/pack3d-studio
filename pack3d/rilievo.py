@@ -33,7 +33,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
-from . import techink
+from . import stato, techink
 
 # Come si chiama la lastra di un rilievo, e da che parte va. "Embossing" e
 # "Debossing" sono i nomi dei Processing Steps; gli altri quelli che si
@@ -92,7 +92,7 @@ def altezze(pdf, quali, riquadro, misura, page_no=0, dpi=DPI):
     """L'altezza del rilievo in mm, HxW float32, sul `riquadro` del foglio
     (punti, telaio di misura, y in giu') portato a `misura` (larghezza,
     altezza) in pixel. None se la lastra non si legge."""
-    cartella = tempfile.mkdtemp(prefix="rilievo_")
+    cartella = tempfile.mkdtemp(prefix="rilievo_", dir=stato.cartella())
     try:
         r = _ritaglio(pdf, page_no, riquadro, os.path.join(cartella, "r.pdf"))
         solo = next(iter(quali)) if len(quali) == 1 else None

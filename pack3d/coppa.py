@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import cup as cupmod
+from . import stato
 from . import tracciati as tr
 
 PT2MM = 25.4 / 72.0
@@ -93,7 +94,7 @@ def _bezier(p0, p1, p2, p3, n=12):
 # Le ultime pagine lette: chi riconosce il PDF e chi lo costruisce lo
 # leggono tutti e due, e sullo sleeve del Nutella POT sono 3,5 secondi. Due
 # bastano - lo sleeve e il tappo - e piu' di due restano in memoria per niente.
-_LETTE = {}
+_LETTE = stato.per_lavoro({})
 _LETTE_MAX = 2
 _LETTE_CHIAVE = threading.Lock()
 

@@ -61,7 +61,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
-from . import strati
+from . import stato, strati
 from .dieline import PT2MM, render_page
 
 # I nomi di livello che portano la colata, confrontati per nome intero.
@@ -299,9 +299,9 @@ def quadricromia(pdf, page_no, scala, riq, sovrastampa="simulate"):
         pg.mediabox.lower_left = (bx + x0, by + alt - y1)
         pg.mediabox.upper_right = (bx + x1, by + alt - y0)
         pg.cropbox = pg.mediabox
-        sorgente = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        sorgente = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
         sorgente.close()
-        destinazione = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+        destinazione = tempfile.NamedTemporaryFile(suffix=".png", delete=False, dir=stato.cartella())
         destinazione.close()
         with open(sorgente.name, "wb") as fh:
             w.write(fh)
@@ -553,7 +553,7 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None, livello=None):
             return _a_occhio(pdf, scala, page_no, note, riquadro, livello)
         return render_page(pdf, page_no, scala, livello)
 
-    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
     tmp.close()
     try:
         spenti = spegni(pdf, tmp.name, nomi)

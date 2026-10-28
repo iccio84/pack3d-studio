@@ -382,6 +382,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - pdfium non si chiama da due thread
   - Due processi: i lavoratori
   - I tracciati di un PDF si leggono una volta
+  - Un lavoro, una cartella e uno stato
 
 **`regole/flowpack.md`** - flowpack
 

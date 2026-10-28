@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from PIL import Image, ImageFilter
 
-from . import techink
+from . import stato, techink
 
 ALLUMINIO, BIANCO, OPACA = "alluminio", "bianco", "opaca"
 RUOLI = (ALLUMINIO, BIANCO, OPACA)
@@ -519,7 +519,7 @@ def maschere(pdf, lettura, dimensione, page_no=0):
     """
     W, H = dimensione
     fuori = {}
-    cartella = tempfile.mkdtemp(prefix="materiali_")
+    cartella = tempfile.mkdtemp(prefix="materiali_", dir=stato.cartella())
     try:
         per_regione = {}
         for ruolo in RUOLI:

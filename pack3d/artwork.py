@@ -28,6 +28,7 @@ import tempfile
 
 from PIL import Image
 
+from . import stato
 from .dieline import PT2MM
 
 
@@ -59,7 +60,7 @@ def risoluzione(quality):
 # Le copie a pagina unica gia' fatte: impronta del file -> (copia, pagine).
 # L'interfaccia chiede /api/analyze e subito dopo /api/build sullo stesso
 # file, e l'analisi in memoria si ritrova solo se la copia e' la stessa.
-_UNA_PAGINA = {}
+_UNA_PAGINA = stato.per_lavoro({})
 _UNA_PAGINA_MAX = 8
 
 
@@ -111,7 +112,7 @@ def _pagina_unica(pdf):
         w = pypdf.PdfWriter(clone_from=pdf)
         for i in range(len(w.pages) - 1, 0, -1):
             w.remove_page(i)
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
         tmp.close()
         with open(tmp.name, "wb") as fh:
             w.write(fh)
@@ -161,7 +162,7 @@ def riquadro_girato(pdf, riq, gradi):
 
 # Le copie girate gia' fatte: (impronta del file, gradi) -> copia. Stessa
 # ragione di _UNA_PAGINA: /api/analyze e /api/build girano lo stesso file.
-_GIRATE = {}
+_GIRATE = stato.per_lavoro({})
 _GIRATE_MAX = 8
 
 
@@ -233,7 +234,7 @@ def pagina_girata(pdf, gradi):
     nuovo.set_data(b"q " + " ".join("%.6f" % v for v in m).encode()
                    + b" cm\n" + dati + b"\nQ\n")
     page.replace_contents(nuovo.flate_encode())
-    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
     tmp.close()
     with open(tmp.name, "wb") as fh:
         w.write(fh)
@@ -1203,7 +1204,7 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
     if not lastre and regione is None and not zone:
         return pdf, []
     try:
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
         tmp.close()
         # Tolto il box resta la sua DIDASCALIA, se non e' scritta in bianco:
         # sul Kinder Cards T2 "Best Before Area" e "POSITIONING AREA FOR EAN

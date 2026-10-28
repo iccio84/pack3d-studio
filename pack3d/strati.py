@@ -40,6 +40,8 @@ import os
 import re
 import tempfile
 
+from . import stato
+
 
 def livelli(pdf):
     """{nome minuscolo: riferimento} degli OCG della pagina."""
@@ -120,7 +122,7 @@ def tecnici(pdf, page_no=0):
 # toglie la lastra - e li legge `rendi`, che la lastra non la vede piu'.
 # Chiave come per le penne: un file temporaneo puo' riprendere il nome di uno
 # cancellato.
-_RISERVATE = {}
+_RISERVATE = stato.per_lavoro({})
 
 
 def _chiave(pdf):
@@ -155,7 +157,7 @@ def senza_tecnici(pdf, page_no=0):
     nomi = tecnici(pdf, page_no)
     if not nomi:
         return pdf, []
-    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
     tmp.close()
     try:
         spenti = spegni(pdf, tmp.name, nomi)
@@ -235,7 +237,7 @@ def _livelli_oggetto(o):
 
 # (file, pagina, mtime, taglia) -> penne. Un file temporaneo puo' riprendere il
 # nome di uno cancellato: la chiave sul solo nome darebbe le penne di un altro.
-_PENNE = {}
+_PENNE = stato.per_lavoro({})
 
 
 def penne(pdf, page_no=0):
@@ -260,7 +262,7 @@ def penne(pdf, page_no=0):
 # EDITION" sullo stesso file - non ha i lati sulle linee del DT, e resta.
 VELO_TOLLERANZA = 1.0   # punti fra un lato del velo e la linea del DT
 VELO_LATO_MIN = 5.0     # punti: sotto e' un segno, non una zona
-_LINEE = {}
+_LINEE = stato.per_lavoro({})
 
 
 def linee_dt(pdf, page_no=0, pen=None):
@@ -539,7 +541,7 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
 SPENTO_TOLLERANZA = 0.6   # punti fra il riquadro scelto e quello dell'oggetto
 CANDIDATO_LATO_MIN = 3.0  # punti: sotto e' un tratto, e i tratti li prende gia' la stima
 CANDIDATO_QUOTA = 0.15    # della superficie del DT: oltre e' un fondo, e i fondi sono grafica
-_SPENTI = []
+_SPENTI = stato.per_lavoro([])
 
 
 @contextlib.contextmanager
@@ -686,8 +688,8 @@ def candidati_tecnici(pdf, regione, page_no=0):
 _QUADRICROMIA = frozenset(("cyan", "magenta", "yellow", "black"))
 # (file, mtime, taglia, pagina) -> disegni, e -> scelte: il flusso si legge
 # una volta sola, e le lastre pure
-_SOVRASTAMPE = {}
-_SCELTE = {}
+_SOVRASTAMPE = stato.per_lavoro({})
+_SCELTE = stato.per_lavoro({})
 # risoluzione a cui si guarda sotto le immagini: quella della spia del nero.
 # L'ombra della colata e' larga tre o quattro punti, e ci sta su due pixel.
 DPI_SOTTO = 36.0
