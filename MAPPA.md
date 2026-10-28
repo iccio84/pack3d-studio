@@ -29,7 +29,8 @@ sono in GADGET.md.
   `server._a_un_lavoratore` passa la richiesta, `server.esegui_lavoro` la
   rifa' nel lavoratore com'era, e i casi da mettere in coda e la lettura del
   PDF tornano al processo del server. `/api/lavori` dice alla pagina a che
-  punto e' in fila.
+  punto e' in fila, e quanti lavoratori ci sono: uno per vCPU del container
+  (`lavoratori.quanti`).
 - `pack3d/dieline.py`, `tratti`: i tratti di una pagina come li da'
   pdfplumber, letti una volta per file e per pagina e tenuti in memoria e su
   disco (`PACK3D_CACHE`), per tutti i lavoratori. Chi vuole i tracciati della

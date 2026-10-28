@@ -263,13 +263,43 @@ ogni chiamata a pdfium, che pero' rimette in fila esattamente quello che si
 voleva parallelizzare.
 
 I processi adesso ci sono: i **lavoratori** (`pack3d/lavoratori.py`,
-REGOLE.md, *Due processi: i lavoratori*). `PACK3D_LAVORATORI` processi,
-due di serie, fanno ognuno un'analisi o una costruzione alla volta; chi
-arriva coi lavoratori occupati aspetta in fila, e la pagina gli dice quanti
-lavori ha davanti. Un lavoratore che cade si porta via solo il suo lavoro, e
-riparte. Piu' vCPU servono adesso: con uno Space da 4 o 8 vCPU si alza
-`PACK3D_LAVORATORI`, e la memoria da tenere e' quella di una costruzione per
-lavoratore.
+REGOLE.md, *Due processi: i lavoratori*). `PACK3D_LAVORATORI` processi, uno
+per vCPU dello Space, fanno ognuno un'analisi o una costruzione alla volta;
+chi arriva coi lavoratori occupati aspetta in fila, e la pagina gli dice
+quanti lavori ha davanti. Un lavoratore che cade si porta via solo il suo
+lavoro, e riparte.
+
+### Piu' vCPU: cosa comprano
+
+Piu' costruzioni insieme, non una costruzione piu' veloce: la pipeline e' a
+un thread solo. Misurato il 28 ottobre 2026 su una macchina da 4 vCPU, sei
+costruzioni diverse del parco mandate insieme:
+
+| lavoratori | tutte finite in | attesa media di chi le ha chieste |
+|---|---|---|
+| 1 | 140 s | 84 s |
+| 2 | 79 s | 48 s |
+| 4 | 45 s | 32 s |
+
+Quasi una vCPU, una costruzione in piu' insieme; la piu' lunga da sola, la
+scatola a punta T6, resta 33-35 s comunque. Con due persone alla volta
+bastano le 2 vCPU del CPU basic; con un gruppo che carica insieme, chi arriva
+terzo aspetta una costruzione intera, e li' servono vCPU.
+
+Per passare a **CPU upgrade** (8 vCPU, 32 GB; 0,03 $ l'ora sulla pagina dei
+prezzi di Hugging Face, a ottobre 2026, contati a minuti mentre lo Space e'
+acceso - una ventina di dollari al mese se non dorme mai):
+
+1. Impostazioni dello Space -> **Space hardware** -> **CPU upgrade**. Si
+   paga solo l'hardware a pagamento, e li' si puo' scegliere anche dopo
+   quanto lo Space dorme se nessuno lo usa (**Sleep time**).
+2. Nelle **Variables** `PACK3D_LAVORATORI` non deve esserci, o deve valere
+   `auto`: un vecchio `2` li tiene a due anche su 8 vCPU.
+3. Lo Space riparte da solo. `/api/lavori` dice quello che ha visto:
+   `"lavoratori": 8` e `"macchina": {"vcpu": 8.0, "memoria_gb": 32.0, ...}`.
+   Se `vcpu` e' `null` il container non dichiara il suo tetto di CPU, e i
+   lavoratori restano due: allora si mette `PACK3D_LAVORATORI` a `8` nelle
+   Variables.
 
 ## B. Render — dove stava prima
 
