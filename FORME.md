@@ -172,7 +172,8 @@ quest'ordine:
 
 ## 7. Le regole
 
-- **REGOLE.md**, una sezione nuova come *La scatola a punta*: cos'e' e come
+- **Le regole**: un file nuovo in `regole/`, come `regole/punta.md` per
+  *La scatola a punta*, e le sue sezioni nell'indice di REGOLE.md: cos'e' e come
   si dichiara, il caso da cui e' nata (il codice del caso, mai il nome del
   cliente), *La firma in fustella* coi numeri, *Il solido* con le formule,
   la texture, e *Cosa manca*.

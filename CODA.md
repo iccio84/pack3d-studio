@@ -3,7 +3,8 @@
 Queste sono le istruzioni per la sessione di Claude Code che prende i casi
 nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
 rilascio della settimana sta in RILASCIO.md, la mappa del codice in MAPPA.md,
-il perche' delle regole del codice in REGOLE.md, la ricetta per una forma
+il perche' delle regole del codice in REGOLE.md (i principi e l'indice) e in
+`regole/` (un file per famiglia), la ricetta per una forma
 nuova in FORME.md. I gadget non passano dalla coda: le loro regole sono in
 GADGET.md.
 
@@ -17,9 +18,10 @@ meccanici e letture che restavano li' fino alla fine. Per questo:
 - **Pochi passi.** I tre comandi del caso (`prepara`, `consegna`,
   `approvato`, qui sotto) fanno in un passo quello che ne chiedeva venti.
   Comandi indipendenti vanno in una riga sola.
-- **Mai un file intero se non serve.** REGOLE.md e' lungo come un libro,
-  `server.py` e la pagina quasi: cerca con `grep -n` e leggi solo il pezzo
-  (`sed -n 'A,Bp'`). Dove guardare lo dice MAPPA.md.
+- **Mai un file intero se non serve.** Le regole della famiglia,
+  `server.py` e la pagina sono lunghi: cerca con `grep -n` e leggi solo il
+  pezzo (`sed -n 'A,Bp'`). Dove guardare lo dice MAPPA.md; in che file sta
+  una regola lo dice l'indice in fondo a REGOLE.md.
 - **La ricerca della causa in un sotto-agente.** Quando non sai dove sta il
   difetto, chiedi a un sotto-agente (Explore) una cosa precisa - "dove si
   decide il verso della grafica del flowpack, e con quali numeri" - e fatti
@@ -54,7 +56,8 @@ per la scatola a punta o `pack3d/ballotin.py`. Il modulo:
 - se il pack e' in piu' pezzi (un PDF per pezzo), si monta come la coppa e
   il cono (`server._pezzi_tondi`): ogni PDF dice da se' che pezzo e', e
   l'ordine in cui arrivano non conta;
-- ha la sua sezione in REGOLE.md e la sua riga in MAPPA.md.
+- ha il suo file in `regole/`, la sua riga nell'indice di REGOLE.md e in
+  MAPPA.md.
 
 **La ricetta e' in FORME.md**: capire la forma, dove entra, il modulo, la
 costruzione, le prove, le regole. Seguila dall'inizio.
@@ -150,7 +153,10 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 5. **Trova la causa** (MAPPA.md, un sotto-agente per la ricerca). La
    correzione e' una **regola generale**: mai il nome del file, il codice del
    cliente o misure cucite su quel PDF. Se l'errore non si spiega con una
-   regola, *Un caso che non si risolve*.
+   regola, *Un caso che non si risolve*. Se la regola cambia altri modelli
+   approvati del parco, non e' di tutti: diventa una **scelta del pack**, con
+   un valore di serie che lascia gli altri come sono (REGOLE.md, *Una regola
+   per tutti, o una scelta del pack*).
 6. **Correggi e ricostruisci solo il caso**:
 
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso_<codice> --solo <nome> | tail -3
@@ -162,8 +168,9 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
        python3 prove/parco.py stesi ../pack3d-casi /tmp/caso_<codice> --solo <nome>
 
    Niente parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
-   regola in REGOLE.md - il caso, la causa, la regola, con i numeri - nella
-   sezione della famiglia, leggendo solo le righe intorno (`grep -n`). Poi
+   regola nel file della famiglia in `regole/` - il caso, la causa, la
+   regola, con i numeri - leggendo solo le righe intorno (`grep -n`); il
+   prodotto col suo nome neutro, mai quello del cliente. Poi
    *Quando si unisce nel ramo della settimana*.
 7. **Consegna**:
 

@@ -2,8 +2,9 @@
 
 Per chi corregge un caso della coda (CODA.md): dove sta quello che serve,
 senza aprire i file interi. `server.py` e la pagina sono lunghi (decine di
-migliaia di parole), REGOLE.md ancora di piu': si cerca con `grep -n` e si
-legge solo il pezzo (`sed -n 'A,Bp'`, o Read con offset e limit). Per una
+migliaia di parole): si cerca con `grep -n` e si legge solo il pezzo
+(`sed -n 'A,Bp'`, o Read con offset e limit). Le regole stanno in REGOLE.md,
+i principi e l'indice, e in `regole/`, un file per famiglia. Per una
 forma che il codice non conosce ancora, la ricetta e' in FORME.md. I gadget
 (oggetti promozionali senza DT) non hanno ancora codice qui: le loro regole
 sono in GADGET.md.
@@ -87,10 +88,15 @@ sono in GADGET.md.
 
 ## Le regole gia' scritte
 
-REGOLE.md ha una sezione per ogni famiglia e per ogni regola (`### ...`).
-Per trovare quella del caso: `grep -n '^##' REGOLE.md`, poi leggi solo la
-sezione che serve. Per aggiungere la regola nuova: leggi solo le righe
-intorno a dove va, e aggiungila li'.
+REGOLE.md ha i principi - le tre regole per tutte le famiglie, *Una regola
+per tutti, o una scelta del pack* - le domande all'utente e l'indice; le
+regole di ogni famiglia stanno in `regole/<famiglia>.md`. Per trovare quella
+del caso: l'indice in fondo a REGOLE.md dice il file, poi
+`grep -n '^##' regole/<famiglia>.md` e leggi solo la sezione che serve. Per
+aggiungere la regola nuova: leggi solo le righe intorno a dove va, aggiungila
+li', e se e' una sezione nuova mettila anche nell'indice. I prodotti hanno
+nomi neutri: quale prodotto e' ognuno lo dice `regole/nomi.md` nel
+repository dei casi.
 
 ## Gli strumenti del caso
 

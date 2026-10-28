@@ -15,7 +15,8 @@ import os
 RADICE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILE = ("server.py", "agent.py", "pack3d_studio.html", "REGOLE.md",
         "requirements.txt")
-CARTELLE = ("pack3d", "risorse")
+# regole/: le regole di ogni famiglia, che l'agente legge con REGOLE.md
+CARTELLE = ("pack3d", "risorse", "regole")
 
 
 def impronta(radice=RADICE):
