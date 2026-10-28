@@ -369,6 +369,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - Le misure approvate: cambiato non vuol dire peggiorato
 - La lettura del PDF accanto al modello
 - Il controllo dell'AI prima della consegna
+  - Il modello subito, il verdetto dopo
   - La correzione: gli inchiostri tecnici li sceglie chi li vede
   - La coda dei casi nuovi
   - Chi lavora la coda, e il parco che la protegge

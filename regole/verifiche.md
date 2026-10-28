@@ -278,6 +278,8 @@ come lo guarderebbe una persona:
   passano da pdfium (vedi *pdfium non si chiama da due thread*). La risposta di
   Claude si aspetta **fuori**: e' solo attesa di rete, e chi viene dopo intanto
   costruisce.
+- **Il modello arriva prima del verdetto** (*Il modello subito, il verdetto
+  dopo*, qui sotto): chi l'ha chiesto lo guarda mentre Claude lo guarda.
 
 Non sono difetti, e il controllo lo sa: il DT, le quote, le note e le barre
 colore che il servizio toglie; i box delle aree riservate e la tabella GDA
@@ -323,6 +325,44 @@ legge `%HVW%HIRUH$UHD`, cioe' "BestBeforeArea" coi codici spostati di 29.
 Nessuna delle strade per nome lo trova (vedi *Le aree riservate non
 compaiono mai nel render*), e l'occhio che dovrebbe vederlo sul fondo non
 guarda.
+
+### Il modello subito, il verdetto dopo
+
+Chi costruiva un modello aspettava la costruzione, poi la risposta di Claude
+- una decina di secondi - e, quando il controllo vedeva segni tecnici, la
+correzione con una seconda costruzione e un secondo verdetto. Il modello
+c'era gia', e non lo vedeva nessuno.
+
+Adesso la costruzione lo manda appena c'e', con le viste del controllo gia'
+fatte, e nell'header `X-Pack3d-Verdetto` un gettone; poi va avanti come
+prima, con lo stesso codice: il giudizio, la correzione se serve, i difetti
+delle verifiche, il caso in coda. Il verdetto, le righe dell'AI e il modello
+corretto, se la correzione l'ha rifatto, li da' `/api/verdetto` col gettone
+(`nuovo_verdetto`, `metti_verdetto`; il GLB corretto `/api/verdetto/glb`).
+In un lavoratore la risposta parte prima della fine del lavoro (`_Lavoro`,
+`lavoratori.esegui` con `anticipo`), e il verdetto torna al processo del
+server con lei.
+
+La pagina mostra il modello subito, con «controllo dell'AI in corso» nella
+riga di stato, e chiede il verdetto ogni secondo e mezzo (`seguiVerdetto`).
+Quando arriva fa quello che prima faceva a costruzione finita:
+
+- **ok**: la riga di stato dice «controllato dall'AI»;
+- **dubbio**: l'avviso del dubbio, col codice del caso;
+- **sbagliato**: il modello esce dal visore e compare il riquadro del caso
+  nuovo, con «Mostra comunque il modello»: un modello respinto non resta in
+  vista come se fosse buono;
+- **corretto**: il modello nuovo prende il posto del primo.
+
+Un modello costruito dopo ferma l'attesa di quello prima. Se il verdetto non
+arriva - il controllo che cade a meta' - lo dicono le righe dell'AI, e il
+modello resta. `prove/parco.py spazio` aspetta il verdetto e, se c'e', il
+modello corretto (`_verdetto`).
+
+Provato con un'API finta che risponde dopo otto secondi, come quella vera:
+il modello nella pagina a 5-8 s, il verdetto a 14-19 s, ok, dubbio e
+sbagliato; il modello corretto al posto del primo; con i lavoratori e senza
+(`PACK3D_LAVORATORI=0`).
 
 ### La correzione: gli inchiostri tecnici li sceglie chi li vede
 

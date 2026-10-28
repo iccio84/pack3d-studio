@@ -27,6 +27,9 @@ quanti lavori ha davanti (`posizione`).
   oltre, si risponde «occupato» come prima (`Occupato`).
 - Un lavoro che non finisce in `LAVORO_MAX` secondi si ferma, e il lavoratore
   riparte.
+- Una costruzione col controllo dell'AI manda il modello prima di finire
+  (`anticipo`): parte subito verso chi l'ha chiesto, e il lavoratore resta
+  occupato col verdetto, che torna al processo del server alla fine.
 - `PACK3D_LAVORATORI=0`: niente lavoratori, tutto nel processo del server e
   una costruzione alla volta, come prima.
 
@@ -77,14 +80,22 @@ class _Lavoratore:
         self.proc.start()
         figlio.close()
 
-    def esegui(self, lavoro, durata):
+    def esegui(self, lavoro, durata, anticipo=None):
+        fine = time.time() + durata
         try:
             self.conn.send(lavoro)
-            # poll torna True anche quando il processo e' morto: recv lo dice
-            if not self.conn.poll(durata):
-                self._riavvia("non ha finito in %d s" % durata)
-                raise Caduto("non ha finito in %d s" % durata)
-            return self.conn.recv()
+            while True:
+                # poll torna True anche quando il processo e' morto: recv lo dice
+                if not self.conn.poll(max(0.0, fine - time.time())):
+                    self._riavvia("non ha finito in %d s" % durata)
+                    raise Caduto("non ha finito in %d s" % durata)
+                m = self.conn.recv()
+                if m.get("tipo") != "anticipo":
+                    return m
+                # il modello prima del verdetto: parte subito, e il lavoro
+                # va avanti
+                if anticipo is not None:
+                    anticipo(m)
         except (EOFError, OSError, BrokenPipeError):
             self.proc.join(5)
             perche = "uscito con %s" % self.proc.exitcode
@@ -126,9 +137,12 @@ def attivi():
     return bool(_lavoratori)
 
 
-def esegui(lavoro, impronta=None, chi=None):
+def esegui(lavoro, impronta=None, chi=None, anticipo=None):
     """Il lavoro su un lavoratore libero, aspettando in fila se non ce n'e'.
-    Torna quello che il lavoratore restituisce; Occupato o Caduto."""
+    Torna quello che il lavoratore restituisce; Occupato o Caduto. Se il
+    lavoratore manda una risposta prima di finire - il modello prima del
+    verdetto del controllo - va ad `anticipo`, e il lavoratore resta occupato
+    fino alla fine."""
     voce = {"impronta": impronta, "w": None, "dal": time.time()}
     with _fila_cv:
         if len(_fila) >= FILA_MAX:
@@ -156,7 +170,7 @@ def esegui(lavoro, impronta=None, chi=None):
         # il prossimo della fila puo' avere un altro lavoratore libero
         _fila_cv.notify_all()
     try:
-        return w.esegui(lavoro, LAVORO_MAX)
+        return w.esegui(lavoro, LAVORO_MAX, anticipo)
     finally:
         with _fila_cv:
             w.occupato = False
@@ -219,7 +233,8 @@ def _ciclo(conn):
         except (EOFError, OSError):
             return
         try:
-            esito = srv.esegui_lavoro(lavoro)
+            esito = srv.esegui_lavoro(
+                lavoro, lambda pacco: conn.send(dict(pacco, tipo="anticipo")))
         except BaseException as e:              # noqa: BLE001
             traceback.print_exc()
             esito = {"risposta": {"code": 500, "body": ("%s: %s" % (type(e).__name__, e)).encode(),
