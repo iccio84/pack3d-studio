@@ -381,6 +381,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Dove la rotella NON arriva
 - pdfium non si chiama da due thread
   - Due processi: i lavoratori
+  - I tracciati di un PDF si leggono una volta
 
 **`regole/flowpack.md`** - flowpack
 

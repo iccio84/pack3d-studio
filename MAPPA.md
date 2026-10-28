@@ -30,6 +30,11 @@ sono in GADGET.md.
   rifa' nel lavoratore com'era, e i casi da mettere in coda e la lettura del
   PDF tornano al processo del server. `/api/lavori` dice alla pagina a che
   punto e' in fila.
+- `pack3d/dieline.py`, `tratti`: i tratti di una pagina come li da'
+  pdfplumber, letti una volta per file e per pagina e tenuti in memoria e su
+  disco (`PACK3D_CACHE`), per tutti i lavoratori. Chi vuole i tracciati della
+  fustella li chiede li' (`extract`, `plancia.tratti`, il ripiego del
+  flowpack), non a pdfplumber.
 - Il modello prima del verdetto: nella costruzione (`server.py`, il ramo di
   `/api/build`) il GLB parte con `verdetto_dopo`, e il giudizio, la
   correzione e il caso in coda vengono dopo; `nuovo_verdetto` e

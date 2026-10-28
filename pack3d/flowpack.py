@@ -16,9 +16,8 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
-import pdfplumber
 
-from .dieline import _segments, _cluster, PT2MM
+from .dieline import segmenti, _cluster, PT2MM
 
 
 @dataclass
@@ -87,13 +86,13 @@ class Flowpack:
         return 2.0 * (self.W + self.T)
 
 
-def _technical_segments(page, min_len=25.0, dentro=None):
+def _technical_segments(tutti, min_len=25.0, dentro=None):
     """Il tracciato tecnico dello steso: tratti sottili, i piu' lunghi.
 
     `dentro`, se c'e', dice quali segmenti guardare: la penna si sceglie fra
     quelli, non sulla pagina intera dove possono vincere le copie tecniche.
     """
-    segs = [s for s in _segments(page) if s[3] - s[2] > min_len and s[4][0] <= 0.8]
+    segs = [s for s in tutti if s[3] - s[2] > min_len and s[4][0] <= 0.8]
     if dentro is not None:
         segs = [s for s in segs if dentro(s)]
     if not segs:
@@ -114,91 +113,89 @@ def analyze(pdf_path: str, page_no: int = 0, tol: float = 0.02,
     cartiglio finivano nelle fasce, e ne usciva un pack plausibile e
     sbagliato, il difetto peggiore che questo progetto possa avere.
     """
-    with pdfplumber.open(pdf_path) as pdf:
-        page = pdf.pages[page_no]
+    def _in(sg):
+        bx0, by0, bx1, by1 = bbox
+        k, c, a0, b0, _st = sg
+        if k == "H":
+            return (by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3
+                    and b0 <= bx1 + 3)
+        return (bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3
+                and b0 <= by1 + 3)
+    segs = _technical_segments(segmenti(pdf_path, page_no),
+                               dentro=_in if bbox else None)
 
-        def _in(sg):
-            bx0, by0, bx1, by1 = bbox
-            k, c, a0, b0, _st = sg
-            if k == "H":
-                return (by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3
-                        and b0 <= bx1 + 3)
-            return (bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3
-                    and b0 <= by1 + 3)
-        segs = _technical_segments(page, dentro=_in if bbox else None)
+    V = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "V"], 2.0)
+    H = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "H"], 2.0)
+    if not V or not H:
+        raise ValueError("nessun tracciato tecnico riconoscibile")
 
-        V = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "V"], 2.0)
-        H = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "H"], 2.0)
-        if not V or not H:
-            raise ValueError("nessun tracciato tecnico riconoscibile")
+    ys = [c for c, w in H]
+    web_pt = ys[-1] - ys[0]
+    # le linee a tutta altezza segnano taglio di ripetizione e saldature
+    full = sorted(c for c, w in V if w > web_pt * 0.9)
+    if len(full) < 4:
+        raise ValueError("saldature di testa non riconosciute")
+    cut0, seal0, seal1, cut1 = full[0], full[1], full[-2], full[-1]
 
-        ys = [c for c, w in H]
-        web_pt = ys[-1] - ys[0]
-        # le linee a tutta altezza segnano taglio di ripetizione e saldature
-        full = sorted(c for c, w in V if w > web_pt * 0.9)
-        if len(full) < 4:
-            raise ValueError("saldature di testa non riconosciute")
-        cut0, seal0, seal1, cut1 = full[0], full[1], full[-2], full[-1]
+    steps = [(ys[i + 1] - ys[i]) * PT2MM for i in range(len(ys) - 1)]
+    i = int(np.argmax(steps))
+    W = steps[i]
 
-        steps = [(ys[i + 1] - ys[i]) * PT2MM for i in range(len(ys) - 1)]
-        i = int(np.argmax(steps))
-        W = steps[i]
+    # lo spessore e' la fascia adiacente al fronte su entrambi i lati; puo'
+    # essere spezzata in piu' tratti dalle linee di riferimento grafiche
+    def run(start, direction, target):
+        tot, n = 0.0, 0
+        j = start
+        while 0 <= j < len(steps) and tot < target * (1 + tol):
+            tot += steps[j]
+            n += 1
+            if abs(tot - target) <= max(0.4, target * tol):
+                return n, tot
+            j += direction
+        return None, None
 
-        # lo spessore e' la fascia adiacente al fronte su entrambi i lati; puo'
-        # essere spezzata in piu' tratti dalle linee di riferimento grafiche
-        def run(start, direction, target):
-            tot, n = 0.0, 0
-            j = start
-            while 0 <= j < len(steps) and tot < target * (1 + tol):
-                tot += steps[j]
-                n += 1
-                if abs(tot - target) <= max(0.4, target * tol):
-                    return n, tot
-                j += direction
-            return None, None
+    best = None
+    for cand in sorted({round(s, 1) for s in steps}, reverse=True):
+        if cand >= W or cand <= 0:
+            continue
+        nl, tl = run(i - 1, -1, cand)
+        nr, tr = run(i + 1, +1, cand)
+        if nl is None or nr is None:
+            continue
+        girth = 2 * (W + cand)
+        # la fascia del perimetro deve chiudere su 2*(W+T)
+        for a in range(0, i - nl + 1):
+            for b in range(i + nr, len(steps)):
+                tot = sum(steps[a:b + 1])
+                if abs(tot - girth) <= max(1.0, girth * tol):
+                    err = abs(tot - girth)
+                    if best is None or err < best[0]:
+                        best = (err, cand, a, b, nl, nr)
+    if best is None:
+        raise ValueError("perimetro della sezione non riconosciuto")
+    _, T, a, b, nl, nr = best
 
-        best = None
-        for cand in sorted({round(s, 1) for s in steps}, reverse=True):
-            if cand >= W or cand <= 0:
-                continue
-            nl, tl = run(i - 1, -1, cand)
-            nr, tr = run(i + 1, +1, cand)
-            if nl is None or nr is None:
-                continue
-            girth = 2 * (W + cand)
-            # la fascia del perimetro deve chiudere su 2*(W+T)
-            for a in range(0, i - nl + 1):
-                for b in range(i + nr, len(steps)):
-                    tot = sum(steps[a:b + 1])
-                    if abs(tot - girth) <= max(1.0, girth * tol):
-                        err = abs(tot - girth)
-                        if best is None or err < best[0]:
-                            best = (err, cand, a, b, nl, nr)
-        if best is None:
-            raise ValueError("perimetro della sezione non riconosciuto")
-        _, T, a, b, nl, nr = best
+    back_a = sum(steps[a:i - nl])
+    back_b = sum(steps[i + nr + 1:b + 1])
+    fin_material = sum(steps[:a]) + sum(steps[b + 1:])
 
-        back_a = sum(steps[a:i - nl])
-        back_b = sum(steps[i + nr + 1:b + 1])
-        fin_material = sum(steps[:a]) + sum(steps[b + 1:])
-
-        fp = Flowpack(
-            W=round(W, 1), T=round(T, 1),
-            L=round((seal1 - seal0) * PT2MM, 1),
-            end_fin=round((seal0 - cut0) * PT2MM, 1),
-            side_fin=round(fin_material / 2.0, 1),
-            back_a=round(back_a, 1), back_b=round(back_b, 1),
-            web_mm=round(web_pt * PT2MM, 1),
-            step_mm=round((cut1 - cut0) * PT2MM, 1),
-            sheet=(cut0, ys[0], cut1, ys[-1]),
-            girth_span=(ys[a], ys[b + 1]),
-        )
-        if abs(back_a + back_b - W) > max(1.0, W * 0.03):
-            fp.warnings.append(
-                f"il retro misura {back_a + back_b:.1f} mm contro {W:.1f} mm di fronte")
-        if abs(fp.end_fin - (cut1 - seal1) * PT2MM) > 0.5:
-            fp.warnings.append("le due pinne di testa hanno larghezza diversa")
-        return fp
+    fp = Flowpack(
+        W=round(W, 1), T=round(T, 1),
+        L=round((seal1 - seal0) * PT2MM, 1),
+        end_fin=round((seal0 - cut0) * PT2MM, 1),
+        side_fin=round(fin_material / 2.0, 1),
+        back_a=round(back_a, 1), back_b=round(back_b, 1),
+        web_mm=round(web_pt * PT2MM, 1),
+        step_mm=round((cut1 - cut0) * PT2MM, 1),
+        sheet=(cut0, ys[0], cut1, ys[-1]),
+        girth_span=(ys[a], ys[b + 1]),
+    )
+    if abs(back_a + back_b - W) > max(1.0, W * 0.03):
+        fp.warnings.append(
+            f"il retro misura {back_a + back_b:.1f} mm contro {W:.1f} mm di fronte")
+    if abs(fp.end_fin - (cut1 - seal1) * PT2MM) > 0.5:
+        fp.warnings.append("le due pinne di testa hanno larghezza diversa")
+    return fp
 
 
 # --------------------------------------------------------------------------- #

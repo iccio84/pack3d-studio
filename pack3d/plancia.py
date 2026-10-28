@@ -605,38 +605,32 @@ def tratti(pdf, riquadro, page_no=0):
     sceglie `dieline.extract`, e si tiene solo quello che sta nel riquadro
     della fustella: fuori ci sono quote, miniature e cartiglio.
     """
-    import pdfplumber
     from . import dieline as dl
 
     x0, y0, x1, y1 = riquadro
     tol = 3.0
     dentro = lambda x, y: x0 - tol <= x <= x1 + tol and y0 - tol <= y <= y1 + tol
     out = []
-    with pdfplumber.open(pdf) as doc:
-        page = doc.pages[page_no]
-        tutti = dl._segments(page)
-        penne = dl._technical_pens(tutti, page.width, page.height)
-        segs = [s for s in tutti if s[4] in penne] or tutti
-        segs = dl._largest_cluster(segs)
-        fustella = (dl.penne_di_fustella(segs, page.width, page.height)
-                    or {s[4] for s in segs})
-        for kind in ("line", "rect", "curve"):
-            for o in page.objects.get(kind, []):
-                if not o.get("stroke"):
-                    continue
-                st = (round(o.get("linewidth") or 0, 2), str(o.get("stroking_color")))
-                if st not in fustella:
-                    continue
-                if kind == "rect":
-                    a, b, c, e = o["x0"], o["top"], o["x1"], o["bottom"]
-                    linee = [[(a, b), (c, b), (c, e), (a, e), (a, b)]]
-                elif o.get("path"):
-                    linee = _spiana(o["path"])
-                else:
-                    linee = [[tuple(q) for q in (o.get("pts") or [])]]
-                for linea in linee:
-                    if len(linea) > 1 and all(dentro(x, y) for x, y in linea):
-                        out.append(linea)
+    t = dl.tratti(pdf, page_no)
+    tutti = list(t.segmenti)
+    penne = dl._technical_pens(tutti, t.larghezza, t.altezza)
+    segs = [s for s in tutti if s[4] in penne] or tutti
+    segs = dl._largest_cluster(segs)
+    fustella = (dl.penne_di_fustella(segs, t.larghezza, t.altezza)
+                or {s[4] for s in segs})
+    for kind, st, o in t.oggetti:
+        if st not in fustella:
+            continue
+        if kind == "rect":
+            a, b, c, e = o["x0"], o["top"], o["x1"], o["bottom"]
+            linee = [[(a, b), (c, b), (c, e), (a, e), (a, b)]]
+        elif o.get("path"):
+            linee = _spiana(o["path"])
+        else:
+            linee = [[tuple(q) for q in (o.get("pts") or [])]]
+        for linea in linee:
+            if len(linea) > 1 and all(dentro(x, y) for x, y in linea):
+                out.append(linea)
     return out
 
 

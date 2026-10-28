@@ -7,7 +7,14 @@ ricava le quote L x H x P in millimetri.
 """
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 import os
+import sys
+import tempfile
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 
 import pdfplumber
@@ -221,6 +228,172 @@ def _segments(page):
         for (ax, ay), (bx, by) in zip(pts, pts[1:]):
             add(ax, ay, bx, by, st)
     return segs
+
+
+# --------------------------------------------------------------------------- #
+# i tratti di una pagina, letti una volta per file
+# --------------------------------------------------------------------------- #
+# pdfplumber, per dare i tratti di una pagina, ne interpreta tutto il
+# contenuto, grafica compresa: da mezzo secondo a sette per pagina. E la stessa
+# pagina la chiedevano in tanti - `extract`, il riconoscimento di vassoi,
+# sportelli e plance, la fustella della punta, il ripiego del flowpack - ognuno
+# riaprendo il file: sul riempimento della T1 caramel cheesecake erano 47
+# letture di due PDF in una costruzione, e /api/build le rifaceva tutte dopo
+# /api/analyze. Ora si leggono una volta per file e per pagina: si tengono in
+# memoria (`TRATTI_MAX`) e su disco (`CACHE`), dove li trova anche l'altro
+# lavoratore e chi riparte dopo una caduta.
+#
+# La chiave e' il CONTENUTO del file, non il nome: un PDF caricato vive in un
+# file temporaneo, e lo stesso nome torna con un altro foglio. E nella chiave
+# del disco c'e' la versione di questo modulo, di pdfplumber e di pdfminer,
+# perche' un disco tenuto fra due versioni del codice non dia i tratti letti
+# da quella vecchia.
+CACHE = os.environ.get("PACK3D_CACHE",
+                       os.path.join(tempfile.gettempdir(), "pack3d-cache"))
+CACHE_MB = float(os.environ.get("PACK3D_CACHE_MB", "256"))
+TRATTI_MAX = 12
+
+
+@dataclass(frozen=True)
+class Tratti:
+    """I tratti di una pagina, come li da' pdfplumber."""
+    larghezza: float
+    altezza: float
+    segmenti: tuple     # quelli di `_segments`
+    oggetti: tuple      # (tipo, stile, oggetto) dei tratti a penna, nell'ordine
+                        # della pagina: line, poi rect, poi curve
+
+
+_TRATTI = OrderedDict()
+_TRATTI_CHIAVE = threading.Lock()
+_IMPRONTE = {}
+
+
+def _versione_tratti():
+    import pdfminer
+    h = hashlib.sha256()
+    with open(__file__, "rb") as fh:
+        h.update(fh.read())
+    h.update(("%s %s" % (pdfplumber.__version__, pdfminer.__version__)).encode())
+    return h.hexdigest()[:12]
+
+
+_VERSIONE_TRATTI = _versione_tratti()
+
+
+def impronta_file(path):
+    """sha256 del contenuto di `path`, ricordata finche' il file non cambia."""
+    st = os.stat(path)
+    chiave = (os.path.abspath(path), st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+    imp = _IMPRONTE.get(chiave)
+    if imp is None:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for blocco in iter(lambda: fh.read(1 << 20), b""):
+                h.update(blocco)
+        imp = h.hexdigest()
+        if len(_IMPRONTE) > 256:
+            _IMPRONTE.clear()
+        _IMPRONTE[chiave] = imp
+    return imp
+
+
+def _leggi_tratti(pdf_path, page_no):
+    with pdfplumber.open(pdf_path) as pdf:
+        page = pdf.pages[page_no]
+        segs = _segments(page)
+        oggetti = []
+        for kind in ("line", "rect", "curve"):
+            for o in page.objects.get(kind, []):
+                if not o.get("stroke"):
+                    continue
+                st = (round(o.get("linewidth") or 0, 2), str(o.get("stroking_color")))
+                oggetti.append((kind, st, {k: o[k] for k in ("x0", "top", "x1", "bottom",
+                                                              "path", "pts") if k in o}))
+        return Tratti(page.width, page.height, tuple(segs), tuple(oggetti))
+
+
+def _file_tratti(chiave):
+    return os.path.join(CACHE, "tratti-%s-%s-%d.json.gz" % ((_VERSIONE_TRATTI,) + chiave))
+
+
+def _dal_disco(chiave):
+    if not CACHE or CACHE == "0":
+        return None
+    f = _file_tratti(chiave)
+    try:
+        with gzip.open(f, "rt", encoding="utf-8") as fh:
+            d = json.load(fh)
+    except (OSError, ValueError, EOFError):
+        return None
+    try:
+        os.utime(f)         # i piu' usati restano quando la cartella si sfoltisce
+    except OSError:
+        pass
+    # JSON fa delle tuple liste: lo stile torna tupla, perche' si confronta
+    # con quelli tenuti in un set
+    return Tratti(d["larghezza"], d["altezza"],
+                  tuple((k, c, a, b, tuple(st)) for k, c, a, b, st in d["segmenti"]),
+                  tuple((k, tuple(st), o) for k, st, o in d["oggetti"]))
+
+
+def _sul_disco(chiave, t):
+    """Scrive i tratti su disco, e se la cartella passa `CACHE_MB` butta i
+    piu' vecchi. Un disco che non si scrive non ferma niente."""
+    if not CACHE or CACHE == "0":
+        return
+    try:
+        os.makedirs(CACHE, mode=0o700, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=CACHE, suffix=".tmp")
+        with os.fdopen(fd, "wb") as grezzo, gzip.open(grezzo, "wt", encoding="utf-8",
+                                                      compresslevel=3) as fh:
+            json.dump({"larghezza": t.larghezza, "altezza": t.altezza,
+                       "segmenti": t.segmenti, "oggetti": t.oggetti}, fh,
+                      separators=(",", ":"))
+        # chi legge trova il file vecchio o quello intero, mai uno a meta'
+        os.replace(tmp, _file_tratti(chiave))
+        voci = []
+        for nome in os.listdir(CACHE):
+            try:
+                s = os.stat(os.path.join(CACHE, nome))
+            except OSError:
+                continue
+            voci.append((s.st_mtime, s.st_size, nome))
+        tot = sum(v[1] for v in voci)
+        for _t, n, nome in sorted(voci):
+            if tot <= CACHE_MB * 1024 * 1024:
+                break
+            try:
+                os.remove(os.path.join(CACHE, nome))
+                tot -= n
+            except OSError:
+                pass
+    except OSError as e:
+        print("cache dei tratti non scritta: %s" % e, file=sys.stderr)
+
+
+def tratti(pdf_path, page_no: int = 0) -> Tratti:
+    """I tratti della pagina, letti una volta per file e per pagina."""
+    chiave = (impronta_file(pdf_path), page_no)
+    with _TRATTI_CHIAVE:
+        t = _TRATTI.get(chiave)
+        if t is not None:
+            _TRATTI.move_to_end(chiave)
+            return t
+    t = _dal_disco(chiave)
+    if t is None:
+        t = _leggi_tratti(pdf_path, page_no)
+        _sul_disco(chiave, t)
+    with _TRATTI_CHIAVE:
+        _TRATTI[chiave] = t
+        while len(_TRATTI) > TRATTI_MAX:
+            _TRATTI.popitem(last=False)
+    return t
+
+
+def segmenti(pdf_path, page_no: int = 0):
+    """`_segments` della pagina, letti una volta sola (`tratti`)."""
+    return list(tratti(pdf_path, page_no).segmenti)
 
 
 def _technical_pens(segs, page_w, page_h, min_segs=4, keep=0.15):
@@ -459,57 +632,56 @@ def _colori(pdf_path, riq, page_no=0, dpi=50.0):
 
 
 def extract(pdf_path: str, page_no: int = 0) -> Dieline:
-    with pdfplumber.open(pdf_path) as pdf:
-        page = pdf.pages[page_no]
-        all_segs = _segments(page)
-        pens = _technical_pens(all_segs, page.width, page.height)
-        segs = [s for s in all_segs if s[4] in pens] or all_segs
-        segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
-            pdf_path, r, page_no))
-        # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
-        # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
-        # guardando solo quello che sta sulla fustella.
-        fustella = penne_di_fustella(segs, page.width, page.height)
-        if fustella:
-            segs = [s for s in segs if s[4] in fustella] or segs
+    t = tratti(pdf_path, page_no)
+    all_segs = list(t.segmenti)
+    pens = _technical_pens(all_segs, t.larghezza, t.altezza)
+    segs = [s for s in all_segs if s[4] in pens] or all_segs
+    segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
+        pdf_path, r, page_no))
+    # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
+    # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
+    # guardando solo quello che sta sulla fustella.
+    fustella = penne_di_fustella(segs, t.larghezza, t.altezza)
+    if fustella:
+        segs = [s for s in segs if s[4] in fustella] or segs
 
-        bx0 = by0 = 1e9
-        bx1 = by1 = -1e9
-        for kind, c, a, b, st in segs:
-            lo_x, hi_x = (c, c) if kind == "V" else (a, b)
-            lo_y, hi_y = (a, b) if kind == "V" else (c, c)
-            bx0, bx1 = min(bx0, lo_x), max(bx1, hi_x)
-            by0, by1 = min(by0, lo_y), max(by1, hi_y)
-        tol = 3.0
-        # scarta quote, frecce e riferimenti esterni al contorno
-        segs = [(k, c, a, b, st) for k, c, a, b, st in segs
-                if bx0 - tol <= (c if k == "V" else a) and (c if k == "V" else b) <= bx1 + tol
-                and by0 - tol <= (c if k == "H" else a) and (c if k == "H" else b) <= by1 + tol]
+    bx0 = by0 = 1e9
+    bx1 = by1 = -1e9
+    for kind, c, a, b, st in segs:
+        lo_x, hi_x = (c, c) if kind == "V" else (a, b)
+        lo_y, hi_y = (a, b) if kind == "V" else (c, c)
+        bx0, bx1 = min(bx0, lo_x), max(bx1, hi_x)
+        by0, by1 = min(by0, lo_y), max(by1, hi_y)
+    tol = 3.0
+    # scarta quote, frecce e riferimenti esterni al contorno
+    segs = [(k, c, a, b, st) for k, c, a, b, st in segs
+            if bx0 - tol <= (c if k == "V" else a) and (c if k == "V" else b) <= bx1 + tol
+            and by0 - tol <= (c if k == "H" else a) and (c if k == "H" else b) <= by1 + tol]
 
-        bbox = (bx0, by0, bx1, by1)
-        Wb, Hb = bx1 - bx0, by1 - by0
+    bbox = (bx0, by0, bx1, by1)
+    Wb, Hb = bx1 - bx0, by1 - by0
 
-        vlong, hlong = [], []
-        for kind, c, a, b, st in segs:
-            L = b - a
-            if kind == "V" and L > Hb * 0.05:
-                vlong.append((c, L))
-            if kind == "H" and L > Wb * 0.05:
-                hlong.append((c, L))
+    vlong, hlong = [], []
+    for kind, c, a, b, st in segs:
+        L = b - a
+        if kind == "V" and L > Hb * 0.05:
+            vlong.append((c, L))
+        if kind == "H" and L > Wb * 0.05:
+            hlong.append((c, L))
 
-        xs = [c for c, w in _cluster(vlong, 3.5) if w > Hb * 0.12]
-        ys = [c for c, w in _cluster(hlong, 3.5) if w > Wb * 0.12]
-        for v in (bx0, bx1):
-            if not any(abs(v - x) < 2.5 for x in xs):
-                xs.append(v)
-        for v in (by0, by1):
-            if not any(abs(v - y) < 2.5 for y in ys):
-                ys.append(v)
-        xs.sort(); ys.sort()
-        d = Dieline(page.width, page.height, bbox, xs, ys)
-        d.vsegs = [(c, a, b) for k, c, a, b, st in segs if k == "V"]
-        d.hsegs = [(c, a, b) for k, c, a, b, st in segs if k == "H"]
-        return d
+    xs = [c for c, w in _cluster(vlong, 3.5) if w > Hb * 0.12]
+    ys = [c for c, w in _cluster(hlong, 3.5) if w > Wb * 0.12]
+    for v in (bx0, bx1):
+        if not any(abs(v - x) < 2.5 for x in xs):
+            xs.append(v)
+    for v in (by0, by1):
+        if not any(abs(v - y) < 2.5 for y in ys):
+            ys.append(v)
+    xs.sort(); ys.sort()
+    d = Dieline(t.larghezza, t.altezza, bbox, xs, ys)
+    d.vsegs = [(c, a, b) for k, c, a, b, st in segs if k == "V"]
+    d.hsegs = [(c, a, b) for k, c, a, b, st in segs if k == "H"]
+    return d
 
 
 # --------------------------------------------------------------------------- #
