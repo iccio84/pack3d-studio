@@ -19,6 +19,8 @@ from dataclasses import dataclass, field, asdict
 
 import pdfplumber
 
+from . import stato
+
 PT2MM = 25.4 / 72.0
 
 
@@ -118,7 +120,7 @@ class Dieline:
 # --------------------------------------------------------------------------- #
 # L'ultima pagina rasterizzata: {(file, pagina): (scala, immagine)}. Una sola,
 # perche' il server costruisce un modello alla volta.
-_RESA = {}
+_RESA = stato.per_lavoro({})
 
 
 def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
@@ -952,7 +954,7 @@ def detect_layout(d: Dieline):
     return "vwrap", {}
 
 
-_PREVIEW = {}
+_PREVIEW = stato.per_lavoro({})
 
 
 def _ink(pdf_path, box, page_no=0, dpi=72):

@@ -198,3 +198,47 @@ costa due o tre secondi invece di venti o trenta.
   texture a livelli, la colata, la spia del nero, la lettura - non i
   tracciati: sul T10 al lampone nove rese, 78 secondi su 100 col
   profilatore.
+
+### Un lavoro, una cartella e uno stato
+
+Un'analisi o una costruzione crea file temporanei - le copie a pagina unica
+e girate, quella senza le lastre tecniche, quella coi livelli spenti, le
+rese di Ghostscript - e i moduli tengono in cassa quello che ne ricavano. I
+file finivano nella cartella temporanea del sistema e nessuno li cancellava:
+con le prove di due settimane erano 2639 PDF, 18 GB, finche' il disco si e'
+riempito e le costruzioni rispondevano 500. Misurato dopo: 32 file e 279 MB
+lasciati da venti lavori, una quindicina di MB ognuno. E le casse passavano
+da un lavoro all'altro: un lavoratore che vive a lungo si teneva un'immagine
+della pagina per ogni astuccio costruito (`dieline._PREVIEW`), e l'agente
+una resa a 300 dpi per ogni PDF (`tools._CLEAN`).
+
+Dal 28 ottobre 2026 ogni lavoro - /api/analyze, /api/analyze-ai,
+/api/build - ha la sua cartella e il suo stato (`pack3d/stato.py`):
+
+- **I file temporanei vanno nella cartella del lavoro**: ogni
+  `NamedTemporaryFile`, `mkdtemp` o `TemporaryDirectory` di un modulo che
+  lavora sul PDF prende `dir=stato.cartella()`. Alla fine del lavoro la
+  cartella si butta con tutto quello che c'e' dentro. Fuori da un lavoro -
+  il parco, una prova a mano - `cartella()` e' None e vale quella del
+  sistema.
+- **Le casse di un lavoro solo si registrano**: `_X = stato.per_lavoro({})`.
+  Partono vuote e si vuotano alla fine. Sono quelle che tengono un file
+  temporaneo, o hanno la chiave sul percorso, o fanno da canale fra due
+  funzioni dello stesso lavoro (`strati._SPENTI`, `strati._RISERVATE`).
+- **Restano da un lavoro all'altro solo le casse con la chiave sul
+  contenuto del file e un valore che non dipende da chi l'ha chiesto
+  prima**: i tratti della pagina (`dieline.tratti`), le analisi del
+  flowpack (`server._ANALISI`), i versi gia' decisi. Le copie girate e a
+  pagina unica la costruzione le rifa', ma pypdf le riscrive identiche al
+  byte, e le analisi in cassa si ritrovano.
+- **Un lavoro alla volta per processo.** In un lavoratore lo e' gia'; nel
+  processo del server (`PACK3D_LAVORATORI=0`) il secondo aspetta il primo,
+  anche durante l'attesa del verdetto dell'AI. Lo chiede pdfium, e lo
+  chiedono le casse: due lavori insieme se le vuoterebbero a vicenda.
+
+Provato prima di cambiare: dieci casi del parco, ognuno in un processo
+nuovo, costruiti da soli e dopo l'analisi dello stesso PDF, danno lo stesso
+modello al byte. Lo stato non cambiava i modelli; lasciava i file e la
+memoria. Il parco intero coi lavoratori, prima e dopo: 43 modelli su 43
+identici al byte, nessuna misura approvata cambiata, 841 s invece di 850; e
+nella cartella temporanea restavano 64 file e 397 MB, ora niente.

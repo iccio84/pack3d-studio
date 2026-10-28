@@ -49,6 +49,7 @@ from pack3d import quote as quotature
 from pack3d import atlante
 from pack3d import lettura as lettura_pdf
 from pack3d import lavoratori
+from pack3d import stato
 from pack3d import steso as lo_steso
 from pack3d import sormonto as lo_sormonto
 from pack3d import template as il_template
@@ -1330,7 +1331,7 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     `carta` e la fustella dell'apertura a strappo se `incisioni`."""
     from pack3d import riempimento
     astuccio = info.get("cu") == "carton"
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
         gv = os.path.join(td, "vassoio.glb")
         gf = os.path.join(td, "pack.glb")
         av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality)
@@ -3953,6 +3954,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._template()
         if lavoratori.attivi() and self.path.startswith(AI_LAVORATORI):
             return self._a_un_lavoratore()
+        if self.path.startswith(AI_LAVORATORI):
+            # un lavoro: la sua cartella per i file temporanei e le casse
+            # vuote, uno alla volta per processo (`pack3d.stato`)
+            with stato.lavoro():
+                return self._col_pdf()
+        return self._col_pdf()
+
+    def _col_pdf(self):
+        """Le richieste che portano il PDF: analisi, costruzione, segnalazione."""
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:
@@ -3981,7 +3991,7 @@ class Handler(BaseHTTPRequestHandler):
             if blocchi is None:
                 return self._send(400, "Le parti dichiarate non tornano col "
                                        "corpo, o una non e' un PDF")
-            with tempfile.TemporaryDirectory() as td:
+            with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
                 pdfs = []
                 for k, blocco in enumerate(blocchi):
                     pdfs.append(os.path.join(td, "in.pdf" if k == 0

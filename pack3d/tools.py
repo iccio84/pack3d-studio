@@ -13,12 +13,13 @@ import os
 import numpy as np
 
 from . import dieline as dl
+from . import stato
 from . import flowpack as fpk
 from . import cup as cupmod
 from . import techink
 
 PT2MM = dl.PT2MM
-_PATHS = {}
+_PATHS = stato.per_lavoro({})
 
 
 def _plain(o):
@@ -285,7 +286,7 @@ def _png_b64(arr, maxw=900):
     return base64.b64encode(b.getvalue()).decode()
 
 
-_CLEAN = {}
+_CLEAN = stato.per_lavoro({})
 
 
 def clean_artwork(pdf, x_mm, y_mm, w_mm, h_mm, dt_x_mm=None, dt_y_mm=None,
@@ -322,7 +323,8 @@ def clean_artwork(pdf, x_mm, y_mm, w_mm, h_mm, dt_x_mm=None, dt_y_mm=None,
     salvati = 0
     if drop:
         import tempfile, os as _os
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False); tmp.close()
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False,
+                                          dir=stato.cartella()); tmp.close()
         _strip(pdf, tmp.name, drop)
         B = np.asarray(dl.render_page(tmp.name, 0, s)).astype(int)
         strip = B[round(y_mm / PT2MM * s):round(y_mm / PT2MM * s) + H,

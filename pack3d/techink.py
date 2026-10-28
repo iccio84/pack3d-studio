@@ -620,6 +620,7 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None,
     import shutil
     import subprocess
     import tempfile
+    from . import stato
 
     gs = shutil.which("gs")
     if not gs:
@@ -629,7 +630,7 @@ def mappe_lastre(pdf, page_no=0, dpi=36, processo=False, solo=None,
 
     cartella = None
     try:
-        cartella = tempfile.mkdtemp(prefix="lastre_")
+        cartella = tempfile.mkdtemp(prefix="lastre_", dir=stato.cartella())
         esito = subprocess.run(
             [gs, "-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-dMaxSpots=40",
              "-sDEVICE=tiffsep", "-r%g" % dpi]

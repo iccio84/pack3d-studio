@@ -30,7 +30,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
-from . import techink
+from . import stato, techink
 
 # Come si chiama la lastra di una lamina: foil, Folie (Heissfolie,
 # Kaltfolie), lamina, stampa a caldo, hot stamping. "Foil" senza spazi
@@ -86,7 +86,7 @@ def copertura(pdf, quali, riquadro, misura, page_no=0, dpi=DPI):
     (punti, telaio di misura, y in giu') portato a `misura` (larghezza,
     altezza) in pixel. None se la lastra non si legge."""
     from .materiali import _ritaglio
-    cartella = tempfile.mkdtemp(prefix="lamina_")
+    cartella = tempfile.mkdtemp(prefix="lamina_", dir=stato.cartella())
     try:
         r = _ritaglio(pdf, page_no, riquadro, os.path.join(cartella, "r.pdf"))
         solo = quali[0] if len(quali) == 1 else None
