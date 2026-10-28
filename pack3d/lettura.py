@@ -59,9 +59,11 @@ def _tavola(pdf, gradi, parti, riquadro, legenda, lato=LATO):
     attorno a lui e riportata al verso del PDF se il foglio di lavoro e'
     girato di `gradi` in senso orario; a destra la `legenda`.
 
-    `parti`: `[(colore, (x0, y0, x1, y1) in punti della pagina, etichetta o
-    None, sempre)]` - l'etichetta si scrive sulla parte dove ci sta, o
-    comunque se `sempre`. `legenda`: `[(testo, colore o None)]`."""
+    `parti`: `[(colore, forma, etichetta o None, sempre)]` - la forma e' un
+    rettangolo `(x0, y0, x1, y1)` o un poligono `[(x, y), ...]`, in punti
+    della pagina con la y dall'alto; l'etichetta si scrive sulla parte dove
+    ci sta, o comunque se `sempre`. `legenda`: `[(testo, colore o None)]`,
+    e una riga troppo lunga va a capo."""
     from PIL import Image, ImageDraw
 
     from .steso import INDIETRO, gira
@@ -72,13 +74,26 @@ def _tavola(pdf, gradi, parti, riquadro, legenda, lato=LATO):
     def px(r):
         return [v * k for v in r]
 
+    def poligono(forma):
+        return len(forma) != 4 or not all(isinstance(v, (int, float)) for v in forma)
+
+    def riquadro_di(forma):
+        if not poligono(forma):
+            return forma
+        xs, ys = zip(*forma)
+        return (min(xs), min(ys), max(xs), max(ys))
+
     # la pagina sbiadita, perche' sopra una grafica piena le parti si vedano
     im = Image.blend(im, Image.new("RGB", im.size, "white"), SBIADITA)
     sopra = Image.new("RGBA", im.size, (0, 0, 0, 0))
     d = ImageDraw.Draw(sopra)
     for colore, r, _e, sempre in parti:
         fondo, bordo = COLORI[colore]
-        d.rectangle(px(r), fill=fondo, outline=bordo + (255,), width=5 if sempre else 3)
+        if poligono(r):
+            d.polygon([(x * k, y * k) for x, y in r], fill=fondo, outline=bordo + (255,),
+                      width=5 if sempre else 3)
+        else:
+            d.rectangle(px(r), fill=fondo, outline=bordo + (255,), width=5 if sempre else 3)
     # il riquadro del disegno usato: la grafica si prende da li'
     d.rectangle(px(riquadro), outline=(0, 0, 0, 255), width=4)
     im = Image.alpha_composite(im.convert("RGBA"), sopra).convert("RGB")
@@ -112,7 +127,7 @@ def _tavola(pdf, gradi, parti, riquadro, legenda, lato=LATO):
     for colore, r, etichetta, sempre in parti:
         if not etichetta:
             continue
-        r = girato(px(r))
+        r = girato(px(riquadro_di(r)))
         lw, lh = d.textbbox((0, 0), etichetta, font=f)[2:]
         if r[2] - r[0] >= lw + 24 and r[3] - r[1] >= lh + 8:
             x, y = r[0] + 12, (r[1] + r[3] - lh) / 2 - 3
@@ -123,11 +138,27 @@ def _tavola(pdf, gradi, parti, riquadro, legenda, lato=LATO):
         d.rectangle((x - 4, y - 2, x + lw + 4, y + lh + 6), fill=COLORI[colore][1])
         d.text((x, y), etichetta, fill="white", font=f)
 
+    f = _carattere(22)
+
+    def a_capo(testo, largo):
+        # le parole finche' ci stanno nella colonna, misurate col carattere;
+        # una riga che ci sta resta com'e', coi suoi spazi
+        if d.textlength(testo, font=f) <= largo:
+            return [testo]
+        righe = []
+        for parola in testo.split():
+            if righe and d.textlength(righe[-1] + " " + parola, font=f) <= largo:
+                righe[-1] += " " + parola
+            else:
+                righe.append(parola)
+        return righe or [""]
+    legenda = [(t, c) for testo, colore in legenda
+               for i, t in enumerate(a_capo(testo, LEGENDA - 40 - (32 if colore else 0)))
+               for c in [colore if i == 0 else None]]
     alto = max(im.height, 40 + 34 * len(legenda))
     tela = Image.new("RGB", (im.width + LEGENDA, alto), "white")
     tela.paste(im, (0, 0))
     d = ImageDraw.Draw(tela)
-    f = _carattere(22)
     y = 20
     for testo, colore in legenda:
         x = im.width + 20
@@ -308,3 +339,119 @@ def plancia(pdf, p, gradi=0, lato=LATO):
                ("il coperchio, il PDF e' stato", None),
                ("letto male: segnalalo.", None)]
     return _tavola(pdf, gradi, parti, _unione([r for _c, r, _e, _s in parti]), legenda, lato)
+
+
+ISTRUZIONE = [("", None),
+              ("Il riquadro nero e' il disegno usato: la grafica si prende da li'.", None),
+              ("Se non sta sul DT vero (per esempio sulla miniatura), il PDF e' stato "
+               "letto male: segnalalo.", None)]
+
+
+def generica(pdf, regione, titolo, righe, parti=(), gradi=0, lato=LATO):
+    """La lettura di una famiglia che disegna solo la regione del disegno
+    usato - `regione`, in punti con la y dall'alto - e le `parti` che
+    conosce, con le righe di quello che ha letto (`dichiara` del suo modulo)
+    in legenda. Basta a vedere l'errore piu' grave, il disegno sbagliato."""
+    legenda = [(titolo, None), ("", None)] + [(r, None) for r in righe] + ISTRUZIONE
+    return _tavola(pdf, gradi, list(parti), regione, legenda, lato)
+
+
+def _cerchio(cx, cy, r, n=96):
+    import math
+    return [(cx + r * math.cos(2 * math.pi * i / n), cy + r * math.sin(2 * math.pi * i / n))
+            for i in range(n)]
+
+
+def _fascia(s, da, a, r0, r1, n=48):
+    """Il poligono della carta di uno steso (`coppa.Steso`) fra due lati e
+    due raggi `r0` < `r1` mm. I lati sono funzioni raggio (mm) -> angolo,
+    girando dal lato `da` al lato `a` verso gli angoli crescenti: un lato di
+    taglio non e' sempre un raggio - il lembo di colla del cono gli corre
+    parallelo, scostato - e l'angolo si prende raggio per raggio."""
+    import math
+    giro = 2 * math.pi
+
+    def su(r, f):
+        return (s.cx + r / PT2MM * math.cos(f), s.cy + r / PT2MM * math.sin(f))
+
+    def arco(r, f0, ampiezza):
+        return [su(r, f0 + ampiezza * i / n) for i in range(n + 1)]
+    raggi = [r1 + (r0 - r1) * i / n for i in range(n + 1)]
+    fuori = arco(r1, da(r1), (a(r1) - da(r1)) % giro)
+    giu = [su(r, a(r)) for r in raggi]
+    dentro = arco(r0, da(r0), (a(r0) - da(r0)) % giro)[::-1]
+    return fuori + giu + dentro + [su(r, da(r)) for r in reversed(raggi)]
+
+
+def _lato(s, nome):
+    return lambda r: s.fi(r, nome)
+
+
+def steso_tondo(pdf, s, titolo, righe, parete=None, gradi=0):
+    """La lettura dello sleeve di una coppa (`coppa.Steso`): fra i due lati
+    di taglio la parete, dalla piega del fondo alla bocca, in arancione;
+    sotto, la fascia che piega sotto il fondo, e sopra l'orlo, in blu."""
+    sx, dx = _lato(s, "sx"), _lato(s, "dx")
+    if not parete:
+        return generica(pdf, tuple(s.riquadro), titolo, righe,
+                        [("fianco", _fascia(s, sx, dx, s.R1, s.R2),
+                          "carta %s - %s mm" % (_mm(s.R1), _mm(s.R2)), False)], gradi)
+    r0, r1 = parete
+    parti = [("fronte", _fascia(s, sx, dx, r0, r1), "PARETE", True)]
+    if r0 - s.R1 > 0.3:
+        parti.append(("fianco", _fascia(s, sx, dx, s.R1, r0),
+                      "sotto il fondo %s mm" % _mm(r0 - s.R1), False))
+    if s.R2 - r1 > 0.3:
+        parti.append(("fianco", _fascia(s, sx, dx, r1, s.R2), "orlo %s mm" % _mm(s.R2 - r1),
+                      False))
+    return generica(pdf, tuple(s.riquadro), titolo, righe, parti, gradi)
+
+
+def cono(pdf, k, titolo, righe, gradi=0):
+    """La lettura dello steso di un cono (`coppa.Cono`): la carta del cono,
+    dal lato radiale all'ultimo raggio e dalla punta alla bocca, in
+    arancione; il risvolto oltre la bocca, che piega sul lid, in blu; il
+    lembo di colla oltre l'ultimo raggio, in viola."""
+    s = k.steso
+    radiale = _lato(s, k.radiale)
+    fine = (lambda r: k.fine)
+    # la carta gira dal lato radiale verso il lembo: verso gli angoli
+    # crescenti se il radiale e' il sinistro
+    da, a = (radiale, fine) if k.radiale == "sx" else (fine, radiale)
+    parti = [("fronte", _fascia(s, da, a, k.R_punta, k.R_bocca), "CONO", True)]
+    if k.risvolto:
+        parti.append(("fianco", _fascia(s, da, a, k.R_bocca, s.R2),
+                      "risvolto %s mm" % _mm(k.risvolto), False))
+    if k.lembo > 0.5:
+        lembo = _lato(s, "dx" if k.radiale == "sx" else "sx")
+        da, a = (fine, lembo) if k.radiale == "sx" else (lembo, fine)
+        parti.append(("pinna", _fascia(s, da, a, max(k.R_punta, 1.05 * k.lembo), s.R2),
+                      "lembo %s mm" % _mm(k.lembo), False))
+    return generica(pdf, tuple(s.riquadro), titolo, righe, parti, gradi)
+
+
+def disco(pdf, centro, r_taglio, titolo, righe, gradi=0):
+    """La lettura di un pezzo tondo - il tappo della coppa, il lid del cono:
+    il cerchio del taglio."""
+    cx, cy = centro
+    r = r_taglio / PT2MM
+    return generica(pdf, (cx - r, cy - r, cx + r, cy + r), titolo, righe,
+                    [("cielo", _cerchio(cx, cy, r), "taglio %s mm" % _mm(2 * r_taglio), True)],
+                    gradi)
+
+
+def accosta(*immagini):
+    """Piu' letture (JPEG) in una, una sotto l'altra: i pack in piu' PDF."""
+    from PIL import Image
+    ims = [Image.open(io.BytesIO(b)).convert("RGB") for b in immagini if b]
+    if not ims:
+        return None
+    if len(ims) == 1:
+        return _jpeg(ims[0])
+    W = max(i.width for i in ims)
+    tela = Image.new("RGB", (W, sum(i.height for i in ims) + 20 * (len(ims) - 1)), "white")
+    y = 0
+    for i in ims:
+        tela.paste(i, (0, y))
+        y += i.height + 20
+    return _jpeg(tela)

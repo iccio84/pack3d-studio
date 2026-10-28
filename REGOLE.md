@@ -2047,11 +2047,27 @@ ricostruisce); parte quando lo conferma con la descrizione, come sempre.
     testata piu' bassa (`vassoio.testata_davanti`);
   - **display con plancia** (`pack3d.plancia`, `pack3d.sportello`): il
     fondo, le pareti fino ai loro bordi - davanti quella con la finestra - il
-    coperchio che fa la plancia e la finestra.
-- Nel riempimento e' la lettura del CU, flowpack o astuccio. Le altre
-  famiglie (la scatola con la plancia ricavata, coppe e coni, pouch, incarti,
-  ballotin, punta, prisma) verranno famiglia per famiglia: per ora la
-  finestra non si apre.
+    coperchio che fa la plancia e la finestra;
+  - **coppa** (`pack3d.coppa`): lo sleeve fra i due lati di taglio - la
+    PARETE dalla piega del fondo alla bocca, sotto la fascia che piega sotto
+    il fondo, sopra l'orlo - e il tappo, il cerchio del taglio;
+  - **cono**: la carta del CONO dal lato radiale all'ultimo raggio e dalla
+    punta alla bocca, il risvolto oltre la bocca, il lembo di colla, e il
+    lid. Il lembo corre parallelo all'ultimo raggio, scostato quanto e'
+    largo: un lato di taglio si prende raggio per raggio (`Steso.fi`), non
+    una volta sola a meta' raggio - preso li', il settore usciva girato
+    rispetto al disegno e fuori dal taglio.
+- Le altre famiglie - la scatola con la plancia ricavata, pouch, incarti,
+  ballotin, punta, tubo, prisma - disegnano il riquadro nero del disegno
+  usato e mettono in legenda le righe che il loro modulo dichiara
+  (`lettura.generica`): basta a vedere l'errore piu' grave, il disegno
+  sbagliato. Le parti verranno famiglia per famiglia, quando serviranno.
+- Un pack in piu' PDF - coppa e tappo, cono e lid, il fondo e il coperchio
+  del prisma - mette le letture una sotto l'altra (`lettura.accosta`), e il
+  riempimento quella del vassoio sopra quella del CU, flowpack o astuccio;
+  del prisma ogni pezzo dice solo le sue misure.
+- La legenda va a capo misurata col carattere, non contando le lettere: a
+  34 lettere le righe larghe uscivano dalla colonna.
 - `prove/parco.py costruisci` la salva accanto al modello, `<nome>_lettura.jpg`.
 
 Provata sul parco: i GLB restano identici al byte, e la lettura e' giusta
