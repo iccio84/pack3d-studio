@@ -69,7 +69,9 @@ Rara non vuol dire mai, e il codice della rotella resta dov'e'.
 
 ## pdfium non si chiama da due thread
 
-Il servizio fa **una costruzione alla volta**, e il motivo non e' la memoria.
+Il servizio faceva **una costruzione alla volta** in un processo solo, e il
+motivo non era la memoria. Adesso le fa in piu' processi: *Due processi: i
+lavoratori*, qui sotto.
 
 Arrivando su una macchina da 16 GB la prima cosa che ho fatto e' stata alzare
 `PACK3D_MAX_JOBS` da 1 a 2: i conti tornavano - la costruzione piu' cara ne usa
@@ -101,3 +103,47 @@ Tre cose da tenere a mente:
 - **Il conto della memoria tornava.** E' il punto: i numeri giusti su una
   domanda sbagliata non salvano da niente. La prova con due file veri ha
   trovato in quaranta secondi quello che l'aritmetica non poteva trovare.
+
+### Due processi: i lavoratori
+
+Dal 28 ottobre 2026 le analisi e le costruzioni girano in processi a parte,
+i lavoratori (`pack3d/lavoratori.py`): ognuno ha il suo pdfium e fa un
+lavoro alla volta, con lo stesso codice di prima - il lavoratore rifa' la
+richiesta com'era (`server.esegui_lavoro`). Il processo del server tiene le
+connessioni, i casi in attesa della conferma di chi li ha caricati - un
+lavoratore li rimanda indietro (`lavoratori.casi_rimandati`) - e le letture
+del PDF per la pagina. Chi arriva coi lavoratori tutti occupati entra in
+fila, invece di prendere «Server occupato»; la pagina chiede a che punto e'
+(`/api/lavori`) e lo scrive nella riga di stato.
+
+Provato in locale, coi PDF del parco:
+
+- due costruzioni insieme, il flowpack piu' caro del parco e il film su
+  scatola: 200 e 200 in 66 s, invece di circa 85 una dopo l'altra, coi GLB
+  identici al parco;
+- tre insieme con due lavoratori: la terza aspetta in fila e parte appena
+  uno si libera, 200 tutte e tre;
+- un lavoratore ucciso con un SIGSEGV a meta' costruzione, come fa pdfium:
+  quella costruzione risponde 500, «il processo che la faceva e' caduto»,
+  l'altra finisce, il lavoratore riparte e le costruzioni dopo escono
+  identiche. Prima cadeva il server, con chiunque fosse collegato.
+
+Da tenere a mente:
+
+- **Anche l'analisi passa da pdfium.** /api/analyze girava fuori dal posto di
+  costruzione: un'analisi insieme a una costruzione poteva far cadere il
+  server come due costruzioni. Adesso va a un lavoratore come la
+  costruzione. /api/segnala no: prepara il caso e basta.
+- **Lo stesso PDF allo stesso lavoratore.** L'analisi di un flowpack si
+  ricorda per processo (`analisi_flowpack`), e la pagina chiede /api/analyze
+  e subito dopo /api/build con lo stesso corpo: la costruzione va, se e'
+  libero, al lavoratore che ha fatto l'analisi (l'impronta del corpo). Lo
+  stesso T1 la seconda volta: 3,7 s invece di 5,9.
+- **Quanti.** `PACK3D_LAVORATORI`, due di serie: le vCPU dello Space
+  gratuito. Non `os.cpu_count()`, che in un container dice i processori della
+  macchina e non i suoi. La memoria di una costruzione e' per lavoratore, il
+  picco peggiore 1,2 GB. Con `0` torna tutto nel processo del server, una
+  costruzione alla volta. Dentro ogni lavoratore `PACK3D_MAX_JOBS` resta 1.
+- **I processi nascono con `spawn`.** Un lavoratore che riparte dopo una
+  caduta nasce mentre il server ha gia' i suoi thread, e un `fork` a quel
+  punto si porterebbe dietro i lucchetti presi da loro.

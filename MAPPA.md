@@ -24,6 +24,12 @@ sono in GADGET.md.
   `build_scatola_plancia`, `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
   `build_tubo`, `build_incarto`,
   `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
+- `pack3d/lavoratori.py`: le analisi e le costruzioni in processi a parte,
+  uno per lavoro, con la fila al posto del «Server occupato».
+  `server._a_un_lavoratore` passa la richiesta, `server.esegui_lavoro` la
+  rifa' nel lavoratore com'era, e i casi da mettere in coda e la lettura del
+  PDF tornano al processo del server. `/api/lavori` dice alla pagina a che
+  punto e' in fila.
 - `pack3d/verifica.py`: le verifiche della costruzione, nell'ordine in cui si
   fanno a mano (UVW contro il DT, fronte sul fronte, marchio dritto, facce
   dell'astuccio, testate del flowpack, vassoio, plancia), e quelle che

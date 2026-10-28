@@ -1370,10 +1370,47 @@ async function findBackend(){
   return false;
 }
 
+/** Mentre una lettura o una costruzione aspetta, il suo posto nella fila
+ *  dello Space (/api/lavori, `pack3d.lavoratori`): con le costruzioni in
+ *  corso gia' al massimo, la riga di stato dice quante ne ha davanti. Torna
+ *  la funzione che smette di guardare. */
+function seguiFila(id){
+  let prima = null, fermo = false, t = null;
+  const giro = async () => {
+    try{
+      const r = await fetch(url('/api/lavori?id=' + id), {cache: 'no-store'});
+      const n = r.ok ? (await r.json()).posizione : null;
+      if (!fermo && n >= 1){
+        if (prima === null) prima = [statusEl.textContent, statusEl.className];
+        setStatus(n === 1 ? 'In fila: le costruzioni in corso sono al massimo, la tua è la prossima…'
+                  : 'In fila: ' + (n - 1) + (n === 2 ? ' costruzione' : ' costruzioni')
+                    + ' prima della tua…', 'busy');
+      }else if (!fermo && prima !== null){
+        setStatus(prima[0], prima[1]);
+        prima = null;
+      }
+    }catch(e){ /* la fila e' un di piu': se non risponde resta la riga di prima */ }
+    if (!fermo) t = setTimeout(giro, 2000);
+  };
+  t = setTimeout(giro, 1200);
+  return () => {
+    fermo = true;
+    clearTimeout(t);
+    if (prima !== null) setStatus(prima[0], prima[1]);
+  };
+}
+
 async function post(p, buf, opts){
   const inizio = Date.now();
-  const r = await fetch(url(p), {method:'POST', body:buf,
-    headers:{'Content-Type':'application/pdf','X-Pack3d':JSON.stringify(opts||{})}});
+  // un nome per il lavoro, per chiedere allo Space a che punto e' in fila
+  const lavoro = Math.random().toString(36).slice(2, 12);
+  const smetti = seguiFila(lavoro);
+  let r;
+  try{
+    r = await fetch(url(p), {method:'POST', body:buf,
+      headers:{'Content-Type':'application/pdf',
+               'X-Pack3d':JSON.stringify(Object.assign({}, opts || {}, {lavoro}))}});
+  }finally{ smetti(); }
   if (!r.ok){
     const secondi = Math.round((Date.now() - inizio) / 1000);
     let t = (await r.text()).slice(0,300).trim();

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import math
 import os
@@ -47,6 +48,7 @@ from pack3d import quote as quotature
 # piu' di un costruttore
 from pack3d import atlante
 from pack3d import lettura as lettura_pdf
+from pack3d import lavoratori
 from pack3d import steso as lo_steso
 from pack3d import sormonto as lo_sormonto
 from pack3d import template as il_template
@@ -3512,6 +3514,12 @@ class Handler(BaseHTTPRequestHandler):
             return self._modello()
         if self.path.startswith("/api/anteprima"):
             return self._anteprima()
+        if self.path.startswith("/api/lavori"):
+            # a che punto e' il lavoro di chi aspetta: in fila, o in corso
+            from urllib.parse import parse_qs, urlparse
+            chi = (parse_qs(urlparse(self.path).query).get("id") or [""])[0][:40]
+            return self._send(200, json.dumps(dict(lavoratori.stato(),
+                                                   posizione=lavoratori.posizione(chi))))
         if self.path.startswith("/api/lettura/"):
             gettone = self.path.split("/api/lettura/", 1)[1].split("?")[0]
             with _LETTURE_LOCK:
@@ -3572,6 +3580,48 @@ class Handler(BaseHTTPRequestHandler):
         if jpg is None:
             return self._send(404, "Nessuna anteprima per questo caso")
         return self._send(200, jpg, "image/jpeg")
+
+    # Un'analisi o una costruzione a un lavoratore (`pack3d.lavoratori`): qui
+    # si legge la richiesta, li' si fa, e qui tornano la risposta, i casi da
+    # mettere in coda e la lettura del PDF.
+    def _a_un_lavoratore(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        if n <= 0:
+            return self._send(400, "Nessun file ricevuto")
+        if n > MAX_UPLOAD:
+            return self._send(413, "PDF troppo grande (limite %d MB)"
+                              % (MAX_UPLOAD // (1024 * 1024)))
+        corpo = self.rfile.read(n)
+        try:
+            chi = str(json.loads(self.headers.get("X-Pack3d") or "{}").get("lavoro") or "")[:40]
+        except (ValueError, AttributeError):
+            chi = ""
+        lavoro = {"path": self.path, "corpo": corpo,
+                  "intestazioni": {"Content-Length": str(n),
+                                   "X-Pack3d": self.headers.get("X-Pack3d") or ""}}
+        try:
+            esito = lavoratori.esegui(lavoro, hashlib.sha256(corpo).hexdigest(), chi)
+        except lavoratori.Occupato as e:
+            print("lavoratori: occupati, %s" % e, file=sys.stderr)
+            return self._send(503, "Server occupato: troppe costruzioni in fila, "
+                                   "riprova fra qualche minuto")
+        except lavoratori.Caduto as e:
+            return self._send(500, "La costruzione si e' fermata: il processo che "
+                                   "la faceva e' caduto (%s). Le altre non ne "
+                                   "risentono: riprova, e se ricapita con questo "
+                                   "PDF mandalo come caso" % e)
+        for a, k in esito["casi"]:
+            coda.metti(*a, **k)
+        r = esito["risposta"]
+        if r.get("lettura") and esito.get("lettura"):
+            metti_lettura(r["lettura"], esito["lettura"])
+        return self._send(r["code"], r["body"], r.get("ctype") or "application/json",
+                          filename=r.get("filename"), meta=r.get("meta"),
+                          controllo=r.get("controllo"), ai=r.get("ai"),
+                          lettura=r.get("lettura") if esito.get("lettura") else None)
 
     def _json_corpo(self, massimo=64 * 1024):
         """Il corpo JSON di una richiesta piccola, o (codice, errore)."""
@@ -3845,6 +3895,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._prossimo()
         if self.path.startswith("/api/template"):
             return self._template()
+        if lavoratori.attivi() and self.path.startswith(AI_LAVORATORI):
+            return self._a_un_lavoratore()
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:
@@ -4339,12 +4391,12 @@ PINNA_SALDATA_MM = 0.04
 NERVATURA_MM = 0.15
 
 MAX_UPLOAD = 60 * 1024 * 1024
-# Uno, e non e' un numero da tarare sulla macchina: pdfium non e' thread-safe
-# nemmeno su documenti diversi, e due costruzioni insieme fanno morire il
-# processo intero con un int3 dentro libpdfium.so. Provato su 16 GB, dove la
-# memoria non c'entrava niente. Alzarlo vuol dire far cadere il servizio sotto
-# i piedi anche di chi non c'entrava. Vedi REGOLE.md, *pdfium non si chiama da
-# due thread*, e DEPLOY.md per i numeri per fase.
+# Uno per processo, e non e' un numero da tarare sulla macchina: pdfium non e'
+# thread-safe nemmeno su documenti diversi, e due costruzioni insieme fanno
+# morire il processo intero con un int3 dentro libpdfium.so. Provato su 16 GB,
+# dove la memoria non c'entrava niente. Le costruzioni insieme le fanno i
+# lavoratori, un processo ciascuno (`pack3d.lavoratori`). Vedi REGOLE.md,
+# *pdfium non si chiama da due thread*, e DEPLOY.md per i numeri per fase.
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "1"))
 _slots = threading.Semaphore(MAX_JOBS)
 
@@ -4385,6 +4437,14 @@ def lettura_accanto(out_glb):
     except OSError:
         return None
     gettone = secrets.token_hex(12)
+    metti_lettura(gettone, dati)
+    return gettone
+
+
+def metti_lettura(gettone, dati):
+    """La lettura `dati` fra quelle che la pagina puo' chiedere, col suo
+    gettone: anche quella fatta da un lavoratore, che il processo del server
+    tiene per lui (`esegui_lavoro`)."""
     with _LETTURE_LOCK:
         adesso = time.time()
         for k in [k for k, (t, _d) in LETTURE.items() if adesso - t > LETTURE_ORE]:
@@ -4392,7 +4452,52 @@ def lettura_accanto(out_glb):
         while len(LETTURE) >= LETTURE_MAX:
             del LETTURE[min(LETTURE, key=lambda k: LETTURE[k][0])]
         LETTURE[gettone] = (adesso, dati)
-    return gettone
+
+
+# ---------------------------------------------------------------------------
+# I lavoratori (`pack3d.lavoratori`): le analisi e le costruzioni in processi
+# a parte. Il processo del server legge la richiesta e la passa intera a un
+# lavoratore, che la fa con lo stesso codice di sempre (`Handler.do_POST`) e
+# rimanda la risposta, i casi da mettere in coda e la lettura del PDF.
+
+# le richieste che passano da pdfium vanno ai lavoratori (/api/analyze-ai
+# compresa); /api/segnala no, prepara solo il caso
+AI_LAVORATORI = ("/api/analyze", "/api/build")
+
+
+class _Lavoro(Handler):
+    """Una richiesta POST rifatta nel lavoratore: niente socket, la risposta
+    resta qui per tornare al processo del server."""
+
+    def __init__(self, path, intestazioni, corpo):     # pylint: disable=super-init-not-called
+        self.path = path
+        self.headers = intestazioni
+        self.rfile = io.BytesIO(corpo)
+        self.risposta = None
+
+    def _send(self, code, body, ctype="application/json", filename=None,
+              meta=None, controllo=None, ai=None, lettura=None):
+        if isinstance(body, str):
+            body = body.encode()
+        self.risposta = dict(code=code, body=body, ctype=ctype, filename=filename,
+                             meta=meta, controllo=controllo, ai=ai, lettura=lettura)
+
+
+def esegui_lavoro(lavoro):
+    """Nel lavoratore: la richiesta com'era, rifatta da `Handler.do_POST`.
+    Torna la risposta, i casi che il processo del server deve mettere in coda
+    (`lavoratori.casi_rimandati`) e i dati della lettura del PDF."""
+    h = _Lavoro(lavoro["path"], lavoro["intestazioni"], lavoro["corpo"])
+    casi = []
+    with lavoratori.casi_rimandati(coda, casi):
+        Handler.do_POST(h)
+    r = h.risposta or {"code": 500, "body": b"il lavoro non ha risposto",
+                       "ctype": "text/plain; charset=utf-8"}
+    lettura = None
+    if r.get("lettura"):
+        with _LETTURE_LOCK:
+            lettura = (LETTURE.pop(r["lettura"], None) or (0, None))[1]
+    return {"risposta": r, "casi": casi, "lettura": lettura}
 
 
 def con_difetti(verdetto, meta):
@@ -4494,4 +4599,7 @@ if __name__ == "__main__":
     print("pack3d studio in ascolto su %s:%d" % (host, port))
     if host in ("0.0.0.0", "::"):
         print("  in locale:  http://localhost:%d" % port)
+    # le analisi e le costruzioni in processi a parte, prima di aprire la
+    # porta: i lavoratori nascono da un processo che non ha ancora thread
+    lavoratori.avvia()
     ThreadingHTTPServer((host, port), Handler).serve_forever()
