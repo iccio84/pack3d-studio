@@ -16,6 +16,7 @@ import hmac
 import json
 import math
 import os
+import shutil
 import sys
 from urllib.parse import quote, unquote
 import tempfile
@@ -46,6 +47,7 @@ from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
 # piu' di un costruttore
 from pack3d import atlante
+from pack3d import lettura as lettura_pdf
 from pack3d import steso as lo_steso
 from pack3d import sormonto as lo_sormonto
 from pack3d import template as il_template
@@ -1282,6 +1284,9 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             # allarga a perimetro costante e la grafica del fronte si stira
             # (il T15 al livello 8: «il T1 non corrisponde al DT»)
             av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
+            # la lettura del CU, accanto al GLB del riempimento
+            if os.path.exists(gf + lettura_pdf.ACCANTO):
+                shutil.copyfile(gf + lettura_pdf.ACCANTO, out_glb + lettura_pdf.ACCANTO)
         with open(gv, "rb") as fh:
             glb_v = fh.read()
         with open(gf, "rb") as fh:
@@ -2137,6 +2142,14 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         clean, lastre = artwork.senza_coperture(
             pdf, extra=list(lastre_extra) + materiali.da_togliere(lettura),
             regione=fpk.foglio_in_pagina(fp0), conti=conti)
+    # la lettura del PDF, da mettere accanto al modello (`pack3d.lettura`):
+    # accanto al GLB, dove il server la va a prendere. Mai un errore: se non
+    # si disegna, il modello si costruisce lo stesso
+    try:
+        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
+            fh.write(lettura_pdf.flowpack(pdf, fp0, gradi))
+    except Exception:
+        traceback.print_exc()
     # Il nero sul file pulito, prima di rendere: vedi `nero.spia`. Sugli
     # Spaces la memoria per il fork di Ghostscript c'e'.
     deciso_nero = nero.spia(clean, 0, dpi / 72.0)
@@ -3351,11 +3364,12 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
         # senza questo il browser nasconde l'header alla pagina, su altra origine
         self.send_header("Access-Control-Expose-Headers",
-                         "X-Pack3d-Meta, X-Pack3d-Controllo, X-Pack3d-AI")
+                         "X-Pack3d-Meta, X-Pack3d-Controllo, X-Pack3d-AI, "
+                         "X-Pack3d-Lettura")
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _send(self, code, body, ctype="application/json", filename=None,
-              meta=None, controllo=None, ai=None):
+              meta=None, controllo=None, ai=None, lettura=None):
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
@@ -3373,6 +3387,9 @@ class Handler(BaseHTTPRequestHandler):
             # quali righe di `meta` sono dell'AI: la pagina le tiene in vista
             self.send_header("X-Pack3d-AI", quote(
                 json.dumps(ai, ensure_ascii=False)))
+        if lettura:
+            # il gettone della lettura del PDF: la pagina la chiede a parte
+            self.send_header("X-Pack3d-Lettura", lettura)
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -3414,6 +3431,15 @@ class Handler(BaseHTTPRequestHandler):
             return self._stati()
         if self.path.startswith("/api/modello"):
             return self._modello()
+        if self.path.startswith("/api/lettura/"):
+            gettone = self.path.split("/api/lettura/", 1)[1].split("?")[0]
+            with _LETTURE_LOCK:
+                v = LETTURE.get(gettone)
+            if v is None:
+                return self._send(404, "La lettura del PDF non c'e' piu': "
+                                       "ricostruisci il modello per rivederla",
+                                  "text/plain; charset=utf-8")
+            return self._send(200, v[1], "image/jpeg")
         path = os.path.join(HERE, "pack3d_studio.html")
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")
@@ -3824,6 +3850,26 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")
+                if self.path.startswith("/api/segnala"):
+                    # «Letto male»: chi ha costruito il modello guarda la
+                    # lettura del PDF accanto (`pack3d.lettura`) e dice che non
+                    # torna. La pagina rimanda gli stessi PDF e le stesse
+                    # opzioni, col motivo: il caso si prepara come quelli che
+                    # il controllo respinge, e parte quando lo conferma con
+                    # la descrizione. Niente costruzione: la rifa' la routine.
+                    motivo = str(opts.get("motivo") or "").strip()[:300] or "letto male"
+                    verdetto = {"esito": "sbagliato", "segnalato": True,
+                                "motivo": "Segnalato da chi l'ha costruito: il PDF e' "
+                                          "stato letto male - %s" % motivo,
+                                "difetti": ["letto male: %s" % motivo]}
+                    ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                               riconosciuto="-", avvisi=[], nomi=nomi,
+                               opzioni={k: opts[k] for k in OPZIONI_CASO
+                                        if k in opts})
+                    verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                        blocchi_caso, nomi_caso, verdetto, None, ctx)
+                    verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                    return self._send(200, json.dumps(verdetto, ensure_ascii=False))
                 if kind == "riempimento" and self.path.startswith("/api/analyze"):
                     try:
                         letto = analisi_riempimento(pdfs, cu)
@@ -4043,6 +4089,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "%d kB" % (os.path.getsize(out) // 1024))
                         with open(out, "rb") as fh:
                             glb = fh.read()
+                        lettura = lettura_accanto(out)
                         meta = righe_prodotto + avvisi_ingresso + list(avvisi)
                         # Le righe dell'AI - le sue scelte, il verdetto del
                         # controllo, la correzione - viaggiano anche in un
@@ -4144,7 +4191,8 @@ class Handler(BaseHTTPRequestHandler):
                     # diagnostica. Il verdetto del controllo in un altro.
                     return self._send(200, glb, "model/gltf-binary",
                                       filename="modello.glb", meta=meta,
-                                      controllo=verdetto, ai=righe_ai)
+                                      controllo=verdetto, ai=righe_ai,
+                                      lettura=lettura)
             return self._send(404, "endpoint sconosciuto")
         except Exception as e:
             traceback.print_exc()
@@ -4206,6 +4254,35 @@ _slots = threading.Semaphore(MAX_JOBS)
 # Quanto la correzione aspetta che il posto di costruzione si liberi. Chi ha
 # chiesto il modello sta gia' aspettando: oltre, si consegna quello di prima.
 CORREZIONE_ATTESA = float(os.environ.get("PACK3D_CORREZIONE_ATTESA", "240"))
+
+
+# Le letture del PDF delle ultime costruzioni (`pack3d.lettura`), per la
+# pagina: la chiede subito dopo il modello, col gettone che le arriva in
+# X-Pack3d-Lettura. Poche e per poco: un'immagine sui 300 kB.
+LETTURE = {}
+LETTURE_MAX = 40
+LETTURE_ORE = 2 * 3600
+_LETTURE_LOCK = threading.Lock()
+
+
+def lettura_accanto(out_glb):
+    """La lettura che la costruzione ha lasciato accanto al GLB, messa da
+    parte per la pagina: il suo gettone, o None se non c'e'."""
+    import secrets
+    try:
+        with open(out_glb + lettura_pdf.ACCANTO, "rb") as fh:
+            dati = fh.read()
+    except OSError:
+        return None
+    gettone = secrets.token_hex(12)
+    with _LETTURE_LOCK:
+        adesso = time.time()
+        for k in [k for k, (t, _d) in LETTURE.items() if adesso - t > LETTURE_ORE]:
+            del LETTURE[k]
+        while len(LETTURE) >= LETTURE_MAX:
+            del LETTURE[min(LETTURE, key=lambda k: LETTURE[k][0])]
+        LETTURE[gettone] = (adesso, dati)
+    return gettone
 
 
 def con_difetti(verdetto, meta):

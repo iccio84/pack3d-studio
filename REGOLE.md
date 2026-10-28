@@ -1994,6 +1994,53 @@ livello 10 nel rapporto del DT «flowpack largo: 31,6 -> 38,5 mm (+21,8%)» e
 lo spessore 21,3 -> 15,9: i pezzi troppo bassi. Un modello uguale a quello
 approvato non dice niente.
 
+## La lettura del PDF accanto al modello
+
+I casi rifiutati in coda quasi mai avevano una misura sbagliata di un decimo:
+avevano una lettura sbagliata di **cosa e' cosa**. Il flowpack montato girato
+di 90 gradi, con la pinna longitudinale presa per le testate (caso
+b0f0b0dbf8); l'astuccio costruito sulla miniatura del cartiglio invece che
+sul foglio (61cfcd4c87); la famiglia sbagliata (55aaaa6f14). Chi ha il PDF li
+vede in un attimo, se gli si fa vedere come lo si e' letto. Chiedere conferma
+delle misure no: sul parco le quote scritte confermano il disegno in un caso
+su 43, in 10 non si leggono come testo, e i 43 sono tutti approvati - letti
+giusti dal disegno. Una domanda su ogni misura non confermata arriverebbe
+quasi sempre, e quasi sempre per niente.
+
+Allora la costruzione disegna la sua lettura (`pack3d.lettura`) e la pagina
+la mette accanto al modello, nella finestra «Come ho letto il PDF», che si
+apre da sola: la pagina del PDF ritagliata attorno allo steso, sbiadita, e
+sopra le fasce lette col loro nome e le misure. Del flowpack: lungo il giro
+retro, fianco, FRONTE, fianco, retro (a sovrapposizione o a tubo piatto senza
+fianchi), lungo il passo le pinne di testa e la gola; il riquadro nero e' lo
+steso, da cui si prende la grafica. Una legenda dice le misure: fronte,
+fianchi, retro, pinne, gola, corpo, passo, giro del film. Se il fronte non e'
+la fascia arancione, o le pinne non sono alle due testate, e' letto male, e
+si vede senza sapere niente del codice.
+
+Da li' chi l'ha costruito segnala «letto male» con il motivo - girato, un
+altro disegno, un'altra famiglia, le misure, altro. La pagina rimanda gli
+stessi PDF e le stesse opzioni a `/api/segnala`, che prepara il caso come
+quelli che il controllo respinge (`coda.metti`, senza viste: la routine lo
+ricostruisce); parte quando lo conferma con la descrizione, come sempre.
+
+- La lettura si fa dentro la costruzione, col disegno appena letto (`fp0`)
+  e la pagina di lavoro: niente seconda analisi. Il server la tiene due ore
+  (al massimo 40), la pagina la chiede col gettone di `X-Pack3d-Lettura`
+  (`/api/lettura/<gettone>`). Se non si disegna, il modello si costruisce lo
+  stesso e la finestra non si apre.
+- Un foglio di lavoro girato si rigira al verso del PDF (`steso.INDIETRO`);
+  uno steso trasposto (pinne in verticale, `fp.ruotato`) ha le fasce in
+  verticale, e il nome solo dove ci sta - il fronte sempre.
+- Nel riempimento e' la lettura del CU flowpack. Per il vassoio, gli
+  astucci e le altre famiglie verra' famiglia per famiglia.
+- `prove/parco.py costruisci` la salva accanto al modello, `<nome>_lettura.jpg`.
+
+Provata sul parco: i GLB restano identici al byte, e la lettura e' giusta
+sui flowpack con lo steso orizzontale e trasposto, a pinna e a sovrapposizione,
+e sul CU del display da 15. Nella pagina, la finestra si apre accanto al
+modello e «Segnala» prepara il caso col motivo e apre il modulo d'invio.
+
 ## Il controllo dell'AI prima della consegna
 
 Le verifiche qui sopra controllano un modello **dentro la sua famiglia**: le
