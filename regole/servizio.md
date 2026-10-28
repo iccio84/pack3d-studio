@@ -168,6 +168,20 @@ invece di 1013 in tutto; il riempimento della T1 caramel cheesecake da 43 s a
 22, la scatola a punta T6 da 45 a 31, il riempimento del display del
 biscotto T3 da 60 a 43.
 
+Il parco chiede solo /api/build. La pagina chiede /api/analyze e poi
+/api/build, e li' si guadagna di piu', perche' la costruzione trova i tratti
+gia' letti dall'analisi. Misurato in un processo solo, analisi piu'
+costruzione, coi modelli identici al byte:
+
+| caso | prima | dopo | un altro processo, col disco gia' pieno |
+|---|---|---|---|
+| riempimento della T1 caramel cheesecake | 23 + 44 s | 8 + 17 s | 3 + 16 s |
+| scatola a punta T6 | 29 + 48 s | 18 + 17 s | 2 + 15 s |
+| vassoio del biscotto T3 | 5 + 31 s | 4 + 22 s | |
+
+L'ultima colonna e' l'altro lavoratore, o quello ripartito: l'analisi gli
+costa due o tre secondi invece di venti o trenta.
+
 - **La chiave e' il contenuto del file, non il nome.** Un PDF caricato vive
   in un file temporaneo, e lo stesso nome torna con un altro foglio.
 - **Sul disco anche la versione.** Nella chiave c'e' l'impronta di
