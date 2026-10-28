@@ -25,7 +25,12 @@ sono in GADGET.md.
   `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/verifica.py`: le verifiche della costruzione, nell'ordine in cui si
   fanno a mano (UVW contro il DT, fronte sul fronte, marchio dritto, facce
-  dell'astuccio, testate del flowpack, vassoio, plancia).
+  dell'astuccio, testate del flowpack, vassoio, plancia), e quelle che
+  fermano il modello: la grafica del fronte stirata, e il segno `DIFETTO`
+  che il server conta come un dubbio (`con_difetti`).
+- `pack3d/misure.py`: le misure del modello finito (ingombro, pezzi, il
+  flowpack lungo, largo e spesso, lo stiro del fronte) e il confronto con
+  quelle approvate nel parco (`prove/parco.py misure`).
 - `pack3d/exporters.py`: il GLB (`write_glb_mesh`; per l'astuccio
   `write_glb`, con lo steso al posto delle immagini delle facce).
 - `pack3d/steso.py`: la texture e' lo steso del PDF. Le famiglie ci arrivano
@@ -63,7 +68,7 @@ sono in GADGET.md.
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |
 | pouch | `pouch.py` |
-| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il flowpack premuto nel display pieno, GLB composto); in `server.py` `analisi_riempimento` e `build_riempimento` |
+| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il CU schiacciato a UV ferme, il pezzo uguale al suo modello e dentro il vano, GLB composto); in `server.py` `analisi_riempimento` e `build_riempimento` |
 
 ## La grafica e le misure
 

@@ -7,6 +7,7 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
     python3 prove/parco.py stesi CASI USCITA [--solo a,b]
+    python3 prove/parco.py misure CASI USCITA [--solo a,b] [--approva]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
@@ -26,6 +27,19 @@ costruzione e le quattro viste (`pack3d.vista`).
 `confronta` dice quali modelli sono cambiati fra due costruzioni, con gli
 avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
 Le immagini finiscono in DIR, di serie DOPO/confronto.
+
+`costruisci` misura anche ogni modello (`pack3d.misure`: l'ingombro, i
+pezzi, il flowpack lungo, largo e spesso, lo stiro della grafica del fronte)
+e lo confronta con le misure approvate del caso, `misure` nel manifesto: una
+misura approvata che cambia oltre la tolleranza la dice sotto il caso e in
+`misure_cambiate`. `confronta` le riassume tutte. Un modello cambiato a
+misure approvate ferme e' un cambio che non si vede; una misura cambiata va
+spiegata, o e' un difetto.
+
+`misure` rifa' il confronto su una costruzione gia' fatta, dal GLB; con
+`--approva` scrive le misure di quei modelli nel manifesto come approvate:
+dopo un rilascio, per i casi cambiati, o quando un cambio e' voluto. Il giro
+di un caso le scrive con `consegna`, insieme a `come_deve_venire`.
 
 `stesi` controlla che la texture di ogni modello sia lo steso del suo PDF
 (REGOLE.md, *La texture e' lo steso*): cerca ogni texture - e ogni zona di
@@ -189,6 +203,17 @@ def _costruisci_caso(url, cartella, caso):
         return e.code, None, [testo[:1000]], time.time() - t, None
 
 
+def _misura(glb, caso):
+    """(misure del modello, misure approvate cambiate). Mai un errore: un
+    GLB che non si misura lo dice nelle misure."""
+    from pack3d import misure
+    try:
+        m = misure.misura(glb)
+    except Exception as e:                  # noqa: BLE001
+        return {"errore": "%s: %s" % (type(e).__name__, e)}, []
+    return m, misure.confronta(caso.get("misure"), m)
+
+
 def costruisci(args):
     from pack3d import versione, vista
     casi = _casi(args.casi, args.solo)
@@ -209,6 +234,9 @@ def costruisci(args):
                     with open(os.path.join(args.uscita, nome + ".glb"), "wb") as fh:
                         fh.write(glb)
                     esito["md5"] = hashlib.md5(glb).hexdigest()
+                    esito["misure"], cambiate = _misura(glb, caso)
+                    if cambiate:
+                        esito["misure_cambiate"] = cambiate
                     try:
                         im, ingombro = vista.viste(
                             os.path.join(args.uscita, nome + ".glb"), 512)
@@ -223,6 +251,8 @@ def costruisci(args):
                                        secondi=esito["secondi"])
                 print("%-18s %3d %6.1f s  %s" % (nome, stato, sec,
                                                  (esito["md5"] or avvisi[0][:80])[:80]))
+                for r in esito.get("misure_cambiate") or []:
+                    print("    MISURA APPROVATA CAMBIATA  %s" % r)
                 sys.stdout.flush()
         finally:
             p.terminate()
@@ -301,6 +331,53 @@ def confronta(args):
         len(uguali), len(cambiati),
         (", %d costruiti da una parte sola" % len(spaiati)) if spaiati else "",
         (": le viste affiancate sono in %s" % uscita) if cambiati else ""))
+    # le misure approvate che DOPO cambia: un cambio che va spiegato
+    misurati = [e for e in b.values() if e.get("misure")]
+    cambiate = [(n, b[n]["misure_cambiate"]) for n in sorted(b)
+                if b[n].get("misure_cambiate")]
+    if cambiate:
+        print("\nMISURE APPROVATE CAMBIATE in %d casi:" % len(cambiate))
+        for n, righe in cambiate:
+            print("  %s" % n)
+            for r in righe:
+                print("    %s" % r)
+    elif misurati:
+        print("nessuna misura approvata cambiata (%d casi misurati)" % len(misurati))
+
+
+def misure_del_parco(args):
+    """Le misure di una costruzione gia' fatta contro quelle approvate; con
+    `--approva`, scritte nel manifesto come approvate."""
+    from pack3d import misure
+    manifesto = _manifesto(args.casi)
+    voluti = set(args.solo or [])
+    cambiati, scritti = 0, 0
+    for caso in manifesto["casi"]:
+        nome = caso["nome"]
+        f = os.path.join(args.uscita, nome + ".glb")
+        if (voluti and nome not in voluti) or not os.path.exists(f):
+            continue
+        with open(f, "rb") as fh:
+            m = misure.misura(fh.read())
+        righe = misure.confronta(caso.get("misure"), m)
+        if not caso.get("misure"):
+            righe = ["nessuna misura approvata"]
+        print("%-44s %s" % (nome[:44], "uguale" if not righe else righe[0]))
+        for r in righe[1:]:
+            print("%-44s %s" % ("", r))
+        cambiati += bool(righe)
+        if args.approva and caso.get("misure") != m:
+            caso["misure"] = m
+            scritti += 1
+    if args.approva:
+        with open(os.path.join(args.casi, "parco", "parco.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump(manifesto, fh, ensure_ascii=False, indent=1)
+            fh.write("\n")
+        print("misure approvate scritte per %d casi in parco/parco.json: commit e push "
+              "nel registro" % scritti)
+    elif cambiati:
+        raise SystemExit(1)
 
 
 def versione_del_codice(args):
@@ -1214,6 +1291,20 @@ def prepara(args):
         print("da fare: scrivi `come_deve_venire` della voce %s in parco/parco.json" % voce["nome"])
 
 
+def _approva_misure(casi, nome, esito):
+    """Scrive nel manifesto le misure di `esito` come quelle approvate del
+    caso `nome`. Niente, se l'esito non le ha."""
+    if not esito.get("misure") or "errore" in esito["misure"]:
+        return
+    manifesto = _manifesto(casi)
+    for caso in manifesto["casi"]:
+        if caso["nome"] == nome:
+            caso["misure"] = esito["misure"]
+    with open(os.path.join(casi, "parco", "parco.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifesto, fh, ensure_ascii=False, indent=1)
+        fh.write("\n")
+
+
 def consegna(args):
     """Il modello corretto a chi ha caricato il caso, da approvare."""
     from contextlib import redirect_stdout
@@ -1246,6 +1337,13 @@ def consegna(args):
     if esito.get("stato") != 200:
         raise SystemExit("il caso non si costruisce col codice di adesso (%s): %s"
                          % (esito.get("stato"), str((esito.get("avvisi") or [""])[0])[:300]))
+    # le misure del modello consegnato diventano quelle approvate del caso,
+    # insieme a `come_deve_venire`: il rilascio le confronta
+    if "misure" not in esito:
+        # costruito prima che le misure ci fossero: si misura il suo GLB
+        with open(os.path.join(uscita, voce["nome"] + ".glb"), "rb") as fh:
+            esito["misure"], _ = _misura(fh.read(), voce)
+    _approva_misure(args.casi, voce["nome"], esito)
     _commit_registro(args.casi, ["parco/parco.json"], "Caso %s: com'e' giusto" % cod)
     with redirect_stdout(rumore):
         try:
@@ -1482,6 +1580,15 @@ def main():
     t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                    help="solo questi casi, separati da virgole")
     t.set_defaults(fai=stesi)
+    m = sub.add_parser("misure", help="le misure di una costruzione contro quelle "
+                                      "approvate (con --approva le scrive)")
+    m.add_argument("casi", help="clone del repository privato dei casi")
+    m.add_argument("uscita", help="la cartella di una costruzione del parco")
+    m.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                   help="solo questi casi, separati da virgole")
+    m.add_argument("--approva", action="store_true",
+                   help="scrive le misure di questi modelli come approvate")
+    m.set_defaults(fai=misure_del_parco)
     s = sub.add_parser("spazio", help="prova un caso sullo Space vero, "
                                       "appena ripartito col codice di qui")
     s.add_argument("url", help="per esempio https://iccio-maurizio.hf.space")

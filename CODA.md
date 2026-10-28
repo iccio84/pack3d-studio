@@ -172,7 +172,9 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    `--messaggio`: due righe per chi l'ha caricato, cosa e' cambiato.
    `--commento`: per la issue, la causa, la regola e il link alla PR (o
    perche' non serviva). Il comando ricostruisce il caso se il codice e'
-   cambiato, registra `come_deve_venire`, manda il modello da approvare
+   cambiato, registra `come_deve_venire` e le misure del modello consegnato
+   come quelle approvate del caso (il rilascio le confronta), manda il
+   modello da approvare
    (`modello.glb` nella cartella del caso), chiede allo Space l'email per chi
    l'ha lasciata, commenta, mette `da-approvare` e toglie `in-lavorazione`.
    Poi chiede allo Space se in coda c'e' un altro caso libero: se c'e', lo

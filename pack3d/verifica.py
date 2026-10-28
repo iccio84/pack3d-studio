@@ -701,9 +701,9 @@ def _quantile(x, w, q):
     return float(x[o][min(int(np.searchsorted(c, q * c[-1])), len(x) - 1)])
 
 
-def grafica_flowpack(glb):
-    """La grafica sul fronte del corpo di ogni flowpack del GLB finito. Righe:
-    una per flowpack, che e' un DIFETTO se e' troppo stirata.
+def stiri_flowpack(glb):
+    """Quanto e' stirata la grafica sul fronte del corpo di ogni flowpack del
+    GLB finito: `[(mediana, decimo peggiore, verso)]`, gli stiri in frazione.
 
     Triangolo per triangolo si misura la mappa dai pixel della texture ai mm
     del modello, e da li' quanto un verso e' stirato rispetto all'altro. I
@@ -719,7 +719,7 @@ def grafica_flowpack(glb):
 
     from .riempimento import _dati, leggi
     J, B = leggi(glb)
-    righe = []
+    out = []
     for me in J.get("meshes", []):
         if me.get("name") != "flowpack":
             continue
@@ -762,19 +762,29 @@ def grafica_flowpack(glb):
             Jp = np.linalg.pinv(Jm)
             px_lungo = np.median(np.linalg.norm(Jp[:, :, lungo], axis=1))
             px_largo = np.median(np.linalg.norm(Jp[:, :, 1 - lungo], axis=1))
-            verso = "nel giro" if px_largo < px_lungo else "lungo il passo"
-            if meta > STIRO_FRONTE:
-                righe.append(DIFETTO + "la grafica del fronte e' stirata del %.0f%% %s "
-                             "(oltre il %.0f%%): il pack e' piu' largo del pannello "
-                             "fronte del DT, prova un rigonfiamento piu' basso o il "
-                             "gonfio nello spessore"
-                             % (100 * meta, verso, 100 * STIRO_FRONTE))
-            elif peggio > STIRO_FRONTE_PARTE:
-                righe.append(DIFETTO + "una parte del fronte ha la grafica stirata del "
-                             "%.0f%% (oltre il %.0f%%), il resto del %.1f%%"
-                             % (100 * peggio, 100 * STIRO_FRONTE_PARTE, 100 * meta))
-            else:
-                righe.append("grafica del fronte: stirata del %.1f%% %s (entro il %.0f%%), "
-                             "%.0f%% nel decimo peggiore"
-                             % (100 * meta, verso, 100 * STIRO_FRONTE, 100 * peggio))
+            out.append((meta, peggio, "nel giro" if px_largo < px_lungo
+                        else "lungo il passo"))
+    return out
+
+
+def grafica_flowpack(glb):
+    """La grafica sul fronte del corpo di ogni flowpack del GLB finito
+    (`stiri_flowpack`). Righe: una per flowpack, che e' un DIFETTO se e'
+    troppo stirata."""
+    righe = []
+    for meta, peggio, verso in stiri_flowpack(glb):
+        if meta > STIRO_FRONTE:
+            righe.append(DIFETTO + "la grafica del fronte e' stirata del %.0f%% %s "
+                         "(oltre il %.0f%%): il pack e' piu' largo del pannello "
+                         "fronte del DT, prova un rigonfiamento piu' basso o il "
+                         "gonfio nello spessore"
+                         % (100 * meta, verso, 100 * STIRO_FRONTE))
+        elif peggio > STIRO_FRONTE_PARTE:
+            righe.append(DIFETTO + "una parte del fronte ha la grafica stirata del "
+                         "%.0f%% (oltre il %.0f%%), il resto del %.1f%%"
+                         % (100 * peggio, 100 * STIRO_FRONTE_PARTE, 100 * meta))
+        else:
+            righe.append("grafica del fronte: stirata del %.1f%% %s (entro il %.0f%%), "
+                         "%.0f%% nel decimo peggiore"
+                         % (100 * meta, verso, 100 * STIRO_FRONTE, 100 * peggio))
     return righe
