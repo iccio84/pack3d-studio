@@ -56,6 +56,8 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_FILA_MAX` | Variables | `12` | quanti lavori aspettano in fila coi lavoratori occupati; oltre, «Server occupato» |
 | `PACK3D_ATTESA_MAX` | Variables | secondi, di serie `600` | quanto un lavoro aspetta in fila prima di arrendersi con «Server occupato» |
 | `PACK3D_LAVORO_MAX` | Variables | secondi, di serie `1200` | oltre, un lavoro si ferma e il suo lavoratore riparte |
+| `PACK3D_CACHE` | Variables | una cartella, di serie `pack3d-cache` nella cartella temporanea | dove si tengono i tratti dei PDF gia' letti, per tutti i lavoratori (`dieline.tratti`); `0` per tenerli solo in memoria |
+| `PACK3D_CACHE_MB` | Variables | di serie `256` | quanto puo' pesare quella cartella; oltre, si buttano i piu' vecchi |
 | `ANTHROPIC_API_KEY` | Secrets | la chiave | il **controllo dell'AI** su ogni costruzione, il rigonfiamento "Scegli tu", e `/api/analyze-ai`. Senza, si costruisce come prima e un cartellino dice che il controllo e' spento |
 | `PACK3D_MODEL` | Variables | il modello di Claude | quello dell'agente e del controllo; senza, quello scritto in `agent.py` |
 | `PACK3D_MODEL_CONTROLLO` | Variables | un modello di Claude | solo se il controllo deve usare un modello diverso dall'agente |

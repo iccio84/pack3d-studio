@@ -149,3 +149,33 @@ Da tenere a mente:
 - **I processi nascono con `spawn`.** Un lavoratore che riparte dopo una
   caduta nasce mentre il server ha gia' i suoi thread, e un `fork` a quel
   punto si porterebbe dietro i lucchetti presi da loro.
+
+### I tracciati di un PDF si leggono una volta
+
+pdfplumber, per dare i tratti di una pagina, ne interpreta tutto il
+contenuto, grafica compresa: da mezzo secondo a sette per pagina. E la
+stessa pagina la chiedevano in tanti, ognuno riaprendo il file: `extract`, il
+riconoscimento di vassoi, sportelli e plance, la fustella della punta, il
+ripiego del flowpack. Misurato col profilatore sul riempimento della T1
+caramel cheesecake: 47 letture di due PDF in una costruzione, 98 secondi su
+115; e /api/build le rifaceva tutte dopo /api/analyze.
+
+Dal 28 ottobre 2026 i tratti di una pagina si leggono una volta per file
+(`dieline.tratti`) e si tengono in memoria e su disco (`PACK3D_CACHE`), dove
+li trova anche l'altro lavoratore e quello che riparte dopo una caduta. Il
+parco intero, prima e dopo: 43 modelli su 43 identici al byte, 910 s
+invece di 1013 in tutto; il riempimento della T1 caramel cheesecake da 43 s a
+22, la scatola a punta T6 da 45 a 31, il riempimento del display del
+biscotto T3 da 60 a 43.
+
+- **La chiave e' il contenuto del file, non il nome.** Un PDF caricato vive
+  in un file temporaneo, e lo stesso nome torna con un altro foglio.
+- **Sul disco anche la versione.** Nella chiave c'e' l'impronta di
+  `dieline.py` e le versioni di pdfplumber e pdfminer: una cartella tenuta
+  fra due versioni del codice non da' i tratti letti da quella vecchia.
+- **Chi vuole i tracciati li chiede a `dieline.tratti`**, non a pdfplumber:
+  una lettura nuova e' una lettura che si paga a ogni costruzione.
+- **Gli astucci non cambiano.** Il loro tempo e' la resa di pdfium - la
+  texture a livelli, la colata, la spia del nero, la lettura - non i
+  tracciati: sul T10 al lampone nove rese, 78 secondi su 100 col
+  profilatore.
