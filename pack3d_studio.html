@@ -143,6 +143,12 @@
   .caso-quando{font-size:10.5px;color:var(--muted-foreground)}
   .risposta{display:flex;flex-direction:column;gap:8px;margin-top:4px}
   .risposta .q{font-weight:600;font-size:13px}
+  /* l'anteprima di una domanda: il modello di adesso e come si e' letto il PDF */
+  .risposta .anteprima-domanda{display:block;align-self:stretch;border:1px solid var(--border);
+                       border-radius:var(--radius-sm);overflow:hidden;background:#fff;
+                       color:var(--muted-foreground);text-decoration:none}
+  .risposta .anteprima-domanda img{display:block;width:100%;height:auto}
+  .risposta .anteprima-domanda span{display:block;padding:6px 10px;font-size:11px;text-align:center}
   .risposta .opzioni{display:flex;flex-wrap:wrap;gap:6px}
   .risposta .opzioni button{padding:7px 12px;text-transform:none;letter-spacing:0;font-size:12px;
                             font-weight:500;color:var(--foreground)}
@@ -2173,6 +2179,28 @@ function moduloRisposta(c){
   q.className = 'q';
   q.textContent = c.domanda;
   box.append(q);
+  if (c.anteprima){
+    // il modello di adesso e la lettura del PDF con le misure lette: si
+    // risponde guardando cosa si e' costruito, non a memoria
+    const u = url('/api/anteprima?codice=' + encodeURIComponent(c.codice) +
+                  '&v=' + encodeURIComponent(c.chiave || ''));
+    const a = document.createElement('a');
+    a.className = 'anteprima-domanda';
+    a.href = u;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.title = 'Apri l’anteprima intera';
+    const im = document.createElement('img');
+    im.src = u;
+    im.alt = 'Il modello di adesso e come è stato letto il PDF, con le misure';
+    im.loading = 'lazy';
+    im.onerror = () => a.remove();
+    const nota = document.createElement('span');
+    nota.textContent = 'Il modello di adesso e come è stato letto il PDF, con le misure: '
+                     + 'toccala per vederla grande.';
+    a.append(im, nota);
+    box.append(a);
+  }
   let scelta = '';
   if (c.opzioni && c.opzioni.length){
     const op = document.createElement('div');
@@ -2228,6 +2256,7 @@ function moduloRisposta(c){
       c.messaggio = 'Risposta inviata: il caso è ripartito.';
       delete c.domanda;
       delete c.opzioni;
+      delete c.anteprima;
       c.chiave = 'risposta';
       salvaCasi();
       disegnaCasi();
@@ -2291,7 +2320,7 @@ async function aggiornaCasi(){
       if (chiave !== c.chiave){
         const prima = c.chiave;
         Object.assign(c, {stato: s.stato, messaggio: s.messaggio || '', domanda: s.domanda,
-                          opzioni: s.opzioni, chiave});
+                          opzioni: s.opzioni, anteprima: s.anteprima, chiave});
         // il primo giro dopo l'invio non e' una novita', una domanda o un
         // modello da approvare si'; un caso che arriva da Glam (un admin li
         // vede tutti) si mostra, ma non si notifica quello che era gia' successo

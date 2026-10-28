@@ -3510,6 +3510,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._stati()
         if self.path.startswith("/api/modello"):
             return self._modello()
+        if self.path.startswith("/api/anteprima"):
+            return self._anteprima()
         if self.path.startswith("/api/lettura/"):
             gettone = self.path.split("/api/lettura/", 1)[1].split("?")[0]
             with _LETTURE_LOCK:
@@ -3554,6 +3556,22 @@ class Handler(BaseHTTPRequestHandler):
         if glb is None:
             return self._send(404, "Nessun modello da approvare per questo caso")
         return self._send(200, glb, "model/gltf-binary")
+
+    # L'anteprima di una domanda della routine (`coda.anteprima`): il modello
+    # di adesso e la lettura del PDF, che la finestra dei casi mostra sopra la
+    # domanda. Solo per codice.
+    def _anteprima(self):
+        from urllib.parse import parse_qs, urlparse
+        cod = (parse_qs(urlparse(self.path).query).get("codice") or [""])[0].strip().lower()
+        try:
+            jpg = coda.anteprima(cod)
+        except (OSError, ValueError) as e:
+            print("anteprima del caso %s non letta: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        if jpg is None:
+            return self._send(404, "Nessuna anteprima per questo caso")
+        return self._send(200, jpg, "image/jpeg")
 
     def _json_corpo(self, massimo=64 * 1024):
         """Il corpo JSON di una richiesta piccola, o (codice, errore)."""

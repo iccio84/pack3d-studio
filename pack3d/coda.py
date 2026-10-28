@@ -886,13 +886,10 @@ def _in_glam(cod, issue, cartella, nome):
                       "Space), ma stato e etichette non sono aggiornati: %s")
 
 
-def modello(cod):
-    """Il GLB corretto che il caso aspetta di far approvare, o None.
-
-    La routine lo mette in `modello.glb`, nella cartella del caso, insieme
-    allo stato "da-approvare". Solo per codice, come lo stato: chi non ha il
-    codice del caso non lo vede. Dopo l'approvazione resta guardabile finche'
-    il caso non e' chiuso."""
+def _caso_aperto(cod):
+    """(cartella del caso nel registro, ultimo stato) di un caso con la issue
+    aperta, o None. Solo per codice: chi non ha il codice del caso non legge
+    niente."""
     if not CODICE_RE.match(cod or "") or not pronta():
         return None
     issue = _issue_del_caso(cod, fresca=True)
@@ -900,41 +897,86 @@ def modello(cod):
         return None
     m = re.search(r"File: \[`(casi/[^`]+)`\]", str(issue.get("body") or ""))
     storia = _storia(issue, fresca=True)
-    if not m or not storia or storia[-1].get("stato") not in ("da-approvare", "approvato"):
+    if not m or not storia:
         return None
-    percorso = m.group(1) + "/modello.glb"
+    return m.group(1), storia[-1]
 
-    def leggi():
-        req = urllib.request.Request(
-            API + "/repos/%s/contents/%s" % (_repo(), percorso),
-            headers={"Authorization": "Bearer " + os.environ["PACK3D_CODA_TOKEN"].strip(),
-                     "Accept": "application/vnd.github.raw",
-                     "X-GitHub-Api-Version": "2022-11-28",
-                     "User-Agent": "pack3d-studio"})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                dati = r.read(MODELLO_MAX + 1)
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
-        if len(dati) > MODELLO_MAX or dati[:4] != b"glTF":
+
+def _grezzo(percorso, massimo):
+    """Un file del registro dei casi cosi' com'e', o None se non c'e' o se
+    supera `massimo` byte."""
+    req = urllib.request.Request(
+        API + "/repos/%s/contents/%s" % (_repo(), percorso),
+        headers={"Authorization": "Bearer " + os.environ["PACK3D_CODA_TOKEN"].strip(),
+                 "Accept": "application/vnd.github.raw",
+                 "X-GitHub-Api-Version": "2022-11-28",
+                 "User-Agent": "pack3d-studio"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            dati = r.read(massimo + 1)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
             return None
-        return dati
+        raise
+    return dati if len(dati) <= massimo else None
+
+
+def modello(cod):
+    """Il GLB corretto che il caso aspetta di far approvare, o None.
+
+    La routine lo mette in `modello.glb`, nella cartella del caso, insieme
+    allo stato "da-approvare". Solo per codice, come lo stato: chi non ha il
+    codice del caso non lo vede. Dopo l'approvazione resta guardabile finche'
+    il caso non e' chiuso."""
+    caso = _caso_aperto(cod)
+    if caso is None or caso[1].get("stato") not in ("da-approvare", "approvato"):
+        return None
+    percorso = caso[0] + "/modello.glb"
     # una cache sua, di due modelli al massimo: sono megabyte, non stati
-    chiave = percorso + ":" + str(storia[-1].get("quando"))
+    chiave = percorso + ":" + str(caso[1].get("quando"))
     with _CACHE_LOCK:
         if chiave in _MODELLI:
             return _MODELLI[chiave]
-    dati = leggi()
-    if dati is not None:
-        with _CACHE_LOCK:
-            while len(_MODELLI) >= 2:
-                _MODELLI.pop(next(iter(_MODELLI)))
-            _MODELLI[chiave] = dati
+    dati = _grezzo(percorso, MODELLO_MAX)
+    if dati is None or dati[:4] != b"glTF":
+        return None
+    with _CACHE_LOCK:
+        while len(_MODELLI) >= 2:
+            _MODELLI.pop(next(iter(_MODELLI)))
+        _MODELLI[chiave] = dati
     return dati
 
 
+def anteprima(cod):
+    """L'anteprima della domanda che il caso aspetta, in JPEG, o None.
+
+    La routine la mette nella cartella del caso con la domanda (`prove/parco.py
+    caso --stato domanda --anteprima`): le viste del modello di adesso e la
+    lettura del PDF con le misure lette. Solo per codice, come lo stato, e
+    solo finche' la domanda e' l'ultima cosa successa al caso."""
+    caso = _caso_aperto(cod)
+    if caso is None or caso[1].get("stato") != "domanda":
+        return None
+    nome = str(caso[1].get("immagine") or "")
+    if not re.match(r"^[a-z_]+\.jpg$", nome):
+        return None
+    percorso = caso[0] + "/" + nome
+    chiave = percorso + ":" + str(caso[1].get("quando"))
+    with _CACHE_LOCK:
+        if chiave in _ANTEPRIME:
+            return _ANTEPRIME[chiave]
+    dati = _grezzo(percorso, ANTEPRIMA_MAX)
+    if dati is None or dati[:3] != b"\xff\xd8\xff":
+        return None
+    with _CACHE_LOCK:
+        while len(_ANTEPRIME) >= 4:
+            _ANTEPRIME.pop(next(iter(_ANTEPRIME)))
+        _ANTEPRIME[chiave] = dati
+    return dati
+
+
+ANTEPRIMA_MAX = 8 * 1024 * 1024
+_ANTEPRIME = {}
 _MODELLI = {}
 
 
@@ -1218,6 +1260,9 @@ def stato_caso(cod):
     if st == "domanda":
         out["domanda"] = str(ultimo.get("domanda") or "")[:500]
         out["opzioni"] = [str(o)[:120] for o in ultimo.get("opzioni") or []][:4]
+        if ultimo.get("immagine"):
+            # il modello di adesso e la lettura del PDF: /api/anteprima
+            out["anteprima"] = True
     if st in ("da-approvare", "approvato"):
         out["modello"] = True
     return out
