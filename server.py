@@ -3438,6 +3438,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         sys.stderr.write("  %s\n" % (fmt % a))
 
+    def handle_one_request(self):
+        # una risposta per richiesta (`_send`): si riparte da capo a ognuna
+        self._inviata = False
+        super().handle_one_request()
+
     def _cors(self):
         # l'interfaccia puo' stare su un dominio diverso dal backend
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -3446,11 +3451,19 @@ class Handler(BaseHTTPRequestHandler):
         # senza questo il browser nasconde l'header alla pagina, su altra origine
         self.send_header("Access-Control-Expose-Headers",
                          "X-Pack3d-Meta, X-Pack3d-Controllo, X-Pack3d-AI, "
-                         "X-Pack3d-Lettura")
+                         "X-Pack3d-Lettura, X-Pack3d-Verdetto")
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _send(self, code, body, ctype="application/json", filename=None,
-              meta=None, controllo=None, ai=None, lettura=None):
+              meta=None, controllo=None, ai=None, lettura=None, verdetto_dopo=None):
+        if getattr(self, "_inviata", False):
+            # il modello e' partito prima del verdetto (`verdetto_dopo`): una
+            # seconda risposta finirebbe in coda alla prima, sulla stessa
+            # connessione
+            print("risposta %d non mandata: la richiesta ha gia' avuto la sua" % code,
+                  file=sys.stderr)
+            return
+        self._inviata = True
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
@@ -3471,6 +3484,10 @@ class Handler(BaseHTTPRequestHandler):
         if lettura:
             # il gettone della lettura del PDF: la pagina la chiede a parte
             self.send_header("X-Pack3d-Lettura", lettura)
+        if verdetto_dopo:
+            # il verdetto del controllo arriva dopo il modello: la pagina lo
+            # chiede con questo gettone (/api/verdetto)
+            self.send_header("X-Pack3d-Verdetto", verdetto_dopo)
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -3514,6 +3531,21 @@ class Handler(BaseHTTPRequestHandler):
             return self._modello()
         if self.path.startswith("/api/anteprima"):
             return self._anteprima()
+        if self.path.startswith("/api/verdetto"):
+            # il verdetto del controllo che arriva dopo il modello, e il GLB
+            # corretto se la correzione l'ha rifatto (/api/verdetto/glb)
+            from urllib.parse import parse_qs, urlparse
+            gettone = (parse_qs(urlparse(self.path).query).get("id") or [""])[0][:40]
+            v = verdetto_di(gettone)
+            if v is None:
+                return self._send(404, "Il verdetto non c'e' piu': ricostruisci il "
+                                       "modello per riaverlo",
+                                  "text/plain; charset=utf-8")
+            if self.path.startswith("/api/verdetto/glb"):
+                if not v["glb"]:
+                    return self._send(404, "Nessun modello corretto", "text/plain; charset=utf-8")
+                return self._send(200, v["glb"], "model/gltf-binary", filename="modello.glb")
+            return self._send(200, json.dumps(dict(v, glb=bool(v["glb"])), ensure_ascii=False))
         if self.path.startswith("/api/lavori"):
             # a che punto e' il lavoro di chi aspetta: in fila, o in corso
             from urllib.parse import parse_qs, urlparse
@@ -3602,26 +3634,50 @@ class Handler(BaseHTTPRequestHandler):
         lavoro = {"path": self.path, "corpo": corpo,
                   "intestazioni": {"Content-Length": str(n),
                                    "X-Pack3d": self.headers.get("X-Pack3d") or ""}}
+        # il modello che parte prima del verdetto: col suo gettone, che vale
+        # «in corso» finche' il lavoratore non manda il verdetto
+        attesa = []
+
+        def anticipo(pacco):
+            attesa.append(pacco["risposta"].get("verdetto_dopo"))
+            metti_verdetto(attesa[-1], pronto=False)
+            self._da_lavoratore(pacco)
         try:
-            esito = lavoratori.esegui(lavoro, hashlib.sha256(corpo).hexdigest(), chi)
+            esito = lavoratori.esegui(lavoro, hashlib.sha256(corpo).hexdigest(), chi,
+                                      anticipo)
         except lavoratori.Occupato as e:
             print("lavoratori: occupati, %s" % e, file=sys.stderr)
             return self._send(503, "Server occupato: troppe costruzioni in fila, "
                                    "riprova fra qualche minuto")
         except lavoratori.Caduto as e:
+            if attesa:
+                # il modello e' gia' arrivato: manca solo il verdetto
+                metti_verdetto(attesa[-1], None, ["controllo AI non fatto: il processo "
+                                                  "che lo faceva e' caduto (%s)" % e], [])
+                return None
             return self._send(500, "La costruzione si e' fermata: il processo che "
                                    "la faceva e' caduto (%s). Le altre non ne "
                                    "risentono: riprova, e se ricapita con questo "
                                    "PDF mandalo come caso" % e)
-        for a, k in esito["casi"]:
+        for gettone, voce in esito.get("verdetti", {}).items():
+            metti_verdetto(gettone, **voce)
+        return self._da_lavoratore(esito)
+
+    def _da_lavoratore(self, pacco):
+        """Quello che un lavoratore rimanda: i casi in coda, la lettura e la
+        risposta, se c'e' (la risposta anticipata e' gia' partita)."""
+        for a, k in pacco["casi"]:
             coda.metti(*a, **k)
-        r = esito["risposta"]
-        if r.get("lettura") and esito.get("lettura"):
-            metti_lettura(r["lettura"], esito["lettura"])
+        r = pacco["risposta"]
+        if r is None:
+            return None
+        if r.get("lettura") and pacco.get("lettura"):
+            metti_lettura(r["lettura"], pacco["lettura"])
         return self._send(r["code"], r["body"], r.get("ctype") or "application/json",
                           filename=r.get("filename"), meta=r.get("meta"),
                           controllo=r.get("controllo"), ai=r.get("ai"),
-                          lettura=r.get("lettura") if esito.get("lettura") else None)
+                          lettura=r.get("lettura") if pacco.get("lettura") else None,
+                          verdetto_dopo=r.get("verdetto_dopo"))
 
     def _json_corpo(self, massimo=64 * 1024):
         """Il corpo JSON di una richiesta piccola, o (codice, errore)."""
@@ -4287,34 +4343,59 @@ class Handler(BaseHTTPRequestHandler):
                     if nota:
                         ctx["nota"] = nota
                     if quadro is not None:
-                        t2 = traccia("controllo")
-                        verdetto = controllo.giudica(quadro, ctx)
-                        traccia("controllo", t2, verdetto["esito"])
-                        riga = None
-                        if (controllo.correggibile(verdetto)
-                                and controllo.correzione_attiva()):
-                            nuovo, riga = correggi(costruisci, aree, pdfs, td,
-                                                   quadro, verdetto, ctx)
-                            if nuovo is not None:
-                                glb, avvisi_corr, quadro, verdetto, ctx = nuovo
-                                meta = (righe_prodotto + avvisi_ingresso
-                                        + list(avvisi_corr))
-                            ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
-                        # i difetti misurati dalle verifiche valgono come un
-                        # dubbio, anche col controllo che dice ok
-                        verdetto = con_difetti(verdetto, meta)
-                        # anche il dubbio: il modello all'utente arriva lo
-                        # stesso, ma qualcuno deve guardarlo, e se ha un
-                        # difetto vero correggerlo come un caso respinto
-                        if verdetto["esito"] in ("sbagliato", "dubbio"):
-                            verdetto["codice"], verdetto["in_coda"] = coda.metti(
-                                blocchi_caso, nomi_caso, verdetto, quadro["viste"], ctx)
-                            verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
-                        if riga:
-                            meta.insert(0, riga)
-                            righe_ai.insert(0, riga)
-                        meta.insert(0, controllo.avviso(verdetto))
-                        righe_ai.insert(0, meta[0])
+                        # Il modello va subito a chi l'ha chiesto, e il
+                        # verdetto dell'AI - con la correzione, se serve -
+                        # arriva dopo: la pagina lo chiede col gettone
+                        # (`/api/verdetto`). Prima si aspettava qui la
+                        # risposta di Claude, e quando c'era la seconda
+                        # costruzione.
+                        attesa = nuovo_verdetto()
+                        in_corso = "controllo AI: in corso, il verdetto arriva fra poco"
+                        self._send(200, glb, "model/gltf-binary",
+                                   filename="modello.glb", meta=[in_corso] + meta,
+                                   ai=[in_corso] + righe_ai, lettura=lettura,
+                                   verdetto_dopo=attesa)
+                        glb_prima = glb
+                        try:
+                            t2 = traccia("controllo")
+                            verdetto = controllo.giudica(quadro, ctx)
+                            traccia("controllo", t2, verdetto["esito"])
+                            riga = None
+                            if (controllo.correggibile(verdetto)
+                                    and controllo.correzione_attiva()):
+                                nuovo, riga = correggi(costruisci, aree, pdfs, td,
+                                                       quadro, verdetto, ctx)
+                                if nuovo is not None:
+                                    glb, avvisi_corr, quadro, verdetto, ctx = nuovo
+                                    meta = (righe_prodotto + avvisi_ingresso
+                                            + list(avvisi_corr))
+                                ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
+                            # i difetti misurati dalle verifiche valgono come
+                            # un dubbio, anche col controllo che dice ok
+                            verdetto = con_difetti(verdetto, meta)
+                            # anche il dubbio: il modello all'utente arriva lo
+                            # stesso, ma qualcuno deve guardarlo, e se ha un
+                            # difetto vero correggerlo come un caso respinto
+                            if verdetto["esito"] in ("sbagliato", "dubbio"):
+                                verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                                    blocchi_caso, nomi_caso, verdetto, quadro["viste"],
+                                    ctx)
+                                verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                            if riga:
+                                meta.insert(0, riga)
+                                righe_ai.insert(0, riga)
+                            meta.insert(0, controllo.avviso(verdetto))
+                            righe_ai.insert(0, meta[0])
+                        except Exception as e:
+                            # il modello e' gia' partito: l'errore lo dice il
+                            # verdetto, non una seconda risposta
+                            traceback.print_exc()
+                            verdetto = None
+                            righe_ai.insert(0, "controllo AI non fatto: %s" % e)
+                            meta.insert(0, righe_ai[0])
+                        metti_verdetto(attesa, verdetto, meta, righe_ai,
+                                       glb if glb is not glb_prima else None)
+                        return None
                     elif (controllo.manca_la_chiave()
                           and info["kind"] != "riempimento"):
                         # spento perche' manca la chiave, non perche' qualcuno
@@ -4469,35 +4550,94 @@ class _Lavoro(Handler):
     """Una richiesta POST rifatta nel lavoratore: niente socket, la risposta
     resta qui per tornare al processo del server."""
 
-    def __init__(self, path, intestazioni, corpo):     # pylint: disable=super-init-not-called
+    def __init__(self, path, intestazioni, corpo, casi, anticipa=None):  # pylint: disable=super-init-not-called
         self.path = path
         self.headers = intestazioni
         self.rfile = io.BytesIO(corpo)
         self.risposta = None
+        self._casi = casi
+        self._anticipa = anticipa
 
     def _send(self, code, body, ctype="application/json", filename=None,
-              meta=None, controllo=None, ai=None, lettura=None):
+              meta=None, controllo=None, ai=None, lettura=None, verdetto_dopo=None):
+        if getattr(self, "_inviata", False):
+            print("risposta %d non mandata: la richiesta ha gia' avuto la sua" % code,
+                  file=sys.stderr)
+            return
+        self._inviata = True
         if isinstance(body, str):
             body = body.encode()
-        self.risposta = dict(code=code, body=body, ctype=ctype, filename=filename,
-                             meta=meta, controllo=controllo, ai=ai, lettura=lettura)
+        r = dict(code=code, body=body, ctype=ctype, filename=filename, meta=meta,
+                 controllo=controllo, ai=ai, lettura=lettura, verdetto_dopo=verdetto_dopo)
+        if verdetto_dopo and self._anticipa:
+            # il modello parte subito, e il lavoratore va avanti col verdetto
+            self._anticipa(_pacco(r, self._casi))
+            return
+        self.risposta = r
 
 
-def esegui_lavoro(lavoro):
-    """Nel lavoratore: la richiesta com'era, rifatta da `Handler.do_POST`.
-    Torna la risposta, i casi che il processo del server deve mettere in coda
-    (`lavoratori.casi_rimandati`) e i dati della lettura del PDF."""
-    h = _Lavoro(lavoro["path"], lavoro["intestazioni"], lavoro["corpo"])
-    casi = []
-    with lavoratori.casi_rimandati(coda, casi):
-        Handler.do_POST(h)
-    r = h.risposta or {"code": 500, "body": b"il lavoro non ha risposto",
-                       "ctype": "text/plain; charset=utf-8"}
+def _pacco(r, casi):
+    """La risposta di un lavoratore per il processo del server: coi casi da
+    mettere in coda finora (e poi via, per non rimetterli) e la lettura."""
     lettura = None
     if r.get("lettura"):
         with _LETTURE_LOCK:
             lettura = (LETTURE.pop(r["lettura"], None) or (0, None))[1]
-    return {"risposta": r, "casi": casi, "lettura": lettura}
+    pacco = {"risposta": r, "casi": list(casi), "lettura": lettura}
+    del casi[:]
+    return pacco
+
+
+def esegui_lavoro(lavoro, anticipa=None):
+    """Nel lavoratore: la richiesta com'era, rifatta da `Handler.do_POST`.
+    Torna la risposta, i casi che il processo del server deve mettere in coda
+    (`lavoratori.casi_rimandati`), i dati della lettura del PDF e i verdetti
+    del controllo. Con `anticipa` il modello parte prima del verdetto: la
+    risposta va li', e alla fine restano i casi e i verdetti."""
+    casi = []
+    h = _Lavoro(lavoro["path"], lavoro["intestazioni"], lavoro["corpo"], casi, anticipa)
+    with _VERDETTI_LOCK:
+        prima = set(VERDETTI)
+    with lavoratori.casi_rimandati(coda, casi):
+        Handler.do_POST(h)
+    esito = _pacco(h.risposta, casi) if h.risposta else {"risposta": None, "casi": list(casi),
+                                                         "lettura": None}
+    with _VERDETTI_LOCK:
+        esito["verdetti"] = {k: VERDETTI.pop(k)[1] for k in list(VERDETTI) if k not in prima}
+    return esito
+
+
+# I verdetti del controllo che arrivano dopo il modello: la pagina li chiede
+# col gettone di X-Pack3d-Verdetto (/api/verdetto). Come le letture: pochi e
+# per poco. Il GLB corretto, se la correzione l'ha rifatto, sta con loro.
+VERDETTI = {}
+VERDETTI_MAX = 40
+_VERDETTI_LOCK = threading.Lock()
+
+
+def nuovo_verdetto():
+    """Il gettone di un verdetto che arrivera': intanto e' «in corso»."""
+    import secrets
+    gettone = secrets.token_hex(12)
+    metti_verdetto(gettone, pronto=False)
+    return gettone
+
+
+def metti_verdetto(gettone, verdetto=None, meta=None, ai=None, glb=None, pronto=True):
+    with _VERDETTI_LOCK:
+        adesso = time.time()
+        for k in [k for k, (t, _v) in VERDETTI.items() if adesso - t > LETTURE_ORE]:
+            del VERDETTI[k]
+        while len(VERDETTI) >= VERDETTI_MAX and gettone not in VERDETTI:
+            del VERDETTI[min(VERDETTI, key=lambda k: VERDETTI[k][0])]
+        VERDETTI[gettone] = (adesso, {"pronto": pronto, "verdetto": verdetto,
+                                      "meta": meta, "ai": ai, "glb": glb})
+
+
+def verdetto_di(gettone):
+    with _VERDETTI_LOCK:
+        v = VERDETTI.get(gettone)
+    return v[1] if v else None
 
 
 def con_difetti(verdetto, meta):

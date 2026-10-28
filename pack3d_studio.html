@@ -1487,6 +1487,15 @@ async function build(buf, name, opts){
   // la lettura del PDF, accanto al modello: c'e' anche se il controllo l'ha
   // respinto, ed e' li' che si vede perche'
   mostraLettura(r.headers.get('X-Pack3d-Lettura'), buf, opts);
+  const attesa = r.headers.get('X-Pack3d-Verdetto');
+  if (attesa){
+    // il modello e' gia' qui, il verdetto del controllo arriva dopo
+    glbBlob = blob;
+    show(await glbBlob.arrayBuffer());
+    setFase('pronto');
+    seguiVerdetto(attesa, blob);
+    return {esito: 'in corso'};
+  }
   if (verdetto && verdetto.esito === 'sbagliato'){
     // respinto: non va nel viewer come se fosse buono
     glbBlob = null;
@@ -1502,8 +1511,74 @@ async function build(buf, name, opts){
   return verdetto;
 }
 
+// il titolo del modello che aspetta il verdetto: lo riusa seguiVerdetto
+let titoloInAttesa = '';
+
+/** Il verdetto del controllo dell'AI, che arriva dopo il modello
+ *  (/api/verdetto, col gettone di X-Pack3d-Verdetto). Il modello si guarda
+ *  subito; col verdetto la pagina fa quello che prima faceva a costruzione
+ *  finita: il riquadro del caso se e' respinto, l'avviso se c'e' un dubbio,
+ *  il modello corretto al posto del primo se la correzione l'ha rifatto. */
+async function seguiVerdetto(gettone, blob){
+  const fine = Date.now() + 15 * 60 * 1000;
+  let d = null;
+  while (Date.now() < fine){
+    await new Promise(ok => setTimeout(ok, 1500));
+    // nel frattempo e' arrivato un altro modello, o si e' tornati all'inizio
+    if (glbBlob !== blob) return;
+    try{
+      const r = await fetch(url('/api/verdetto?id=' + encodeURIComponent(gettone)),
+                            {cache: 'no-store'});
+      if (r.status === 404) break;
+      if (r.ok){
+        d = await r.json();
+        if (d.pronto) break;
+        d = null;
+      }
+    }catch(e){ /* la rete puo' sbagliare un giro: si riprova */ }
+  }
+  if (glbBlob !== blob) return;
+  const titolo = titoloInAttesa || 'Modello pronto';
+  if (!d){
+    setStatus(titolo + ' · il verdetto dell’AI non è arrivato', '');
+    return;
+  }
+  if (d.meta) setMeta(d.meta, d.ai || []);
+  let modello = blob;
+  if (d.glb){
+    // la correzione ha rifatto il modello: quello nuovo prende il posto del primo
+    try{
+      const g = await fetch(url('/api/verdetto/glb?id=' + encodeURIComponent(gettone)),
+                            {cache: 'no-store'});
+      if (g.ok){
+        const nuovo = await g.blob();
+        if (glbBlob !== blob) return;
+        modello = glbBlob = nuovo;
+        show(await nuovo.arrayBuffer());
+        setFase('pronto');
+      }
+    }catch(e){ /* resta il primo modello, e il verdetto vale per lui */ }
+  }
+  const v = d.verdetto;
+  if (v && v.esito === 'sbagliato'){
+    // respinto: non resta nel viewer come se fosse buono
+    glbBlob = null;
+    mostraCaso(v, modello);
+    setFase('lavoro');
+  }else if (v && v.esito === 'dubbio' && (v.in_coda || v.in_attesa)){
+    mostraVerifica(v);
+  }
+  esitoFinale(v, titolo);
+}
+
 /** La riga di stato a costruzione finita, secondo il controllo dell'AI. */
 function esitoFinale(v, titolo){
+  if (v && v.esito === 'in corso'){
+    // il modello c'e', il verdetto no: lo porta seguiVerdetto
+    titoloInAttesa = titolo;
+    setStatus(titolo + ' · controllo dell’AI in corso…', '');
+    return;
+  }
   if (!v || v.esito === 'non controllato'){ setStatus(titolo, ''); return; }
   // corretto: l'AI ha tolto lastre tecniche e il modello e' stato rifatto
   const da = v.corretto ? 'corretto e controllato dall\u2019AI' : 'controllato dall\u2019AI';

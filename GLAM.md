@@ -194,6 +194,14 @@ fra i commenti.
 
 La domanda e il messaggio sono testo: si mostrano come testo, mai come HTML.
 
+**Il modello arriva prima del verdetto del controllo.** La pagina lo mostra
+appena costruito e il verdetto dell'AI lo chiede dopo (`/api/verdetto`):
+Glam riceve il GLB da `Response.blob()` come sempre, prima di sapere se il
+controllo lo approva. Se il verdetto e' «sbagliato» la pagina toglie il
+modello e mostra il riquadro del caso nuovo; se la correzione l'ha rifatto,
+la pagina scarica il modello corretto con `Response.blob()` e Glam riceve
+quello, al posto del primo.
+
 ## 6. Le notifiche: la busta nella barra
 
 Chi ha un caso in correzione non deve andare a cercarlo: nella barra verde in

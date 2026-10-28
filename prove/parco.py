@@ -204,7 +204,18 @@ def _costruisci_caso(url, cartella, caso, lettura=None):
             controllo = r.headers.get("X-Pack3d-Controllo")
             controllo = json.loads(unquote(controllo)) if controllo else None
             gettone = r.headers.get("X-Pack3d-Lettura")
+            attesa = r.headers.get("X-Pack3d-Verdetto")
             secondi = time.time() - t
+        if attesa:
+            # il modello e' arrivato prima del verdetto del controllo: si
+            # aspetta lui, e il modello corretto se la correzione l'ha rifatto
+            v = _verdetto(url, attesa)
+            if v is not None:
+                controllo, avvisi = v["verdetto"], v["meta"] or avvisi
+                if v["glb"]:
+                    with urllib.request.urlopen(url + "/api/verdetto/glb?id=" + attesa,
+                                                timeout=120) as rg:
+                        glb = rg.read()
         if lettura and gettone:
             try:
                 with urllib.request.urlopen(url + "/api/lettura/" + gettone,
@@ -216,6 +227,27 @@ def _costruisci_caso(url, cartella, caso, lettura=None):
     except urllib.error.HTTPError as e:
         testo = e.read().decode("utf-8", "replace")
         return e.code, None, [testo[:1000]], time.time() - t, None
+
+
+def _verdetto(url, gettone):
+    """Il verdetto del controllo che arriva dopo il modello (/api/verdetto),
+    quando c'e'; None se non arriva in tempo."""
+    fine = time.time() + ATTESA_COSTRUZIONE
+    while time.time() < fine:
+        try:
+            with urllib.request.urlopen(url + "/api/verdetto?id=" + gettone,
+                                        timeout=60) as r:
+                v = json.loads(r.read().decode("utf-8"))
+            if v.get("pronto"):
+                return v
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        time.sleep(3)
+    print("il verdetto del controllo non e' arrivato in %d s" % ATTESA_COSTRUZIONE)
+    return None
 
 
 def _misura(glb, caso):
