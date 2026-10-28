@@ -1911,6 +1911,59 @@ Sul flowpack ce n'e' una terza, dopo: **il film sulle testate**, quanto la
 grafica si stira su pinne e spalle. Sta con la regola che la chiede, in *La
 grafica sulle pinne: il film non si allunga*.
 
+## Le verifiche che fermano il modello
+
+Gridare negli avvisi non bastava: in due giorni il vassoio da 36 (caso
+838cbae0ac) e il display da 15 (caso c5b98dfbee) sono stati consegnati
+sbagliati sei volte, e ogni volta l'ha visto chi li aveva caricati. Sui
+riempimenti il controllo dell'AI non c'e'. Allora quattro verifiche misurano
+il modello finito e, quando non torna, scrivono una riga che comincia con
+`DIFETTO:` (`verifica.DIFETTO`). Il server la raccoglie (`verifica.difetti`,
+`server.con_difetti`) e vale come un dubbio del controllo dell'AI: il modello
+arriva lo stesso, con l'avviso «Le verifiche hanno trovato un difetto», e il
+caso va in coda. Col controllo dell'AI che dice ok il verdetto diventa
+dubbio; senza controllo - i riempimenti, o la chiave che manca - il verdetto
+lo danno le verifiche, e il caso va in coda senza le viste del controllo:
+la routine lo ricostruisce comunque.
+
+- **La grafica del fronte di un flowpack** (`verifica.grafica_flowpack`, sul
+  GLB finito). Triangolo per triangolo, quanto un verso della grafica e'
+  stirato rispetto all'altro sul fronte del corpo: i pixel della texture
+  sono quadrati, quindi conta il rapporto e non i dpi. Difetto oltre il 10%
+  di mediana (`STIRO_FRONTE`), o oltre il 50% nel decimo peggiore
+  (`STIRO_FRONTE_PARTE`). Il film non si allunga, ma gonfio nel rapporto del
+  DT la faccia si allarga e la grafica con lei: sui flowpack approvati del
+  parco fino al 7,8%. Respinti: il display da 15 al livello 8 («la grafica
+  viene strecciata») 14%, al livello 9 nel rapporto del DT 20%, il T1
+  allargato del vassoio da 36 (#160) 37%, il fronte rimappato 92% nel decimo
+  peggiore.
+- **Il CU nel vassoio e' il suo modello** (`riempimento.fuori_dal_modello`):
+  il corpo del pezzo adattato deve essere il CU costruito da solo, accorciato
+  e schiacciato come consentito, entro 0,01 mm. Le pinne si stringono e si
+  piegano, il corpo no. Il cuscino, la pressa e il fronte rimappato lo
+  cambiavano (*Nel riempimento il CU resta il suo modello*).
+- **I pezzi chiesti ci sono tutti**: il display e' fatto per il suo numero,
+  e con meno pezzi e' sbagliato. Prima lo diceva una riga qualunque; il
+  rilascio del 26 ottobre ha trovato sul parco il display da 40 con 38 pezzi.
+- **Nessun pezzo esce dal vano** (`riempimento.fuori_dal_vano`): oltre 1 mm
+  dalle pareti o dal fondo. Sopra si puo' sporgere: un pezzo piu' alto delle
+  pareti sta in piedi. Ruotata di 10 gradi, la pila del display da 15
+  usciva dal vano di 7 mm.
+
+Provate. Sul parco nessun modello approvato ha un difetto, e i GLB restano
+identici al byte. Dei modelli di quei due casi ripresi dalla storia del
+registro, le verifiche fermano i quattro con la grafica stirata; gli altri
+respinti erano sbagliati per cose che non sono una misura del modello finito
+- la disposizione che chi l'ha caricato voleva, le linee dei ponticelli, il
+T1 piu' stretto di quello approvato, che e' un confronto col modello
+approvato (il punto 2 del piano: le misure attese nel parco). La lente della
+#159 aveva la grafica dritta e il T1 diverso da quello costruito da solo:
+la ferma la seconda verifica, provata su un pezzo allargato del 34% (6,8 mm
+di scarto) e sul pezzo schiacciato e stretto come consentito (0). La pila
+ruotata di 10 gradi esce dal vano di 6,9 mm, dritta di 0. Il display da 40
+con 90 pezzi chiesti dice «ce ne stanno al massimo 44»; con 60 ci stanno,
+schiacciati al 76%, e non e' un difetto.
+
 ## Il controllo dell'AI prima della consegna
 
 Le verifiche qui sopra controllano un modello **dentro la sua famiglia**: le
