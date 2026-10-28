@@ -239,4 +239,6 @@ Dal 28 ottobre 2026 ogni lavoro - /api/analyze, /api/analyze-ai,
 Provato prima di cambiare: dieci casi del parco, ognuno in un processo
 nuovo, costruiti da soli e dopo l'analisi dello stesso PDF, danno lo stesso
 modello al byte. Lo stato non cambiava i modelli; lasciava i file e la
-memoria. Dopo: gli stessi modelli, e la cartella temporanea vuota.
+memoria. Il parco intero coi lavoratori, prima e dopo: 43 modelli su 43
+identici al byte, nessuna misura approvata cambiata, 841 s invece di 850; e
+nella cartella temporanea restavano 64 file e 397 MB, ora niente.
