@@ -663,6 +663,8 @@
       <input id="soft" type="range" min="1" max="10" step="1" value="5">
       <label class="auto"><input id="softauto" type="checkbox"> Scegli tu &mdash; decide l&rsquo;AI in base al prodotto</label>
       <p class="note">Scegli quanto &egrave; gonfio il pack. 1: molto rigido, effetto simile al sottovuoto. 10: molto gonfio, per prodotti tondeggianti o con aria dentro.</p>
+      <label class="auto"><input id="spessoregonfio" type="checkbox"> Gonfio nello spessore</label>
+      <p class="note">La faccia resta larga come il fronte del DT e l&rsquo;aria va nello spessore, come un pack molto pieno. Senza, il pack gonfio si allarga un poco e la grafica del fronte con lui.</p>
     </div>
     <div class="fld solo-flowpack">
       <label for="pinne">Apertura pinne <b id="pinneval">Aperte 3/3</b></label>
@@ -3184,6 +3186,8 @@ document.getElementById('go').onclick = async () => {
               scatola: document.getElementById('scatola').checked,
               pinne: Number(document.getElementById('pinne').value),
               saldatura: Number(document.getElementById('saldatura').value),
+              // il rigonfiamento nello spessore, se scelto per il pack
+              gonfio: document.getElementById('spessoregonfio').checked ? 'spessore' : undefined,
               soft:  document.getElementById('softauto').checked
                        ? 'auto'
                        : Number(document.getElementById('soft').value)};

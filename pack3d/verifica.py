@@ -766,7 +766,8 @@ def grafica_flowpack(glb):
             if meta > STIRO_FRONTE:
                 righe.append(DIFETTO + "la grafica del fronte e' stirata del %.0f%% %s "
                              "(oltre il %.0f%%): il pack e' piu' largo del pannello "
-                             "fronte del DT, prova un rigonfiamento piu' basso"
+                             "fronte del DT, prova un rigonfiamento piu' basso o il "
+                             "gonfio nello spessore"
                              % (100 * meta, verso, 100 * STIRO_FRONTE))
             elif peggio > STIRO_FRONTE_PARTE:
                 righe.append(DIFETTO + "una parte del fronte ha la grafica stirata del "
