@@ -141,11 +141,16 @@ Da tenere a mente:
   e subito dopo /api/build con lo stesso corpo: la costruzione va, se e'
   libero, al lavoratore che ha fatto l'analisi (l'impronta del corpo). Lo
   stesso T1 la seconda volta: 3,7 s invece di 5,9.
-- **Quanti.** `PACK3D_LAVORATORI`, due di serie: le vCPU dello Space
-  gratuito. Non `os.cpu_count()`, che in un container dice i processori della
-  macchina e non i suoi. La memoria di una costruzione e' per lavoratore, il
-  picco peggiore 1,2 GB. Con `0` torna tutto nel processo del server, una
-  costruzione alla volta. Dentro ogni lavoratore `PACK3D_MAX_JOBS` resta 1.
+- **Quanti.** `PACK3D_LAVORATORI`, `auto` di serie: uno per vCPU del
+  container (`lavoratori.quanti`), finche' stanno nella memoria - 1,5 GB
+  ciascuno, il picco peggiore e' 1,2 - e al massimo otto. Le vCPU si leggono
+  dal tetto del cgroup, che e' quello che lo Space vende: non da
+  `os.cpu_count()`, che in un container dice i processori della macchina e
+  non i suoi. Un container senza tetto ne prende due, come prima. Cosa ha
+  visto lo dice `/api/lavori` (`macchina`) e la prima riga del log. Un
+  numero al posto di `auto` vale quello; con `0` torna tutto nel processo del
+  server, una costruzione alla volta. Dentro ogni lavoratore
+  `PACK3D_MAX_JOBS` resta 1.
 - **I processi nascono con `spawn`.** Un lavoratore che riparte dopo una
   caduta nasce mentre il server ha gia' i suoi thread, e un `fork` a quel
   punto si porterebbe dietro i lucchetti presi da loro.

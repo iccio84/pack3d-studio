@@ -52,7 +52,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | nome | dove | valore | a cosa serve |
 |---|---|---|---|
 | `PACK3D_MAX_JOBS` | Variables | `1` | le costruzioni insieme **dentro un processo**: e' gia' il default dell'immagine. **Non alzarlo**, vedi sotto. Le costruzioni insieme le fanno i lavoratori |
-| `PACK3D_LAVORATORI` | Variables | `2` | i processi che fanno analisi e costruzioni, uno ciascuno: tante costruzioni insieme. Due di serie, le vCPU dello Space gratuito; `0` per farle tutte nel processo del server, una alla volta |
+| `PACK3D_LAVORATORI` | Variables | `auto` | i processi che fanno analisi e costruzioni, uno ciascuno: tante costruzioni insieme. `auto` di serie: uno per vCPU dello Space, finche' stanno nella memoria (due sul CPU basic, otto sul CPU upgrade); un numero per fissarli; `0` per farle tutte nel processo del server, una alla volta. Se questa variabile c'e' nelle impostazioni dello Space col vecchio `2`, va tolta o messa ad `auto`, se no non cresce con l'hardware |
 | `PACK3D_FILA_MAX` | Variables | `12` | quanti lavori aspettano in fila coi lavoratori occupati; oltre, «Server occupato» |
 | `PACK3D_ATTESA_MAX` | Variables | secondi, di serie `600` | quanto un lavoro aspetta in fila prima di arrendersi con «Server occupato» |
 | `PACK3D_LAVORO_MAX` | Variables | secondi, di serie `1200` | oltre, un lavoro si ferma e il suo lavoratore riparte |
@@ -263,13 +263,43 @@ ogni chiamata a pdfium, che pero' rimette in fila esattamente quello che si
 voleva parallelizzare.
 
 I processi adesso ci sono: i **lavoratori** (`pack3d/lavoratori.py`,
-REGOLE.md, *Due processi: i lavoratori*). `PACK3D_LAVORATORI` processi,
-due di serie, fanno ognuno un'analisi o una costruzione alla volta; chi
-arriva coi lavoratori occupati aspetta in fila, e la pagina gli dice quanti
-lavori ha davanti. Un lavoratore che cade si porta via solo il suo lavoro, e
-riparte. Piu' vCPU servono adesso: con uno Space da 4 o 8 vCPU si alza
-`PACK3D_LAVORATORI`, e la memoria da tenere e' quella di una costruzione per
-lavoratore.
+REGOLE.md, *Due processi: i lavoratori*). `PACK3D_LAVORATORI` processi, uno
+per vCPU dello Space, fanno ognuno un'analisi o una costruzione alla volta;
+chi arriva coi lavoratori occupati aspetta in fila, e la pagina gli dice
+quanti lavori ha davanti. Un lavoratore che cade si porta via solo il suo
+lavoro, e riparte.
+
+### Piu' vCPU: cosa comprano
+
+Piu' costruzioni insieme, non una costruzione piu' veloce: la pipeline e' a
+un thread solo. Misurato il 28 ottobre 2026 su una macchina da 4 vCPU, sei
+costruzioni diverse del parco mandate insieme:
+
+| lavoratori | tutte finite in | attesa media di chi le ha chieste |
+|---|---|---|
+| 1 | 140 s | 84 s |
+| 2 | 79 s | 48 s |
+| 4 | 45 s | 32 s |
+
+Quasi una vCPU, una costruzione in piu' insieme; la piu' lunga da sola, la
+scatola a punta T6, resta 33-35 s comunque. Con due persone alla volta
+bastano le 2 vCPU del CPU basic; con un gruppo che carica insieme, chi arriva
+terzo aspetta una costruzione intera, e li' servono vCPU.
+
+Per passare a **CPU upgrade** (8 vCPU, 32 GB; 0,03 $ l'ora sulla pagina dei
+prezzi di Hugging Face, a ottobre 2026, contati a minuti mentre lo Space e'
+acceso - una ventina di dollari al mese se non dorme mai):
+
+1. Impostazioni dello Space -> **Space hardware** -> **CPU upgrade**. Si
+   paga solo l'hardware a pagamento, e li' si puo' scegliere anche dopo
+   quanto lo Space dorme se nessuno lo usa (**Sleep time**).
+2. Nelle **Variables** `PACK3D_LAVORATORI` non deve esserci, o deve valere
+   `auto`: un vecchio `2` li tiene a due anche su 8 vCPU.
+3. Lo Space riparte da solo. `/api/lavori` dice quello che ha visto:
+   `"lavoratori": 8` e `"macchina": {"vcpu": 8.0, "memoria_gb": 32.0, ...}`.
+   Se `vcpu` e' `null` il container non dichiara il suo tetto di CPU, e i
+   lavoratori restano due: allora si mette `PACK3D_LAVORATORI` a `8` nelle
+   Variables.
 
 ## B. Render — dove stava prima
 
@@ -442,8 +472,8 @@ stanno tutte dentro il foglio. Vedi REGOLE.md, *La texture e' HD di serie*.
 ## Limiti
 
 - **Una** costruzione alla volta **per processo** (`PACK3D_MAX_JOBS`), e
-  tante insieme quanti sono i lavoratori (`PACK3D_LAVORATORI`, due di
-  serie); le altre aspettano in fila, fino a `PACK3D_FILA_MAX`, e oltre
+  tante insieme quanti sono i lavoratori (`PACK3D_LAVORATORI`, uno per
+  vCPU: due sul CPU basic); le altre aspettano in fila, fino a `PACK3D_FILA_MAX`, e oltre
   ricevono 503 con invito a riprovare.
 
   `PACK3D_MAX_JOBS` **non si alza**, su nessuna macchina: pdfium non e'

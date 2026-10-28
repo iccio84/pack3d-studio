@@ -75,6 +75,10 @@ mano. Si fa **prima** di guardare la coda.
    - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
      stato (uscita 3): scrivilo sulla issue e lasciala `da-rilasciare`; la
      riprova il rilascio dopo.
+   - **I lavoratori**: `curl -s https://iccio-maurizio.hf.space/api/lavori`
+     dice quanti sono e la macchina che hanno visto (`macchina`). Devono
+     essere tanti quante le vCPU dello Space; se no vedi DEPLOY.md, *Piu'
+     vCPU: cosa comprano*, e scrivilo nel riassunto.
 
    Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
    casi della settimana e dei casi cambiati, e le loro misure approvate:
