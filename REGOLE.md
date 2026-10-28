@@ -2032,8 +2032,26 @@ ricostruisce); parte quando lo conferma con la descrizione, come sempre.
 - Un foglio di lavoro girato si rigira al verso del PDF (`steso.INDIETRO`);
   uno steso trasposto (pinne in verticale, `fp.ruotato`) ha le fasce in
   verticale, e il nome solo dove ci sta - il fronte sempre.
-- Nel riempimento e' la lettura del CU flowpack. Per il vassoio, gli
-  astucci e le altre famiglie verra' famiglia per famiglia.
+- Una tavola sola per tutte le famiglie (`lettura._tavola`): la pagina di
+  lavoro sbiadita, le parti lette col loro colore - il fronte sempre
+  arancione - il riquadro nero del disegno usato, il ritaglio attorno a lui,
+  il giro al verso del PDF, e le scritte messe DOPO il giro, se no su un
+  foglio girato di 180 gradi si leggono capovolte. Le famiglie le passano
+  solo le loro parti:
+  - **flowpack**: le fasce del giro e delle testate, come sopra;
+  - **astuccio**: i pannelli della fustella col loro ruolo - fronte, retro
+    (le due meta' su un astuccio aperto), fianchi, cielo e fondo - e le
+    falde. E' qui che si vede l'astuccio costruito sulla miniatura (caso
+    61cfcd4c87): il riquadro nero sta su un disegno di pochi centimetri;
+  - **vassoio** (anche sagomato): il fondo e le quattro pareti, davanti la
+    testata piu' bassa (`vassoio.testata_davanti`);
+  - **display con plancia** (`pack3d.plancia`, `pack3d.sportello`): il
+    fondo, le pareti fino ai loro bordi - davanti quella con la finestra - il
+    coperchio che fa la plancia e la finestra.
+- Nel riempimento e' la lettura del CU, flowpack o astuccio. Le altre
+  famiglie (la scatola con la plancia ricavata, coppe e coni, pouch, incarti,
+  ballotin, punta, prisma) verranno famiglia per famiglia: per ora la
+  finestra non si apre.
 - `prove/parco.py costruisci` la salva accanto al modello, `<nome>_lettura.jpg`.
 
 Provata sul parco: i GLB restano identici al byte, e la lettura e' giusta

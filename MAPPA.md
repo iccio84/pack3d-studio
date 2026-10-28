@@ -29,7 +29,8 @@ sono in GADGET.md.
   fermano il modello: la grafica del fronte stirata, e il segno `DIFETTO`
   che il server conta come un dubbio (`con_difetti`).
 - `pack3d/lettura.py`: la lettura del PDF da mettere accanto al modello -
-  la pagina con le fasce lette e le misure (il flowpack, per ora); il
+  la pagina con le parti lette e le misure (flowpack, astuccio, vassoio,
+  display con plancia); il
   server la serve da `/api/lettura/<gettone>`, e «letto male» va a
   `/api/segnala`.
 - `pack3d/misure.py`: le misure del modello finito (ingombro, pezzi, il

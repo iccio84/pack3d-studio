@@ -590,6 +590,12 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
+    # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
+    try:
+        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
+            fh.write(lettura_pdf.astuccio(pdf, d, gradi))
+    except Exception:
+        traceback.print_exc()
     # Coperture via per nome e texture girate sul verso della grafica: sono
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
@@ -799,6 +805,12 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             raise ValueError("non e' un vassoio: la griglia della fustella "
                              "non ha cinque colonne e tre fasce, e non e' un "
                              "display con plancia")
+    # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
+    try:
+        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
+            fh.write(lettura_pdf.vassoio(pdf, v, gradi))
+    except Exception:
+        traceback.print_exc()
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
@@ -898,6 +910,12 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     dei punti per millimetro.
     """
     dpi, tmax = risoluzione(quality)
+    # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
+    try:
+        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
+            fh.write(lettura_pdf.plancia(pdf, p, gradi))
+    except Exception:
+        traceback.print_exc()
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     px_mm = 4.0
     pz = forma.pezzi(pdf, p, d, px_mm)
@@ -1284,9 +1302,9 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             # allarga a perimetro costante e la grafica del fronte si stira
             # (il T15 al livello 8: «il T1 non corrisponde al DT»)
             av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
-            # la lettura del CU, accanto al GLB del riempimento
-            if os.path.exists(gf + lettura_pdf.ACCANTO):
-                shutil.copyfile(gf + lettura_pdf.ACCANTO, out_glb + lettura_pdf.ACCANTO)
+        # la lettura del CU, accanto al GLB del riempimento
+        if os.path.exists(gf + lettura_pdf.ACCANTO):
+            shutil.copyfile(gf + lettura_pdf.ACCANTO, out_glb + lettura_pdf.ACCANTO)
         with open(gv, "rb") as fh:
             glb_v = fh.read()
         with open(gf, "rb") as fh:
