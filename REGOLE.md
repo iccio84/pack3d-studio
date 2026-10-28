@@ -1964,6 +1964,36 @@ ruotata di 10 gradi esce dal vano di 6,9 mm, dritta di 0. Il display da 40
 con 90 pezzi chiesti dice «ce ne stanno al massimo 44»; con 60 ci stanno,
 schiacciati al 76%, e non e' un difetto.
 
+## Le misure approvate: cambiato non vuol dire peggiorato
+
+Il parco diceva se un modello era cambiato - l'impronta del GLB - e i
+cambiati si guardavano a occhio sulle viste affiancate. Il 26 ottobre il
+rigonfiamento nello spessore e' uscito col rilascio: il T1 del vassoio da 36
+(caso 838cbae0ac) e' passato da 40,1 a 37,1 mm di faccia, la grafica del
+fronte dal 6,6 al 2,6% di stiro, e a occhio non si vedeva; l'ha visto chi
+l'aveva caricato, accanto al T1 approvato.
+
+Ora ogni caso del parco ha le sue **misure approvate** (`misure` nel
+manifesto), lette dal GLB e non dagli avvisi (`pack3d.misure`): l'ingombro,
+i pezzi di un riempimento, il flowpack lungo, largo e spesso a meta' corpo
+(il pezzo come sta nel vassoio), lo stiro della grafica del fronte.
+`prove/parco.py costruisci` misura ogni modello e scrive sotto il caso le
+misure approvate che cambiano oltre la tolleranza - 0,3 mm o lo 0,5% della
+misura, un punto di stiro, i pezzi esatti; `confronta` le riassume in fondo,
+`misure` le rifa' su una costruzione gia' fatta, e con `--approva` le scrive
+come approvate. Le registra anche `consegna`, insieme a `come_deve_venire`.
+Al rilascio una misura approvata cambiata va spiegata nella PR, o e' un caso
+rotto (RILASCIO.md).
+
+Provate. Le misure di tutti i 43 casi vengono dalla costruzione identica al
+byte ai modelli rilasciati. Dalla storia del registro: il T1 nello spessore
+del vassoio da 36 dice «flowpack largo: 40,1 -> 37,1 mm (-7,5%)» e lo stiro
+6,6 -> 2,6%, il T1 allargato della #160 «40,1 -> 49,6 mm (+23,7%)», la
+prima disposizione a 4 file lo spessore 20,7 -> 25,4; il display da 15 al
+livello 10 nel rapporto del DT «flowpack largo: 31,6 -> 38,5 mm (+21,8%)» e
+lo spessore 21,3 -> 15,9: i pezzi troppo bassi. Un modello uguale a quello
+approvato non dice niente.
+
 ## Il controllo dell'AI prima della consegna
 
 Le verifiche qui sopra controllano un modello **dentro la sua famiglia**: le
