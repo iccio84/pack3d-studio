@@ -40,8 +40,9 @@ USER app
 #
 # Quindi PACK3D_MAX_JOBS=1 vale per processo, e le costruzioni insieme le fanno
 # i lavoratori: PACK3D_LAVORATORI processi, uno per lavoro, con la fila per chi
-# arriva coi lavoratori occupati (pack3d/lavoratori.py). Due, le vCPU dello
-# Space gratuito; con piu' vCPU si alza questo, non MAX_JOBS.
-ENV HOST=0.0.0.0 PORT=7860 PACK3D_MAX_JOBS=1 PACK3D_LAVORATORI=2
+# arriva coi lavoratori occupati (pack3d/lavoratori.py). `auto`: uno per vCPU
+# del container, finche' stanno nella memoria - due sullo Space gratuito, otto
+# su 8 vCPU e 32 GB. Con piu' vCPU cresce questo da solo, non MAX_JOBS.
+ENV HOST=0.0.0.0 PORT=7860 PACK3D_MAX_JOBS=1 PACK3D_LAVORATORI=auto
 EXPOSE 7860
 CMD ["python", "server.py"]

@@ -52,7 +52,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | nome | dove | valore | a cosa serve |
 |---|---|---|---|
 | `PACK3D_MAX_JOBS` | Variables | `1` | le costruzioni insieme **dentro un processo**: e' gia' il default dell'immagine. **Non alzarlo**, vedi sotto. Le costruzioni insieme le fanno i lavoratori |
-| `PACK3D_LAVORATORI` | Variables | `2` | i processi che fanno analisi e costruzioni, uno ciascuno: tante costruzioni insieme. Due di serie, le vCPU dello Space gratuito; `0` per farle tutte nel processo del server, una alla volta |
+| `PACK3D_LAVORATORI` | Variables | `auto` | i processi che fanno analisi e costruzioni, uno ciascuno: tante costruzioni insieme. `auto` di serie: uno per vCPU dello Space, finche' stanno nella memoria (due sul CPU basic, otto sul CPU upgrade); un numero per fissarli; `0` per farle tutte nel processo del server, una alla volta. Se questa variabile c'e' nelle impostazioni dello Space col vecchio `2`, va tolta o messa ad `auto`, se no non cresce con l'hardware |
 | `PACK3D_FILA_MAX` | Variables | `12` | quanti lavori aspettano in fila coi lavoratori occupati; oltre, «Server occupato» |
 | `PACK3D_ATTESA_MAX` | Variables | secondi, di serie `600` | quanto un lavoro aspetta in fila prima di arrendersi con «Server occupato» |
 | `PACK3D_LAVORO_MAX` | Variables | secondi, di serie `1200` | oltre, un lavoro si ferma e il suo lavoratore riparte |
@@ -442,8 +442,8 @@ stanno tutte dentro il foglio. Vedi REGOLE.md, *La texture e' HD di serie*.
 ## Limiti
 
 - **Una** costruzione alla volta **per processo** (`PACK3D_MAX_JOBS`), e
-  tante insieme quanti sono i lavoratori (`PACK3D_LAVORATORI`, due di
-  serie); le altre aspettano in fila, fino a `PACK3D_FILA_MAX`, e oltre
+  tante insieme quanti sono i lavoratori (`PACK3D_LAVORATORI`, uno per
+  vCPU: due sul CPU basic); le altre aspettano in fila, fino a `PACK3D_FILA_MAX`, e oltre
   ricevono 503 con invito a riprovare.
 
   `PACK3D_MAX_JOBS` **non si alza**, su nessuna macchina: pdfium non e'
