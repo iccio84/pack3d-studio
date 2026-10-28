@@ -572,7 +572,7 @@ fuori dallo sportello e le strisce lungo i fianchi.
   per cento di mezzo (la linguetta); la parete nord non ne ha.
 
 Si prova solo dichiarato vassoio, e solo dopo il vassoio e la plancia:
-`build_vassoio` e `_analyze_pdf` ci arrivano quando gli altri due hanno
+`build_vassoio` e `_prova_vassoio` ci arrivano quando gli altri due hanno
 rifiutato il foglio.
 
 **Il solido** (`sportello.mesh`, costruito da `build_plancia` con
@@ -734,7 +734,7 @@ parte nel fronte, con la stampa capovolta, scende davanti nella finestra.
 
 Solo dichiarato: nel vassoio dichiarato (e quindi nel riempimento), dopo il
 vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
-(`server._analyze_pdf`, `build_vassoio`). I casi del parco che passavano non
+(`server._prova_vassoio`, `build_vassoio`). I casi del parco che passavano non
 cambiano strada.
 
 ### Cosa manca
