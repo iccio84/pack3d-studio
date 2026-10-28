@@ -32,7 +32,7 @@ Nel repository che Render sta usando:
 |---|---|
 | `pack3d/tools.py` | strumenti di misura esposti a Claude |
 | `agent.py` | ciclo di tool use |
-| `REGOLE.md` | system prompt: le regole del progetto |
+| `REGOLE.md`, `regole/` | system prompt: le regole del progetto |
 | `server.py` | contiene gia' `/api/analyze-ai` |
 | `requirements.txt` | aggiunto `anthropic` |
 

@@ -7,6 +7,7 @@ JSON piccolo di parametri. La mesh la costruisce il codice.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -285,6 +286,9 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None):
     p = regole_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "REGOLE.md")
     if os.path.exists(p):
         regole = open(p, encoding="utf-8").read()
+        # le regole di ogni famiglia stanno accanto, in regole/
+        for f in sorted(glob.glob(os.path.join(os.path.dirname(p), "regole", "*.md"))):
+            regole += "\n\n" + open(f, encoding="utf-8").read()
 
     msgs = [{"role": "user", "content":
              "Tipologia dichiarata dall'utente: %s.\nRisposte alle domande: %s.\n"

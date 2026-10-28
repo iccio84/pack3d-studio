@@ -60,11 +60,13 @@ caso di cui stavate parlando.
 
 ## Il punto di giunzione: `REGOLE.md`
 
-Non e' documentazione. `agent.py` lo legge e lo infila nel system prompt
-dell'agente a ogni analisi:
+Non e' documentazione. `agent.py` lo legge, coi file di `regole/` che ne
+sono il seguito, e lo infila nel system prompt dell'agente a ogni analisi:
 
 ```python
 regole = open(p, encoding="utf-8").read()
+for f in sorted(glob.glob(os.path.join(os.path.dirname(p), "regole", "*.md"))):
+    regole += "\n\n" + open(f, encoding="utf-8").read()
 ...
 system=ISTRUZIONI + "\n\n# Regole del progetto\n\n" + regole
 ```
@@ -78,8 +80,8 @@ margine non stampato"*, che su un artwork al vivo da' `end_fin = 0` — l'errore
 che aveva prodotto il 21% di triangoli degeneri sul Bueno T2. Il codice era gia'
 stato corretto; la regola no, e l'agente leggeva quella.
 
-**Quindi: ogni modifica al comportamento tocca anche `REGOLE.md`, nello stesso
-commit.** Se non c'e' niente da scrivere li', probabilmente non hai cambiato il
+**Quindi: ogni modifica al comportamento tocca anche `REGOLE.md` - o il file
+della sua famiglia in `regole/` - nello stesso commit.** Se non c'e' niente da scrivere li', probabilmente non hai cambiato il
 comportamento.
 
 ## Un caso studio nuovo
@@ -89,7 +91,7 @@ massimo quattro cose, e ognuna ha il suo posto:
 
 | cosa hai imparato | dove va |
 |---|---|
-| una regola di lettura del disegno | `REGOLE.md` |
+| una regola di lettura del disegno | il file della famiglia in `regole/` (l'indice e' in `REGOLE.md`) |
 | qualcosa che l'analista deve fare diversamente | `ISTRUZIONI` in `agent.py` |
 | un conto che il codice sbagliava | `pack3d/flowpack.py`, `server.py` |
 | un impaginato che i solutori non coprono | registro `CASI` in `server.py` |
