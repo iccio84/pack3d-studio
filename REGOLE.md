@@ -379,6 +379,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - Un servizio che si sveglia non e' un servizio rotto
   - Dove la rotella NON arriva
 - pdfium non si chiama da due thread
+  - Due processi: i lavoratori
 
 **`regole/flowpack.md`** - flowpack
 

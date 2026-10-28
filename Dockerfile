@@ -38,8 +38,10 @@ USER app
 # anche il lavoro di chi non c'entrava niente. Questo limite non si compra con
 # la RAM: per farne due davvero servono due PROCESSI, non due thread.
 #
-# La seconda richiesta prende un 503 con invito a riprovare. Meglio respingere
-# che far cadere il servizio.
-ENV HOST=0.0.0.0 PORT=7860 PACK3D_MAX_JOBS=1
+# Quindi PACK3D_MAX_JOBS=1 vale per processo, e le costruzioni insieme le fanno
+# i lavoratori: PACK3D_LAVORATORI processi, uno per lavoro, con la fila per chi
+# arriva coi lavoratori occupati (pack3d/lavoratori.py). Due, le vCPU dello
+# Space gratuito; con piu' vCPU si alza questo, non MAX_JOBS.
+ENV HOST=0.0.0.0 PORT=7860 PACK3D_MAX_JOBS=1 PACK3D_LAVORATORI=2
 EXPOSE 7860
 CMD ["python", "server.py"]

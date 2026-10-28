@@ -51,7 +51,11 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 
 | nome | dove | valore | a cosa serve |
 |---|---|---|---|
-| `PACK3D_MAX_JOBS` | Variables | `1` | e' gia' il default dell'immagine. **Non alzarlo**, vedi sotto |
+| `PACK3D_MAX_JOBS` | Variables | `1` | le costruzioni insieme **dentro un processo**: e' gia' il default dell'immagine. **Non alzarlo**, vedi sotto. Le costruzioni insieme le fanno i lavoratori |
+| `PACK3D_LAVORATORI` | Variables | `2` | i processi che fanno analisi e costruzioni, uno ciascuno: tante costruzioni insieme. Due di serie, le vCPU dello Space gratuito; `0` per farle tutte nel processo del server, una alla volta |
+| `PACK3D_FILA_MAX` | Variables | `12` | quanti lavori aspettano in fila coi lavoratori occupati; oltre, «Server occupato» |
+| `PACK3D_ATTESA_MAX` | Variables | secondi, di serie `600` | quanto un lavoro aspetta in fila prima di arrendersi con «Server occupato» |
+| `PACK3D_LAVORO_MAX` | Variables | secondi, di serie `1200` | oltre, un lavoro si ferma e il suo lavoratore riparte |
 | `ANTHROPIC_API_KEY` | Secrets | la chiave | il **controllo dell'AI** su ogni costruzione, il rigonfiamento "Scegli tu", e `/api/analyze-ai`. Senza, si costruisce come prima e un cartellino dice che il controllo e' spento |
 | `PACK3D_MODEL` | Variables | il modello di Claude | quello dell'agente e del controllo; senza, quello scritto in `agent.py` |
 | `PACK3D_MODEL_CONTROLLO` | Variables | un modello di Claude | solo se il controllo deve usare un modello diverso dall'agente |
@@ -250,11 +254,20 @@ chiamate insieme sporcano l'heap nativo e si portano via il processo, cioe'
 anche il lavoro di chi non c'entrava niente. La memoria non c'entra - nella
 prova ne restavano quindici GB liberi.
 
-Quindi il limite di **una costruzione alla volta resta**, ed e' strutturale:
-non si compra con un piano piu' grande. Per farne due davvero servono due
-**processi**, non due thread - o un lock unico attorno a ogni chiamata a
-pdfium, che pero' rimette in fila esattamente quello che si voleva
-parallelizzare. Nessuna delle due e' fatta.
+Quindi il limite di **una costruzione alla volta per processo resta**, ed
+e' strutturale: non si compra con un piano piu' grande. Per farne due
+davvero servono due **processi**, non due thread - o un lock unico attorno a
+ogni chiamata a pdfium, che pero' rimette in fila esattamente quello che si
+voleva parallelizzare.
+
+I processi adesso ci sono: i **lavoratori** (`pack3d/lavoratori.py`,
+REGOLE.md, *Due processi: i lavoratori*). `PACK3D_LAVORATORI` processi,
+due di serie, fanno ognuno un'analisi o una costruzione alla volta; chi
+arriva coi lavoratori occupati aspetta in fila, e la pagina gli dice quanti
+lavori ha davanti. Un lavoratore che cade si porta via solo il suo lavoro, e
+riparte. Piu' vCPU servono adesso: con uno Space da 4 o 8 vCPU si alza
+`PACK3D_LAVORATORI`, e la memoria da tenere e' quella di una costruzione per
+lavoratore.
 
 ## B. Render — dove stava prima
 
@@ -322,7 +335,8 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
 | Porta 7860 e `PORT` da ambiente | ok |
 | Astuccio KMS T10 | 200, 915 kB, 5,5 s |
 | Flowpack FULFIL, 20 denti morbido | 200, 3591 kB, 3,4 s |
-| Tre costruzioni insieme | 200, 200, 503 (coda piena) |
+| Tre costruzioni insieme, due lavoratori | 200, 200, 200: la terza aspetta in fila |
+| Un lavoratore ucciso a meta' costruzione | 500 per quella, 200 per l'altra, il lavoratore riparte |
 | Ripresa dopo il carico | 200 |
 | Preflight CORS da altro dominio | 204 |
 | File non PDF | 400 con messaggio |
@@ -425,14 +439,16 @@ stanno tutte dentro il foglio. Vedi REGOLE.md, *La texture e' HD di serie*.
 
 ## Limiti
 
-- **Una** costruzione alla volta (`PACK3D_MAX_JOBS`), la seconda riceve 503
-  con invito a riprovare. Meglio respingere che far cadere il servizio.
+- **Una** costruzione alla volta **per processo** (`PACK3D_MAX_JOBS`), e
+  tante insieme quanti sono i lavoratori (`PACK3D_LAVORATORI`, due di
+  serie); le altre aspettano in fila, fino a `PACK3D_FILA_MAX`, e oltre
+  ricevono 503 con invito a riprovare.
 
-  Il numero **non si alza**, su nessuna macchina: pdfium non e' thread-safe e
-  due costruzioni insieme fanno morire il processo intero. Vedi sopra, *I 16
-  GB non comprano due costruzioni insieme*. La memoria qui sotto dice quanto
-  serve per **una**, ed e' l'altro motivo per cui su 512 MB i file grandi non
-  passavano.
+  `PACK3D_MAX_JOBS` **non si alza**, su nessuna macchina: pdfium non e'
+  thread-safe e due costruzioni nello stesso processo lo fanno morire. Vedi
+  sopra, *I 16 GB non comprano due costruzioni insieme*. La memoria qui
+  sotto dice quanto serve per **una**, per lavoratore, ed e' l'altro motivo
+  per cui su 512 MB i file grandi non passavano.
 
   Il numero viene dalla memoria, non dalla CPU. Picchi misurati su
   `/api/analyze` piu' `/api/build` nello stesso processo, qualita' web - cioe'
