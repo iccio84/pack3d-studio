@@ -11,7 +11,7 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
-                                [--domanda TESTO --opzione TESTO ...]
+                                [--domanda TESTO --opzione TESTO ... [--anteprima NOME]]
     python3 prove/parco.py prepara CASI CODICE [--riprendi]
     python3 prove/parco.py consegna CASI CODICE --messaggio TESTO --commento TESTO
     python3 prove/parco.py approvato CASI CODICE
@@ -81,8 +81,11 @@ mette nella cartella del caso il modello da approvare: quello che
 `costruisci --solo NOME` ha costruito col codice della settimana (il giro di
 un caso, CODA.md), o quello provato sullo Space con `spazio`. Il caso e'
 quello di CASI/casi/<data>_<CODICE>, e il nome quello che la pagina gli ha
-annunciato. La risposta a una domanda torna
-dallo Space, sulla issue del caso (`coda.aggiungi`).
+annunciato. Con `--stato domanda --anteprima NOME` la domanda porta con se'
+le viste del modello di adesso e la lettura del PDF con le misure lette di
+quel caso del parco, che la finestra dei casi mostra sopra la domanda. La
+risposta a una domanda torna dallo Space, sulla issue del caso
+(`coda.aggiungi`).
 
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
@@ -794,6 +797,38 @@ def _modello_da_approvare(args, cartella):
     return [os.path.join(cartella, "modello.glb"), os.path.join(cartella, "modello.json")]
 
 
+# L'anteprima di una domanda, nella cartella del caso: il modello di adesso
+# dai quattro lati e la lettura del PDF con le misure lette, uno sotto
+# l'altra. La finestra dei casi della pagina la mostra sopra la domanda
+# (`coda.anteprima`): chi risponde vede cosa si e' costruito e cosa si e'
+# letto, non solo la domanda.
+ANTEPRIMA = "domanda.jpg"
+ANTEPRIMA_LATO = 1600
+
+
+def _anteprima(uscita, nome, cartella):
+    """Compone CARTELLA/domanda.jpg dal caso del parco NOME costruito in
+    USCITA (`costruisci --solo`): le viste e la lettura del PDF. Il percorso."""
+    from PIL import Image
+    pezzi = [Image.open(f).convert("RGB") for f in
+             (os.path.join(uscita, nome + "_viste.png"),
+              os.path.join(uscita, nome + "_lettura.jpg")) if os.path.exists(f)]
+    if not pezzi:
+        raise SystemExit("mancano le viste di %s in %s: prima `costruisci --solo %s`"
+                         % (nome, uscita, nome))
+    largo = min(ANTEPRIMA_LATO, max(im.width for im in pezzi))
+    pezzi = [im.resize((largo, max(1, round(im.height * largo / im.width)))) for im in pezzi]
+    tela = Image.new("RGB", (largo, sum(im.height for im in pezzi) + 20 * (len(pezzi) - 1)),
+                     "white")
+    y = 0
+    for im in pezzi:
+        tela.paste(im, (0, y))
+        y += im.height + 20
+    dove = os.path.join(cartella, ANTEPRIMA)
+    tela.save(dove, quality=80)
+    return dove
+
+
 def _registra_stato(casi, cartella, codice, corpo, altri=()):
     """Lo stato del caso in `stato.json`, nella sua cartella, per la pagina
     dello Space: la finestra dei casi e le notifiche di chi l'ha mandato lo
@@ -808,7 +843,8 @@ def _registra_stato(casi, cartella, codice, corpo, altri=()):
     if not isinstance(dati, dict):
         dati = {}
     storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
-    voce = {k: corpo[k] for k in ("stato", "nome", "messaggio", "domanda", "opzioni")
+    voce = {k: corpo[k] for k in ("stato", "nome", "messaggio", "domanda", "opzioni",
+                                  "immagine")
             if corpo.get(k) not in (None, "", [])}
     voce["quando"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     dati["storia"] = (storia + [voce])[-30:]
@@ -922,6 +958,11 @@ def caso(args):
     elif args.domanda or args.opzione:
         raise SystemExit("--domanda e --opzione vanno con --stato domanda")
     altri = []
+    if args.anteprima:
+        if args.stato != "domanda":
+            raise SystemExit("--anteprima va con --stato domanda")
+        altri = [_anteprima(args.uscita, args.anteprima, cartella)]
+        corpo["immagine"] = ANTEPRIMA
     if args.stato == "da-approvare":
         if not args.modello:
             raise SystemExit("con --stato da-approvare ci vuole --modello: il caso "
@@ -935,6 +976,8 @@ def caso(args):
     if (_registra_stato(args.casi, cartella, args.codice, corpo, altri)
             and args.stato in ("domanda", "da-approvare")):
         _avvisa(args.spazio, args.codice)
+    # l'anteprima la mostra la pagina: Glam riceve i campi che conosce (GLAM.md)
+    corpo.pop("immagine", None)
     try:
         risposta = _stato_a_glam(args.url, corpo)
     except urllib.error.HTTPError as e:
@@ -1260,7 +1303,7 @@ def prepara(args):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
                                     stato="in-lavorazione", messaggio=None, domanda=None,
-                                    opzione=None, modello=None, uscita=uscita,
+                                    opzione=None, anteprima=None, modello=None, uscita=uscita,
                                     spazio=args.spazio))
             a_glam = "si'"
         except SystemExit:
@@ -1300,6 +1343,13 @@ def prepara(args):
         "; foto: " + ", ".join(foto) if foto else ""))
     for v in voci[-3:]:
         print("  > " + " ".join(v.split())[:600])
+    no = sum(1 for v in voci if v.startswith("**Modello NON approvato"))
+    if no:
+        print("respinto %d %s: prima di un'altra interpretazione, la domanda con "
+              "l'anteprima%s (CODA.md, *Dopo un Non approvo, prima si chiede*)"
+              % (no, "volta" if no == 1 else "volte",
+                 ", sempre: e' il secondo no" if no >= 2 else
+                 ", se la correzione non e' una sola"))
     if nuova:
         print("da fare: scrivi `come_deve_venire` della voce %s in parco/parco.json" % voce["nome"])
 
@@ -1362,8 +1412,8 @@ def consegna(args):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
                                     stato="da-approvare", messaggio=args.messaggio,
-                                    domanda=None, opzione=None, modello=voce["nome"],
-                                    uscita=uscita, spazio=args.spazio))
+                                    domanda=None, opzione=None, anteprima=None,
+                                    modello=voce["nome"], uscita=uscita, spazio=args.spazio))
         except SystemExit:
             pass
     # registrato? lo stato e il modello sono nel registro prima di Glam
@@ -1426,7 +1476,7 @@ def approvato(args):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
                                     stato="risolto", messaggio=messaggio, domanda=None,
-                                    opzione=None, modello=None, uscita="/tmp",
+                                    opzione=None, anteprima=None, modello=None, uscita="/tmp",
                                     spazio=args.spazio))
         except SystemExit:
             pass
@@ -1637,6 +1687,10 @@ def main():
                                      "parco costruito con `costruisci --solo` (o "
                                      "provato con `spazio`), il cui modello va a "
                                      "chi l'ha caricato da approvare")
+    q.add_argument("--anteprima", help="con --stato domanda: il caso del parco "
+                                       "costruito con `costruisci --solo`, le cui "
+                                       "viste e la cui lettura del PDF vanno con la "
+                                       "domanda")
     q.add_argument("--uscita", default="/tmp/parco_spazio",
                    help="la cartella dove `costruisci` (o `spazio`) ha salvato il GLB")
     q.add_argument("--spazio", default=SPAZIO,

@@ -181,7 +181,9 @@ fra i commenti.
 - **L'elenco dei casi sta in un posto solo: la finestra «Casi» della pagina
   dello Space**, dentro la sezione. Per ognuno il nome, lo stato a parole
   sue, quando è cambiato, il messaggio e, se c'è una domanda, il modulo per
-  rispondere. Glam **non** disegna un suo elenco «I tuoi casi in correzione»
+  rispondere, con sopra l'anteprima quando la routine la manda: il modello
+  di adesso e come è stato letto il PDF, con le misure. A Glam la routine
+  manda solo la domanda e le risposte. Glam **non** disegna un suo elenco «I tuoi casi in correzione»
   sotto il visore: c'era, e i casi comparivano due volte. Vedi *Il testo per
   Lovable: un elenco solo*.
 - Glam tiene la tabella dei casi (serve alle notifiche, al numero sul tasto

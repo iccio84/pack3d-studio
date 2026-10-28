@@ -147,9 +147,10 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 4. **Guarda il foglio** accanto ai difetti e alle voci, e scrivi
    `come_deve_venire` della voce nuova in `parco/parco.json`, con le misure.
    Se l'esito e' `dubbio` vedi *Un caso col dubbio*, se e' `errore` *Un caso
-   che non si costruisce*. Se il modello di adesso e' **gia' giusto** - l'ha
-   sistemato la correzione di un altro caso della settimana - salta al
-   punto 7, senza PR.
+   che non si costruisce*. Se il caso e' gia' stato respinto - `prepara`
+   dice quante volte - *Dopo un Non approvo, prima si chiede*. Se il
+   modello di adesso e' **gia' giusto** - l'ha sistemato la correzione di
+   un altro caso della settimana - salta al punto 7, senza PR.
 5. **Trova la causa** (MAPPA.md, un sotto-agente per la ricerca). La
    correzione e' una **regola generale**: mai il nome del file, il codice del
    cliente o misure cucite su quel PDF. Se l'errore non si spiega con una
@@ -279,9 +280,49 @@ approvato**» o «**Modello NON approvato**» - e in `stato.json`, e toglie
 - **Non approvato**: e' un modello sbagliato, e il motivo descrive cosa non
   va. Il caso e' di nuovo libero: si riparte dal punto 3 del giro, con
   `prepara` (il motivo e le foto sono fra le voci), fino a una nuova
-  `consegna`.
+  `consegna` o a una domanda: *Dopo un Non approvo, prima si chiede*.
 
 Un caso `da-approvare` o `da-rilasciare` non e' libero: i giri lo saltano.
+
+## Dopo un Non approvo, prima si chiede
+
+Un «Non approvo» dice che il modello e' sbagliato, non sempre come va
+fatto. Il display da 36 del caso 838cbae0ac e' stato rifatto tre volte, e
+tre volte la routine ha scelto da sola un'altra interpretazione - 4 file da
+9, il pack premuto a cuscino, il pack scalato nel largo - consegnando un
+altro modello sbagliato. La risposta giusta e' arrivata quando si e' chiesto
+a chi l'aveva caricato quanti per fila, e zigrinatura, rigonfiamento e
+apertura delle pinne. Una domanda al primo no risparmiava tre giri e tre
+modelli.
+
+Quindi, dopo un Non approvo (`prepara` dice quante volte il caso e' stato
+respinto):
+
+- **La correzione e' una sola**: il motivo, con le foto, dice cosa e'
+  sbagliato, e c'e' un modo solo di rimetterlo che non cambia altro - il
+  fronte girato di 180 gradi, una fascia sul pannello sbagliato. Correggi e
+  consegna, come sempre.
+- **La correzione non e' una sola**: il disegno si legge in due modi, o
+  serve un valore che sa solo chi ha il pack - quanti per fila, la
+  zigrinatura, il rigonfiamento, l'apertura delle pinne, come si monta,
+  quale lato e' il fronte. **Prima la domanda, poi il modello**: non si
+  costruisce e non si consegna un'altra interpretazione scelta da soli.
+- **Al secondo no si chiede sempre**: mai una terza interpretazione senza
+  una risposta.
+
+La domanda porta l'**anteprima**: il modello di adesso dai quattro lati e la
+lettura del PDF con le misure lette, il caso del parco costruito da
+`prepara`. La finestra dei casi la mostra sopra le risposte:
+
+    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..." --anteprima <nome> --uscita /tmp/caso_<codice>
+
+Nella domanda la misura che si chiede, con quella letta: «Il pack l'ho letto
+largo 40,1 mm e ne metto 3 per fila: quanti ce ne stanno nel display?».
+Prima della domanda, come in *Un caso che non si risolve*: commento sulla
+issue, `da-guardare` e via `in-lavorazione`. La risposta riapre il caso da
+sola. Se il modello giusto dipende da una scelta che vale solo per quel pack,
+la risposta diventa un'opzione del caso nel parco (REGOLE.md, *Una regola per
+tutti, o una scelta del pack*).
 
 ## Un caso col dubbio
 
@@ -328,7 +369,7 @@ come sta un pezzo, quale lato e' il fronte - chiediglielo. Prima rileggi
 `voci.md`: la risposta puo' essere gia' in una nota. Poi, **prima** della
 domanda, commento, `da-guardare` e via `in-lavorazione`, e la domanda:
 
-    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..."
+    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..." --anteprima <nome> --uscita /tmp/caso_<codice>
 
 Una domanda sola, con parole sue, niente nomi di funzioni; da due a quattro
 risposte di cui una sola vera; se basta una foto del pack montato, chiedila.

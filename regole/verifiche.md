@@ -652,6 +652,19 @@ del caso arriva a lui (GLAM.md):
 - **La risposta.** Glam la manda allo Space (`/api/risposta`, con un token
   che sta solo nei segreti dei due), che la scrive sulla issue, toglie
   `da-guardare` e rilancia la routine: nessuno deve girare niente a mano.
+- **Dopo un no, prima la domanda, con l'anteprima.** Il display da 36 del
+  caso 838cbae0ac e' stato rifatto tre volte, ogni volta con
+  un'interpretazione scelta dalla routine, e tre volte era sbagliato: quanti
+  per fila e quanto gonfio li sapeva solo chi l'aveva caricato. Dopo un «Non
+  approvo» la routine chiede, se la correzione non e' una sola, e al secondo
+  no chiede sempre (CODA.md, *Dopo un Non approvo, prima si chiede*). La
+  domanda porta l'anteprima: il modello di adesso dai quattro lati e la
+  lettura del PDF con le misure lette (`prove/parco.py caso --anteprima`,
+  `domanda.jpg` nella cartella del caso). La finestra dei casi la mostra
+  sopra le risposte (`/api/anteprima`, `coda.anteprima`: col solo codice del
+  caso, finche' la domanda e' l'ultima cosa successa) e, toccata, la apre
+  intera: a quella larghezza le misure non si leggono. Glam riceve la
+  domanda e le risposte, non l'anteprima.
 
 Nota e risposta sono testo di un utente. Sulla issue stanno citate riga per
 riga, e non possono sembrare scritte da altri; la routine le legge come la
