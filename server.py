@@ -16,7 +16,6 @@ import hmac
 import json
 import math
 import os
-import shutil
 import sys
 from urllib.parse import quote, unquote
 import tempfile
@@ -591,11 +590,7 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
     # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
-    try:
-        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
-            fh.write(lettura_pdf.astuccio(pdf, d, gradi))
-    except Exception:
-        traceback.print_exc()
+    scrivi_lettura(out_glb, lambda: lettura_pdf.astuccio(pdf, d, gradi))
     # Coperture via per nome e texture girate sul verso della grafica: sono
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
@@ -806,11 +801,7 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                              "non ha cinque colonne e tre fasce, e non e' un "
                              "display con plancia")
     # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
-    try:
-        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
-            fh.write(lettura_pdf.vassoio(pdf, v, gradi))
-    except Exception:
-        traceback.print_exc()
+    scrivi_lettura(out_glb, lambda: lettura_pdf.vassoio(pdf, v, gradi))
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
@@ -911,11 +902,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
     """
     dpi, tmax = risoluzione(quality)
     # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
-    try:
-        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
-            fh.write(lettura_pdf.plancia(pdf, p, gradi))
-    except Exception:
-        traceback.print_exc()
+    scrivi_lettura(out_glb, lambda: lettura_pdf.plancia(pdf, p, gradi))
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     px_mm = 4.0
     pz = forma.pezzi(pdf, p, d, px_mm)
@@ -986,6 +973,8 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     del rovescio. Nel GLB la plancia e' un nodo a parte, come nel display con
     plancia: il riempimento misura il vano senza di lei."""
     dpi, tmax = risoluzione(quality)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Display a scatola letto cosi'", scatola_plancia.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -1025,6 +1014,55 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
                                     ("plancia", inizio, len(T))],
                              tinte=tinte)
     return scatola_plancia.dichiara(p) + avvisi
+
+
+def lettura_tondi(pezzi, giri):
+    """La lettura dei pezzi tondi (`pack3d.lettura`): lo steso a settore
+    dello sleeve o del cono, il tappo o il lid, riletti sulle loro pagine gia'
+    orientate - la costruzione li legge dentro `pack3d.coppa` e restituisce
+    solo la maglia. Uno sotto l'altro."""
+    from pack3d import coppa as cp
+    letture = []
+    for nome, pdf in pezzi.items():
+        if pdf is None:
+            continue
+        T = cp.tracce(pdf)
+        gradi = giri.get(nome, 0) if giri else 0
+        if nome == "coppa":
+            c = cp.leggi_coppa(pdf, T)
+            s = c.steso
+            letture.append(lettura_pdf.steso_tondo(
+                pdf, s, "Sleeve della coppa letto cosi'",
+                ["carta fra i raggi %s e %s mm" % (_mm(s.R1), _mm(s.R2)),
+                 "parete dalla piega del fondo alla bocca: %s mm" % _mm(c.parete),
+                 "coppa alta %s mm, bocca %s mm" % (_mm(c.montata.altezza),
+                                                     _mm(2 * c.montata.r_bordo))],
+                parete=(s.piega, s.piega + c.parete), gradi=gradi))
+        elif nome == "cono":
+            k = cp.leggi_cono(T)
+            if k is not None:
+                letture.append(lettura_pdf.cono(
+                    pdf, k, "Cono letto cosi'",
+                    ["steso a settore pieno, raggio %s mm" % _mm(k.steso.R2),
+                     "cono alto %s mm, bocca %s mm" % (_mm(k.altezza), _mm(2 * k.r_bocca)),
+                     "lembo di colla %s mm" % _mm(k.lembo)], gradi=gradi))
+        elif nome == "tappo":
+            t = cp.leggi_tappo(pdf, T)
+            letture.append(lettura_pdf.disco(
+                pdf, t.centro, t.r_taglio, "Tappo letto cosi'",
+                ["taglio %s mm, alto %s mm" % (_mm(2 * t.r_taglio), _mm(t.altezza))],
+                gradi=gradi))
+        elif nome == "lid":
+            d = cp.leggi_disco(T)
+            if d is not None:
+                letture.append(lettura_pdf.disco(
+                    pdf, d.centro, d.r_taglio, "Lid letto cosi'",
+                    ["taglio %s mm" % _mm(2 * d.r_taglio)], gradi=gradi))
+    return lettura_pdf.accosta(*letture)
+
+
+def _mm(x):
+    return ("%.1f" % x).replace(".", ",")
 
 
 def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
@@ -1302,9 +1340,17 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             # allarga a perimetro costante e la grafica del fronte si stira
             # (il T15 al livello 8: «il T1 non corrisponde al DT»)
             av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
-        # la lettura del CU, accanto al GLB del riempimento
-        if os.path.exists(gf + lettura_pdf.ACCANTO):
-            shutil.copyfile(gf + lettura_pdf.ACCANTO, out_glb + lettura_pdf.ACCANTO)
+        # la lettura del vassoio e quella del CU, una sotto l'altra, accanto
+        # al GLB del riempimento
+
+        def due_letture():
+            letture = []
+            for g in (gv, gf):
+                if os.path.exists(g + lettura_pdf.ACCANTO):
+                    with open(g + lettura_pdf.ACCANTO, "rb") as fh:
+                        letture.append(fh.read())
+            return lettura_pdf.accosta(*letture)
+        scrivi_lettura(out_glb, due_letture)
         with open(gv, "rb") as fh:
             glb_v = fh.read()
         with open(gf, "rb") as fh:
@@ -1341,6 +1387,7 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
             raise
         return build_prisma(pdfs, pr, out_glb, quality, lastre_extra,
                             dichiarato, carta)
+    scrivi_lettura(out_glb, lambda: lettura_tondi(pezzi, giri))
     if _cono(pezzi):
         cono, lid = pezzi.get("cono"), pezzi.get("lid")
         V, UV, T, A, parti, meta, bianchi = cp.costruisci_cono(
@@ -1711,6 +1758,8 @@ def build_pouch(pdf, out_glb, quality="hd", lastre_extra=(),
     dpi, tmax = risoluzione(quality)
     pdf, n_pagine = artwork.pagina_unica(pdf)
     pu = analisi_pouch(pdf)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, pu.foglio, "Pouch letto cosi'", pouch.dichiara(pu)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=pu.foglio, conti=conti)
@@ -1764,6 +1813,8 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
     if b is None:
         raise ValueError("ballotin: la fustella non si legge come un ballotin "
                          "(fondo quadrato con quattro lenti agli spigoli)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, b.regione, "Ballotin letto cosi'", ballotin.dichiara(b)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=b.regione, conti=conti)
@@ -1845,6 +1896,14 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
                     and q.regione == p.regione and id(q) not in per_pdf:
                 per_pdf[id(q)] = (pagina, n_pagine)
                 break
+    # la riga di ogni pezzo: il fondo dice anche se manca il coperchio
+    righe = prisma.dichiara(fondo, coperchio)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.accosta(*[
+        lettura_pdf.generica(per_pdf[id(pr)][0], pr.regione,
+                             "Scatola a prisma, %s, letta cosi'" % nome, r)
+        for nome, pr, r in (("fondo", fondo, righe if coperchio is None else righe[:1]),
+                            ("coperchio", coperchio, righe[1:]))
+        if pr is not None and id(pr) in per_pdf]))
     avvisi, V, UV, T, A, parti, quali = [], [], [], [], [], [], []
     colori, MR = [], []
     for nome, pr, M, quota, cop in (
@@ -1936,6 +1995,8 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
         raise ValueError("scatola a punta: la fustella non si legge come una "
                          "scatola a punta (fronte e retro chiusi in cima, "
                          "fianchi a soffietto)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Scatola a punta letta cosi'", punta.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -1994,6 +2055,8 @@ def build_tubo(pdf, out_glb, quality="hd", lastre_extra=(),
         raise ValueError("tubo a cono: la fustella non si legge come un "
                          "settore di corona (due archi e due lati verso il "
                          "loro centro)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Tubo a cono letto cosi'", tubo.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -2049,6 +2112,8 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
         raise ValueError("incarto a triangolo: il DT non si legge come il "
                          "foglio di una barretta incartata (cinque fasce fra "
                          "righe intere, testate dritte sulla faccia)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Incarto letto cosi'", incarto.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -2163,11 +2228,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     # la lettura del PDF, da mettere accanto al modello (`pack3d.lettura`):
     # accanto al GLB, dove il server la va a prendere. Mai un errore: se non
     # si disegna, il modello si costruisce lo stesso
-    try:
-        with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
-            fh.write(lettura_pdf.flowpack(pdf, fp0, gradi))
-    except Exception:
-        traceback.print_exc()
+    scrivi_lettura(out_glb, lambda: lettura_pdf.flowpack(pdf, fp0, gradi))
     # Il nero sul file pulito, prima di rendere: vedi `nero.spia`. Sugli
     # Spaces la memoria per il fork di Ghostscript c'e'.
     deciso_nero = nero.spia(clean, 0, dpi / 72.0)
@@ -4272,6 +4333,19 @@ _slots = threading.Semaphore(MAX_JOBS)
 # Quanto la correzione aspetta che il posto di costruzione si liberi. Chi ha
 # chiesto il modello sta gia' aspettando: oltre, si consegna quello di prima.
 CORREZIONE_ATTESA = float(os.environ.get("PACK3D_CORREZIONE_ATTESA", "240"))
+
+
+def scrivi_lettura(out_glb, fai):
+    """La lettura del PDF accanto al GLB (`pack3d.lettura`): `fai()` la
+    disegna. Mai un errore: se non si disegna, il modello si costruisce lo
+    stesso e la pagina non apre la finestra."""
+    try:
+        dati = fai()
+        if dati:
+            with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
+                fh.write(dati)
+    except Exception:
+        traceback.print_exc()
 
 
 # Le letture del PDF delle ultime costruzioni (`pack3d.lettura`), per la
