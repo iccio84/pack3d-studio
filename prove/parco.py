@@ -22,7 +22,8 @@ e' pubblico. Qui c'e' solo lo strumento.
 repository), con il controllo dell'AI e la coda spenti, e per ogni caso di
 CASI/parco/parco.json manda i PDF a /api/build con le opzioni del caso, come
 fa la pagina. In USCITA salva per ogni caso il GLB, gli avvisi della
-costruzione e le quattro viste (`pack3d.vista`).
+costruzione e le quattro viste (`pack3d.vista`), e la lettura del PDF
+che la pagina mette accanto al modello (`pack3d.lettura`), se c'e'.
 
 `confronta` dice quali modelli sono cambiati fra due costruzioni, con gli
 avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
@@ -174,9 +175,11 @@ def _avvia(codice, log):
     raise SystemExit("il server non risponde: vedi %s" % log.name)
 
 
-def _costruisci_caso(url, cartella, caso):
+def _costruisci_caso(url, cartella, caso, lettura=None):
     """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
-    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento."""
+    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento. Con
+    `lettura`, un percorso, ci salva la lettura del PDF che la pagina mette
+    accanto al modello (`pack3d.lettura`), se il server l'ha fatta."""
     files = [os.path.join(cartella, "parco", "pdf", f) for f in caso["file"]]
     blocchi = []
     for f in files:
@@ -197,7 +200,16 @@ def _costruisci_caso(url, cartella, caso):
             avvisi = json.loads(unquote(r.headers.get("X-Pack3d-Meta") or "[]"))
             controllo = r.headers.get("X-Pack3d-Controllo")
             controllo = json.loads(unquote(controllo)) if controllo else None
-            return r.status, glb, avvisi, time.time() - t, controllo
+            gettone = r.headers.get("X-Pack3d-Lettura")
+            secondi = time.time() - t
+        if lettura and gettone:
+            try:
+                with urllib.request.urlopen(url + "/api/lettura/" + gettone,
+                                            timeout=60) as rl, open(lettura, "wb") as fh:
+                    fh.write(rl.read())
+            except (urllib.error.URLError, OSError) as e:
+                print("lettura del PDF non salvata: %s" % e)
+        return r.status, glb, avvisi, secondi, controllo
     except urllib.error.HTTPError as e:
         testo = e.read().decode("utf-8", "replace")
         return e.code, None, [testo[:1000]], time.time() - t, None
@@ -226,7 +238,8 @@ def costruisci(args):
             riassunto = {}
             for caso in casi:
                 nome = caso["nome"]
-                stato, glb, avvisi, sec, _ = _costruisci_caso(url, args.casi, caso)
+                stato, glb, avvisi, sec, _ = _costruisci_caso(
+                    url, args.casi, caso, os.path.join(args.uscita, nome + "_lettura.jpg"))
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
                              file=caso["file"], opzioni=caso.get("opzioni"),
                              avvisi=avvisi, md5=None, versione=impronta)

@@ -99,6 +99,13 @@
   .finestra .vuoto{margin:0;padding:16px;font-size:12px;color:var(--muted-foreground)}
   .finestra .vuoto[hidden]{display:none}
   #dettagli-lista li.grido, #ai-righe li.grido{color:var(--destructive);font-weight:600}
+  /* la lettura del PDF: la pagina con le parti lette, e «letto male?» */
+  #lettura .corpo{padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px;
+                  overflow-y:auto;font-size:12px}
+  #lettura img{width:100%;height:auto;display:block;border-radius:var(--radius-sm);
+               border:1px solid var(--border);cursor:zoom-in}
+  #lettura .azioni{display:flex;gap:8px}
+  #lettura select{flex:1;min-width:0}
   /* sul telefono la colonna va sotto il palco, e la pagina si allunga e
      scorre: il palco non si schiaccia e non finisce sopra le domande */
   @media (max-width:760px){
@@ -505,6 +512,29 @@
   <div id="status">Nessun modello caricato</div>
 </div>
 <aside id="lato">
+  <section id="lettura" class="finestra" aria-label="Come ho letto il PDF">
+    <div class="testa">
+      <span class="tit">Come ho letto il PDF</span>
+      <button type="button" id="lettura-chiudi" aria-label="Chiudi la lettura del PDF">&times;</button>
+    </div>
+    <div class="corpo">
+      <a id="lettura-apri" target="_blank" rel="noopener" title="Apri in grande"><img id="lettura-img"
+         alt="La pagina del PDF con le parti lette: fronte, fianchi, retro e pinne, con le misure"></a>
+      <label for="lettura-motivo">Letto male? Dicci cosa non torna</label>
+      <div class="azioni">
+        <select id="lettura-motivo">
+          <option value="">Scegli cosa non torna&hellip;</option>
+          <option>il pack &egrave; girato: il fronte non &egrave; la fascia giusta</option>
+          <option>ha letto un altro disegno, non il DT vero</option>
+          <option>non &egrave; questa famiglia di pack</option>
+          <option>le misure lette sono sbagliate</option>
+          <option>altro</option>
+        </select>
+        <button type="button" id="lettura-segnala">Segnala</button>
+      </div>
+      <div id="lettura-esito" class="esito" role="status"></div>
+    </div>
+  </section>
   <section id="dettagli" class="finestra" aria-label="Dettagli tecnici della costruzione">
     <div class="testa">
       <span class="tit" id="dettagli-tit">Dettagli tecnici</span>
@@ -690,6 +720,7 @@
     <input id="file-img" type="file" accept="image/jpeg,image/png,image/webp" hidden>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="texture-btn" type="button" style="display:none">Scarica texture</button>
+    <button id="lettura-btn" type="button" aria-expanded="false" aria-controls="lettura" hidden>Lettura del PDF</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
     <button id="casi-btn" type="button" aria-expanded="false" aria-controls="casi">Casi</button>
     <button id="notifiche-btn" type="button" aria-expanded="false" aria-controls="notifiche">Notifiche</button>
@@ -1382,6 +1413,7 @@ async function analyze(buf, opts){
 
 async function build(buf, name, opts){
   nascondiCaso();
+  nascondiLettura();
   setStatus('Costruzione del modello…','busy');
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   let r;
@@ -1409,6 +1441,9 @@ async function build(buf, name, opts){
     if (c) verdetto = JSON.parse(decodeURIComponent(c));
   }catch(e){}
   const blob = await r.blob();
+  // la lettura del PDF, accanto al modello: c'e' anche se il controllo l'ha
+  // respinto, ed e' li' che si vede perche'
+  mostraLettura(r.headers.get('X-Pack3d-Lettura'), buf, opts);
   if (verdetto && verdetto.esito === 'sbagliato'){
     // respinto: non va nel viewer come se fosse buono
     glbBlob = null;
@@ -1782,6 +1817,70 @@ function apriFinestra(el, btn, si, ricorda){
   if (si && el === notificheEl) segnaLette();
   if (si && el === casiEl){ aGlam({type: 'pack3d:ruolo?'}); aggiornaCasi(); }
 }
+
+/* La lettura del PDF accanto al modello (`pack3d.lettura`): la pagina col
+   disegno usato e sopra le parti lette, con le misure. Si apre da sola dopo
+   la costruzione; chi vede che il PDF e' stato letto male lo segnala, e il
+   caso si prepara come quelli che il controllo respinge: parte quando lo
+   conferma con la descrizione. */
+const letturaEl = document.getElementById('lettura');
+const letturaBtn = document.getElementById('lettura-btn');
+const letturaImg = document.getElementById('lettura-img');
+const letturaMotivo = document.getElementById('lettura-motivo');
+const letturaSegnala = document.getElementById('lettura-segnala');
+let ultimaCostruzione = null;
+function esitoLettura(t, cls){
+  const e = document.getElementById('lettura-esito');
+  e.textContent = t || '';
+  e.className = 'esito' + (cls ? ' ' + cls : '');
+}
+function nascondiLettura(){
+  ultimaCostruzione = null;
+  letturaBtn.hidden = true;
+  apriFinestra(letturaEl, letturaBtn, false);
+  letturaImg.removeAttribute('src');
+}
+function mostraLettura(gettone, buf, opts){
+  if (!gettone){ nascondiLettura(); return; }
+  ultimaCostruzione = {buf, opts};
+  const u = url('/api/lettura/' + encodeURIComponent(gettone));
+  letturaImg.src = u;
+  document.getElementById('lettura-apri').href = u;
+  letturaMotivo.value = '';
+  letturaSegnala.disabled = false;
+  esitoLettura('');
+  letturaBtn.hidden = false;
+  apriFinestra(letturaEl, letturaBtn, true);
+}
+letturaBtn.onclick = () => apriFinestra(letturaEl, letturaBtn, !letturaEl.classList.contains('on'));
+document.getElementById('lettura-chiudi').onclick = () => apriFinestra(letturaEl, letturaBtn, false);
+letturaSegnala.onclick = async () => {
+  const c = ultimaCostruzione;
+  if (!c) return;
+  const motivo = letturaMotivo.value;
+  if (!motivo){
+    esitoLettura('Scegli prima cosa non torna.', 'err');
+    letturaMotivo.focus();
+    return;
+  }
+  letturaSegnala.disabled = true;
+  esitoLettura('Preparo il caso\u2026');
+  try{
+    const v = await (await post('/api/segnala', c.buf, Object.assign({}, c.opts, {motivo}))).json();
+    if (!v.codice || !v.in_attesa) throw new Error('il caso non si \u00e8 potuto preparare');
+    esitoLettura('Descrivi il pack qui sotto e manda il caso.');
+    verificaEl.textContent = 'Hai segnalato che il PDF \u00e8 stato letto male (' + motivo
+      + '). Descrivi il pack e manda il caso: chi corregge il codice lo riprende (codice '
+      + v.codice + ').';
+    verificaEl.classList.add('on');
+    mostraInvio(v);
+    aggiornaAI();
+    document.getElementById('ai').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }catch(err){
+    letturaSegnala.disabled = false;
+    esitoLettura('Segnalazione non partita: ' + testoErrore(err), 'err');
+  }
+};
 
 function quandoBreve(iso){
   const d = new Date(iso);

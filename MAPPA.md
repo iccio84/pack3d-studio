@@ -28,6 +28,10 @@ sono in GADGET.md.
   dell'astuccio, testate del flowpack, vassoio, plancia), e quelle che
   fermano il modello: la grafica del fronte stirata, e il segno `DIFETTO`
   che il server conta come un dubbio (`con_difetti`).
+- `pack3d/lettura.py`: la lettura del PDF da mettere accanto al modello -
+  la pagina con le fasce lette e le misure (il flowpack, per ora); il
+  server la serve da `/api/lettura/<gettone>`, e «letto male» va a
+  `/api/segnala`.
 - `pack3d/misure.py`: le misure del modello finito (ingombro, pezzi, il
   flowpack lungo, largo e spesso, lo stiro del fronte) e il confronto con
   quelle approvate nel parco (`prove/parco.py misure`).
