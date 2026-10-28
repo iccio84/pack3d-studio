@@ -664,3 +664,116 @@ def blocco(V, UV, T, parti, lato_tex, coda):
         return False, righe
     return True, ["blocco unico: le quattro pareti arrivano agli spigoli e "
                   "toccano il fondo entro %.2f mm, nessuna feritoia" % peggio]
+
+
+# --------------------------------------------------------------------------- #
+# 4. a modello finito: la grafica del fronte, e i difetti che fermano
+# --------------------------------------------------------------------------- #
+# Una riga che comincia cosi' e' un DIFETTO: il server la raccoglie dagli
+# avvisi (`difetti`) e il modello vale come un dubbio del controllo AI -
+# arriva a chi l'ha chiesto con l'avviso, e il caso va in coda. Le altre
+# verifiche gridano negli avvisi e basta; questa ferma.
+DIFETTO = "DIFETTO: "
+# Quanto puo' essere stirata la grafica sul fronte del corpo di un flowpack:
+# l'anisotropia mediana, il rapporto fra il verso piu' stirato e l'altro. Il
+# film non si allunga, ma gonfio nel rapporto del DT la faccia si allarga e la
+# grafica con lei: sui flowpack approvati del parco fino al 7,8% (KMS T1,
+# Kinder Cards, B-ready T2). Respinti: il display da 15 del caso c5b98dfbee al
+# livello 8, «la grafica viene strecciata», al 13,9%, e al livello 9 nel
+# rapporto del DT al 19,5%; il T1 allargato del vassoio da 36 (caso
+# 838cbae0ac, #160) al 37%.
+STIRO_FRONTE = 0.10
+# ...e in una parte del fronte, il decimo peggiore: col fronte rimappato il
+# T1 del vassoio da 36 era stirato oltre il 90%; sugli approvati arriva al 23%
+# (i pezzi del display da 26, schiacciati fra i vicini)
+STIRO_FRONTE_PARTE = 0.50
+
+
+def difetti(righe):
+    """I difetti fra gli avvisi della costruzione, senza il segno: anche
+    quelli col nome di un pezzo davanti ("flowpack: DIFETTO: ...")."""
+    return [r.replace(DIFETTO, "", 1) for r in righe if DIFETTO in r]
+
+
+def _quantile(x, w, q):
+    o = np.argsort(x)
+    c = np.cumsum(w[o])
+    return float(x[o][min(int(np.searchsorted(c, q * c[-1])), len(x) - 1)])
+
+
+def grafica_flowpack(glb):
+    """La grafica sul fronte del corpo di ogni flowpack del GLB finito. Righe:
+    una per flowpack, che e' un DIFETTO se e' troppo stirata.
+
+    Triangolo per triangolo si misura la mappa dai pixel della texture ai mm
+    del modello, e da li' quanto un verso e' stirato rispetto all'altro. I
+    pixel della texture sono quadrati, quindi non serve sapere a quanti dpi e'
+    stata resa: conta il rapporto. Il fronte e' dove la normale guarda +z,
+    davanti per come il tubo e' costruito, e il corpo il 60% centrale lungo
+    l'asse lungo (x o y: il modello puo' essere girato attorno al fronte). Vale
+    anche per il pezzo dentro un riempimento, che sta nel riferimento del suo
+    prodotto."""
+    import io
+
+    from PIL import Image
+
+    from .riempimento import _dati, leggi
+    J, B = leggi(glb)
+    righe = []
+    for me in J.get("meshes", []):
+        if me.get("name") != "flowpack":
+            continue
+        for prim in me["primitives"]:
+            mat = J["materials"][prim["material"]] if "material" in prim else {}
+            tex = ((mat.get("pbrMetallicRoughness") or {}).get("baseColorTexture")
+                   or {}).get("index")
+            a = prim["attributes"]
+            if tex is None or "TEXCOORD_0" not in a or "indices" not in prim:
+                continue
+            img = J["images"][J["textures"][tex]["source"]]
+            if "bufferView" not in img:
+                continue
+            bv = J["bufferViews"][img["bufferView"]]
+            o = bv.get("byteOffset", 0)
+            W, H = Image.open(io.BytesIO(B[o:o + bv["byteLength"]])).size
+            P = _dati(J, B, a["POSITION"]).astype(float) * 1000.0
+            px = _dati(J, B, a["TEXCOORD_0"]).astype(float) * [W, H]
+            T = _dati(J, B, prim["indices"]).reshape(-1, 3)
+            e1, e2 = P[T[:, 1]] - P[T[:, 0]], P[T[:, 2]] - P[T[:, 0]]
+            t1, t2 = px[T[:, 1]] - px[T[:, 0]], px[T[:, 2]] - px[T[:, 0]]
+            n = np.cross(e1, e2)
+            area = 0.5 * np.linalg.norm(n, axis=1)
+            det = t1[:, 0] * t2[:, 1] - t1[:, 1] * t2[:, 0]
+            ampi = P.max(0) - P.min(0)
+            lungo = 0 if ampi[0] > ampi[1] else 1
+            c = P[T].mean(1)[:, lungo]
+            mezzo = 0.5 * (P[:, lungo].min() + P[:, lungo].max())
+            fronte = ((area > 1e-6) & (np.abs(det) > 1e-9)
+                      & (n[:, 2] > 0.9 * 2.0 * np.maximum(area, 1e-12))
+                      & (np.abs(c - mezzo) < 0.3 * ampi[lungo]))
+            if fronte.sum() < 8:
+                continue
+            Jm = np.stack([e1, e2], 2)[fronte] @ np.linalg.inv(np.stack([t1, t2], 2)[fronte])
+            s = np.linalg.svd(Jm, compute_uv=False)
+            stiro = s[:, 0] / s[:, 1] - 1.0
+            w = area[fronte]
+            meta, peggio = _quantile(stiro, w, 0.5), _quantile(stiro, w, 0.9)
+            # in che verso: i pixel per mm lungo l'asse lungo e attraverso
+            Jp = np.linalg.pinv(Jm)
+            px_lungo = np.median(np.linalg.norm(Jp[:, :, lungo], axis=1))
+            px_largo = np.median(np.linalg.norm(Jp[:, :, 1 - lungo], axis=1))
+            verso = "nel giro" if px_largo < px_lungo else "lungo il passo"
+            if meta > STIRO_FRONTE:
+                righe.append(DIFETTO + "la grafica del fronte e' stirata del %.0f%% %s "
+                             "(oltre il %.0f%%): il pack e' piu' largo del pannello "
+                             "fronte del DT, prova un rigonfiamento piu' basso"
+                             % (100 * meta, verso, 100 * STIRO_FRONTE))
+            elif peggio > STIRO_FRONTE_PARTE:
+                righe.append(DIFETTO + "una parte del fronte ha la grafica stirata del "
+                             "%.0f%% (oltre il %.0f%%), il resto del %.1f%%"
+                             % (100 * peggio, 100 * STIRO_FRONTE_PARTE, 100 * meta))
+            else:
+                righe.append("grafica del fronte: stirata del %.1f%% %s (entro il %.0f%%), "
+                             "%.0f%% nel decimo peggiore"
+                             % (100 * meta, verso, 100 * STIRO_FRONTE, 100 * peggio))
+    return righe

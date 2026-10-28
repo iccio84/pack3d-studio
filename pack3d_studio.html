@@ -1430,8 +1430,9 @@ function esitoFinale(v, titolo){
   if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 ' + da, ''); return; }
   if (v.esito === 'dubbio'){
     // una riga sola in fondo al visore: il motivo intero e' nei cartellini
-    setStatus((v.corretto ? 'Corretto dall\u2019AI, ma resta un dubbio: '
-                          : 'Il controllo AI ha un dubbio: ')
+    setStatus(((v.verifiche && v.verifiche.length) ? 'Le verifiche hanno trovato un difetto: '
+               : v.corretto ? 'Corretto dall\u2019AI, ma resta un dubbio: '
+                            : 'Il controllo AI ha un dubbio: ')
               + (v.motivo || 'guarda bene il modello').slice(0, 160), 'dubbio');
     return;
   }
@@ -1526,12 +1527,16 @@ function mostraCaso(v, blob, tieniNota){
 const verificaEl = document.getElementById('verifica');
 
 function mostraVerifica(v){
+  // il dubbio puo' venire dalle verifiche, che misurano il modello, e non
+  // dall'AI: allora lo si dice
+  const chi = (v.verifiche && v.verifiche.length) ? 'Le verifiche hanno trovato un difetto'
+                                                  : 'Il controllo AI ha un dubbio';
   verificaEl.textContent = v.in_coda
-    ? 'Il controllo AI ha un dubbio, e il caso è andato in verifica (codice '
+    ? chi + ', e il caso è andato in verifica (codice '
       + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
       + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
       + '», col nome «' + nomeInGlam() + '». ' + STIMA
-    : 'Il controllo AI ha un dubbio su questo modello (codice ' + (v.codice || '-')
+    : chi + ' su questo modello (codice ' + (v.codice || '-')
       + '). Il modello lo puoi usare lo stesso.';
   verificaEl.classList.add('on');
   mostraInvio(v);

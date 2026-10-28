@@ -2544,6 +2544,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     colore, UVm, mr = lo_steso.nel_verso_del_pdf(
         gradi + (90 if fp.ruotato else 0), colore, UVm, mr)
     exporters.write_glb_mesh(Vm, UVm, Tm, colore, out_glb, tex_max=tmax, mr=mr)
+    # a modello finito, la grafica del fronte: troppo stirata e' un DIFETTO
+    with open(out_glb, "rb") as fh:
+        avvisi_sez += verifica.grafica_flowpack(fh.read())
 
     base = fin_open / max(int(teeth), 1)
     if fp.pillow:
@@ -4076,19 +4079,19 @@ class Handler(BaseHTTPRequestHandler):
                     finally:
                         _slots.release()
                     verdetto = None
+                    ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                               riconosciuto=info.get("title") or info["kind"],
+                               avvisi=list(meta), nomi=nomi,
+                               # col caso in coda, perche' chi lo riprende
+                               # lo ricostruisca uguale
+                               opzioni={k: opts[k] for k in OPZIONI_CASO
+                                        if k in opts})
+                    nota = (nota_apertura(meta) or nota_incisioni(meta)
+                            or nota_materiali(meta) or nota_gelato(meta))
+                    if nota:
+                        ctx["nota"] = nota
                     if quadro is not None:
                         t2 = traccia("controllo")
-                        ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
-                                   riconosciuto=info.get("title") or info["kind"],
-                                   avvisi=list(meta), nomi=nomi,
-                                   # col caso in coda, perche' chi lo
-                                   # riprende lo ricostruisca uguale
-                                   opzioni={k: opts[k] for k in OPZIONI_CASO
-                                            if k in opts})
-                        nota = (nota_apertura(meta) or nota_incisioni(meta)
-                                or nota_materiali(meta) or nota_gelato(meta))
-                        if nota:
-                            ctx["nota"] = nota
                         verdetto = controllo.giudica(quadro, ctx)
                         traccia("controllo", t2, verdetto["esito"])
                         riga = None
@@ -4101,6 +4104,9 @@ class Handler(BaseHTTPRequestHandler):
                                 meta = (righe_prodotto + avvisi_ingresso
                                         + list(avvisi_corr))
                             ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
+                        # i difetti misurati dalle verifiche valgono come un
+                        # dubbio, anche col controllo che dice ok
+                        verdetto = con_difetti(verdetto, meta)
                         # anche il dubbio: il modello all'utente arriva lo
                         # stesso, ma qualcuno deve guardarlo, e se ha un
                         # difetto vero correggerlo come un caso respinto
@@ -4121,6 +4127,18 @@ class Handler(BaseHTTPRequestHandler):
                                         "ANTHROPIC_API_KEY fra i Secrets dello "
                                         "Space")
                         meta.append(righe_ai[-1])
+                    if quadro is None and verifica.difetti(meta):
+                        # senza controllo AI - i riempimenti, o la chiave che
+                        # manca - il verdetto lo danno le verifiche: il caso
+                        # va in coda senza le viste del controllo, la routine
+                        # lo ricostruisce comunque
+                        verdetto = con_difetti(None, meta)
+                        verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                            blocchi_caso, nomi_caso, verdetto, None, ctx)
+                        verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                        meta.insert(0, "VERIFICHE: il modello ha dei difetti misurati - %s"
+                                    % verdetto["motivo"])
+                        righe_ai.insert(0, meta[0])
                     # gli avvisi della costruzione viaggiano in un header: il
                     # corpo e' il GLB. Finivano nel nulla, e con loro ogni
                     # diagnostica. Il verdetto del controllo in un altro.
@@ -4188,6 +4206,25 @@ _slots = threading.Semaphore(MAX_JOBS)
 # Quanto la correzione aspetta che il posto di costruzione si liberi. Chi ha
 # chiesto il modello sta gia' aspettando: oltre, si consegna quello di prima.
 CORREZIONE_ATTESA = float(os.environ.get("PACK3D_CORREZIONE_ATTESA", "240"))
+
+
+def con_difetti(verdetto, meta):
+    """Il verdetto con i difetti che le verifiche hanno misurato sul modello
+    (`verifica.difetti`). Un difetto vale come un dubbio del controllo AI: il
+    modello arriva lo stesso, con l'avviso, e il caso va in coda. Senza
+    controllo AI - i riempimenti, o la chiave che manca - il verdetto lo danno
+    le verifiche da sole. None se non ce n'e' nessuno e non c'era verdetto."""
+    trovati = verifica.difetti(meta)
+    if not trovati:
+        return verdetto
+    v = dict(verdetto or {"esito": "dubbio", "motivo": ""})
+    misurato = "le verifiche hanno misurato: " + "; ".join(trovati)
+    v["motivo"] = misurato + (" - " + v["motivo"] if v.get("motivo") else "")
+    if v.get("esito") != "sbagliato":
+        v["esito"] = "dubbio"
+    v["difetti"] = list(trovati) + list(v.get("difetti") or [])
+    v["verifiche"] = list(trovati)
+    return v
 
 
 def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
