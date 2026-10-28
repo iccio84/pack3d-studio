@@ -100,6 +100,14 @@ cartoncino, e' un cartotecnico e si costruisce.
     aprirlo e non copiarlo mai** altrove: serve solo allo Space.
   - `parco/`: i PDF di prova, il manifesto `parco/parco.json` (opzioni e
     `come_deve_venire` di ogni caso) e le viste di riferimento.
+  - Il **parco della notte** (`.github/workflows/parco.yml`): ogni notte, se
+    `coda-settimana` e' andata avanti, il parco intero contro `main`, nelle
+    Actions di questo repository, dove stanno i PDF. E' rosso se un caso che
+    con `main` si costruiva non si costruisce piu', o se una misura
+    approvata cambia (`prove/parco.py esito`); il riassunto dice anche i
+    modelli solo cambiati, con le viste affiancate nell'artefatto. Si lancia
+    anche a mano, su un ramo o una PR (**Run workflow**, `codice`:
+    `pull/<numero>/head`).
 - **Il ramo `coda-settimana`** del codice raccoglie le correzioni della
   settimana: le PR dei casi vanno li', e lo Space non lo vede. Lo Space si
   aggiorna solo da `main`, e in `main` unisce solo il rilascio della

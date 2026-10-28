@@ -20,7 +20,11 @@ mano. Si fa **prima** di guardare la coda.
    con `da-rilasciare`, non c'e' niente: torna al giro.
 2. **Fissa il ramo.** Annota lo SHA di `origin/coda-settimana`: provi e
    pubblichi quello, non quello che un giro di un caso unisce nel frattempo.
-3. **Parco prima e dopo**, per intero:
+3. **Parco prima e dopo**, per intero. Prima guarda l'ultimo **parco della
+   notte** (Actions di `pack3d-casi`, *Parco*): se e' rosso, la correzione
+   che ha rotto il caso e' fra quelle unite il giorno prima del rosso, e la
+   trovi prima di costruire. Il parco qui sotto si fa comunque, sullo SHA del
+   punto 2:
 
        git worktree add /tmp/prima origin/main
        git worktree add /tmp/dopo <SHA>
