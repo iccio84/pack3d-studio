@@ -6,6 +6,7 @@ e' pubblico. Qui c'e' solo lo strumento.
 
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
+    python3 prove/parco.py esito PRIMA DOPO [--ieri DIR] [--titolo TESTO] [--riassunto FILE]
     python3 prove/parco.py stesi CASI USCITA [--solo a,b]
     python3 prove/parco.py misure CASI USCITA [--solo a,b] [--approva]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
@@ -391,6 +392,60 @@ def confronta(args):
                 print("    %s" % r)
     elif misurati:
         print("nessuna misura approvata cambiata (%d casi misurati)" % len(misurati))
+
+
+def esito(args):
+    """Il verdetto di un parco fatto da solo (la notte, nelle Actions del
+    repository dei casi): DOPO contro PRIMA - il codice di `main`, quello
+    approvato - e, se c'e', contro IERI. Scrive il riassunto in markdown
+    (`--riassunto`, di serie a video) ed esce con 1 se qualcosa si e' rotto:
+    un caso che con PRIMA si costruiva e con DOPO no, un caso nuovo che non
+    si costruisce, o una misura approvata cambiata. Un modello solo cambiato
+    no: il ramo della settimana cambia i modelli apposta, e si guarda al
+    rilascio."""
+    a, b = _esiti(args.prima), _esiti(args.dopo)
+    ieri = _esiti(args.ieri) if args.ieri and os.path.isdir(args.ieri) else {}
+    rotti = [n for n in sorted(b) if b[n]["stato"] != 200
+             and (n not in a or a[n]["stato"] == 200)]
+    cambiati = [n for n in sorted(set(a) & set(b)) if n not in rotti
+                and (a[n]["stato"], a[n]["md5"]) != (b[n]["stato"], b[n]["md5"])]
+    misure = [(n, b[n]["misure_cambiate"]) for n in sorted(b)
+              if b[n].get("misure_cambiate")]
+    da_ieri = [n for n in sorted(b) if n in ieri
+               and (ieri[n]["stato"], ieri[n]["md5"]) != (b[n]["stato"], b[n]["md5"])]
+    righe = ["## Parco%s" % (": " + args.titolo if args.titolo else ""), "",
+             "**%d casi**: %d uguali a `main` al byte, %d cambiati, **%d rotti**, "
+             "**%d con misure approvate cambiate**." % (
+                 len(b), len(b) - len(cambiati) - len(rotti), len(cambiati),
+                 len(rotti), len(misure))]
+    if ieri:
+        righe.append("Rispetto alla notte prima cambiano %d casi%s." % (
+            len(da_ieri), (": " + ", ".join("`%s`" % n for n in da_ieri)) if da_ieri else ""))
+    if rotti:
+        righe += ["", "### Rotti", ""]
+        for n in rotti:
+            prima = a[n]["stato"] if n in a else "caso nuovo"
+            righe.append("- `%s`: %s -> %s. %s" % (n, prima, b[n]["stato"],
+                                                   (b[n]["avvisi"] or [""])[0][:300]))
+    if misure:
+        righe += ["", "### Misure approvate cambiate", ""]
+        for n, cambiate in misure:
+            righe.append("- `%s`: %s" % (n, "; ".join(cambiate)))
+    if cambiati:
+        righe += ["", "### Cambiati rispetto a `main`", "",
+                  "Le viste affiancate, PRIMA sopra e DOPO sotto, sono nell'artefatto.", ""]
+        for n in cambiati:
+            nuovi = [x for x in b[n]["avvisi"] if x not in a[n]["avvisi"]]
+            righe.append("- `%s`%s%s" % (n, " (da stanotte)" if n in da_ieri else "",
+                                          (": " + nuovi[0][:200]) if nuovi else ""))
+    testo = "\n".join(righe) + "\n"
+    if args.riassunto:
+        with open(args.riassunto, "a", encoding="utf-8") as fh:
+            fh.write(testo)
+    else:
+        print(testo)
+    if rotti or misure:
+        raise SystemExit(1)
 
 
 def misure_del_parco(args):
@@ -1668,6 +1723,15 @@ def main():
     k.add_argument("dopo")
     k.add_argument("--immagini", help="dove salvare le viste affiancate")
     k.set_defaults(fai=confronta)
+    e = sub.add_parser("esito", help="il verdetto di un parco fatto da solo: "
+                                     "esce con 1 se qualcosa si e' rotto")
+    e.add_argument("prima", help="la costruzione col codice di main")
+    e.add_argument("dopo", help="la costruzione col codice da provare")
+    e.add_argument("--ieri", help="la costruzione della notte prima, se c'e'")
+    e.add_argument("--titolo", help="cosa si e' provato, per il riassunto")
+    e.add_argument("--riassunto", help="il file dove aggiungere il riassunto "
+                                       "in markdown (nelle Actions: $GITHUB_STEP_SUMMARY)")
+    e.set_defaults(fai=esito)
     t = sub.add_parser("stesi", help="controlla che ogni texture sia lo steso "
                                      "del suo PDF, dritta")
     t.add_argument("casi", help="clone del repository privato dei casi")
