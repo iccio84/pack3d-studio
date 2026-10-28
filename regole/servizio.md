@@ -126,7 +126,9 @@ Provato in locale, coi PDF del parco:
 - un lavoratore ucciso con un SIGSEGV a meta' costruzione, come fa pdfium:
   quella costruzione risponde 500, «il processo che la faceva e' caduto»,
   l'altra finisce, il lavoratore riparte e le costruzioni dopo escono
-  identiche. Prima cadeva il server, con chiunque fosse collegato.
+  identiche. Prima cadeva il server, con chiunque fosse collegato;
+- il parco intero passando dai lavoratori: 43 modelli su 43 identici al
+  byte, 43 letture del PDF, nessun lavoratore caduto.
 
 Da tenere a mente:
 
