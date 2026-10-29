@@ -197,7 +197,58 @@ costa due o tre secondi invece di venti o trenta.
 - **Gli astucci non cambiano.** Il loro tempo e' la resa di pdfium - la
   texture a livelli, la colata, la spia del nero, la lettura - non i
   tracciati: sul T10 al lampone nove rese, 78 secondi su 100 col
-  profilatore.
+  profilatore. Per quelle c'e' la cassa delle rese, qui sotto.
+
+### Le rese di pdfium su disco
+
+Su un artwork pesante la resa di pdfium e' quasi tutta la costruzione, e
+non dipende dalla risoluzione: sul T10 al lampone ogni resa costa dieci
+secondi fissi, anche a un decimo di scala, e una costruzione ne fa nove -
+74 secondi su 93. Ricostruire lo stesso PDF con un'altra opzione le rifaceva
+tutte: le casse di prima tenevano una pagina sola, per nome di file e per la
+costruzione in corso, e i file temporanei cambiano nome a ogni costruzione.
+Sul wafer da colazione erano 32 secondi su 48.
+
+Dal 29 ottobre 2026 le rese costose restano su disco (`pack3d/rese.py`),
+sotto la cartella dei tratti (`PACK3D_CACHE`), per tutti i lavoratori: la
+lettura del PDF (`vista.pagina`), la spia del nero, le due rese della
+colata, la scelta della sovrastampa, la texture a livelli (`strati.rendi`) e
+la pagina com'e' (`dieline.render_page`). Misurato in un processo solo, coi
+modelli identici al byte a quelli del parco:
+
+| caso | prima costruzione | lo stesso PDF con un'altra opzione |
+|---|---|---|
+| T10 al lampone, apertura 60 | 92 s | 16 s |
+| wafer da colazione, saldatura 1 | 48 s | 15 s |
+
+Il parco intero, con la cassa vuota e poi piena: 43 modelli su 43 identici
+al byte tutte e due le volte, letture uguali. Con la cassa vuota 732 s
+invece di 801, perche' tre casi trovano le rese di quello prima: il T10
+aperto da 88 s a 16, il riempimento col T10 da 91 a 24, il riempimento del
+display del biscotto T3 da 41 a 33. Al secondo giro poco di piu', 656 s: le
+rese di tutto il parco sono 1,9 GB, e prima di tornare ai primi casi il tetto
+le ha gia' buttate. Chi ricostruisce lo stesso PDF le trova, ed e' quello
+che conta.
+
+- **La chiave e' il contenuto del file, e tutto quello che decide i pixel.**
+  I file temporanei - la pagina unica, la copia coi livelli spenti, quella
+  senza le coperture - hanno sempre gli stessi byte, misurato. Nella chiave
+  ci sono poi la pagina, i parametri della resa e lo stato che chi rende ci
+  mette intorno: per la texture a livelli i livelli tecnici, il riquadro
+  stampato, le aree riservate e i segni scelti dall'AI (`strati.spegnendo`),
+  con i CONTI che la resa lascia agli avvisi.
+- **E la versione.** Il codice di `pack3d`, pypdfium2 e pdfium, Pillow,
+  numpy, Ghostscript (`rese.versione`): un codice cambiato non trova le rese
+  di quello di prima, e una resa presa dalla cassa e' identica al byte a una
+  rifatta.
+- **Solo le rese costose.** Si tengono quelle costate almeno un secondo
+  (`rese.SOGLIA_S`): sugli altri PDF del parco una resa costa meno, e si
+  rifa' prima di quanto si scriva.
+- **Un tetto.** `PACK3D_RESE_MB`, di serie 2048: le rese di un PDF pesante
+  sono 160-180 MB, e oltre il tetto se ne vanno le meno usate. Una resa che
+  non si legge si butta e si rifa'.
+- **Chi aggiunge una resa costosa la mette in cassa** con `rese.chiave`, e
+  nella chiave mette tutto quello che, oltre al file, cambia i suoi pixel.
 
 ### Un lavoro, una cartella e uno stato
 

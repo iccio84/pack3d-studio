@@ -44,6 +44,10 @@ sono in GADGET.md.
   disco (`PACK3D_CACHE`), per tutti i lavoratori. Chi vuole i tracciati della
   fustella li chiede li' (`extract`, `plancia.tratti`, il ripiego del
   flowpack), non a pdfplumber.
+- `pack3d/rese.py`: le rese costose di pdfium tenute su disco, con la chiave
+  sul contenuto del file e su tutto quello che decide i pixel, per
+  ricostruire lo stesso PDF con un'altra opzione senza rifarle. Chi aggiunge
+  una resa costosa la mette in cassa con `rese.chiave`.
 - Il modello prima del verdetto: nella costruzione (`server.py`, il ramo di
   `/api/build`) il GLB parte con `verdetto_dopo`, e il giudizio, la
   correzione e il caso in coda vengono dopo; `nuovo_verdetto` e

@@ -160,9 +160,23 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
         return im.resize((larg, alt), Image.LANCZOS)
 
     if livello is None:
-        page = pdfium.PdfDocument(pdf_path)[page_no]
-        page.set_cropbox(*page.get_mediabox())
-        im = page.render(scale=scale).to_pil().convert("RGB")
+        # la resa nativa resta su disco per la prossima costruzione (`rese`)
+        import time
+
+        import numpy as np
+
+        from . import rese
+        k = rese.chiave("dieline.render_page", pdf_path, page_no, float(scale))
+        v = rese.leggi(k)
+        if v is not None:
+            im = Image.fromarray(v[0])
+        else:
+            t = time.time()
+            page = pdfium.PdfDocument(pdf_path)[page_no]
+            page.set_cropbox(*page.get_mediabox())
+            im = page.render(scale=scale).to_pil().convert("RGB")
+            if time.time() - t >= rese.SOGLIA_S:
+                rese.scrivi(k, np.asarray(im))
     else:
         from . import strati
         im = strati.rendi(pdf_path, page_no, scale, livello)
@@ -360,7 +374,9 @@ def _sul_disco(chiave, t):
                 s = os.stat(os.path.join(CACHE, nome))
             except OSError:
                 continue
-            voci.append((s.st_mtime, s.st_size, nome))
+            # le cartelle sono d'altri: le rese (`rese`) hanno il loro tetto
+            if os.path.isfile(os.path.join(CACHE, nome)):
+                voci.append((s.st_mtime, s.st_size, nome))
         tot = sum(v[1] for v in voci)
         for _t, n, nome in sorted(voci):
             if tot <= CACHE_MB * 1024 * 1024:

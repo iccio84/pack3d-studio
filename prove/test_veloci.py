@@ -5,7 +5,7 @@ Il parco dice CHE cosa si e' rotto - un caso, un modello cambiato - ma ci
 mette da venti a quaranta minuti, e non dice dove. Queste dicono dove, e in
 qualche secondo: la lettura della fustella, le misure del modello, il
 registro delle famiglie, lo stato di un lavoro, i lavoratori, i file di un
-caso nel registro. Non usano
+caso nel registro, la cassa delle rese. Non usano
 nessun file dei clienti - i PDF e i GLB li costruiscono loro - e girano anche
 nelle Actions di questo repository, su ogni PR (`.github/workflows/prove.yml`).
 
@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import io
 import os
+import shutil
 import sys
 import tempfile
 import unittest
@@ -269,6 +270,84 @@ class Lavoratori(unittest.TestCase):
     def test_senza_tetto_due_come_prima(self):
         self.assertEqual(self._quanti({"/sys/fs/cgroup/cpu.max": "max 100000",
                                        "/proc/meminfo": "MemTotal: 16000000 kB"}), 2)
+
+
+class CassaDelleRese(unittest.TestCase):
+    """`rese`: le rese di pdfium su disco, con la chiave sul contenuto."""
+
+    def setUp(self):
+        from pack3d import rese
+        self.rese = rese
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir, True)
+        p = mock.patch.object(rese, "CARTELLA", os.path.join(self.dir, "rese"))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _file(self, nome, testo):
+        f = os.path.join(self.dir, nome)
+        with open(f, "wb") as fh:
+            fh.write(testo)
+        return f
+
+    def test_andata_e_ritorno(self):
+        a = np.arange(2 * 3 * 4, dtype=np.uint8).reshape(2, 3, 4)
+        k = self.rese.chiave("prova", self._file("a.pdf", b"uno"), 0, 2.0)
+        self.rese.scrivi(k, a, {"tinta": 2, "riquadri": [[1.5, 2.0, 3.0, 4.0]]})
+        b, dati = self.rese.leggi(k)
+        self.assertEqual((b.dtype, b.shape), (a.dtype, a.shape))
+        self.assertTrue(np.array_equal(a, b))
+        self.assertEqual(dati, {"tinta": 2, "riquadri": [[1.5, 2.0, 3.0, 4.0]]})
+        self.rese.scrivi(k + "x", None, {"indici": [3, 1]})
+        self.assertEqual(self.rese.leggi(k + "x"), (None, {"indici": [3, 1]}))
+
+    def test_la_chiave_e_il_contenuto_non_il_nome(self):
+        uno, copia = self._file("a.pdf", b"uno"), self._file("tmp123.pdf", b"uno")
+        due = self._file("b.pdf", b"due")
+        k = self.rese.chiave("prova", uno, 0, 2.0)
+        self.assertEqual(k, self.rese.chiave("prova", copia, 0, 2.0))
+        self.assertNotEqual(k, self.rese.chiave("prova", due, 0, 2.0))
+        self.assertNotEqual(k, self.rese.chiave("prova", uno, 0, 4.0))
+        self.assertNotEqual(k, self.rese.chiave("altra", uno, 0, 2.0))
+        self.assertIsNone(self.rese.chiave("prova", os.path.join(self.dir, "non-c-e.pdf")))
+
+    def test_solo_le_rese_costose(self):
+        k = self.rese.chiave("prova", self._file("a.pdf", b"uno"))
+        fatte = []
+
+        def fai():
+            fatte.append(1)
+            return np.zeros((2, 2, 3), np.uint8), None
+
+        with mock.patch.object(self.rese, "SOGLIA_S", 60.0):
+            self.rese.tieni(k, fai)
+            self.rese.tieni(k, fai)
+        self.assertEqual(len(fatte), 2)             # veloce: non in cassa
+        with mock.patch.object(self.rese, "SOGLIA_S", 0.0):
+            self.rese.tieni(k, fai)
+            self.rese.tieni(k, fai)
+        self.assertEqual(len(fatte), 3)             # costosa: la seconda dalla cassa
+
+    def test_una_resa_rovinata_si_rifa(self):
+        k = self.rese.chiave("prova", self._file("a.pdf", b"uno"))
+        self.rese.scrivi(k, np.zeros((4, 4), np.uint8))
+        f = self.rese._file(k)
+        with open(f, "r+b") as fh:
+            fh.truncate(os.path.getsize(f) - 3)
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.assertIsNone(self.rese.leggi(k))
+        self.assertFalse(os.path.exists(f))
+
+    def test_il_tetto_butta_le_meno_usate(self):
+        f = self._file("a.pdf", b"uno")
+        chiavi = [self.rese.chiave("prova", f, i) for i in range(3)]
+        with mock.patch.object(self.rese, "RESE_MB", 2.5 / 1024):    # 2,5 kB
+            for i, k in enumerate(chiavi):
+                self.rese.scrivi(k, np.zeros(1000, np.uint8))
+                os.utime(self.rese._file(k), (1000 + i, 1000 + i))
+            self.rese.scrivi(chiavi[0], np.zeros(1000, np.uint8))
+        rimaste = [k for k in chiavi if os.path.exists(self.rese._file(k))]
+        self.assertEqual(rimaste, [chiavi[0], chiavi[2]])
 
 
 class FileDelCasoNelRegistro(unittest.TestCase):

@@ -90,15 +90,22 @@ def _pagina(pdf, page_no, dpi):
     200 dpi invece che con una resa a 36, e la quota cambierebbe a seconda di
     chi ha chiamato prima. Misurato: due GLB del parco cambiavano da una
     passata all'altra senza che cambiasse una riga di codice.
-    """
-    import pypdfium2 as pdfium
 
-    doc = pdfium.PdfDocument(pdf)
-    try:
-        bmp = doc[page_no].render(scale=dpi / 72.0)
-        return bmp.to_pil().convert("RGB")
-    finally:
-        doc.close()
+    La resa nativa resta su disco per la prossima costruzione (`rese`).
+    """
+    from . import rese
+
+    def fai():
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf)
+        try:
+            bmp = doc[page_no].render(scale=dpi / 72.0)
+            return np.asarray(bmp.to_pil().convert("RGB")), None
+        finally:
+            doc.close()
+
+    a, _ = rese.tieni(rese.chiave("nero.pagina", pdf, page_no, dpi), fai)
+    return Image.fromarray(a)
 
 
 def _lastra(pdf, page_no, dpi):
