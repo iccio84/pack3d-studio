@@ -66,7 +66,7 @@ FOLDS = {"vwrap": FOLD_V, "hwrap": FOLD_H}
 # Su un astuccio APERTO i fianchi non sono agganciati al retro - che non c'e' -
 # ma al FRONTE, e il fronte non si ribalta. La quinta dei fianchi va quindi
 # ruotata di 180 gradi rispetto a quella di un astuccio chiuso, altrimenti la
-# grafica dei fianchi esce capovolta: e' quello che si vedeva sul Pingui T6.
+# grafica dei fianchi esce capovolta: e' quello che si vedeva sul T6 aperto.
 #
 # Che questi siano i quad giusti lo conferma FOLD_H senza bisogno di fidarsi
 # del ragionamento: nella fasciatura orizzontale i fianchi sono agganciati al
@@ -203,7 +203,7 @@ def rasterize_panels(pdf_path: str, panels: dict, dpi: int = 300,
         # un'immagine nuova, e quella in cassa sarebbe un secondo foglio intero
         # vivo per niente.
         dieline.scarta_resa()
-        # La `k` di `kinder` e' nera, e pdfium la fa azzurra perche' ignora la
+        # La `k` del marchio e' nera, e pdfium la fa azzurra perche' ignora la
         # sovrastampa. Si rimette il nero dove la lastra lo dichiara, e solo
         # li': vedi `nero.py` per perche' non si puo' rendere tutto con gs.
         sheet = nero.riporta(pulito, sheet, scale, page_no, note, deciso_nero,
@@ -240,7 +240,7 @@ UV = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
 # lo spessore del cartoncino
 # --------------------------------------------------------------------------- #
 # Un astuccio non e' una superficie. Se lo fosse - e finora lo era - guardando
-# dentro la finestra di un Pingui T6 non si vedrebbe niente: ogni faccia ha una
+# dentro la finestra di un T6 aperto non si vedrebbe niente: ogni faccia ha una
 # normale sola, e da dietro il culling la fa sparire. Il pack diventa un guscio
 # di carta zero, e dove e' aperto si vede il vuoto.
 #

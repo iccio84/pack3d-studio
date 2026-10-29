@@ -45,14 +45,14 @@ TOL_GRADI = 15.0
 TOL_COLORE = 24.0
 # Quanto puo' stirarsi la grafica di una faccia d'astuccio. Sotto il 2% non
 # si dice niente; fino al 5% si dice, perche' c'e' una ragione di mestiere -
-# sul Nutella Donut cielo e fondo del DT sono falde da 36,9 mm su una faccia da
+# sull'astuccio della ciambella cielo e fondo del DT sono falde da 36,9 mm su una faccia da
 # 38,1, e una falda di chiusura e' spesso un filo piu' corta - e oltre si grida.
 STIRO_DICE = 0.02
 STIRO_GRIDA = 0.05
 # lato della finestra su cui si media il colore di una sonda, in mm. A cinque
 # pixel un gradiente con mezzo pixel di sfasamento - quello fra il centro di
 # un pixel della pagina e quello della texture ruotata - dava 33 di scarto su
-# KP T1 Mandarino in HD, a mappatura giusta; su due millimetri scende sotto
+# T1 al mandarino in HD, a mappatura giusta; su due millimetri scende sotto
 # 3, e il giro sbagliato resta a 189.
 SONDA_MM = 2.0
 
@@ -76,9 +76,9 @@ def uvw_flowpack(fp0, fp, rastremo, scatola, spalla=None):
       della pinna; la seconda, se la gola e' stata letta, l'inizio del
       prodotto;
     - con una scatola dentro, se il DT non dice la gola - la saldatura non e'
-      disegnata, come sul Brioss - la prima linea e' la piega della scatola,
+      disegnata, come sulla brioche - la prima linea e' la piega della scatola,
       e deve essere l'inizio del prodotto: la pinna sta oltre, dove la mette
-      la gola stimata. Se la gola la dice - K Colazione Piu' - si controlla
+      la gola stimata. Se la gola la dice - wafer da colazione - si controlla
       come a pinna.
 
     Lungo il passo le UV non si muovono mai ai confini - `L/2 + end_fin` non
@@ -160,8 +160,8 @@ def giro_del_marchio(V, UV, nv, fp, verso=0):
     dal davanti, perche' la grafica del fronte si legga orizzontale e dritta.
 
     Il tubo si costruisce sempre coricato: l'asse lungo la x, il fronte verso
-    +z. Ma il marchio sta come sta sullo steso: sul KP T1 Mandarino, sul K
-    Brioss, su Colazione il testo corre ATTRAVERSO il passo, e sul pack
+    +z. Ma il marchio sta come sta sullo steso: sul T1 al mandarino, sul K
+    brioche, sul wafer da colazione il testo corre ATTRAVERSO il passo, e sul pack
     coricato si leggeva dall'alto in basso. Il pack in mano sta in piedi.
 
     Qui non si ragiona sulle convenzioni, si misura: al centro del fronte,
@@ -361,13 +361,13 @@ def facce_astuccio(faces, panels, curva_mm=0.0):
 # Oltre quanto si grida, sul 95% dei triangoli di pinne e spalle. Lungo il
 # giro il film sulla pinna non ha motivo di stirarsi: e' il tubo appiattito.
 # Lungo il passo un po' si', perche' la spalla scende e il film non si
-# allunga: 1,2 a pinne aperte, 1,67 sul Brioss, dove la scatola tiene la
+# allunga: 1,2 a pinne aperte, 1,67 sulla brioche, dove la scatola tiene la
 # sezione fino alla faccia e la gola e' quella che e' - il film vero li' fa
 # le orecchie, che una superficie liscia non sa fare.
 STIRO_GIRO = 1.25
 STIRO_PASSO = 1.8
 # sotto quanto il giro si chiude, a pinne aperte: e' il fianco che spariva sul
-# bordo della pinna, 0,06 sul Paradiso prima della correzione
+# bordo della pinna, 0,06 sul T1 farcito prima della correzione
 CHIUSO_GIRO = 0.6
 
 
@@ -625,8 +625,8 @@ def blocco(V, UV, T, parti, lato_tex, coda):
     Le pareti devono arrivare agli spigoli e toccare il fondo: i fianchi
     lunghi quanto il fondo, fronte e retro larghi quanto lui, e tutte e
     quattro giu' fino al piano del fondo. E' la regola *Un blocco unico,
-    senza feritoie*: sul Tronky i fianchi finivano un millimetro e mezzo
-    prima dello spigolo, e sul KMS fra fondo e pareti restava un quarto di
+    senza feritoie*: sul wafer T1 i fianchi finivano un millimetro e mezzo
+    prima dello spigolo, e sul T1 della barretta fresca fra fondo e pareti restava un quarto di
     millimetro. Si misura sulla faccia esterna, quella con la grafica.
     """
     _W_t, H_t = lato_tex
@@ -677,8 +677,8 @@ DIFETTO = "DIFETTO: "
 # Quanto puo' essere stirata la grafica sul fronte del corpo di un flowpack:
 # l'anisotropia mediana, il rapporto fra il verso piu' stirato e l'altro. Il
 # film non si allunga, ma gonfio nel rapporto del DT la faccia si allarga e la
-# grafica con lei: sui flowpack approvati del parco fino al 7,8% (KMS T1,
-# Kinder Cards, B-ready T2). Respinti: il display da 15 del caso c5b98dfbee al
+# grafica con lei: sui flowpack approvati del parco fino al 7,8% (T1 della barretta fresca,
+# T2 di cialde, pane ripieno T2). Respinti: il display da 15 del caso c5b98dfbee al
 # livello 8, «la grafica viene strecciata», al 13,9%, e al livello 9 nel
 # rapporto del DT al 19,5%; il T1 allargato del vassoio da 36 (caso
 # 838cbae0ac, #160) al 37%.

@@ -359,10 +359,10 @@ Se la texture non passa, il modello resta dov'è: lo Space e la routine
 
 In Glam ogni modello ha **«Scarica Template»**: un PSD su cui il grafico
 appoggia il nuovo artwork, e da cui esporta la texture da caricare sul
-modello. Oggi c'è solo per il Nutella 750 g, caricato a mano con «Carica
+modello. Oggi c'è solo per il vasetto da 750 g, caricato a mano con «Carica
 Template» (bucket `templates`). Per i modelli costruiti dal PDF il template
 lo fa lo Space dal GLB (`pack3d/template.py`), con la struttura di quello
-del Nutella 750 g:
+del vasetto da 750 g:
 
 | gruppo | livello | |
 |---|---|---|
@@ -543,13 +543,13 @@ Ogni modello costruito da PDF deve avere anche la sua texture nella sezione text
 Da incollare dopo il testo della texture. Non servono segreti nuovi.
 
 ```text
-Ogni modello costruito da PDF deve avere anche il suo template, scaricabile con "Scarica Template" come quello del Nutella 750 g: un PSD con la texture del modello e le guide UV, fatto dallo Space. Il contratto completo è in GLAM.md, sezione 9, del repository iccio84/pack3d-studio.
+Ogni modello costruito da PDF deve avere anche il suo template, scaricabile con "Scarica Template" come quello del vasetto da 750 g: un PSD con la texture del modello e le guide UV, fatto dallo Space. Il contratto completo è in GLAM.md, sezione 9, del repository iccio84/pack3d-studio.
 
 1. Dalla pagina dello Space. Nel componente di "Costruisci modello 3D da PDF", dove ascolti già "pack3d:built" e "pack3d:texture", ascolta anche { type: "pack3d:template", nome, blob, glb }, con lo stesso controllo e.origin === window.location.origin, e solo se blob è un Blob (tipo image/vnd.adobe.photoshop) di al massimo 50 MB e nome finisce in .psd. Trattalo come la texture: tieni l'ultimo ricevuto, e quando salvi il modello di "pack3d:built" con blob.size uguale a glb, salva il template per quel modello con le stesse funzioni del server di "Carica Template": file nel bucket "templates", registrato per il model_key del modello appena salvato ("up_" + id), col nome del file = nome. Può arrivare anche dopo che il modello è stato salvato (lo Space ci mette qualche secondo): se il modello con quella misura è già salvato, salvalo subito per lui. Se non si salva, il modello resta: toast "Template non salvato".
 
 2. Nuovo endpoint server POST /api/import-template, autorizzato esattamente come /api/import-model (Bearer PACK3D_IMPORT_TOKEN). Il corpo sono i byte del PSD: Content-Type image/vnd.adobe.photoshop, al massimo 50 MB, e deve cominciare con i quattro byte "8BPS". Intestazioni: X-Model-Name e X-Model-Category (decodeURIComponent, come in /api/import-model), X-Template-Name (decodeURIComponent, al massimo 160 caratteri, finisce in .psd) e X-Pack3d-Codice facoltativa. I destinatari sono quelli di /api/import-texture. Per ciascuno trova il suo modello con quel nome e quella categoria (il più recente) e salva il PSD come fa "Carica Template": bucket "templates", registrato per il model_key "up_" + id del modello, al posto del template che aveva. Risposte come /api/import-texture: 200 {"ok": true, "utenti": N}; 400 col motivo; 401 token sbagliato; 404 se nessun destinatario ha il modello.
 
-3. "Scarica Template" scarica il template del modello selezionato col suo nome di file. Tutto il resto resta com'è: il template del Nutella 750 g, "Carica Template" per chi carica a mano, la texture e il suo "Carica texture".
+3. "Scarica Template" scarica il template del modello selezionato col suo nome di file. Tutto il resto resta com'è: il template del vasetto da 750 g, "Carica Template" per chi carica a mano, la texture e il suo "Carica texture".
 ```
 
 ### Il testo per Lovable: il caso inviato chiude la finestra

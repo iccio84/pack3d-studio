@@ -7,8 +7,8 @@ bianca della grafica presa per il margine della pinna. Chi ha preparato il
 file pero' le misure le ha anche SCRITTE, di solito nella miniatura del DT in
 un angolo della tavola, come catene di quote lungo i due assi:
 
-    Colazione, lungo il passo:   20 | 37,5 | 215 | 37,5 | 20      = 330
-    Colazione, lungo il nastro:  20 | 5 | 66,5 | 7 | 57 | ... | 20 = 460
+    wafer da colazione, lungo il passo:   20 | 37,5 | 215 | 37,5 | 20      = 330
+    wafer da colazione, lungo il nastro:  20 | 5 | 66,5 | 7 | 57 | ... | 20 = 460
 
 Quando ci sono come testo, sono il riscontro piu' forte che esista: un numero
 che il progettista ha scritto, non uno che abbiamo dedotto. Qui non si usano
@@ -20,7 +20,7 @@ nutrizionale. Conta la CATENA: numeri allineati sullo stesso asse, in fila,
 che sommano alla misura totale. Che una catena intera torni con le nostre
 misure per caso non succede.
 
-Sul K Tronky le quote sono vettorializzate e non si leggono: lo si dice, e le
+Sul wafer T1 le quote sono vettorializzate e non si leggono: lo si dice, e le
 misure restano quelle del disegno, da controllare a occhio sulla miniatura.
 """
 from __future__ import annotations
@@ -124,7 +124,7 @@ def riscontro_testate(pdf, passo, pinna, gola, page_no=0):
               else [pinna, corpo, pinna])
     # Lungo il passo il pack e' simmetrico, e la sua catena anche. Con una
     # quarantina di numeri sul foglio una fila che somma al passo si trova
-    # anche per caso - su Colazione 7 | 135 | 7 | 57 | 7 | 71,5 | 40 | 5, che
+    # anche per caso - sul wafer da colazione 7 | 135 | 7 | 57 | 7 | 71,5 | 40 | 5, che
     # sono pezzi del nastro - ma una fila simmetrica per caso no.
     trovate = [c for c in catene(nums, passo)
                if len(c) >= 3 and all(abs(a - b) <= SCARTO
@@ -300,7 +300,7 @@ def riscontro_plancia(pdf, p, d, page_no=0):
 # Una tavola porta spesso il disegno tecnico piu' volte: le copie per i
 # tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,
 # aree coperte - e la miniatura del cartiglio. Sono lo STESSO disegno in
-# scala, e quando le quote sono vettorializzate, come sul Kinder Cards T2, sono
+# scala, e quando le quote sono vettorializzate, come sul T2 di cialde, sono
 # l'unico riscontro che il codice sappia leggere: "forma e proporzioni dalla
 # miniatura, scala dal disegno grande".
 #
@@ -309,11 +309,11 @@ def riscontro_plancia(pdf, p, d, page_no=0):
 # della sua taglia, fuori da lui. Dentro ci devono essere le sue linee.
 #
 # Solo per confermare, mai per gridare. Di rettangoli con le proporzioni giuste
-# una tavola ne ha anche altri: sul Kinder Country sono le cornici delle lastre
-# di separazione, sul Paradiso i riquadri della legenda, e dentro non c'e' il
+# una tavola ne ha anche altri: sul T1 ai cereali sono le cornici delle lastre
+# di separazione, sul T1 farcito i riquadri della legenda, e dentro non c'e' il
 # disegno. Una copia che non torna non dice che il DT e' stato letto male: puo'
 # non essere una copia. E le radici delle pinne non si chiedono, perche' non
-# tutte le miniature le disegnano - sul Milch-Schnitte e sul Paradiso no.
+# tutte le miniature le disegnano - sul T1 della barretta fresca e sul T1 farcito no.
 MINIATURA_SCALA = (0.08, 0.92)
 # mm alla scala del DT grande, ma mai sotto 0,6 punti sulla copia
 MINIATURA_TOL_MM = 0.8

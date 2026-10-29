@@ -4,9 +4,9 @@ Perche' non pdfplumber: pdfplumber costruisce un oggetto Python per ogni
 elemento della pagina, e su un impaginato grande sono decine di migliaia.
 Misurato sul solo parsing:
 
-    K Brioss STD  (21.038 elementi)   pdfplumber 6,6 s  251 MB
+    brioche STD  (21.038 elementi)   pdfplumber 6,6 s  251 MB
                                       pypdfium2  0,9 s   41 MB
-    Colazione     (34.381 elementi)   pdfplumber 9,5 s  278 MB
+    wafer da colazione     (34.381 elementi)   pdfplumber 9,5 s  278 MB
                                       pypdfium2  0,7 s   43 MB
 
 pypdfium2 e' gia' una dipendenza - ci rasterizziamo le pagine - e la sua
@@ -89,7 +89,7 @@ def piatte(pdf_path, page_no=0):
     Serve a non confondere il disegno tecnico con la grafica. La fustella e
     i retini print-free sono quasi sempre su una lastra a se' - /Cutter,
     /Die, una Pantone di servizio - e le stesse Pantone le usa anche il
-    marchio: sul Kinder Brioss le lettere del logo sono PANTONE 361 U. Se
+    marchio: sulla brioche le lettere del logo sono PANTONE 361 U. Se
     una tinta piatta entrasse nella tavolozza tecnica, mascherarla
     vorrebbe dire cancellare il logo dalla texture.
 
@@ -189,7 +189,7 @@ def _telaio(page):
     Il telaio e' quello della MediaBox e non della CropBox, perche' e'
     quello che impone dieline.render_page al rasterizzatore ed e' quello su
     cui pdfplumber conta le sue coordinate. Non e' un dettaglio da poco: il
-    K Tronky ha la CropBox piu' stretta della MediaBox, e chi si fida di
+    wafer T1 ha la CropBox piu' stretta della MediaBox, e chi si fida di
     page.get_size() ribalta la pagina sull'altezza sbagliata.
     """
     x0, _y0, _x1, y1 = page.get_mediabox()
@@ -251,7 +251,7 @@ def _misure(page):
 def _discendi(contenitore, quanti, prendi, m, visita):
     """Scende nella pagina componendo le matrici come fa il PDF.
 
-    I form object vanno seguiti: sul K Brioss le cordonature piu' esterne
+    I form object vanno seguiti: sulla brioche le cordonature piu' esterne
     stanno dentro un form, e chi si ferma al primo livello le perde.
     """
     for i in range(quanti(contenitore)):
@@ -291,7 +291,7 @@ def _pagina(page, visita):
 def _cammina(page, pieni, tratti, tavolozza=None, curve=False):
     """Una passata sola sulla pagina, tenendo il minimo indispensabile.
 
-    Misurato su Colazione: la pagina ha 32.757 percorsi e 408.341 punti, e
+    Misurato sul wafer da colazione: la pagina ha 32.757 percorsi e 408.341 punti, e
     di tutto quello sopravvivono 1.040 segmenti H/V. Materializzarli tutti
     come oggetti Python costava 93 MB per tenerne qualche centinaio di kB.
 
@@ -299,7 +299,7 @@ def _cammina(page, pieni, tratti, tavolozza=None, curve=False):
     e' un'euristica:
 
     - un percorso CON TRATTO puo' dare segmenti, quindi i suoi punti
-      servono. Sono il 4,9% del totale su Colazione, lo 0,7% sul K Brioss;
+      servono. Sono il 4,9% del totale sul wafer da colazione, lo 0,7% sulla brioche;
     - un percorso SENZA TRATTO conta solo se qualche sua figura e' un
       rettangolo pieno, perche' serve a riconoscere le cornici
       dell'artwork. E _rettangolo() accetta solo figure da 4 o 5 punti:
@@ -453,7 +453,7 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6,
     Il verso lo danno i CARATTERI STAMPATI, e non il disegno tecnico. Sono due
     cose diverse: il disegno tecnico dice come e' impaginato il foglio, la
     grafica dice come si legge il pack in mano, e il modello deve seguire la
-    seconda. Su un astuccio Nutella Donut il pannello fronte ha tutto il testo
+    seconda. Su un astuccio della ciambella il pannello fronte ha tutto il testo
     a 90 gradi e il retro a 270: sul foglio e' cosi', sul pack no.
 
     `riquadri` e' un dizionario nome -> (x0, y0, x1, y1) nel telaio di misura.
@@ -465,7 +465,7 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6,
     di venti righe di legale a corpo 5, che e' come la legge un occhio.
 
     Il testo STORTO non vota: una scritta messa di sbieco e' un tratto della
-    grafica, non il verso del pannello. Sul fronte del K Brioss "RICICLAMI
+    grafica, non il verso del pannello. Sul fronte della brioche "RICICLAMI
     nella CARTA" sta a 303 gradi, e col suo corpo grande pesava piu' di tutto
     il testo dritto: arrotondata a 270, girava il fronte di un quarto. Vota
     solo chi sta entro `storto` gradi da un multiplo di 90.

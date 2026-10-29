@@ -83,6 +83,9 @@ mano. Si fa **prima** di guardare la coda.
      dice quanti sono e la macchina che hanno visto (`macchina`). Devono
      essere tanti quante le vCPU dello Space; se no vedi DEPLOY.md, *Piu'
      vCPU: cosa comprano*, e scrivilo nel riassunto.
+   - **La risorsa della colata**: `curl -s https://iccio-maurizio.hf.space/api/ping`
+     deve dire `"colata": true`. Se dice `false` manca il secret `CASI_TOKEN`
+     (DEPLOY.md, *La risorsa della colata*): scrivilo nel riassunto.
 
    Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
    casi della settimana e dei casi cambiati, e le loro misure approvate:

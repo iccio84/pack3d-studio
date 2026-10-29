@@ -155,7 +155,7 @@ def analyze_flowpack(pdf):
     """Fasce del nastro, perimetro e saldature di un flowpack.
 
     Sul blocco dell'artwork, come la costruzione, e non sulla pagina intera:
-    sul Kinder Cards T2 la pagina porta il DT con la grafica e quattro sue
+    sul T2 di cialde la pagina porta il DT con la grafica e quattro sue
     copie tecniche, e misurate insieme davano nastro 260 x passo 168 invece di
     148 x 108. Se sul blocco le fasce non chiudono si riprova sul riquadro
     della fustella, come fa `server.analisi_flowpack`.
@@ -551,7 +551,7 @@ def area_riservata(pdf, x_mm, y_mm, w_mm, h_mm, dpi=36):
     """PROPONE la rimozione di un'area riservata indicata a occhio, e la MOSTRA.
 
     Serve per le aree riservate che il file non dichiara da nessuna parte: sul
-    cartotecnico Pingui T6 e sul Kinder Bueno Dark T2 il nome sta solo nella
+    cartotecnico T6 aperto e sul croccante T2 fondente il nome sta solo nella
     legenda, non scritto sopra il riquadro, e la lettura automatica non ha
     niente da leggere. A occhio invece sono ovvie.
 
@@ -561,8 +561,8 @@ def area_riservata(pdf, x_mm, y_mm, w_mm, h_mm, dpi=36):
     millimetro non cambia il risultato.
 
     Non decide per te, e non puo': un rettangolo pieno puo' essere anche il
-    fondo della grafica, e i numeri non li distinguono - su Colazione la
-    fascia `TEXT AREA` copre il 6,5% del foglio e `Kinder ORANGE`, che e'
+    fondo della grafica, e i numeri non li distinguono - sul wafer da colazione la
+    fascia `TEXT AREA` copre il 6,5% del foglio e l'arancio del marchio, che e'
     grafica, il 7,9%. Per questo torna un'IMMAGINE con in rosso tutto quello
     che quella lastra dipinge: GUARDALA. Se il rosso tocca grafica la
     proposta e' sbagliata e va lasciata cadere.
@@ -585,7 +585,7 @@ def area_riservata(pdf, x_mm, y_mm, w_mm, h_mm, dpi=36):
     ink = np.asarray(Image.fromarray(
         ((255 - mappa.astype(int)) >= 128).astype(np.uint8) * 255).resize((W, H))) > 127
     # base in GRIGIO, lastra in rosso pieno. Evidenziare in rosso sopra i
-    # colori veri non si legge: il Pingui T6 ha una fascia di grafica rossa
+    # colori veri non si legge: il T6 aperto ha una fascia di grafica rossa
     # grande quanto mezzo pack, e il rosso dell'evidenziatore ci spariva
     # dentro. Cosi' invece tutto quello che e' colorato e' la lastra.
     g = base.mean(2)
@@ -636,7 +636,7 @@ _RAW["area_riservata"] = area_riservata
 def colata_a_occhio(pdf, x_mm, y_mm, w_mm, h_mm, scala=3.0):
     """PROPONE di rimettere l'ombra alla colata, e MOSTRA prima e dopo.
 
-    La colata Kinder e' costruita in **sovrastampa**: una lastra di ciano che
+    La colata di latte e' costruita in **sovrastampa**: una lastra di ciano che
     moltiplica il rosso sotto, e da quella moltiplicazione vengono l'ombra
     sulle gocce e il volume del getto. Il nostro rasterizzatore la sovrastampa
     la butta via, quindi il ciano COPRE il rosso invece di moltiplicarlo e
@@ -655,7 +655,7 @@ def colata_a_occhio(pdf, x_mm, y_mm, w_mm, h_mm, scala=3.0):
     e quello che azzurro non e' non lo tocca nessuno.
 
     **E non decidere dai numeri.** L'azzurro da solo non distingue un'ombra
-    rotta da una grafica blu: sul Kinder Pingui T6 BOX la macchia azzurra piu'
+    rotta da una grafica blu: sul T6 aperto la macchia azzurra piu'
     grande del foglio e' il FONDO del pack, gocce d'acqua su azzurro, e
     ripararla sarebbe un disastro. Per questo qui torna un'immagine con sopra
     e sotto la stessa banda, prima e dopo: GUARDALA. Se il "dopo" ha un'ombra
@@ -760,7 +760,7 @@ def riquadro_artwork(pdf):
 # Un gruppo di linee tecniche e' un DT se e' una GRIGLIA: almeno due righe e
 # due colonne lunghe, e sei in tutto. Una cornice - la legenda, il cartiglio,
 # il bordo dell'area di stampa - ne ha quattro, e dentro puo' essere piu'
-# colorata del DT: sul Kinder Paradiso la cornice della legenda racchiude 233
+# colorata del DT: sul T1 farcito la cornice della legenda racchiude 233
 # colori, il DT con la grafica 177.
 DT_LINEE_MIN = 6
 # Una linea e' lunga se copre almeno questa frazione del gruppo.
@@ -835,7 +835,7 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
             griglie.append(trovata)
             continue
         # Un gruppo che non fa griglia puo' essere un DT fuso con le note. Sul
-        # Nutella B-ready T2 le linee di richiamo delle note entrano nel DT da
+        # pane ripieno T2 le linee di richiamo delle note entrano nel DT da
         # ogni lato, e vista esterna, vista interna e riquadri delle note
         # venivano fuori come un gruppo solo largo 573 mm, in cui le pieghe da
         # 226 non erano piu' "lunghe": restava come DT la sola copia per la
@@ -874,8 +874,8 @@ def dt_principale(pdf, page_no=0):
     """Il riquadro del DT con la grafica, `(x, y, w, h)` in mm, o None.
 
     La regola: fra i DT della tavola si prende QUELLO CON LA GRAFICA, che di
-    norma e' il piu' grosso. Nell'ordine inverso non funziona: sul Kinder
-    Country il DT con la grafica e le sue tre copie tecniche sono grandi
+    norma e' il piu' grosso. Nell'ordine inverso non funziona: sul T1 ai
+    cereali il DT con la grafica e le sue tre copie tecniche sono grandi
     uguali, e la vista interna e' anche un po' piu' alta. Quindi prima la
     taglia - i DT a pari scala col piu' grosso (`DT_PARI`), cosi' una
     miniatura colorata non passa davanti - e fra quelli la grafica, cioe' i
@@ -908,8 +908,8 @@ def dt_principale(pdf, page_no=0):
 
 # Sotto questa sovrapposizione su unione il blocco che porta il DT non e' il
 # DT: e' il DT fuso con le note, e si misura il DT. Sul parco il blocco e il
-# suo DT stanno tutti sopra 0,78 (Colazione, dove il blocco comprende la
-# cornice dello steso); sul Nutella B-ready T2 sono 0,22.
+# suo DT stanno tutti sopra 0,78 (wafer da colazione, dove il blocco comprende la
+# cornice dello steso); sul pane ripieno T2 sono 0,22.
 DT_NEL_BLOCCO = 0.5
 
 
@@ -917,7 +917,7 @@ def _riquadro_del_dt(pdf, dt, page_no=0):
     """Dove si misura un DT fuso con le note: `(x, y, w, h)` in mm.
 
     Il riquadro del DT viene dal suo gruppo di linee, che puo' non essere
-    tutto lo steso - un contorno di un'altra penna, come sul K Tronky, dove
+    tutto lo steso - un contorno di un'altra penna, come sul wafer T1, dove
     il perimetro e' nero e le pieghe blu. Allora gli si unisce il rettangolo
     chiuso della fustella che gli somiglia di piu' (`riquadro_fustella`),
     se c'e'.
@@ -1035,7 +1035,7 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
     # L'artwork e' il blocco che porta il DT CON LA GRAFICA - vedi
     # `dt_principale` - e non il piu' colorato. Il colore da solo sbaglia in
     # due modi. Il primo: la grafica c'e' ma e' argento, metallizzato,
-    # bianco. Sul Kinder Cards T2 la vista stampata e' colorata al 34% - il
+    # bianco. Sul T2 di cialde la vista stampata e' colorata al 34% - il
     # resto e' film argentato - e senza blocco stampato l'analisi misurava
     # tutta la tavola: il DT con la grafica piu' le sue quattro copie
     # tecniche sotto, nastro 260 x passo 168 invece di 148 x 108. Il secondo:
@@ -1053,7 +1053,7 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
 
         def somiglia(b):
             """Sovrapposizione su unione: fra un blocco e la cornice che lo
-            racchiude - sul Brioss STD il bordo dell'area di stampa - vince
+            racchiude - sulla brioche STD il bordo dell'area di stampa - vince
             quello che e' il DT, non quello che lo contiene."""
             inter = dentro(b) * dt[2] * dt[3]
             unione = b["w_mm"] * b["h_mm"] + dt[2] * dt[3] - inter
@@ -1067,7 +1067,7 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
             b["dt_principale"] = True
             if somiglia(b) < DT_NEL_BLOCCO:
                 # Il blocco e' il DT fuso con le note dalle linee di richiamo:
-                # sul Nutella B-ready T2 un blocco solo di 573 x 350 mm con
+                # sul pane ripieno T2 un blocco solo di 573 x 350 mm con
                 # vista esterna, vista interna, riquadri delle note e legenda,
                 # e misurato cosi' il pack usciva 572 x 207 invece di 226 x
                 # 190. Si misura il DT, non il blocco.
@@ -1076,7 +1076,7 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
                  b["w_mm"], b["h_mm"]) = _riquadro_del_dt(pdf, dt)
                 b["ristretto_al_dt"] = True
     # Dopo il DT, l'artwork e' il blocco piu' vario, non il piu' grande: su
-    # Kinder Country le tre lastre di separazione sono piu' larghe della
+    # T1 ai cereali le tre lastre di separazione sono piu' larghe della
     # OUTSIDE VIEW e la scaletta per ingombro metteva davanti la lastra del
     # bianco.
     out.sort(key=lambda b: (b.get("dt_principale", False),
@@ -1134,7 +1134,7 @@ def livelli(pdf, x_mm=None, y_mm=None, w_mm=None, h_mm=None):
     prende dalla grafica col DT spento. Il livello DT e' quello da guardare per
     primo, perche' dentro ci sono le MINIATURE con le loro quote - le misure
     scritte da chi ha progettato il pack. Quando sono testo le legge gia' il
-    codice (`quote.py`); quando sono vettorializzate, come sul K Tronky, solo un
+    codice (`quote.py`); quando sono vettorializzate, come sul wafer T1, solo un
     occhio le legge. Servono a verificare le misure, non a produrle: una quota
     si misura dal disegno.
 

@@ -3,7 +3,7 @@ Il controllo dell'AI: prima di consegnare un modello, Claude lo guarda.
 
 Il codice costruisce, e sui pack che conosce costruisce bene. Su un pack che
 non conosce pero' non si ferma: costruisce la cosa piu' vicina che sa fare e
-la consegna come se fosse giusta. Il cono Camy caricato in un pezzo usciva
+la consegna come se fosse giusta. Il cono caricato in un pezzo usciva
 come un astuccio, e il solutore non aveva modo di accorgersene: i suoi conti
 tornavano, sul pack sbagliato.
 
@@ -315,7 +315,7 @@ def avviso(verdetto):
 # la correzione: gli inchiostri del disegno tecnico, scelti guardando
 # --------------------------------------------------------------------------- #
 #
-# Il caso che l'ha fatta nascere: il KP T1 Mandarino esiste in due versioni con
+# Il caso che l'ha fatta nascere: il T1 al mandarino esiste in due versioni con
 # lo stesso nome. In quella coi livelli il disegno tecnico sta su "notes" e
 # "technical-drawing" e il modello esce pulito; in quella senza livelli la
 # fascia della saldatura e i due box dell'EAN sono pieni come la grafica, e
@@ -541,7 +541,7 @@ def _segni_tecnici(pdfs, quadro, verdetto, candidati, modello, client):
 def nota_correzione(scelta):
     """Cosa deve sapere il secondo controllo, che guarda il modello corretto.
 
-    Sul KP T1 Mandarino il primo verdetto vero dopo una correzione era ancora
+    Sul T1 al mandarino il primo verdetto vero dopo una correzione era ancora
     un dubbio: "sul retro c'e' una fascia bianca a tutta altezza". Era la
     zona della saldatura: sotto la campitura tecnica il foglio non ha stampa,
     e il modello della versione coi livelli e' bianco nello stesso punto. Chi
@@ -707,7 +707,7 @@ def ruoli_lastre(pdf_path, modello=None, client=None):
     """Le lastre di materiale che Claude legge nei titoli e nella legenda.
 
     Serve quando il file le chiama con un PANTONE qualsiasi e scrive in curve,
-    come il Nutella Biscuits T3: il codice trova le copie del DT ma non sa
+    come il biscotto T3: il codice trova le copie del DT ma non sa
     leggerne il titolo. Torna dict(ruoli={inchiostro: ruolo}, motivo) o
     dict(errore=...), e non lancia mai: senza risposta il modello resta di
     plastica. Rasterizza la pagina: va chiamata dentro il posto di costruzione.

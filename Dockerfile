@@ -7,7 +7,7 @@ WORKDIR /app
 # Ghostscript serve a una cosa sola, e non c'e' altro modo di farla: simulare
 # la SOVRASTAMPA. pdfium non la simula - verificato con un PDF costruito
 # apposta, un ciano sopra un magenta con /OP true e senza: esce identico - e
-# senza sovrastampa la colata Kinder perde l'ombra sulle gocce, che diventa un
+# senza sovrastampa la colata di latte perde l'ombra sulle gocce, che diventa un
 # alone azzurro piatto. Vedi REGOLE.md, *La colata si rimette con l'inchiostro
 # del file*.
 #

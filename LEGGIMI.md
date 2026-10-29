@@ -120,9 +120,9 @@ il film **alle ganasce**, non che forma prende il corpo.
 
 | | bordo della pinna |
 |---|---|
-| 3 | meta' perimetro, la pinna e' piu' alta del pack (Milch-Schnitte) |
+| 3 | meta' perimetro, la pinna e' piu' alta del pack (T1 della barretta fresca) |
 | 2 | in mezzo |
-| 1 | quanto la faccia del pack, senza svaso (Kinder Brioss) |
+| 1 | quanto la faccia del pack, senza svaso (brioche) |
 
 La casella **"Il film avvolge una scatola"** propone rigonfiamento 1 e pinne 1,
 e in piu' tiene la sezione a quella della fustella invece di riscalarla, e
@@ -132,14 +132,14 @@ restano modificabili.
 ## Etichette
 
 Le etichette vecchie continuano a funzionare nell'API: `rigido` = 2,
-`medio` = 5, `morbido` = 8. Gli estremi vengono da Milch-Schnitte (teso) e
-FULFIL (gonfio); il centro scala e' interpolato e va ritarato sul prossimo
+`medio` = 5, `morbido` = 8. Gli estremi vengono da T1 della barretta fresca (teso) e
+barretta proteica (gonfio); il centro scala e' interpolato e va ritarato sul prossimo
 flowpack di prova.
 
 ## Limiti noti
 
 - Il riconoscimento automatico dei flowpack copre l'impaginato tipo
-  Milch-Schnitte. Gli artwork risolti a mano stanno nel registro `CASI` dentro
+  T1 della barretta fresca. Gli artwork risolti a mano stanno nel registro `CASI` dentro
   `server.py`, riconosciuti dalla firma della pagina; ogni nuovo flowpack
   risolto va aggiunto li'.
 - Una costruzione impegna un thread per 3-15 secondi. Per uso condiviso da piu'

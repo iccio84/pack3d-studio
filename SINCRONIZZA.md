@@ -77,7 +77,7 @@ riga di manuale sbagliata: e' l'agente che continua a misurare come prima.
 
 Era successo. `REGOLE.md` diceva ancora *"le pinne di testa si misurano dal
 margine non stampato"*, che su un artwork al vivo da' `end_fin = 0` — l'errore
-che aveva prodotto il 21% di triangoli degeneri sul Bueno T2. Il codice era gia'
+che aveva prodotto il 21% di triangoli degeneri sul croccante T2. Il codice era gia'
 stato corretto; la regola no, e l'agente leggeva quella.
 
 **Quindi: ogni modifica al comportamento tocca anche `REGOLE.md` - o il file
@@ -110,14 +110,14 @@ c'e' una verifica automatica, questa e' la lista da ripassare a mano.
 
 | caso | cosa tiene fermo |
 |---|---|
-| Milch-Schnitte T1 | l'impaginato di riferimento, nastro 144 = 43 + 15 x 2 + 14 x 2; la soglia sulle cordonature non deve salire sopra la costante, o si perde la piega a 108,5 |
-| FULFIL | il caso calibrato a mano in `CASI`, riferimento del gonfio |
-| Kinder Bueno T2 | pinne ricavate dalle saldature su grafica al vivo; sezione 41 x 20 e non 50 x 11 a pari perimetro |
-| Kinder Pingui T1 | steso ruotato di 90 gradi; cucitura non centrata (16 + 18); fasce grinza 8 \| 10 \| 113 \| 10 \| 8 |
-| Kinder Country | l'artwork e' il blocco piu' vario, non il piu' grande: le lastre di separazione lo superano in ingombro |
-| Kinder Paradiso T1 | nastro 165 x passo 155, sezione 43 x 27 |
-| K Brioss T10 | steso grande (420 x 290): soglie relative; film su scatola, pinna senza svaso, corta (9,0 e non 37,5) e sezione 148,9 x 57,0 non riscalata |
-| K Tronky T1 | **non coperto**: nastro 83 e passo 144 giusti, fasciatura che non chiude |
+| T1 della barretta fresca | l'impaginato di riferimento, nastro 144 = 43 + 15 x 2 + 14 x 2; la soglia sulle cordonature non deve salire sopra la costante, o si perde la piega a 108,5 |
+| barretta proteica | il caso calibrato a mano in `CASI`, riferimento del gonfio |
+| croccante T2 | pinne ricavate dalle saldature su grafica al vivo; sezione 41 x 20 e non 50 x 11 a pari perimetro |
+| T1 della merendina | steso ruotato di 90 gradi; cucitura non centrata (16 + 18); fasce grinza 8 \| 10 \| 113 \| 10 \| 8 |
+| T1 ai cereali | l'artwork e' il blocco piu' vario, non il piu' grande: le lastre di separazione lo superano in ingombro |
+| T1 farcito | nastro 165 x passo 155, sezione 43 x 27 |
+| brioche T10 | steso grande (420 x 290): soglie relative; film su scatola, pinna senza svaso, corta (9,0 e non 37,5) e sezione 148,9 x 57,0 non riscalata |
+| wafer T1 | **non coperto**: nastro 83 e passo 144 giusti, fasciatura che non chiude |
 
 Il controllo minimo su ognuno: perimetro + 2 falde = nastro, la riga
 "mappatura verificata" negli avvisi della costruzione, e un'occhiata al render.

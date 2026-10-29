@@ -21,7 +21,7 @@ def _normal(quad):
 # con un materiale suo: trasparente (BLEND), a due facce, liscio. Il bianco
 # appena azzurro e il 22% di copertura la fanno leggere come un velo lucido
 # sulla finestra senza annebbiare quello che c'e' dietro: provati in
-# model-viewer sul ballotin Raffaello, al 16% non si vedeva, al 40% la
+# model-viewer sul ballotin, al 16% non si vedeva, al 40% la
 # finestra era lattiginosa. Niente KHR_materials_transmission, che sarebbe
 # il vetro vero: un viewer che non la conosce mostrerebbe un foglio bianco
 # opaco. Il controllo dell'AI non la guarda: vedi `vista.leggi_glb`.

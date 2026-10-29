@@ -8,14 +8,14 @@ con la grafica:
 
 - **alluminio** (`Aluminium`, `Aluminium Support`): il supporto e'
   metallizzato. A volte non sta in una copia ma e' il grigio del DT
-  principale, scavato dove la grafica copre: sul Nutella Biscuits T3 e' un
+  principale, scavato dove la grafica copre: sul biscotto T3 e' un
   PANTONE 423 C che copre il 35% del foglio, quello che resta scoperto;
 - **white plate**: il bianco coprente sotto gli inchiostri. Dove c'e', il
   film resta plastica bianca; dove non c'e', gli inchiostri sono trasparenti
   sul metallo e il pack e' metallizzato del loro colore, o argento dove non
   c'e' inchiostro;
 - **vernice opaca** (`Matt Varnish`): opaca sulla plastica, satinata sul
-  metallo. Sul Nutella Biscuits sono i raggi attorno al biscotto, che la
+  metallo. Sul biscotto T3 sono i raggi attorno al biscotto, che la
   grafica disegna in grigio chiaro sull'alluminio.
 
 Le lastre si riconoscono dal nome, o dalla didascalia scritta accanto alla
@@ -61,8 +61,8 @@ _NOMI = (
 )
 
 # Le copie del DT: rettangoli col rapporto del foglio, in scala qualsiasi, le
-# cui linee lunghe sono quelle del DT. Sul Kinder Cards T2 le quattro copie
-# sono a 1:2, sul Nutella Biscuits a 1:1 e 200 mm piu' in la'.
+# cui linee lunghe sono quelle del DT. Sul T2 di cialde le quattro copie
+# sono a 1:2, sul biscotto T3 a 1:1 e 200 mm piu' in la'.
 SPESSO = 1.2              # punti: i tratti del DT sono a filo di capello
 SCALE = (0.2, 1.1)
 FIRMA_LATO = 0.25         # le linee della firma: almeno un quarto del lato
@@ -136,7 +136,7 @@ class Lettura:
         """Ruoli da fuori - il caso, l'AI - per nome di lastra.
 
         Dall'AI, sul DT principale si accetta solo l'alluminio, e solo se e'
-        una campitura piena e piatta come il grigio del Nutella Biscuits: una
+        una campitura piena e piatta come il grigio del biscotto T3: una
         lastra sul DT va via dalla texture, e un errore li' cancellerebbe un
         inchiostro della grafica. Il caso invece l'ha guardato qualcuno.
         """
@@ -204,11 +204,11 @@ def copie_del_dt(pdf, foglio, page_no=0):
 
     Un candidato e' una coppia di linee col rapporto del foglio: due
     orizzontali di uguale estensione a distanza `s * H`, o due verticali a
-    `s * W`. Basta una delle due coppie - sul Nutella B-ready T2 il bordo
+    `s * W`. Basta una delle due coppie - sul pane ripieno T2 il bordo
     sinistro della copia della vernice e' interrotto dalle fasce delle pinne.
     E la copia si conferma solo se dentro ci sono le linee lunghe del DT, nello
     stesso posto: un riquadro interno della grafica col rapporto giusto, come
-    sul Kinder Country, non le ha.
+    sul T1 ai cereali, non le ha.
     """
     from .tracciati import segmenti
     segs, _w, _h = segmenti(pdf, page_no)
@@ -253,8 +253,8 @@ def copie_del_dt(pdf, foglio, page_no=0):
         if dentro(r, foglio):
             continue                      # il DT stesso, o un suo riquadro
         # Specchiata solo se combacia nettamente meglio: un DT di flowpack e'
-        # quasi simmetrico, e le copie del Nutella Biscuits tornano uguali nei
-        # due versi. La vista interna del B-ready no.
+        # quasi simmetrico, e le copie del biscotto T3 tornano uguali nei
+        # due versi. La vista interna del pane ripieno no.
         dritta = _combacia(firma, Ha, Va, r, s, W, H, False)
         rovescia = _combacia(firma, Ha, Va, r, s, W, H, True)
         specchio = rovescia > dritta + 0.05
@@ -299,7 +299,7 @@ def _copertura(mappa, riquadro, dpi):
 
 def _neutre(pdf, page_no):
     """Le tinte piatte che a tinta piena sono un grigio neutro: l'alluminio
-    disegnato sul DT lo e' (PANTONE 423 C sul Nutella Biscuits), un box area
+    disegnato sul DT lo e' (PANTONE 423 C sul biscotto T3), un box area
     arancione no. Si legge la funzione di tipo 2, come `techink.lastre_bianche`."""
     import pypdf
     fuori = set()
@@ -366,9 +366,9 @@ def _titoli(pdf, page_no, copie):
     """{indice della copia: titolo} delle copie che ne hanno uno scritto.
 
     Il testo si legge copia per copia, in una fascia sopra, sotto e a
-    sinistra larga quanto lei: sul Kinder Country i tre titoli stanno sulla
+    sinistra larga quanto lei: sul T1 ai cereali i tre titoli stanno sulla
     stessa riga e pdfium li da' come una riga sola. E i titoli di una pagina
-    stanno tutti dallo stesso lato: sul Kinder Cards T2 quello di una copia e'
+    stanno tutti dallo stesso lato: sul T2 di cialde quello di una copia e'
     sopra di lei e sotto quella di prima, e il lato giusto e' quello dove ce
     ne sono di piu'. Un numero da solo e' una quota, non un titolo.
     """
@@ -473,7 +473,7 @@ def leggi(pdf, foglio, page_no=0, dichiarati=None):
 def da_togliere(lettura):
     """Le lastre di materiale disegnate sul DT principale: non sono
     inchiostri, sono il disegno del materiale, e dalla texture vanno via -
-    sul Nutella Biscuits il grigio dell'alluminio. Sotto resta l'inchiostro
+    sul biscotto T3 il grigio dell'alluminio. Sotto resta l'inchiostro
     vero, o niente: e niente sul metallo e' argento."""
     if lettura is None or not lettura.applicabile():
         return []
@@ -532,8 +532,8 @@ def maschere(pdf, lettura, dimensione, page_no=0):
             q = lettura.regioni[k]
             ritaglio = _ritaglio(pdf, page_no, q.riquadro,
                                  os.path.join(cartella, "r%d.pdf" % k))
-            # Le linee del DT della copia bucano la lastra: sul Nutella
-            # Biscuits il white plate usciva rigato di metallo lungo ogni
+            # Le linee del DT della copia bucano la lastra: sul biscotto
+            # T3 il white plate usciva rigato di metallo lungo ogni
             # piega. Via tutte le altre tinte, e poi si chiudono i buchi di un
             # filo che resta, se una linea e' in quadricromia.
             altre = [n for n in lettura.lastre if n not in {v for v, _r in voci}]
@@ -601,7 +601,7 @@ def mappe_pbr(tex, mas):
 def con_effetto(quota_metallo, quota_opaca):
     """Se il materiale cambia abbastanza da valere un GLB diverso: mezzo
     punto di film metallico, o un millesimo di vernice opaca - i raggi del
-    Nutella Biscuits sono l'1%."""
+    biscotto T3 sono l'1%."""
     return quota_metallo >= 0.005 or quota_opaca >= 0.001
 
 
