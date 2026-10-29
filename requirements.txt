@@ -8,12 +8,24 @@
 #
 # Queste sono le versioni su cui i casi calibrati sono verificati, su
 # Python 3.11.
+#
+# Fissate non vuol dire ferme: pillow, pypdf, pypdfium2 e pdfplumber leggono
+# file caricati da chiunque, e i loro aggiornamenti di sicurezza contano. Si
+# aggiornano una volta al mese: le versioni nuove in un ambiente a parte, i
+# test veloci, il parco completo e le letture (`prove/parco.py`), e se i
+# modelli sono identici al byte si uniscono. Se un modello cambia, la libreria
+# che lo cambia si prova da sola e si guarda il perche'.
+#
+# Ultimo giro, 29 ottobre 2026: pillow 12.3.0 -> 13.0.0, pypdf 6.19.0 ->
+# 6.21.4, pypdfium2 5.13.0 -> 5.14.0, psd-tools 1.24.0 -> 1.26.0; i 43 casi
+# del parco identici al byte, le letture uguali. numpy 2.5 e scipy 1.18 vogliono
+# Python 3.12: queste sono le ultime per 3.11, l'immagine dello Space.
 numpy==2.4.6
 scipy==1.17.1
-pillow==12.3.0
+pillow==13.0.0
 pdfplumber==0.11.10
-pypdf==6.19.0
-pypdfium2==5.13.0
+pypdf==6.21.4
+pypdfium2==5.14.0
 
 # Questi due non toccano la geometria. anthropic serve al controllo dell'AI
 # su ogni costruzione e all'agente di /api/analyze-ai: e' fissato alla
@@ -21,12 +33,17 @@ pypdfium2==5.13.0
 # JSON vincolato (output_config), che le versioni vecchie non conoscono.
 # openai serve solo al piano B dell'agente e resta aperto: qui non e'
 # installato, e fissarlo a un numero che non ho provato sarebbe peggio che
-# lasciarlo libero.
+# lasciarlo libero. anthropic 2.x c'e' (ottobre 2026), ma e' un cambio di
+# versione grande, e il controllo si prova solo con la chiave vera, sullo
+# Space: resta qui finche' non si prova li'.
 anthropic==1.11.0
 openai>=1.60
 
 # Il template PSD dei modelli, per «Scarica Template» di Glam
 # (pack3d/template.py). Fissato perche' il modulo usa due cose interne: la
 # composizione gia' fatta, che psd-tools rifarebbe in venti secondi, e il
-# blocco dei livelli, che `lock()` di questa versione non scrive.
-psd-tools==1.24.0
+# blocco dei livelli, che `lock()` di questa versione non scrive. Al cambio
+# di versione si confrontano i template di qualche modello del parco livello
+# per livello: con la 1.26.0 sono uguali, tranne il numero di versione che
+# psd-tools scrive nel file.
+psd-tools==1.26.0
