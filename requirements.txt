@@ -14,7 +14,9 @@
 # aggiornano una volta al mese: le versioni nuove in un ambiente a parte, i
 # test veloci, il parco completo e le letture (`prove/parco.py`), e se i
 # modelli sono identici al byte si uniscono. Se un modello cambia, la libreria
-# che lo cambia si prova da sola e si guarda il perche'.
+# che lo cambia si prova da sola e si guarda il perche'. Il giro lo fa da sola
+# una sessione di Claude Code il primo del mese, e apre la PR; unirla resta
+# una scelta di chi gestisce il codice.
 #
 # Ultimo giro, 29 ottobre 2026: pillow 12.3.0 -> 13.0.0, pypdf 6.19.0 ->
 # 6.21.4, pypdfium2 5.13.0 -> 5.14.0, psd-tools 1.24.0 -> 1.26.0; i 43 casi
