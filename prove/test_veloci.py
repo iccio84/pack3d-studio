@@ -4,7 +4,8 @@ Le prove veloci: secondi, non i venti o quaranta minuti del parco.
 Il parco dice CHE cosa si e' rotto - un caso, un modello cambiato - ma ci
 mette da venti a quaranta minuti, e non dice dove. Queste dicono dove, e in
 qualche secondo: la lettura della fustella, le misure del modello, il
-registro delle famiglie, lo stato di un lavoro, i lavoratori. Non usano
+registro delle famiglie, lo stato di un lavoro, i lavoratori, i file di un
+caso nel registro. Non usano
 nessun file dei clienti - i PDF e i GLB li costruiscono loro - e girano anche
 nelle Actions di questo repository, su ogni PR (`.github/workflows/prove.yml`).
 
@@ -268,6 +269,104 @@ class Lavoratori(unittest.TestCase):
     def test_senza_tetto_due_come_prima(self):
         self.assertEqual(self._quanti({"/sys/fs/cgroup/cpu.max": "max 100000",
                                        "/proc/meminfo": "MemTotal: 16000000 kB"}), 2)
+
+
+class FileDelCasoNelRegistro(unittest.TestCase):
+    """`coda._metti_file` riprova, la issue dice i file che non sono arrivati,
+    e il caso rimandato li completa. GitHub e' finto: `_richiesta` risponde
+    dalla lista `risposte` (un'eccezione si solleva), e segna le chiamate."""
+
+    def setUp(self):
+        from pack3d import coda
+        self.coda = coda
+        self.chiamate, self.risposte = [], {}
+        for nome, valore in (("RIPROVE_S", (0, 0)), ("privato", lambda: True),
+                             ("_richiesta", self._richiesta),
+                             ("avvia_routine", mock.Mock(return_value=None)),
+                             ("_salva_email", mock.Mock())):
+            p = mock.patch.object(coda, nome, valore)
+            p.start()
+            self.addCleanup(p.stop)
+        p = mock.patch.dict(os.environ, {"PACK3D_CODA_REPO": "io/casi",
+                                         "PACK3D_CODA_TOKEN": "x"})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _richiesta(self, metodo, percorso, corpo=None, timeout=60):
+        self.chiamate.append((metodo, percorso, corpo))
+        for chiave, coda_risposte in self.risposte.items():
+            if (metodo + " " + percorso).startswith(chiave) and coda_risposte:
+                r = coda_risposte.pop(0)
+                if isinstance(r, Exception):
+                    raise r
+                return r
+        return {}
+
+    @staticmethod
+    def _http(codice):
+        import urllib.error
+        return urllib.error.HTTPError("https://api.github.com", codice, "x", {}, None)
+
+    def _metti(self, *risposte):
+        self.risposte["PUT"] = list(risposte)
+        with contextlib.redirect_stderr(io.StringIO()):
+            esito = self.coda._metti_file("io/casi", "casi/x/a.pdf", "m", b"pdf")
+        return esito, sum(1 for c in self.chiamate if c[0] == "PUT")
+
+    def test_riprova_sul_409_sui_5xx_e_sulla_rete(self):
+        self.assertEqual(self._metti(self._http(409), {}), (True, 2))
+        self.chiamate.clear()
+        self.assertEqual(self._metti(self._http(502), OSError("giu'"), {}), (True, 3))
+        self.chiamate.clear()
+        self.assertEqual(self._metti(*[OSError("giu'")] * 3), (False, 3))
+
+    def test_il_422_e_gia_li_e_il_413_non_si_riprova(self):
+        self.assertEqual(self._metti(self._http(422)), (True, 1))
+        self.chiamate.clear()
+        self.assertEqual(self._metti(self._http(413), {}), (False, 1))
+
+    def test_la_issue_dice_i_file_che_mancano(self):
+        self.risposte["GET /repos/io/casi/issues"] = [[]]
+        self.risposte["PUT /repos/io/casi/contents/casi/"] = [
+            {}, self._http(413), {}]
+        self.risposte["POST /repos/io/casi/issues"] = [{"number": 7, "html_url": "u"}]
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.coda._carica_davvero("abc", [b"1", b"2"], ["a.pdf", "b.pdf"],
+                                      {"esito": "respinto"}, None, {})
+        corpo = [c[2]["body"] for c in self.chiamate if c[0] == "POST"][0]
+        self.assertIn("**File non arrivati nel registro:** b.pdf.", corpo)
+
+    def test_il_caso_rimandato_porta_i_file_che_mancavano(self):
+        issue = {"number": 7, "title": "Caso nuovo abc: a.pdf, b.pdf", "html_url": "u",
+                 "body": "File: [`casi/2026-10-29_abc`](../tree/HEAD/casi/2026-10-29_abc)",
+                 "labels": [{"name": "da-guardare"}]}
+        self.risposte["GET /repos/io/casi/issues"] = [[issue]]
+        self.risposte["GET /repos/io/casi/contents/casi/2026-10-29_abc"] = [
+            [{"name": "a.pdf"}, {"name": "verdetto.json"}]]
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.coda._carica_davvero("abc", [b"1", b"2"], ["a.pdf", "b.pdf"],
+                                      {"esito": "respinto"}, None, {})
+        messi = [c[1] for c in self.chiamate if c[0] == "PUT"]
+        self.assertEqual(messi, ["/repos/io/casi/contents/casi/2026-10-29_abc/b.pdf"])
+        commento = [c[2]["body"] for c in self.chiamate if c[0] == "POST"]
+        self.assertEqual(commento, ["**File arrivati col nuovo invio:** b.pdf."])
+        self.assertIn(("DELETE", "/repos/io/casi/issues/7/labels/da-guardare", None),
+                      self.chiamate)
+        self.coda.avvia_routine.assert_called_once()
+
+    def test_senza_cartella_arrivano_tutti(self):
+        issue = {"number": 7, "title": "Caso nuovo abc: a.pdf", "html_url": "u",
+                 "body": "File: [`casi/2026-10-29_abc`](../tree/HEAD/casi/2026-10-29_abc)",
+                 "labels": []}
+        self.risposte["GET /repos/io/casi/issues"] = [[issue]]
+        self.risposte["GET /repos/io/casi/contents/"] = [self._http(404)]
+        with contextlib.redirect_stderr(io.StringIO()):
+            self.coda._carica_davvero("abc", [b"1"], ["a.pdf"],
+                                      {"esito": "respinto"}, None, {})
+        self.assertEqual([c[1] for c in self.chiamate if c[0] == "PUT"],
+                         ["/repos/io/casi/contents/casi/2026-10-29_abc/a.pdf"])
+        # senza `da-guardare` la routine non riparte: il caso e' gia' libero
+        self.coda.avvia_routine.assert_not_called()
 
 
 if __name__ == "__main__":
