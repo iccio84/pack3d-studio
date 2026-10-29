@@ -381,6 +381,21 @@ il modello nella pagina a 5-8 s, il verdetto a 14-19 s, ok, dubbio e
 sbagliato; il modello corretto al posto del primo; con i lavoratori e senza
 (`PACK3D_LAVORATORI=0`).
 
+**Scarica GLB arriva col verdetto.** Dentro Glam Lab il tasto che compare e'
+il segnale con cui Glam salva il modello: lo script che il suo proxy mette
+nella pagina guarda `#download`, e appena si vede manda il GLB
+(`pack3d:built`, GLAM.md); Glam lo salva e chiude la finestra. La pagina
+mostrava il tasto col modello, prima del verdetto: in Glam il modello finiva
+salvato e la finestra chiusa mentre il controllo guardava ancora, e un
+respinto restava salvato senza che nessuno vedesse il verdetto. Provato con
+lo script del proxy e un controllo finto: due `pack3d:built` a verdetto in
+corso, poi «sbagliato». Dal 29 ottobre 2026 il modello si guarda subito ma
+Scarica GLB - e con lui Glam - aspetta il verdetto (`seguiVerdetto`): con
+ok, dubbio o un verdetto che non arriva il tasto compare; con sbagliato no,
+e il modello si salva solo da «Mostra comunque il modello». Provato allo
+stesso modo: nessun `pack3d:built` prima del verdetto, due dopo l'ok,
+nessuno col respinto.
+
 ### La correzione: gli inchiostri tecnici li sceglie chi li vede
 
 Il primo verdetto vero, sullo Space, e' stato un dubbio sul T1 al mandarino:

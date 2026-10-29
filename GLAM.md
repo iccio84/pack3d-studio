@@ -86,6 +86,21 @@ ricevuto cosa non va, e il caso è ripartito»). Qui non c'è un
 `pack3d:caso` prima. Fuori da Glam resta la finestra dei casi, che dice lo
 stato nuovo.
 
+### Il modello arriva a Glam col verdetto
+
+Glam salva il modello quando riceve `pack3d:built`, e quel messaggio lo
+manda lo script che il proxy `/api/public/pack3d` mette in testa alla
+pagina: appena il tasto «Scarica GLB» (`#download`) si vede, manda l'ultimo
+GLB arrivato. Il controllo dell'AI dà il suo verdetto dopo il modello, e la
+pagina mostrava il tasto subito: Glam salvava e chiudeva la finestra mentre
+il controllo guardava ancora, e un modello respinto restava salvato.
+
+Dal 29 ottobre 2026 la pagina mostra il modello subito, ma «Scarica GLB»
+compare solo col verdetto: ok, dubbio, o un verdetto che non arriva. Con un
+respinto non compare, e il modello si salva solo se chi l'ha caricato
+preme «Mostra comunque il modello». A Glam non serve cambiare niente: lo
+script del proxy resta quello che c'è.
+
 ## 2. Lo stato e le domande: dalla routine a Glam
 
 `POST /api/pack3d-case`, con la stessa autorizzazione di `/api/import-model`
