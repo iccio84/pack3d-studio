@@ -1489,10 +1489,14 @@ async function build(buf, name, opts){
   mostraLettura(r.headers.get('X-Pack3d-Lettura'), buf, opts);
   const attesa = r.headers.get('X-Pack3d-Verdetto');
   if (attesa){
-    // il modello e' gia' qui, il verdetto del controllo arriva dopo
+    // Il modello e' gia' qui, il verdetto del controllo arriva dopo. Si
+    // guarda subito, ma Scarica GLB aspetta il verdetto: dentro Glam Lab il
+    // tasto che compare e' il segnale con cui Glam salva il modello e chiude
+    // la finestra (`pack3d:built`, vedi GLAM.md), e un modello che l'AI poi
+    // respinge restava salvato in Glam, senza che nessuno vedesse il verdetto.
     glbBlob = blob;
     show(await glbBlob.arrayBuffer());
-    setFase('pronto');
+    setFase('lavoro');
     seguiVerdetto(attesa, blob);
     return {esito: 'in corso'};
   }
@@ -1540,6 +1544,8 @@ async function seguiVerdetto(gettone, blob){
   if (glbBlob !== blob) return;
   const titolo = titoloInAttesa || 'Modello pronto';
   if (!d){
+    // senza verdetto il modello resta di chi l'ha chiesto, come a controllo spento
+    setFase('pronto');
     setStatus(titolo + ' · il verdetto dell’AI non è arrivato', '');
     return;
   }
@@ -1555,18 +1561,20 @@ async function seguiVerdetto(gettone, blob){
         if (glbBlob !== blob) return;
         modello = glbBlob = nuovo;
         show(await nuovo.arrayBuffer());
-        setFase('pronto');
       }
     }catch(e){ /* resta il primo modello, e il verdetto vale per lui */ }
   }
   const v = d.verdetto;
   if (v && v.esito === 'sbagliato'){
-    // respinto: non resta nel viewer come se fosse buono
+    // respinto: non resta nel viewer come se fosse buono, e Scarica GLB -
+    // cioe' Glam - non lo vede mai
     glbBlob = null;
     mostraCaso(v, modello);
     setFase('lavoro');
-  }else if (v && v.esito === 'dubbio' && (v.in_coda || v.in_attesa)){
-    mostraVerifica(v);
+  }else{
+    // solo adesso Scarica GLB, e in Glam Lab il salvataggio
+    setFase('pronto');
+    if (v && v.esito === 'dubbio' && (v.in_coda || v.in_attesa)) mostraVerifica(v);
   }
   esitoFinale(v, titolo);
 }
@@ -1576,7 +1584,7 @@ function esitoFinale(v, titolo){
   if (v && v.esito === 'in corso'){
     // il modello c'e', il verdetto no: lo porta seguiVerdetto
     titoloInAttesa = titolo;
-    setStatus(titolo + ' · controllo dell’AI in corso…', '');
+    setStatus(titolo + ' · controllo dell’AI in corso: Scarica GLB arriva col verdetto…', '');
     return;
   }
   if (!v || v.esito === 'non controllato'){ setStatus(titolo, ''); return; }
