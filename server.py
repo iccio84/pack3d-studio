@@ -3225,6 +3225,13 @@ def _prova_film(l):
         return None
 
 
+# Il messaggio sta dentro i 200 caratteri che l'interfaccia mostra, col
+# consiglio in fondo: e' quello che dice cosa fare.
+CARTOTECNICO_SENZA_PANNELLI = (
+    "cartotecnico: la fustella non si divide in pannelli, e non e' una "
+    "scatola a punta, una coppa o un tubo. Se e' un film, dichiara 'flowpack'.")
+
+
 def _prova_astuccio(l):
     """L'astuccio. Se il solutore lo rifiuta e il pack e' dichiarato
     cartotecnico, il motivo resta in `errore_astuccio` per le forme dopo."""
@@ -3233,6 +3240,13 @@ def _prova_astuccio(l):
         # devono dire le falde nell'ordine in cui le vedra' il modello
         l.pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(l.pdf)
         if not d.panels:
+            if l.kind == "carton":
+                # Dichiarato cartotecnico, e il solutore astuccio non trova
+                # pannelli senza fermarsi: e' un rifiuto come gli altri.
+                # Prima si scivolava fino al flowpack, cioe' la famiglia
+                # sbagliata senza dirlo (REGOLE.md, *La dichiarazione vale
+                # anche quando dice di no*).
+                l.errore_astuccio = ValueError(CARTOTECNICO_SENZA_PANNELLI)
             return None
         meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
                 "%.1f x %.1f x %.1f mm" % d.dims_mm]
@@ -3377,9 +3391,7 @@ RICONOSCIMENTO = (
     Famiglia("tubo a cono", ["carton"], _prova_tubo),
     Famiglia("cartotecnico che non si legge", ["carton"], _ferma_cartotecnico),
     Famiglia("incarto", [None, "flowpack"], _prova_incarto),
-    # un cartotecnico arriva qui solo se il solutore astuccio non ha trovato
-    # pannelli senza fermarsi: come prima
-    Famiglia("flowpack", [None, "flowpack", "carton"], _prova_flowpack),
+    Famiglia("flowpack", [None, "flowpack"], _prova_flowpack),
 )
 
 

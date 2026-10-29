@@ -130,3 +130,8 @@ repository dei casi.
 - `prove/parco.py consegna`: manda il modello corretto da approvare.
 - `prove/parco.py approvato`: dopo l'approvazione, in Glam e `da-rilasciare`
   (se lo Space non l'ha gia' fatto da solo).
+- `prove/test_veloci.py`: le prove veloci, in meno di un secondo e senza
+  file dei clienti (lettura della fustella, misure, registro delle famiglie,
+  stato, lavoratori); girano su ogni PR.
+- `prove/parco.py letture`: la lettura di ogni caso del parco contro quella
+  approvata, senza costruire: a quale caso una correzione ha cambiato strada.

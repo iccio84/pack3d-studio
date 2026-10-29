@@ -273,8 +273,35 @@ compresi parola per parola; le undici costruzioni chiamate con gli stessi
 argomenti, incarto compreso, che il parco non ha; il parco intero, 43
 modelli su 43 identici al byte.
 
-La tabella fa vedere una cosa che la catena nascondeva: un cartotecnico
-dichiarato, se il solutore astuccio non trova pannelli senza fermarsi,
-arriva fino alla prova del flowpack. E' com'era, ed e' lasciato com'era;
-la dichiarazione dovrebbe valere anche quando dice di no, come per il
-vassoio.
+La tabella ha fatto vedere una cosa che la catena nascondeva: un
+cartotecnico dichiarato, se il solutore astuccio non trovava pannelli senza
+fermarsi, arrivava fino alla prova del flowpack. Ora e' un rifiuto come gli
+altri: si provano punta, coppa e tubo, e se nessuno e' suo si ferma
+(REGOLE.md, *La dichiarazione vale anche quando dice di no*). Dei 44 PDF del
+parco, letti dichiarati cartotecnico, nessuno passava da li'.
+
+### Le prove veloci
+
+Il parco dice CHE cosa si e' rotto, ma ci mette da venti a quaranta minuti e
+non dice dove. Due prove lo dicono prima:
+
+- **`prove/test_veloci.py`**, meno di un secondo e nessun file dei clienti:
+  la lettura della fustella (la griglia di un foglio disegnato dalla prova, i
+  tratti in cassa uguali a quelli letti, la chiave sul contenuto), le misure
+  del modello (l'ingombro di un GLB costruito dalla prova, le tolleranze), il
+  registro delle famiglie (l'ordine, le dichiarazioni che fermano, una
+  costruzione per famiglia), lo stato di un lavoro, i lavoratori. Girano su
+  ogni PR e su ogni unione nel ramo della settimana
+  (`.github/workflows/prove.yml`):
+
+      python3 -m unittest discover -s prove -p "test_*.py"
+
+- **`prove/parco.py letture CASI`**: la lettura di ogni caso del parco -
+  famiglia, misure, cartellini, come la chiede la pagina prima di costruire
+  - contro quella approvata in `parco/letture.json` del repository dei
+  casi, senza costruire. Dice a quale caso una correzione ha cambiato strada,
+  e come. `--approva` le scrive approvate, come le misure: le letture
+  cambiate apposta si approvano nella PR del caso.
+
+Una prova veloce che fallisce si guarda prima del parco: il parco dice lo
+stesso, mezz'ora dopo.
