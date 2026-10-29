@@ -1,8 +1,9 @@
 # Mappa del codice: dove guardare
 
 Per chi corregge un caso della coda (CODA.md): dove sta quello che serve,
-senza aprire i file interi. `server.py` e la pagina sono lunghi (decine di
-migliaia di parole): si cerca con `grep -n` e si legge solo il pezzo
+senza aprire i file interi. `server.py`, i moduli delle famiglie e la pagina
+sono lunghi (decine di migliaia di parole): si cerca con `grep -n` e si legge
+solo il pezzo
 (`sed -n 'A,Bp'`, o Read con offset e limit). Le regole stanno in REGOLE.md,
 i principi e l'indice, e in `regole/`, un file per famiglia. Per una
 forma che il codice non conosce ancora, la ricetta e' in FORME.md. I gadget
@@ -11,7 +12,15 @@ sono in GADGET.md.
 
 ## Il giro di una costruzione
 
-- `server.py`, `RICONOSCIMENTO`: la **lettura** del PDF e il riconoscimento
+- `server.py` e' il servizio: le richieste (`Handler`), i lavoratori, il
+  controllo dell'AI, il verdetto, la coda. Le famiglie stanno in
+  `pack3d/famiglie/`, un modulo per famiglia (`flowpack`, `astuccio`,
+  `vassoio` con la plancia e la scatola, `coppa` col cono e il prisma,
+  `pouch`, `ballotin`, `punta`, `tubo`, `incarto`, `riempimento`), piu'
+  `comune` (gli avvisi, le tinte, la pellicola, i nomi delle famiglie) e il
+  `registro`. Fino al 29 ottobre 2026 stava tutto in `server.py`, cinquemila
+  righe.
+- `pack3d/famiglie/registro.py`, `RICONOSCIMENTO`: la **lettura** del PDF e il riconoscimento
   della famiglia, una riga per prova nell'ordine in cui si fanno, ognuna
   con le tipologie dichiarate per cui vale e la sua `_prova_<forma>`: le
   dichiarate sole (coppa, riempimento, incarto, pouch), il caso calibrato,
@@ -22,12 +31,13 @@ sono in GADGET.md.
   sbagliata si guarda qui. `COSTRUZIONI` dice, per la famiglia letta, quale
   `build_*` si chiama e con quali scelte della pagina. La famiglia **Incarti** dichiarata dalla pagina passa da
   `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`); la sua
-  immagine del prodotto la separa dal PDF `_separa_prodotto`, all'inizio di
-  `do_POST`, e va col caso (`blocchi_caso`).
-- `server.py`, `build_carton`, `build_vassoio`, `build_plancia`,
-  `build_scatola_plancia`, `build_coppa`, `build_prisma`, `build_pouch`, `build_ballotin`, `build_punta`,
-  `build_tubo`, `build_incarto`,
-  `build_flowpack`: la **costruzione** di ogni famiglia, dal PDF al GLB.
+  immagine del prodotto la separa dal PDF `_separa_prodotto` (in
+  `server.py`), all'inizio di `do_POST`, e va col caso (`blocchi_caso`).
+- `pack3d/famiglie/`: `build_carton` (`astuccio`), `build_vassoio`,
+  `build_plancia`, `build_scatola_plancia` (`vassoio`), `build_coppa`,
+  `build_prisma` (`coppa`), `build_pouch`, `build_ballotin`, `build_punta`,
+  `build_tubo`, `build_incarto`, `build_riempimento` e `build_flowpack`: la
+  **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/lavoratori.py`: le analisi e le costruzioni in processi a parte,
   uno per lavoro, con la fila al posto del «Server occupato».
   `server._a_un_lavoratore` passa la richiesta, `server.esegui_lavoro` la
@@ -88,22 +98,19 @@ sono in GADGET.md.
 |---|---|
 | astuccio | `dieline.py` (fustella: `extract`, `solve_carton`), `folding.py` (piegatura, `build_faces`), `incisioni.py` (tagli dentro le facce), `apertura.py` (strappo aperto), `rilievo.py` (embossing), `lamina.py` (foil: metallo sulla scatola a prisma) |
 | scatola a punta | `punta.py` |
-| tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `server.build_tubo`; `gelato.py` (il ghiacciolo che esce dalla bocca, a scelta) |
-| scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `server.build_prisma` |
+| tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `famiglie.tubo.build_tubo`; `gelato.py` (il ghiacciolo che esce dalla bocca, a scelta) |
+| scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `famiglie.coppa.build_prisma` |
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
-| incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `server.build_incarto` |
+| incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `famiglie.incarto.build_incarto` |
 | vassoio espositore | `vassoio.py` |
 | vassoio sagomato (pareti oblique o con incavi, il fondo fra quattro cordonature; si prova per ultimo) | `vassoio.riconosci_sagomato` |
 | display con plancia | `plancia.py` |
-<<<<<<< HEAD
-| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py`, montato in `server.build_scatola_plancia` |
-=======
+| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py`, montato in `famiglie.vassoio.build_scatola_plancia` |
 | display con la plancia dentro il coperchio | `sportello.py`; costruito da `build_plancia` con `forma=sportello` |
->>>>>>> origin/coda-settimana
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |
 | pouch | `pouch.py` |
-| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il CU schiacciato a UV ferme, il pezzo uguale al suo modello e dentro il vano, GLB composto); in `server.py` `analisi_riempimento` e `build_riempimento` |
+| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il CU schiacciato a UV ferme, il pezzo uguale al suo modello e dentro il vano, GLB composto); in `pack3d/famiglie/riempimento.py` `analisi_riempimento` e `build_riempimento` |
 
 ## La grafica e le misure
 

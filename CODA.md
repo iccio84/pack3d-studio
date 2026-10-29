@@ -54,7 +54,7 @@ per la scatola a punta o `pack3d/ballotin.py`. Il modulo:
 - si prova **dopo** i moduli che ci sono, quando hanno rifiutato la
   fustella: i casi del parco non cambiano strada;
 - se il pack e' in piu' pezzi (un PDF per pezzo), si monta come la coppa e
-  il cono (`server._pezzi_tondi`): ogni PDF dice da se' che pezzo e', e
+  il cono (`famiglie.coppa._pezzi_tondi`): ogni PDF dice da se' che pezzo e', e
   l'ordine in cui arrivano non conta;
 - ha il suo file in `regole/`, la sua riga nell'indice di REGOLE.md e in
   MAPPA.md.

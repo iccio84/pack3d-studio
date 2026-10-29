@@ -279,7 +279,7 @@ Dal 28 ottobre 2026 ogni lavoro - /api/analyze, /api/analyze-ai,
 - **Restano da un lavoro all'altro solo le casse con la chiave sul
   contenuto del file e un valore che non dipende da chi l'ha chiesto
   prima**: i tratti della pagina (`dieline.tratti`), le analisi del
-  flowpack (`server._ANALISI`), i versi gia' decisi. Le copie girate e a
+  flowpack (`famiglie.flowpack._ANALISI`), i versi gia' decisi. Le copie girate e a
   pagina unica la costruzione le rifa', ma pypdf le riscrive identiche al
   byte, e le analisi in cassa si ritrovano.
 - **Un lavoro alla volta per processo.** In un lavoratore lo e' gia'; nel
@@ -302,7 +302,7 @@ provava prima di chi bisognava leggerla tutta, e una forma nuova ci si
 infilava a meta'. La scelta della costruzione, in /api/build, era un'altra
 catena di `elif`.
 
-Dal 29 ottobre 2026 sono due tabelle in `server.py`:
+Dal 29 ottobre 2026 sono due tabelle, oggi in `pack3d/famiglie/registro.py`:
 
 - **`RICONOSCIMENTO`**: una riga per prova, nell'ordine in cui si fanno,
   con le tipologie dichiarate per cui vale e la sua `_prova_<forma>`. La
@@ -330,6 +330,32 @@ fermarsi, arrivava fino alla prova del flowpack. Ora e' un rifiuto come gli
 altri: si provano punta, coppa e tubo, e se nessuno e' suo si ferma
 (REGOLE.md, *La dichiarazione vale anche quando dice di no*). Dei 44 PDF del
 parco, letti dichiarati cartotecnico, nessuno passava da li'.
+
+### Le famiglie fuori da server.py
+
+`server.py` era arrivato a cinquemila righe: il servizio - le richieste, i
+lavoratori, il controllo dell'AI, il verdetto, la coda - e insieme la
+lettura e la costruzione di ogni famiglia, `build_flowpack` da sola
+cinquecento. Per correggere un flowpack si apriva il file del server, e
+ogni correzione di una famiglia toccava il file di tutte.
+
+Dal 29 ottobre 2026 le famiglie stanno in `pack3d/famiglie/`, un modulo per
+famiglia - `flowpack`, `astuccio`, `vassoio` (con la plancia e la scatola),
+`coppa` (col cono e il prisma), `pouch`, `ballotin`, `punta`, `tubo`,
+`incarto`, `riempimento` - piu' `comune` e il `registro` (`RICONOSCIMENTO`
+e `COSTRUZIONI`). `server.py` e' il servizio, millecinquecento righe, e
+importa dalle famiglie solo quello che usa.
+
+- **Spostate parola per parola.** Uno script ha preso ogni funzione e ogni
+  costante coi commenti che la precedono, e un controllo sull'albero del
+  codice dice che sono uguali a prima tranne una: `analisi_riempimento`
+  importa `analyze_pdf` dentro la funzione, perche' il registro usa il
+  riempimento e il riempimento il registro. Il parco intero, prima e dopo:
+  43 modelli su 43 identici al byte, letture uguali.
+- **Una famiglia nuova va nel suo modulo**, con la riga in `RICONOSCIMENTO`
+  e la voce in `COSTRUZIONI` (FORME.md), non in `server.py`.
+- **`comune` non importa nessuna famiglia, e le famiglie non importano
+  `server`**: il servizio usa le famiglie, mai il contrario.
 
 ### Le prove veloci
 

@@ -41,7 +41,7 @@ regole. Texture, template, atlante e controllo dell'AI vengono da se'.
 Il modulo nuovo si prova **dopo** quelli che ci sono, quando l'hanno
 rifiutata: cosi' i casi del parco non cambiano strada e non pagano la prova.
 
-- **Un pezzo solo** (un PDF): una riga in `RICONOSCIMENTO` (`server.py`),
+- **Un pezzo solo** (un PDF): una riga in `RICONOSCIMENTO` (`pack3d/famiglie/registro.py`),
   dopo `astuccio` e accanto a `scatola a punta`, per `["carton"]`, con la
   sua `_prova_<forma>`: torna None subito se `lettura.errore_astuccio` e'
   None - si prova solo se il solutore astuccio ha rifiutato il foglio - e
@@ -51,7 +51,7 @@ rifiutata: cosi' i casi del parco non cambiano strada e non pagano la prova.
   su un astuccio esce subito (il ballotin cerca le lenti agli spigoli, il
   cono il settore pieno, in qualche decimo di secondo).
 - **Piu' pezzi** (un PDF per pezzo, dichiarato cartotecnico in N pezzi): la
-  richiesta passa da `server.in_piu_pezzi` ad `analisi_coppa` e a
+  richiesta passa da `famiglie.coppa.in_piu_pezzi` ad `analisi_coppa` e a
   `_pezzi_tondi`, che oggi riconosce lo sleeve e il tappo della coppa, il
   cono e il lid, e per qualunque altro foglio si ferma con «per ora so
   montare...». Il riconoscimento dei pezzi nuovi va li', **dopo**
@@ -131,11 +131,11 @@ come `parti=[(nome, primo, ultimo)]` in `write_glb_mesh`, e alla fine
 Se un foglio e' stato girato per leggerlo, le sue UV tornano nel verso del
 PDF con `lo_steso.INDIETRO`, come in `build_coppa`.
 
-**I due fili da collegare in `server.py`**:
+**I due fili da collegare nel registro (`pack3d/famiglie/registro.py`)**:
 
 - la lettura (`_prova_<forma>` in `RICONOSCIMENTO`, o `analisi_coppa` per
   i pezzi) restituisce `dict(kind="<forma>", title="...", meta=dichiara(p))`;
-- la costruzione: una voce in `COSTRUZIONI` (`server.py`), accanto a
+- la costruzione: una voce in `COSTRUZIONI`, accanto a
   `"punta": _costruisci_punta`, e la sua `_costruisci_<forma>(r, info)` che
   chiama `build_<forma>` con lo spessore della carta (`carta=r.carta`). `r`
   ha il PDF e le scelte della pagina.
