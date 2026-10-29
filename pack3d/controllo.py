@@ -102,6 +102,26 @@ Non sono difetti, perche' il servizio li toglie o li lascia di proposito:
 - le parti non stampate del foglio (alette di colla, linguette) che nel pack
   montato stanno dentro.
 
+Se il riassunto dice che e' un RIEMPIMENTO, i due PDF sono pezzi diversi: il
+contenitore (un vassoio espositore, un display, un astuccio espositore) e il
+pack che ci va dentro, e il riassunto dice quale e' quale. Il modello e' il
+contenitore montato con dentro tante copie dello stesso pack: quante e come
+stanno lo dice la riga "riempimento: ..." degli avvisi. Allora:
+- le copie del pack non sono pezzi in piu': sono il riempimento;
+- il contenitore e il pack si giudicano ognuno col suo PDF, con le regole di
+  sopra; la grafica del pack guardala su quelli che si vedono bene, non su
+  quelli coperti dagli altri;
+- "sbagliato" anche quando i pack escono dalle pareti o dal fondo del
+  contenitore, si compenetrano fra loro o col contenitore, galleggiano sopra
+  il fondo, o la grafica del loro fronte non si vede: nei pack in piedi
+  guarda verso chi sta davanti al contenitore, col marchio dritto, in quelli
+  sdraiati verso l'alto;
+- "dubbio" quando il numero o la disposizione dei pack non sembrano quelli
+  della riga "riempimento: ...";
+- non sono difetti i pack che sporgono sopra il bordo perche' sono piu' alti
+  delle pareti, ne' un flowpack un po' accorciato o schiacciato, o con le
+  pinne piegate, per entrare nel vano: gli avvisi lo dicono.
+
 Scrivi in italiano semplice, per chi lavora nel packaging e non per un
 programmatore:
 - pack_nel_pdf: che pack c'e' nel PDF (tipo, pezzi, forma), in una frase;

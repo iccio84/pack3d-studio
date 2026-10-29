@@ -368,6 +368,20 @@ def nota_incisioni(meta):
             "grafica sotto e' intera." % " e ".join(quali))
 
 
+def nota_riempimento(info, nomi):
+    """La riga "da sapere" per il controllo di un riempimento: e' un
+    RIEMPIMENTO, e quale PDF e' il contenitore e quale il pack."""
+    def nome(k):
+        return nomi[k] if isinstance(k, int) and 0 <= k < len(nomi) else None
+    contenitore, pack = nome(info.get("vassoio")), nome(info.get("flowpack"))
+    cosa = "un astuccio" if info.get("cu") == "carton" else "un flowpack"
+    if contenitore and pack:
+        return ("e' un RIEMPIMENTO: il PDF \"%s\" e' il contenitore, il PDF \"%s\" "
+                "e' il pack, %s, di cui il contenitore e' pieno." % (contenitore, pack, cosa))
+    return "e' un RIEMPIMENTO: un contenitore pieno di %s." % (
+        "astucci" if info.get("cu") == "carton" else "flowpack")
+
+
 def nota_gelato(meta):
     """La riga "da sapere" per il controllo, se il tubo ha il gelato."""
     riga = next((str(m) for m in meta or () if str(m).startswith(GELATO)), None)
@@ -4526,14 +4540,7 @@ class Handler(BaseHTTPRequestHandler):
                         # fuori, a posto restituito: e' solo attesa di rete, e
                         # chi viene dopo intanto costruisce.
                         quadro = None
-                        if info["kind"] == "riempimento":
-                            # il controllo confronta il modello con l'artwork
-                            # di un pack solo: sul vassoio pieno ancora no
-                            righe_ai.append("controllo AI: sui riempimenti non "
-                                            "c'e' ancora, guarda tu il vassoio "
-                                            "o il display pieno")
-                            meta.append(righe_ai[-1])
-                        elif controllo.attivo():
+                        if controllo.attivo():
                             try:
                                 quadro = controllo.prepara(pdfs, out)
                             except Exception as e:
@@ -4559,6 +4566,10 @@ class Handler(BaseHTTPRequestHandler):
                                         if k in opts})
                     nota = (nota_apertura(meta) or nota_incisioni(meta)
                             or nota_materiali(meta) or nota_gelato(meta))
+                    if info["kind"] == "riempimento":
+                        # il controllo sa che e' un riempimento, e quale PDF
+                        # e' il contenitore e quale il pack
+                        nota = " ".join(n for n in (nota_riempimento(info, nomi), nota) if n)
                     if nota:
                         ctx["nota"] = nota
                     if quadro is not None:
@@ -4624,8 +4635,8 @@ class Handler(BaseHTTPRequestHandler):
                                         "Space")
                         meta.append(righe_ai[-1])
                     if quadro is None and verifica.difetti(meta):
-                        # senza controllo AI - i riempimenti, o la chiave che
-                        # manca - il verdetto lo danno le verifiche: il caso
+                        # senza controllo AI - la chiave che manca, o le viste
+                        # che non riescono - il verdetto lo danno le verifiche: il caso
                         # va in coda senza le viste del controllo, la routine
                         # lo ricostruisce comunque
                         verdetto = con_difetti(None, meta)
@@ -4863,8 +4874,8 @@ def con_difetti(verdetto, meta):
     """Il verdetto con i difetti che le verifiche hanno misurato sul modello
     (`verifica.difetti`). Un difetto vale come un dubbio del controllo AI: il
     modello arriva lo stesso, con l'avviso, e il caso va in coda. Senza
-    controllo AI - i riempimenti, o la chiave che manca - il verdetto lo danno
-    le verifiche da sole. None se non ce n'e' nessuno e non c'era verdetto."""
+    controllo AI - la chiave che manca, o le viste che non riescono - il
+    verdetto lo danno le verifiche da sole. None se non ce n'e' nessuno e non c'era verdetto."""
     trovati = verifica.difetti(meta)
     if not trovati:
         return verdetto

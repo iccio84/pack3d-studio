@@ -93,14 +93,14 @@ grafica sulle pinne: il film non si allunga*.
 
 Gridare negli avvisi non bastava: in due giorni il vassoio da 36 (caso
 838cbae0ac) e il display da 15 (caso c5b98dfbee) sono stati consegnati
-sbagliati sei volte, e ogni volta l'ha visto chi li aveva caricati. Sui
-riempimenti il controllo dell'AI non c'e'. Allora quattro verifiche misurano
+sbagliati sei volte, e ogni volta l'ha visto chi li aveva caricati: sui
+riempimenti allora il controllo dell'AI non c'era. Quattro verifiche misurano
 il modello finito e, quando non torna, scrivono una riga che comincia con
 `DIFETTO:` (`verifica.DIFETTO`). Il server la raccoglie (`verifica.difetti`,
 `server.con_difetti`) e vale come un dubbio del controllo dell'AI: il modello
 arriva lo stesso, con l'avviso «Le verifiche hanno trovato un difetto», e il
 caso va in coda. Col controllo dell'AI che dice ok il verdetto diventa
-dubbio; senza controllo - i riempimenti, o la chiave che manca - il verdetto
+dubbio; senza controllo - la chiave che manca, o le viste che non riescono - il verdetto
 lo danno le verifiche, e il caso va in coda senza le viste del controllo:
 la routine lo ricostruisce comunque.
 
@@ -315,6 +315,23 @@ apposta, e allora tace.
 
 Un "sbagliato" puo' essere sbagliato lui: per questo il modello resta a un
 clic, e non si butta.
+
+**Anche i riempimenti.** Fino al 29 ottobre 2026 il controllo li saltava:
+le sue istruzioni chiamano difetto "un pezzo che il PDF non ha", e un
+display con quaranta pack dentro sarebbe uscito sbagliato sempre. Eppure
+sono i casi piu' complessi del parco, e i piu' consegnati sbagliati (il
+vassoio da 36, il display da 15). Adesso il controllo li guarda come gli
+altri, con un blocco di istruzioni loro (`controllo.ISTRUZIONI`, *Se il
+riassunto dice che e' un RIEMPIMENTO*) e una riga "da sapere" che dice quale
+PDF e' il contenitore e quale il pack (`server.nota_riempimento`). Le copie
+del pack sono il riempimento, non pezzi in piu'; contenitore e pack si
+giudicano ognuno col suo PDF; e sono sbagliati i pack che escono dalle
+pareti o dal fondo, si compenetrano, galleggiano, o non mostrano il fronte -
+in piedi verso il davanti col marchio dritto, sdraiati in su, come li mette
+`riempimento`. Il numero e la disposizione si confrontano con la riga
+"riempimento: ..." degli avvisi. Le quattro viste di un riempimento costano
+di piu', una decina di secondi con quaranta pack invece di uno o due, e il
+modello arriva quel tanto dopo.
 
 **Il fondo non lo vede.** Nessuna delle quattro viste mostra la faccia di
 sotto, e un difetto che sta solo li' passa. Sul T5 a strappo il box
