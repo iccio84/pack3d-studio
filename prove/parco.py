@@ -1737,6 +1737,9 @@ def stesi(args):
         # per texture
         puliti = []
         for f in caso["file"]:
+            # l'immagine del prodotto di un incarto non e' un foglio
+            if not f.lower().endswith(".pdf"):
+                continue
             una, _n = artwork.pagina_unica(os.path.join(args.casi, "parco", "pdf", f))
             puliti.append(artwork.senza_coperture(strati.senza_tecnici(una)[0])[0])
         rese = {}

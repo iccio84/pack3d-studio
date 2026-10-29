@@ -17,6 +17,12 @@ risolve male - un tubo gonfio con le pinne seghettate al posto delle testate
 non scatta mai, in qualche decimo di secondo). La pagina non chiede denti,
 rigonfiamento e pinne: costruisce subito.
 
+Dal 29 ottobre 2026 la barretta incartata T1 e' nel parco
+(`barretta_incartata_t1`), col suo PDF e l'immagine del prodotto, chiusa a
+pieghe: gli incarti erano l'unica famiglia senza un caso, e nessuna
+modifica poteva romperli senza che si vedesse. `prove/parco.py stesi` salta
+l'immagine del prodotto, che non e' un foglio.
+
 - Il **DT** e' un rettangolo, il passo lungo la barretta (141 mm) e il nastro
   attorno (70). Le righe intere, da un taglio all'altro, sono gli spigoli
   della barretta: cinque fasce, 18,75 | 10,5 | 17,5 | 10,5 | 12,75. Una riga a
