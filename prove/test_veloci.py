@@ -350,6 +350,47 @@ class CassaDelleRese(unittest.TestCase):
         self.assertEqual(rimaste, [chiavi[0], chiavi[2]])
 
 
+class ControlloSuiRiempimenti(unittest.TestCase):
+    """Il controllo dell'AI guarda anche i riempimenti: sa che lo sono, e
+    quale PDF e' il contenitore e quale il pack. Claude e' finto."""
+
+    def test_la_nota_dice_chi_e_chi(self):
+        import server
+        nota = server.nota_riempimento({"vassoio": 0, "flowpack": 1},
+                                       ["display.pdf", "barretta.pdf"])
+        self.assertIn('il PDF "display.pdf" e\' il contenitore', nota)
+        self.assertIn('il PDF "barretta.pdf" e\' il pack, un flowpack', nota)
+        nota = server.nota_riempimento({"vassoio": 1, "flowpack": 0, "cu": "carton"},
+                                       ["astuccio.pdf"])
+        self.assertEqual(nota, "e' un RIEMPIMENTO: un contenitore pieno di astucci.")
+
+    def test_claude_lo_sa(self):
+        from pack3d import controllo
+        chiesto = {}
+
+        class Risposta:
+            stop_reason = "end_turn"
+            content = [mock.Mock(type="text", text='{"esito": "ok", "pack_nel_pdf": "p", '
+                                 '"modello": "m", "motivo": "x", "difetti": [], '
+                                 '"residui_tecnici": false}')]
+
+        class Messaggi:
+            def create(self, **k):
+                chiesto.update(k)
+                return Risposta()
+
+        cliente = mock.Mock(messages=Messaggi())
+        quadro = {"pagine": [b"a", b"b"], "viste": b"v", "ingombro": (100, 50, 200),
+                  "fogli": [(300, 200), (150, 120)]}
+        v = controllo.giudica(quadro, {"dichiarato": "riempimento", "nomi": ["d.pdf", "p.pdf"],
+                                       "nota": "e' un RIEMPIMENTO: il PDF \"d.pdf\" ..."},
+                              modello="prova", client=cliente)
+        self.assertEqual(v["esito"], "ok")
+        self.assertIn("Se il riassunto dice che e' un RIEMPIMENTO", chiesto["system"])
+        testo = chiesto["messages"][0]["content"][-1]["text"]
+        self.assertIn("Da sapere: e' un RIEMPIMENTO", testo)
+
+
 class FileDelCasoNelRegistro(unittest.TestCase):
     """`coda._metti_file` riprova, la issue dice i file che non sono arrivati,
     e il caso rimandato li completa. GitHub e' finto: `_richiesta` risponde
