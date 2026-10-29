@@ -1,7 +1,7 @@
 """
 Il display con plancia: una scatola chiusa che, aperta, diventa espositore.
 
-Il Tronky T48 - Ferrero CT4977, "Display con plancia per T48" - arriva come
+Il display T1x48 - cliente CT4977, "Display con plancia per T48" - arriva come
 una scatola CHIUSA. Si apre staccando dei pezzi, e diventa un espositore da
 banco con un cartello in piedi dietro al prodotto: la **plancia**, che e' uno
 dei pezzi della scatola. Dichiarato "vassoio" o "display" si costruiva come
@@ -13,7 +13,7 @@ Sta accanto al vassoio, e ne riusa tutto quello che ha in comune: il fondo, le
 quattro pareti e le alette agli angoli sono quelle di `vassoio`, stese dalla
 stessa `vassoio.Maglia`. In piu' c'e' un **coperchio** grande quanto il fondo,
 attaccato al bordo di un fianco, e le falde che ci si incollano sotto. Sul DT
-del Tronky, in mm:
+del wafer T1, in mm:
 
     colonne   15 | 116 | 134 | 117 | 133      falda, fianco, fondo, fianco,
     fasce     25 | 116 | 204 | 116 | 25       coperchio; falda, fronte, fondo,
@@ -58,7 +58,7 @@ display" da tre file di trenta pezzi, e' della stessa famiglia, montato in un
 altro modo. E' un vassoio con il fronte basso, e il coperchio e' incernierato sul
 bordo alto del RETRO, non su un fianco: sul foglio continua il retro, oltre
 la sua riga esterna. Lo attraversa UNA riga sola, parallela alla cerniera -
-un mezzo taglio, non la doppia cordonatura del Tronky - e oltre la riga c'e'
+un mezzo taglio, non la doppia cordonatura del wafer T1 - e oltre la riga c'e'
 la parte con la grafica grande, con una linguetta che entra nella parte
 attaccata al retro e ne esce col suo contorno perforato. In mm:
 
@@ -71,7 +71,7 @@ diventa il prolungamento in alto, con la stampa verso dietro; l'altra si
 ripiega di 180 gradi in avanti sulla riga e le scende davanti, con la stampa
 verso chi guarda. La linguetta, che e' sua, spunta sopra la riga come
 cresta, e il suo piede - 14 mm piu' lungo - entra nella scatola davanti al
-retro. E' la plancia del Tronky con il dorso largo uno spessore e la cerniera
+retro. E' la plancia del wafer T1 con il dorso largo uno spessore e la cerniera
 sul retro: si riconosce da li', ed e' l'unica lettura possibile, perche' il
 coperchio sta su UNA sola delle due testate, quella alta. Il fronte e' la
 testata bassa, e non ha finestra da strappare.
@@ -94,7 +94,7 @@ DI_FILA = 1.2
 # Le righe corte non fanno griglia: frecce, tacche, punti di tenuta.
 RIGA_MINIMA = 15.0 * MM
 # Quanto possono ballare due righe della griglia fra loro: il fondo e i
-# fianchi del Tronky finiscono a 1,5 mm l'uno dagli altri, per lo spessore.
+# fianchi del wafer T1 finiscono a 1,5 mm l'uno dagli altri, per lo spessore.
 GRIGLIA = 1.5 * MM
 # Un fondo piu' piccolo di cosi' non regge un espositore.
 FONDO_MINIMO = 40.0 * MM
@@ -129,11 +129,11 @@ class Plancia:
 
     `bordi` e' il bordo esterno di ogni parete - cioe' la riga dove finisce la
     parete e comincia la falda, o il coperchio - e `fianchi` le due righe dove
-    finiscono i fianchi, che non sono quelle del fondo: sul Tronky stanno 1,5
+    finiscono i fianchi, che non sono quelle del fondo: sul wafer T1 stanno 1,5
     mm piu' dentro, per lo spessore. `pieghe` sono le due righe della doppia
     cordonatura del coperchio, dall'alto.
 
-    `cerniera` dice dove sta il coperchio: "fianco" (il Tronky) o "retro" (il
+    `cerniera` dice dove sta il coperchio: "fianco" (il wafer T1) o "retro" (il
     display T3x30). Sul retro `lato_coperchio` e' la testata del retro, le
     due `pieghe` sono la stessa riga - il dorso e' largo uno spessore - e
     `finestra` e' None.
@@ -189,7 +189,7 @@ def _corse(pezzi):
     """I tratti collineari e di fila uniti in corse: `[(c, a, b)]` in punti.
 
     Una cordonatura perforata il file la disegna a pezzi: la cerniera del
-    coperchio del Tronky e' 124 tratti da uno, due e tre millimetri, uno
+    coperchio del wafer T1 e' 124 tratti da uno, due e tre millimetri, uno
     dietro l'altro. Per la griglia e' una riga sola, e cosi' va letta.
     """
     gruppi = []
@@ -244,7 +244,7 @@ def _pieghe(H, x0, y0, x1, y1):
     """Le due righe della doppia cordonatura del coperchio, o None.
 
     Una riga di piega attraversa il coperchio da un bordo all'altro, magari
-    interrotta in mezzo - sul Tronky l'onda del taglio la spezza - quindi si
+    interrotta in mezzo - sul wafer T1 l'onda del taglio la spezza - quindi si
     cerca una riga che tocchi TUTTI E DUE i bordi, alla stessa quota.
     """
     livelli = []
@@ -389,7 +389,7 @@ def _piega_sola(H, x0, y0, x1, y1):
     interrotta in mezzo - qui la interrompe la linguetta - ma ai lati si
     ferma prima, sull'intaglio a V della piega: si accetta fino a
     `PIEGA_BORDO`. Ce ne deve essere UNA: due sono la doppia cordonatura del
-    Tronky, e il suo coperchio sta sul fianco.
+    wafer T1, e il suo coperchio sta sul fianco.
     """
     livelli = []
     for r in H:
@@ -481,7 +481,7 @@ def di_traverso(d):
 
     Serve all'analisi senza dichiarazione, che il foglio non lo gira - costa
     un'estrazione per verso, e la pagherebbe ogni astuccio e ogni flowpack -
-    e cosi' il Tronky messo di traverso sulla tavola usciva di nuovo
+    e cosi' il wafer T1 messo di traverso sulla tavola usciva di nuovo
     flowpack. Scambiare righe e colonne della griglia gia' letta invece non
     costa niente, e dice se girato di un quarto il foglio e' un display: lo
     scambio e' uno specchio e non un giro, ma il riconoscimento non guarda la
@@ -605,38 +605,32 @@ def tratti(pdf, riquadro, page_no=0):
     sceglie `dieline.extract`, e si tiene solo quello che sta nel riquadro
     della fustella: fuori ci sono quote, miniature e cartiglio.
     """
-    import pdfplumber
     from . import dieline as dl
 
     x0, y0, x1, y1 = riquadro
     tol = 3.0
     dentro = lambda x, y: x0 - tol <= x <= x1 + tol and y0 - tol <= y <= y1 + tol
     out = []
-    with pdfplumber.open(pdf) as doc:
-        page = doc.pages[page_no]
-        tutti = dl._segments(page)
-        penne = dl._technical_pens(tutti, page.width, page.height)
-        segs = [s for s in tutti if s[4] in penne] or tutti
-        segs = dl._largest_cluster(segs)
-        fustella = (dl.penne_di_fustella(segs, page.width, page.height)
-                    or {s[4] for s in segs})
-        for kind in ("line", "rect", "curve"):
-            for o in page.objects.get(kind, []):
-                if not o.get("stroke"):
-                    continue
-                st = (round(o.get("linewidth") or 0, 2), str(o.get("stroking_color")))
-                if st not in fustella:
-                    continue
-                if kind == "rect":
-                    a, b, c, e = o["x0"], o["top"], o["x1"], o["bottom"]
-                    linee = [[(a, b), (c, b), (c, e), (a, e), (a, b)]]
-                elif o.get("path"):
-                    linee = _spiana(o["path"])
-                else:
-                    linee = [[tuple(q) for q in (o.get("pts") or [])]]
-                for linea in linee:
-                    if len(linea) > 1 and all(dentro(x, y) for x, y in linea):
-                        out.append(linea)
+    t = dl.tratti(pdf, page_no)
+    tutti = list(t.segmenti)
+    penne = dl._technical_pens(tutti, t.larghezza, t.altezza)
+    segs = [s for s in tutti if s[4] in penne] or tutti
+    segs = dl._largest_cluster(segs)
+    fustella = (dl.penne_di_fustella(segs, t.larghezza, t.altezza)
+                or {s[4] for s in segs})
+    for kind, st, o in t.oggetti:
+        if st not in fustella:
+            continue
+        if kind == "rect":
+            a, b, c, e = o["x0"], o["top"], o["x1"], o["bottom"]
+            linee = [[(a, b), (c, b), (c, e), (a, e), (a, b)]]
+        elif o.get("path"):
+            linee = _spiana(o["path"])
+        else:
+            linee = [[tuple(q) for q in (o.get("pts") or [])]]
+        for linea in linee:
+            if len(linea) > 1 and all(dentro(x, y) for x, y in linea):
+                out.append(linea)
     return out
 
 
@@ -668,7 +662,7 @@ def _al_piu_vicino(tratto, lab):
     `distance_transform_edt`, a pari distanza, sceglie sempre dalla stessa
     parte della griglia. E la riga di mezzo di un tratto largo tre pixel e' a
     pari distanza dai due pezzi che divide: col foglio capovolto passava al
-    pezzo di fronte, e sul Tronky la cresta della plancia saliva di un pixel.
+    pezzo di fronte, e sul wafer T1 la cresta della plancia saliva di un pixel.
     Si guarda anche la griglia capovolta: dove le due scelte non coincidono e'
     un pari merito, e vince la zona piu' grande, che e' la stessa comunque stia
     il foglio.
@@ -725,7 +719,7 @@ def pezzi(pdf, p, d, px_mm=4.0, page_no=0):
 
         Una zona che sta per lo piu' FUORI dal riquadro e' di un pezzo accanto:
         il tratto che li divide l'ha dato a lei, e il riquadro, che cade sulla
-        riga, se ne prendeva un filo. Sul Tronky l'aletta nord-est si portava
+        riga, se ne prendeva un filo. Sul wafer T1 l'aletta nord-est si portava
         dietro il bordo destro di tutto il fronte, un pixel per 116 mm.
         """
         m = np.zeros((H, W), bool)
@@ -868,7 +862,7 @@ def mesh(p, pz, px_mm, spessore=SPESSORE, alt_texture=None, parti=None):
       - la parte DIETRO sta in piedi sul retro, nel suo piano, con la stampa
         verso fuori: altezza = retro + t;
       - il DORSO e' orizzontale in cima: la stessa altezza, e avanza verso il
-        fronte di quanto e' largo, 8,1 mm sul Tronky;
+        fronte di quanto e' largo, 8,1 mm sul wafer T1;
       - la parte DAVANTI scende dal dorso con la stampa verso chi guarda. La
         cresta - l'onda, che sta oltre la piega - viene fuori sopra la cima,
         e il piede, piu' lungo della parte dietro, finisce dentro la scatola.
@@ -985,7 +979,7 @@ def _plancia_sul_retro(maglia, p, pz, telaio, spessore):
     verso dietro: dalla cerniera, all'altezza del retro, alla riga. La parte
     davanti scende dalla riga con la stampa verso chi guarda, uno spessore
     davanti alla parte dietro - la piega a 180 gradi di un cartone sottile,
-    il dorso del Tronky largo uno spessore - e la linguetta, che sul foglio
+    il dorso del wafer T1 largo uno spessore - e la linguetta, che sul foglio
     sta oltre la riga, spunta sopra come cresta. In larghezza il coperchio
     sta dove sta sul foglio rispetto al fondo: continua il retro.
     """

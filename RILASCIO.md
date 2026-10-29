@@ -20,7 +20,11 @@ mano. Si fa **prima** di guardare la coda.
    con `da-rilasciare`, non c'e' niente: torna al giro.
 2. **Fissa il ramo.** Annota lo SHA di `origin/coda-settimana`: provi e
    pubblichi quello, non quello che un giro di un caso unisce nel frattempo.
-3. **Parco prima e dopo**, per intero:
+3. **Parco prima e dopo**, per intero. Prima guarda l'ultimo **parco della
+   notte** (Actions di `pack3d-casi`, *Parco*): se e' rosso, la correzione
+   che ha rotto il caso e' fra quelle unite il giorno prima del rosso, e la
+   trovi prima di costruire. Il parco qui sotto si fa comunque, sullo SHA del
+   punto 2:
 
        git worktree add /tmp/prima origin/main
        git worktree add /tmp/dopo <SHA>
@@ -36,6 +40,11 @@ mano. Si fa **prima** di guardare la coda.
      `codice`) e' giusto;
    - ogni altro caso del parco e' **identico al byte**, oppure cambia e il
      cambio e' un **miglioramento evidente**, spiegato caso per caso nella PR;
+   - `confronta` non trova **misure approvate cambiate** (in fondo, «MISURE
+     APPROVATE CAMBIATE»), oppure ognuna e' voluta e spiegata nella PR con i
+     suoi numeri: una misura che cambia senza una ragione e' un caso rotto,
+     anche se a occhio le viste sembrano uguali (il T1 del vassoio da 36 il
+     26 ottobre: 40,1 -> 37,1 mm);
    - nessun caso del parco che prima si costruiva adesso fallisce;
    - `stesi` non trova texture girate: ognuna e' lo steso del suo PDF;
    - `python3 -m py_compile` passa sui file Python cambiati.
@@ -70,9 +79,21 @@ mano. Si fa **prima** di guardare la coda.
    - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
      stato (uscita 3): scrivilo sulla issue e lasciala `da-rilasciare`; la
      riprova il rilascio dopo.
+   - **I lavoratori**: `curl -s https://iccio-maurizio.hf.space/api/lavori`
+     dice quanti sono e la macchina che hanno visto (`macchina`). Devono
+     essere tanti quante le vCPU dello Space; se no vedi DEPLOY.md, *Piu'
+     vCPU: cosa comprano*, e scrivilo nel riassunto.
+   - **La risorsa della colata**: `curl -s https://iccio-maurizio.hf.space/api/ping`
+     deve dire `"colata": true`. Se dice `false` manca il secret `CASI_TOKEN`
+     (DEPLOY.md, *La risorsa della colata*): scrivilo nel riassunto.
 
    Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
-   casi della settimana e dei casi cambiati, commit e push.
+   casi della settimana e dei casi cambiati, e le loro misure approvate:
+
+       python3 prove/parco.py misure ../pack3d-casi /tmp/parco_dopo --solo <casi> --approva
+
+   (solo i casi la cui misura cambiata e' voluta: le altre non si approvano),
+   commit e push.
 7. **Riallinea il ramo**: porta `main` dentro `coda-settimana` con una PR,
    come una correzione (CODA.md, *Quando si unisce nel ramo della
    settimana*):

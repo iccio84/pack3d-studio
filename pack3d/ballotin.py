@@ -6,7 +6,7 @@ chiudono la cima.
 Una lente sono due cordonature curve che partono e arrivano negli stessi due
 punti: l'angolo del fondo e l'angolo della cima. La corda fra i due capi e' lo
 spigolo del tronco, ma vivo solo ai capi: piegata, la lente curva e rientra
-nel pack, e lo spigolo e' una gola fra le due facce. Sul ballotin Raffaello
+nel pack, e lo spigolo e' una gola fra le due facce. Sul ballotin
 Passion Fruit (fondo 90, cima 115, fianchi da 100) le lenti sono larghe 15 mm
 a meta' altezza e magenta piene: sul pack sono le quattro gole degli spigoli.
 
@@ -23,7 +23,7 @@ La fustella, nel verso in cui la si legge:
 - i due COPERCHI L1 e L2 chiudono la cima stesi, e ognuno porta la sua
   LINGUETTA (T1, T2). Quello la cui linguetta e' tratteggiata nel disegno
   tecnico sta SOTTO: il tratteggio vuol dire zona coperta. L'altro sta sopra,
-  con la linguetta stesa sul primo - sul Raffaello e' il medaglione col
+  con la linguetta stesa sul primo - sul ballotin e' il medaglione col
   marchio, che si legge dal fronte;
 - in cima ai fianchi ci sono le alette che si chiudono per prime sotto i
   coperchi: si vedono nelle fessure ai lati, perche' i coperchi si
@@ -158,7 +158,7 @@ def tratti_fustella(pdf, page_no=0, linee=None):
 
     La penna principale la sceglie `strati.penne`, come per ogni altro DT; da
     lei si prende il COLORE, e tutti i tratti di quel colore e di spessore
-    vicino sono fustella. Sul Raffaello le finestre sono tagliate con penne da
+    vicino sono fustella. Sul ballotin le finestre sono tagliate con penne da
     0,71 e 0,85 pt, cinque tratti in tutto, e nessuna soglia sul numero di
     segmenti le terrebbe: il colore si'.
     """
@@ -350,7 +350,7 @@ def grafo(tratti, tol=NODO):
 
 def ripara(nodi, archi, raggio=BUCO):
     """Un capo libero a meno di `raggio` mm da un altro nodo si collega a
-    quello con un tratto dritto: sul Raffaello la cupola di L2 si ferma a
+    quello con un tratto dritto: sul ballotin la cupola di L2 si ferma a
     1,9 mm dal bordo da una parte sola."""
     grado, vicini = defaultdict(int), defaultdict(set)
     for u, v, _p in archi:
@@ -793,7 +793,7 @@ def _classifica(ff, archi, page_no=0):
 
     def apice(k_lente, capo_fondo):
         """La punta della lente lontana dal fondo. Le due curve non sempre
-        arrivano nello stesso punto - sul Raffaello quella del fianco si
+        arrivano nello stesso punto - sul ballotin quella del fianco si
         ferma 0,9 mm sotto lo spigolo del fronte - e la punta e' il loro
         punto di mezzo."""
         a, b, _f = lenti[k_lente]
@@ -1260,7 +1260,7 @@ def _mappe(b, sp):
     h_l1, h_l2 = (h_sopra, h_sotto) if b.sotto == "retro" else (h_sotto, h_sopra)
 
     # Quello che del coperchio sta dall'altra parte della cerniera - sul
-    # Raffaello gli angoli di L1, che partono dall'angolo del fianco 0,9 mm
+    # ballotin gli angoli di L1, che partono dall'angolo del fianco 0,9 mm
     # sotto la cordonatura - resta sulla cerniera: se no sporge davanti al
     # fronte e apre una fessura all'angolo.
     def coperchio_fronte(h):

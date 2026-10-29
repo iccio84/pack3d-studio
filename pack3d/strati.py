@@ -8,18 +8,18 @@ su tutto il parco quella regola non ha mai tolto un solo pixel di disegno
 tecnico che i tratti non togliessero gia'. Su sei file su nove non cambia
 niente; sugli altri tre cancella **grafica**:
 
-    K Brioss STD   il logo `Brioss`, la tabella nutrizionale, "CON LATTE",
+    brioche STD   il logo del prodotto, la tabella nutrizionale, "CON LATTE",
                    il testo legale - il 4,4% del foglio
-    K Pingui T6    il bollino "x6" e l'icona del pack
-    K Brioss       lo 0,75% del foglio, tutto grafica
+    T6 aperto    il bollino "x6" e l'icona del pack
+    brioche       lo 0,75% del foglio, tutto grafica
 
 Il motivo non e' una soglia sbagliata: e' che **una lastra tecnica usa colori
 che usa anche la grafica**. Il ciano di processo che traccia una quota e' lo
-stesso ciano del logo Brioss; la Pantone di servizio e' la stessa del marchio;
+stesso ciano del logo brioche; la Pantone di servizio e' la stessa del marchio;
 il registro `All` e' nero come il testo. Nessuna soglia separa due cose che
 hanno lo stesso colore.
 
-Quello che invece lo dice senza ambiguita' e' il **livello**. Su K Brioss STD
+Quello che invece lo dice senza ambiguita' e' il **livello**. Sulla brioche STD
 il file ha otto OCG, e due si chiamano `Cutter` e `Legend`: spegnendo quelli si
 toglie l'1,61% - la fustella e il cartiglio, esattamente - e il logo resta
 intero. E' la stessa scala di certezza che REGOLE.md descrive da sempre, solo
@@ -40,6 +40,8 @@ import os
 import re
 import tempfile
 
+from . import stato
+
 
 def livelli(pdf):
     """{nome minuscolo: riferimento} degli OCG della pagina."""
@@ -59,7 +61,7 @@ def spegni(src, dst, nomi):
     """Scrive `dst` con quei livelli spenti. Restituisce i nomi spenti.
 
     E' una modifica di DIZIONARIO - l'OCG finisce in `/OCProperties/D/OFF` -
-    e non costa la passata di pypdf sul flusso di contenuto, che su Colazione
+    e non costa la passata di pypdf sul flusso di contenuto, che sul wafer da colazione
     vale 7 secondi e 100 MB.
 
     `PdfWriter().append()` PERDE `/OCProperties`, e senza quello non c'e'
@@ -120,7 +122,7 @@ def tecnici(pdf, page_no=0):
 # toglie la lastra - e li legge `rendi`, che la lastra non la vede piu'.
 # Chiave come per le penne: un file temporaneo puo' riprendere il nome di uno
 # cancellato.
-_RISERVATE = {}
+_RISERVATE = stato.per_lavoro({})
 
 
 def _chiave(pdf):
@@ -155,7 +157,7 @@ def senza_tecnici(pdf, page_no=0):
     nomi = tecnici(pdf, page_no)
     if not nomi:
         return pdf, []
-    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
     tmp.close()
     try:
         spenti = spegni(pdf, tmp.name, nomi)
@@ -179,11 +181,11 @@ def senza_tecnici(pdf, page_no=0):
 # --------------------------------------------------------------------------- #
 #
 # Spegnere un OCG e' la strada esatta, ma la puo' prendere solo il file che
-# l'ha preparata: Colazione di livelli non ne ha nessuno. Li' il disegno tecnico
+# l'ha preparata: il wafer da colazione di livelli non ne ha nessuno. Li' il disegno tecnico
 # si toglieva DOPO la resa, con una maschera sui tratti sottili e il pixel
 # valido piu' vicino a riempire - ed e' quella la texture "ritagliata in piu'
 # punti". Dove una cordonatura attraversa la grafica il riempimento mangia una
-# fascia larga un millimetro e la rifa' coi bordi: sul cedolino blu di Colazione
+# fascia larga un millimetro e la rifa' coi bordi: sul cedolino blu del wafer da colazione
 # l'angolo usciva a gradini, e degli incroci del retino delle saldature
 # restavano i puntini sul bianco.
 #
@@ -235,7 +237,7 @@ def _livelli_oggetto(o):
 
 # (file, pagina, mtime, taglia) -> penne. Un file temporaneo puo' riprendere il
 # nome di uno cancellato: la chiave sul solo nome darebbe le penne di un altro.
-_PENNE = {}
+_PENNE = stato.per_lavoro({})
 
 
 def penne(pdf, page_no=0):
@@ -252,15 +254,15 @@ def penne(pdf, page_no=0):
 
 
 # Un VELO tecnico: un rettangolo pieno e semitrasparente che copre esattamente
-# una cella del DT, con i quattro lati sulle sue linee. Sul Kinder Pingui T1
-# Cheesecake le due gole da 10 mm e le due strisce coperte sono velate cosi',
+# una cella del DT, con i quattro lati sulle sue linee. Sul T1 della merendina
+# alla cheesecake le due gole da 10 mm e le due strisce coperte sono velate cosi',
 # bianco al 50% dentro quattro form, e non stanno su un livello: sul modello
-# le pinne e i fianchi uscivano sbiaditi. Sul T1 Mandarino, stesso DT, i veli
+# le pinne e i fianchi uscivano sbiaditi. Sul T1 al mandarino, stesso DT, i veli
 # non ci sono. Una grafica semitrasparente - il fondino del bollino "LIMITED
 # EDITION" sullo stesso file - non ha i lati sulle linee del DT, e resta.
 VELO_TOLLERANZA = 1.0   # punti fra un lato del velo e la linea del DT
 VELO_LATO_MIN = 5.0     # punti: sotto e' un segno, non una zona
-_LINEE = {}
+_LINEE = stato.per_lavoro({})
 
 
 def linee_dt(pdf, page_no=0, pen=None):
@@ -364,7 +366,7 @@ def _colore(o):
 # grande quanto lei, ed e' grafica - il posto bianco dove si stampera' il
 # codice - non la sua didascalia. Per una scritta basta che non lo riempia;
 # un tracciato deve essere un SEGNO - una lettera in curve, il punto di un
-# richiamo - e non un fondo: sul K Brioss (FERRERO_1765...) le didascalie
+# richiamo - e non un fondo: sulla brioche (file 1765…) le didascalie
 # sono bianche, e dentro la Best Before Area c'e' il riquadro bianco dove si
 # stampera' la data.
 SBORDO_ETICHETTA = 1.0
@@ -391,24 +393,24 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
 
     Con un'eccezione, per i BOX AREA che la costruzione ha tolto
     (`riservate`, i loro riquadri: vedi `artwork.strip_separations`). Tolto
-    il box resta la sua DIDASCALIA - sul Kinder Cards T2 "Best Before Area" e
+    il box resta la sua DIDASCALIA - sul T2 di cialde "Best Before Area" e
     "POSITIONING AREA FOR EAN CODE (if requested)" in marrone scuro, sul
-    Nutella B-ready T2 "INGREDIENTS", "WEIGHT", "GDA", "F8 LEGAL TEXT" - e la
+    pane ripieno T2 "INGREDIENTS", "WEIGHT", "GDA", "F8 LEGAL TEXT" - e la
     didascalia e' il nome del posto, non si stampa mai. Dentro un riquadro
     tolto:
 
     - un testo che dice il nome di un'area riservata (`techink.NOME_RISERVATA`)
       e' una didascalia: lo dice quello che c'e' scritto, non il colore;
-    - ma non tutte dicono "area": sul B-ready "INGREDIENTS" e "WEIGHT" sono
-      il nome della casella e basta, e quella del codice a barre del Kinder
-      Cards e' in curve, 38 tracciati. Una scritta, o un SEGNO piccolo (vedi
+    - ma non tutte dicono "area": sul pane ripieno "INGREDIENTS" e "WEIGHT" sono
+      il nome della casella e basta, e quella del codice a barre del T2 di
+      cialde e' in curve, 38 tracciati. Una scritta, o un SEGNO piccolo (vedi
       `QUOTA_SEGNO`), tutto dentro il riquadro e del COLORE di una didascalia
       scritta e' una didascalia anche lui. Un codice a barre vero - nero, e la
       didascalia e' di un'altra tinta - resta dov'e'; e senza nessuna
       didascalia scritta non si impara nessun colore e non si toglie niente.
 
-    Nell'area COPERTA no: sotto la pinna la grafica continua - sul Kinder
-    Cards T2 la cialda e la banda rossa - e li' si spegne solo il testo che
+    Nell'area COPERTA no: sotto la pinna la grafica continua - sul T2 di
+    cialde la cialda e la banda rossa - e li' si spegne solo il testo che
     dice il nome dell'area. Coperta, per prudenza, e' ogni area che non e'
     vuota per definizione (`techink.vuota`): una che non si conosce puo'
     avere grafica sotto. Il colore si impara solo dai box vuoti.
@@ -528,7 +530,7 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
 # i segni scelti a occhio: la correzione dell'AI
 # --------------------------------------------------------------------------- #
 #
-# Sul KP T1 Mandarino senza livelli, ai capi della fascia di saldatura ci sono
+# Sul T1 al mandarino senza livelli, ai capi della fascia di saldatura ci sono
 # due blocchetti neri: segni del disegno, che sul pack non si stampano - lo dice
 # chi i pack li fa, e nella versione coi livelli stanno su `technical-drawing`.
 # Sono in nero di quadricromia, quindi non si tolgono per inchiostro, e sbordano
@@ -539,7 +541,7 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
 SPENTO_TOLLERANZA = 0.6   # punti fra il riquadro scelto e quello dell'oggetto
 CANDIDATO_LATO_MIN = 3.0  # punti: sotto e' un tratto, e i tratti li prende gia' la stima
 CANDIDATO_QUOTA = 0.15    # della superficie del DT: oltre e' un fondo, e i fondi sono grafica
-_SPENTI = []
+_SPENTI = stato.per_lavoro([])
 
 
 @contextlib.contextmanager
@@ -635,21 +637,21 @@ def candidati_tecnici(pdf, regione, page_no=0):
 # quello che trova. pdfium la sovrastampa la ignora - e' lo stesso difetto
 # della `k` di `nero` - e dipinge ogni oggetto coprente. Due casi, misurati:
 #
-# - la COLATA Kinder. L'ombra sotto l'onda del latte e' un'immagine di solo
+# - la colata di latte. L'ombra sotto l'onda del latte e' un'immagine di solo
 #   ciano in sovrastampa sul rosso, e in stampa ciano sul rosso fa l'ombra
 #   rosso scuro; coprente esce un alone azzurro. Sul parco la colata e' sempre
 #   fatta cosi' - la banda lunga e le due gocce - in DeviceN di solo Cyan su
-#   undici file, in RGB indicizzato sul Kinder Choco Fresh T1, in RGB ICC
-#   indicizzato sul KP T1 Mandarino;
-# - la MERENDINA del Kinder Choco Fresh T1. La foto e' in RGB, e sopra,
+#   undici file, in RGB indicizzato sul T1 al cioccolato fresco, in RGB ICC
+#   indicizzato sul T1 al mandarino;
+# - la MERENDINA del T1 al cioccolato fresco. La foto e' in RGB, e sopra,
 #   grande quanto lei, c'e' un'immagine in PANTONE Cool Gray 8 C in
 #   sovrastampa: coprente, dove il grigio e' a zero viene bianco, e un
 #   rettangolo bianco copre la merendina e il latte.
 #
 # Ghostscript la sovrastampa la sa simulare, ma proprio su questi casi
-# sbaglia. Sotto un'immagine RGB con una maschera morbida - l'ombra del KCF e
-# del Mandarino - la tinta piatta la cancella, e dentro un gruppo di
-# trasparenza RGB - la pagina del KCF - la cancella anche sotto il CMYK.
+# sbaglia. Sotto un'immagine RGB con una maschera morbida - l'ombra del T1 al cioccolato fresco e
+# del T1 al mandarino - la tinta piatta la cancella, e dentro un gruppo di
+# trasparenza RGB - la pagina del T1 al cioccolato fresco - la cancella anche sotto il CMYK.
 # Provato con PDF fatti apposta: un rosso in tinta piatta, sopra un ciano in
 # sovrastampa in RGB, RGB indicizzato, CMYK e DeviceN. Senza maschera il rosso
 # resta sotto tutti e quattro; con la maschera solo sotto CMYK e DeviceN; in
@@ -686,8 +688,8 @@ def candidati_tecnici(pdf, regione, page_no=0):
 _QUADRICROMIA = frozenset(("cyan", "magenta", "yellow", "black"))
 # (file, mtime, taglia, pagina) -> disegni, e -> scelte: il flusso si legge
 # una volta sola, e le lastre pure
-_SOVRASTAMPE = {}
-_SCELTE = {}
+_SOVRASTAMPE = stato.per_lavoro({})
+_SCELTE = stato.per_lavoro({})
 # risoluzione a cui si guarda sotto le immagini: quella della spia del nero.
 # L'ombra della colata e' larga tre o quattro punti, e ci sta su due pixel.
 DPI_SOTTO = 36.0
@@ -800,13 +802,13 @@ def sovrastampe(pdf, page_no=0):
     return disegni
 
 
-# Del flusso servono pochi operatori, e pypdf li leggerebbe tutti: sul K Brioss
+# Del flusso servono pochi operatori, e pypdf li leggerebbe tutti: sulla brioche
 # STD sono 231.000 operazioni in 7 MB, tre secondi solo per trovare le poche
 # che contano. Qui li trova un'espressione regolare, che salta intero quello
 # dentro cui ci si confonderebbe - i commenti, le stringhe (annidate fino a
 # tre livelli) e i byte delle immagini in linea - e che dagli operandi prende
 # solo il nome che precede `gs` e `Do`. Il primo carattere si guarda prima di
-# tutto il resto: cinque volte piu' veloce, mezzo secondo sul Brioss STD.
+# tutto il resto: cinque volte piu' veloce, mezzo secondo sulla brioche STD.
 _DELIMITA = rb"(?![^\s()<>\[\]{}/%])"
 _FLUSSO = re.compile(
     rb"(?=[%(B/qQ])(?:%[^\r\n]*"
@@ -979,20 +981,29 @@ def sovrastampa(pdf, page_no=0):
     giu', quelle con colori di processo rese a moltiplica - la colata, che
     `colata` allora non ripara piu'. Vedi *la sovrastampa delle immagini*.
     """
+    from . import rese
     k = _chiave(pdf)
     chiave = k + (page_no,) if k else None
     if chiave is not None and chiave in _SCELTE:
         return _SCELTE[chiave]
-    conto = dict(tinta=0, processo=0, coperte=0, spaiate=False,
-                 senza_gs=False, riquadri=[])
-    indici = set()
-    disegni = sovrastampe(pdf, page_no)
-    if disegni:
-        try:
-            indici = _scegli(pdf, page_no, disegni, conto)
-        except Exception:
-            indici = set()
-    esito = (frozenset(indici), conto)
+
+    def fai():
+        # quattro rese e le lastre di Ghostscript: su disco, per la prossima
+        # costruzione dello stesso file (`rese`)
+        conto = dict(tinta=0, processo=0, coperte=0, spaiate=False,
+                     senza_gs=False, riquadri=[])
+        indici = set()
+        disegni = sovrastampe(pdf, page_no)
+        if disegni:
+            try:
+                indici = _scegli(pdf, page_no, disegni, conto)
+            except Exception:
+                indici = set()
+        conto["riquadri"] = [[float(v) for v in r] for r in conto["riquadri"]]
+        return None, {"indici": sorted(indici), "conto": conto}
+
+    _a, dati = rese.tieni(rese.chiave("strati.sovrastampa", pdf, page_no), fai)
+    esito = (frozenset(dati["indici"]), dati["conto"])
     if chiave is not None:
         while len(_SCELTE) >= 8:
             _SCELTE.pop(next(iter(_SCELTE)))
@@ -1136,7 +1147,43 @@ def rendi(pdf, page_no=0, scala=1.0, livello=GRAFICA, riquadro=None,
     stesso livello anche sul file originale. `stampato` e' il riquadro
     dell'artwork, per mandare nel DT i testi che ne stanno fuori: vedi
     `dividi`.
+
+    La resa resta su disco per la prossima costruzione dello stesso file
+    (`rese`), coi suoi CONTI. Nella chiave c'e' tutto quello che sceglie gli
+    oggetti da spegnere oltre al file: i parametri, le aree riservate e i
+    segni scelti dall'AI (`spegnendo`).
     """
+    import time
+
+    import numpy as np
+    from PIL import Image
+
+    from . import rese
+
+    def piatto(v):
+        return None if v is None else tuple(float(x) for x in v)
+
+    k = rese.chiave("strati.rendi", pdf, page_no, float(scala), livello,
+                    piatto(riquadro), bool(trasparente),
+                    None if nomi_tecnici is None else tuple(sorted(nomi_tecnici)),
+                    piatto(stampato), tuple(piatto(r) for r in riservate(pdf)),
+                    tuple(piatto(r) for r in _SPENTI))
+    v = rese.leggi(k)
+    if v is not None:
+        a, conti = v
+        CONTI.clear()
+        CONTI.update(conti)
+        return Image.fromarray(a)
+    t = time.time()
+    im = _rendi(pdf, page_no, scala, livello, riquadro, trasparente, nomi_tecnici,
+                stampato)
+    if time.time() - t >= rese.SOGLIA_S:
+        rese.scrivi(k, np.asarray(im), dict(CONTI))
+    return im
+
+
+def _rendi(pdf, page_no, scala, livello, riquadro, trasparente, nomi_tecnici,
+           stampato):
     import pypdfium2 as pdfium
     import pypdfium2.raw as raw
     nomi = set(tecnici(pdf, page_no) if nomi_tecnici is None else nomi_tecnici)

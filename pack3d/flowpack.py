@@ -16,9 +16,8 @@ import math
 from dataclasses import dataclass, field
 
 import numpy as np
-import pdfplumber
 
-from .dieline import _segments, _cluster, PT2MM
+from .dieline import segmenti, _cluster, PT2MM
 
 
 @dataclass
@@ -87,13 +86,13 @@ class Flowpack:
         return 2.0 * (self.W + self.T)
 
 
-def _technical_segments(page, min_len=25.0, dentro=None):
+def _technical_segments(tutti, min_len=25.0, dentro=None):
     """Il tracciato tecnico dello steso: tratti sottili, i piu' lunghi.
 
     `dentro`, se c'e', dice quali segmenti guardare: la penna si sceglie fra
     quelli, non sulla pagina intera dove possono vincere le copie tecniche.
     """
-    segs = [s for s in _segments(page) if s[3] - s[2] > min_len and s[4][0] <= 0.8]
+    segs = [s for s in tutti if s[3] - s[2] > min_len and s[4][0] <= 0.8]
     if dentro is not None:
         segs = [s for s in segs if dentro(s)]
     if not segs:
@@ -114,91 +113,89 @@ def analyze(pdf_path: str, page_no: int = 0, tol: float = 0.02,
     cartiglio finivano nelle fasce, e ne usciva un pack plausibile e
     sbagliato, il difetto peggiore che questo progetto possa avere.
     """
-    with pdfplumber.open(pdf_path) as pdf:
-        page = pdf.pages[page_no]
+    def _in(sg):
+        bx0, by0, bx1, by1 = bbox
+        k, c, a0, b0, _st = sg
+        if k == "H":
+            return (by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3
+                    and b0 <= bx1 + 3)
+        return (bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3
+                and b0 <= by1 + 3)
+    segs = _technical_segments(segmenti(pdf_path, page_no),
+                               dentro=_in if bbox else None)
 
-        def _in(sg):
-            bx0, by0, bx1, by1 = bbox
-            k, c, a0, b0, _st = sg
-            if k == "H":
-                return (by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3
-                        and b0 <= bx1 + 3)
-            return (bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3
-                    and b0 <= by1 + 3)
-        segs = _technical_segments(page, dentro=_in if bbox else None)
+    V = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "V"], 2.0)
+    H = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "H"], 2.0)
+    if not V or not H:
+        raise ValueError("nessun tracciato tecnico riconoscibile")
 
-        V = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "V"], 2.0)
-        H = _cluster([(c, b - a) for k, c, a, b, st in segs if k == "H"], 2.0)
-        if not V or not H:
-            raise ValueError("nessun tracciato tecnico riconoscibile")
+    ys = [c for c, w in H]
+    web_pt = ys[-1] - ys[0]
+    # le linee a tutta altezza segnano taglio di ripetizione e saldature
+    full = sorted(c for c, w in V if w > web_pt * 0.9)
+    if len(full) < 4:
+        raise ValueError("saldature di testa non riconosciute")
+    cut0, seal0, seal1, cut1 = full[0], full[1], full[-2], full[-1]
 
-        ys = [c for c, w in H]
-        web_pt = ys[-1] - ys[0]
-        # le linee a tutta altezza segnano taglio di ripetizione e saldature
-        full = sorted(c for c, w in V if w > web_pt * 0.9)
-        if len(full) < 4:
-            raise ValueError("saldature di testa non riconosciute")
-        cut0, seal0, seal1, cut1 = full[0], full[1], full[-2], full[-1]
+    steps = [(ys[i + 1] - ys[i]) * PT2MM for i in range(len(ys) - 1)]
+    i = int(np.argmax(steps))
+    W = steps[i]
 
-        steps = [(ys[i + 1] - ys[i]) * PT2MM for i in range(len(ys) - 1)]
-        i = int(np.argmax(steps))
-        W = steps[i]
+    # lo spessore e' la fascia adiacente al fronte su entrambi i lati; puo'
+    # essere spezzata in piu' tratti dalle linee di riferimento grafiche
+    def run(start, direction, target):
+        tot, n = 0.0, 0
+        j = start
+        while 0 <= j < len(steps) and tot < target * (1 + tol):
+            tot += steps[j]
+            n += 1
+            if abs(tot - target) <= max(0.4, target * tol):
+                return n, tot
+            j += direction
+        return None, None
 
-        # lo spessore e' la fascia adiacente al fronte su entrambi i lati; puo'
-        # essere spezzata in piu' tratti dalle linee di riferimento grafiche
-        def run(start, direction, target):
-            tot, n = 0.0, 0
-            j = start
-            while 0 <= j < len(steps) and tot < target * (1 + tol):
-                tot += steps[j]
-                n += 1
-                if abs(tot - target) <= max(0.4, target * tol):
-                    return n, tot
-                j += direction
-            return None, None
+    best = None
+    for cand in sorted({round(s, 1) for s in steps}, reverse=True):
+        if cand >= W or cand <= 0:
+            continue
+        nl, tl = run(i - 1, -1, cand)
+        nr, tr = run(i + 1, +1, cand)
+        if nl is None or nr is None:
+            continue
+        girth = 2 * (W + cand)
+        # la fascia del perimetro deve chiudere su 2*(W+T)
+        for a in range(0, i - nl + 1):
+            for b in range(i + nr, len(steps)):
+                tot = sum(steps[a:b + 1])
+                if abs(tot - girth) <= max(1.0, girth * tol):
+                    err = abs(tot - girth)
+                    if best is None or err < best[0]:
+                        best = (err, cand, a, b, nl, nr)
+    if best is None:
+        raise ValueError("perimetro della sezione non riconosciuto")
+    _, T, a, b, nl, nr = best
 
-        best = None
-        for cand in sorted({round(s, 1) for s in steps}, reverse=True):
-            if cand >= W or cand <= 0:
-                continue
-            nl, tl = run(i - 1, -1, cand)
-            nr, tr = run(i + 1, +1, cand)
-            if nl is None or nr is None:
-                continue
-            girth = 2 * (W + cand)
-            # la fascia del perimetro deve chiudere su 2*(W+T)
-            for a in range(0, i - nl + 1):
-                for b in range(i + nr, len(steps)):
-                    tot = sum(steps[a:b + 1])
-                    if abs(tot - girth) <= max(1.0, girth * tol):
-                        err = abs(tot - girth)
-                        if best is None or err < best[0]:
-                            best = (err, cand, a, b, nl, nr)
-        if best is None:
-            raise ValueError("perimetro della sezione non riconosciuto")
-        _, T, a, b, nl, nr = best
+    back_a = sum(steps[a:i - nl])
+    back_b = sum(steps[i + nr + 1:b + 1])
+    fin_material = sum(steps[:a]) + sum(steps[b + 1:])
 
-        back_a = sum(steps[a:i - nl])
-        back_b = sum(steps[i + nr + 1:b + 1])
-        fin_material = sum(steps[:a]) + sum(steps[b + 1:])
-
-        fp = Flowpack(
-            W=round(W, 1), T=round(T, 1),
-            L=round((seal1 - seal0) * PT2MM, 1),
-            end_fin=round((seal0 - cut0) * PT2MM, 1),
-            side_fin=round(fin_material / 2.0, 1),
-            back_a=round(back_a, 1), back_b=round(back_b, 1),
-            web_mm=round(web_pt * PT2MM, 1),
-            step_mm=round((cut1 - cut0) * PT2MM, 1),
-            sheet=(cut0, ys[0], cut1, ys[-1]),
-            girth_span=(ys[a], ys[b + 1]),
-        )
-        if abs(back_a + back_b - W) > max(1.0, W * 0.03):
-            fp.warnings.append(
-                f"il retro misura {back_a + back_b:.1f} mm contro {W:.1f} mm di fronte")
-        if abs(fp.end_fin - (cut1 - seal1) * PT2MM) > 0.5:
-            fp.warnings.append("le due pinne di testa hanno larghezza diversa")
-        return fp
+    fp = Flowpack(
+        W=round(W, 1), T=round(T, 1),
+        L=round((seal1 - seal0) * PT2MM, 1),
+        end_fin=round((seal0 - cut0) * PT2MM, 1),
+        side_fin=round(fin_material / 2.0, 1),
+        back_a=round(back_a, 1), back_b=round(back_b, 1),
+        web_mm=round(web_pt * PT2MM, 1),
+        step_mm=round((cut1 - cut0) * PT2MM, 1),
+        sheet=(cut0, ys[0], cut1, ys[-1]),
+        girth_span=(ys[a], ys[b + 1]),
+    )
+    if abs(back_a + back_b - W) > max(1.0, W * 0.03):
+        fp.warnings.append(
+            f"il retro misura {back_a + back_b:.1f} mm contro {W:.1f} mm di fronte")
+    if abs(fp.end_fin - (cut1 - seal1) * PT2MM) > 0.5:
+        fp.warnings.append("le due pinne di testa hanno larghezza diversa")
+    return fp
 
 
 # --------------------------------------------------------------------------- #
@@ -283,8 +280,8 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     # Ancorare al punto di y massima, come si faceva qui, prende il CENTRO
     # della faccia laterale e non lo spigolo: sono mezzo spessore di distanza,
     # e la grafica gira attorno al tubo di altrettanto. Misurato fascia per
-    # fascia: 4,2 mm su Kinder Country (T 10), 12,9 su Paradiso (T 27), 25,7
-    # su Brioss (T 57).
+    # fascia: 4,2 mm sul T1 ai cereali (T 10), 12,9 sul T1 farcito (T 27), 25,7
+    # sulla brioche (T 57).
     #
     # Nella parametrizzazione lo spigolo e' il punto a 45 gradi, dove
     # |uy| = |uz|, cioe' t = 7/4 pi: per n grande tende allo spigolo vero del
@@ -293,12 +290,12 @@ def superellipse_section(fp: Flowpack, n: float, thickness=None, npts: int = 160
     # Su un tubo piatto non e' quello. Li' non ci sono spigoli: ci sono le due
     # PIEGHE del tubo appiattito, che sono gli estremi dell'asse maggiore,
     # cioe' t = 0. Ancorare comunque ai 45 gradi ruota la grafica di tutto
-    # l'arco fra i due punti - misurato sul K Tronky T1: 7,55 mm su un giro di
+    # l'arco fra i due punti - misurato sul wafer T1: 7,55 mm su un giro di
     # 71, il 10,6%, con il fronte che finiva mezzo sul fianco.
     #
     # E su un tubo piatto la cucitura non puo' stare piu' in la' della piega
     # opposta: il retro e' mezzo giro. Quando il lembo si chiude proprio sulla
-    # piega - il Kinder Choco Fresh ha tutto il retro da un lato, 42 mm, e la
+    # piega - il T1 al cioccolato fresco ha tutto il retro da un lato, 42 mm, e la
     # meta' dell'ellisse e' 40,5 - la cucitura va sulla piega; lasciata a 42
     # mm cadeva sul fronte, e il fronte finiva dietro.
     #
@@ -397,7 +394,7 @@ class _GiroSulFilm:
     Nel corpo i vertici stanno dove li mette la sezione, e i nodi dei pannelli
     fanno cadere ogni fascia sulla sua faccia. Verso la pinna la sezione si
     schiaccia e si allarga, e scalarla, come si faceva, porta con se' le
-    fasce: il fronte si allargava con la pinna, del 46% sul Paradiso, e i
+    fasce: il fronte si allargava con la pinna, del 46% sul T1 farcito, e i
     fianchi si chiudevano a zero sul bordo. La grafica sterzava verso fuori
     lungo la gola e sulla pinna arrivava stirata.
 
@@ -495,7 +492,7 @@ def _stendi_spalla(verts, uvs, u, half, taper):
 # dente, con cui si ammorbidisce il profilo a V.
 DENTE_ALTEZZA = 2.0 / 3.0
 DENTE_SMUSSO = 0.04
-# Sul bordo i vertici dell'anello sono pochi: sul B-ready un dente di 5 mm
+# Sul bordo i vertici dell'anello sono pochi: sul pane ripieno un dente di 5 mm
 # ne aveva 6, e la punta cadeva fra due vertici, mozzata. Il bordo dentato si
 # fa allora a parte, con l'anello della pinna suddiviso finche' ogni dente ne
 # ha almeno tanti; e comincia un po' prima della gola, perche' anche il dente
@@ -906,7 +903,7 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
     stampata rivolta verso il retro da cui arriva, quindi coricandosi su quel
     retro la fascia di g0 gli va contro e non si vede - resta in vista
     l'altra, che continua il retro dall'altra parte come un film ripiegato
-    su se stesso. Il DT lo dice con i nomi: sul Yogurette la fascia oltre g0
+    su se stesso. Il DT lo dice con i nomi: sul gelato su stecco la fascia oltre g0
     e' "Neutral Area", bianca, e la striscia sotto la falda "Covered Area";
     la fascia oltre g1 e' marrone come la fascia del retro accanto, e il box
     della scadenza la attraversa. La texture prendeva la fascia di g0, la
@@ -941,7 +938,7 @@ def fin_on_surface(grid, fp: Flowpack, G: float, nv: int, gap: float = 0.5,
         t = min(1.0, max(0.0, (half - abs(x)) / fade))
         # Mai a zero: nelle testate la falda sta SOPRA il retro, schiacciata
         # con lui nella saldatura, e a distanza zero le due superfici si
-        # contendono i pixel - sul Happy Hippo la falda bianca e la testata
+        # contendono i pixel - sul T1 cold seal la falda bianca e la testata
         # marrone uscivano a puntini. Un ventesimo di millimetro non si vede
         # e decide chi sta sopra.
         lift = max(gap * (t * t * (3 - 2 * t)), FALDA_SOPRA)
@@ -1003,8 +1000,8 @@ def _collapse_guides(vals, max_gap=8.0, tol=0.6):
     Il motivo e' misurato. La soglia di 0,6 mm sullo scarto fra i due passi
     decideva tutto, e i disegni ci stanno sopra a cavallo:
 
-        K Brioss STD    341,31 344,81 348,31   scarto 0,00  -> fuse
-        K Brioss Promo  341,31 345,15 348,31   scarto 0,67  -> intere
+        brioche STD    341,31 344,81 348,31   scarto 0,00  -> fuse
+        brioche promo  341,31 345,15 348,31   scarto 0,67  -> intere
 
     Stesso pack, stesso disegno tecnico, stesse quote a cartiglio. Fuse, la
     piega a 341,3 sparisce e con lei la quaterna giusta: il pack usciva
@@ -1034,7 +1031,7 @@ def merito(b):
 
     Il passo attraversato viene prima del fronte per via delle guide
     dell'area di stampa. Una piega corre lungo tutto il tubo; una guida si
-    ferma alle saldature, perche' li' la stampa finisce. Sul Kinder Cards T2
+    ferma alle saldature, perche' li' la stampa finisce. Sul T2 di cialde
     le pieghe sono lunghe 108 mm (il passo) e le guide, a 1,5 mm da ogni
     piega, 88: prendendo le guide al posto delle pieghe i conti chiudono lo
     stesso - con la cucitura centrata la simmetria e' zero comunque - e il
@@ -1044,8 +1041,8 @@ def merito(b):
 
     Conta la piega PIU' CORTA delle quattro, arrotondata al 5%: un gruppo di
     linee dello stesso tipo ha tutto la stessa lunghezza, e un centesimo di
-    rumore non deve decidere. Dove tutte le pieghe sono uguali - Colazione,
-    Paradiso, Brioss - il criterio pareggia e decide il fronte come prima.
+    rumore non deve decidere. Dove tutte le pieghe sono uguali - wafer da colazione,
+    T1 farcito, brioche - il criterio pareggia e decide il fronte come prima.
     """
     return (b["side_fin"] > FALDA_LIMITE, b["simmetria"],
             -b.get("copertura", 0.0), -b["front"])
@@ -1069,8 +1066,8 @@ def solve_bands(web_mm, folds_mm, tol=1.5, copertura=None):
     return solve_bands_any(web_mm, folds_mm, tol, copertura)
 
 
-# Falde misurate su tutti i pack coperti: 4,1 (K Brioss T10) 12,5 (Paradiso)
-# 14,0 (Milch-Schnitte) 15,0 (FULFIL) 16,0 (Country), su nastri da 122 a 420
+# Falde misurate su tutti i pack coperti: 4,1 (brioche T10) 12,5 (T1 farcito)
+# 14,0 (T1 della barretta fresca) 15,0 (barretta proteica) 16,0 (T1 ai cereali), su nastri da 122 a 420
 # mm. Non scala col nastro perche' e' il lembo che schiacciano le ganasce, e
 # le ganasce non cambiano con la taglia del sacchetto. Il margine e' meta'
 # del massimo visto: serve a non escludere una falda davvero grande, non a
@@ -1083,7 +1080,7 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0, copertura=None):
 
     La versione precedente cercava coppie speculari rispetto alla mezzeria del
     nastro: funziona finche' la cucitura e' centrata sul retro, e fallisce
-    quando non lo e' (Kinder Pingui, Kinder Bueno T2). L'invariante che vale
+    quando non lo e' (T1 della merendina, croccante T2). L'invariante che vale
     sempre e' un altro: retro = fronte, fianchi uguali, perimetro + 2 falde =
     nastro.
     """
@@ -1106,7 +1103,7 @@ def solve_bands_any(web_mm, folds_mm, tol=2.0, copertura=None):
                     simmetria=round(abs(ba - bb), 2),
                     copertura=round(20.0 * min(copertura.get(y, 0.0)
                                                for y in (y1, y2, y3, y4))) / 20.0)
-        # Prima la falda, poi la simmetria. Su K Brioss STD le due quaterne in
+        # Prima la falda, poi la simmetria. Sulla brioche STD le due quaterne in
         # gara erano queste:
         #
         #   W 134,93  T  7,00  falda 68,02   simmetria 0,12   <- vinceva
@@ -1130,7 +1127,7 @@ def risolvi_pillow(web_mm, folds_mm, tol=2.0, tutti=False):
 
     Cambia l'invariante. A pinna vale `perimetro + 2 falde = nastro`; qui
     vale `fronte + retro + lembo = nastro` con `fronte = retro`, cioe' il
-    fronte misura mezzo giro. Il K Tronky T1 chiude cosi' al millimetro:
+    fronte misura mezzo giro. Il wafer T1 chiude cosi' al millimetro:
 
         23 (retro) + 36 (FRONTE) + 12 (retro) + 12 (lembo) = 83
         giro 71, fronte 36, mezzo giro 35,5
@@ -1185,8 +1182,8 @@ def risolvi_pinna_piatta(web_mm, folds_mm, tol=1.5):
 
     Un film che avvolge un prodotto morbido non ha pieghe fra fronte e
     fianchi, e il DT non ne disegna: segna le due fasce ai bordi del nastro
-    che si saldano a pinna, e in mezzo il giro. E' il Kinder Happy Hippo T1
-    (Ferrero 12402, cold seal), nastro 115 = 1 | 15 | 83 | 15 | 1: pinna 16,
+    che si saldano a pinna, e in mezzo il giro. E' il T1 cold seal
+    (cliente 12402, cold seal), nastro 115 = 1 | 15 | 83 | 15 | 1: pinna 16,
     giro 83, che e' proprio l'area di stampa del DT. Ne' `solve_bands_any` -
     non ci sono le quattro pieghe - ne' `risolvi_pillow` - non c'e' un lembo
     da una parte sola - lo risolvono.
@@ -1223,7 +1220,7 @@ def _solve_bands_symmetric(web_mm, folds_mm, tol=1.5):
     Su un flowpack la fasciatura e' simmetrica rispetto alla mezzeria del
     nastro, quindi le pieghe stanno a coppie speculari: quella esterna separa
     retro e fianco, quella interna fianco e fronte. Verificato su
-    Milch-Schnitte, FULFIL e Kinder Bueno Dark.
+    T1 della barretta fresca, barretta proteica e croccante T2 fondente.
     """
     mid = web_mm / 2.0
     pairs = []
@@ -1317,8 +1314,8 @@ def _tratteggi(pezzi):
     identici: un tracciato solo col motivo del tratteggio, che il PDF
     tratteggia quando stampa, o un tracciato per trattino. Il primo il
     solutore lo legge come una linea, il secondo no: sono trattini da pochi
-    millimetri, tutti sotto la soglia, e la piega sparisce. Sul Yogurette
-    (Ferrero 1688...) sparivano cosi' tutte e quattro le pieghe del
+    millimetri, tutti sotto la soglia, e la piega sparisce. Sul gelato su stecco
+    (cliente 1688...) sparivano cosi' tutte e quattro le pieghe del
     prodotto, 23 trattini da 6 mm l'una, e senza di loro l'unica lettura che
     chiudeva era quella girata di 90 gradi: le fasce della pinna prese per
     le saldature di testa.
@@ -1347,9 +1344,9 @@ def _ricuci(S):
 
     Una linea del DT puo' essere disegnata a pezzi, e il solutore misura i
     tratti uno per uno: sotto un terzo del contorno dello steso li scarta.
-    Sul Kinder Pingui T1 Cheesecake il taglio in fondo e' nove segmenti di fila
+    Sul T1 cheesecake il taglio in fondo e' nove segmenti di fila
     - il piu' lungo 96 punti contro una soglia di 135 - mentre sul T1
-    Mandarino, stesso disegno, e' uno da 340: lo steso si fermava sulla
+    T1 al mandarino, stesso disegno, e' uno da 340: lo steso si fermava sulla
     saldatura, e il passo usciva 141 mm invece di 149.
 
     Per la stessa ragione un tratteggio disegnato a trattini separati diventa
@@ -1422,7 +1419,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
 
     sc = SCALA_ANALISI
     im = render_page(pdf_path, page_no, sc)
-    # int16, non int: su un foglio come quello del Brioss la rasterizzazione a
+    # int16, non int: su un foglio come quello della brioche la rasterizzazione a
     # 150 dpi e' una ventina di MB in uint8, e .astype(int) li moltiplica per
     # otto perche' int e' int64. Del raster qui serve solo max(2)-min(2) su
     # canali 0-255: int16 basta e avanza. Misurato: il picco della sola
@@ -1442,7 +1439,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     #
     # L'ordine conta, e l'ho imparato rompendolo: "le fasce non chiudono" e'
     # anche il segnale che lo steso e' girato di 90 gradi. Provando l'altra
-    # chiusura prima dell'altro verso, il K Brioss - che va letto ruotato -
+    # chiusura prima dell'altro verso, la brioche - che va letto ruotato -
     # trovava una lettura plausibile nel verso sbagliato, e il verso giusto
     # non veniva mai provato.
     primo = None
@@ -1477,7 +1474,7 @@ def _strutture(dist):
 
     Tre linee ravvicinate ed equidistanti sono una piega sola, quella di mezzo,
     disegnata con due guide ai lati: e' la stessa lettura di
-    `_collapse_guides`, e sulla testata la conferma la quota. Su Colazione il
+    `_collapse_guides`, e sulla testata la conferma la quota. Sul wafer da colazione il
     cartiglio scrive 20 | 37,5 | 215 | 37,5 | 20, e le guide stanno a 52,5,
     57,5 e 62,5: la piega e' a 57,5 = 20 + 37,5.
     """
@@ -1503,9 +1500,9 @@ def testate_dal_dt(vs, x0, x1):
 
     La regola e' **prima le misure, poi il contenuto**. La pinna si misurava
     dal margine non stampato, e il margine non stampato non e' la pinna quando
-    la grafica ha del bianco: su Colazione il fronte ha una fascia bianca sopra
+    la grafica ha del bianco: sul wafer da colazione il fronte ha una fascia bianca sopra
     il marchio, e il margine veniva 41,2 mm contro i 20 della saldatura -
-    quella che il DT disegna e il cartiglio quota. Sul Brioss STD usciva 32,6
+    quella che il DT disegna e il cartiglio quota. Sulla brioche STD usciva 32,6
     contro i 37,6 della piega, che e' la misura su cui la gola e' tarata.
 
     Dal taglio verso l'interno:
@@ -1513,10 +1510,10 @@ def testate_dal_dt(vs, x0, x1):
     - la prima linea e' la SALDATURA, e la pinna finisce li';
     - la seconda e' dove finisce il prodotto, e fra le due c'e' la GOLA: il
       tubo che si schiaccia verso la pinna. Il DT la chiama zona grinze
-      (KMS, KP: 10 mm) o la quota come tratto a se' (Colazione: 37,5);
+      (T1 della barretta fresca, T1 della merendina: 10 mm) o la quota come tratto a se' (wafer da colazione: 37,5);
     - se la prima struttura e' una piega con le sue guide, la saldatura non e'
       disegnata e la testata arriva alla piega: e' il film che avvolge una
-      scatola (Brioss), dove la gola la decide lo spessore.
+      scatola (brioche), dove la gola la decide lo spessore.
 
     I due lati devono dire la stessa cosa. Se non la dicono, per la pinna si
     tiene il rientro piu' stretto - la regola che c'era gia' per le saldature
@@ -1574,7 +1571,7 @@ def _testate_speculari(vs, x0, x1, tol=0.5):
     """Il DT segna la testata alla stessa distanza dai due tagli?
 
     E' quello che distingue il verso giusto di un tubo piatto a pinna. Sul
-    Happy Hippo tutte e due le letture trovano due linee speculari - le fasce
+    T1 cold seal tutte e due le letture trovano due linee speculari - le fasce
     della pinna in un verso, le saldature di testa nell'altro - ma solo nel
     verso giusto le testate tornano: 15 e 15 mm. Nell'altro verso le
     "testate" sono le fasce della pinna viste di traverso, e i margini dei
@@ -1613,8 +1610,8 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     from .dieline import _cluster
 
     # Le soglie erano assolute, 150 e 250 punti, e non possono esserlo: fra il
-    # nastro di K Tronky (83 mm) e quello di K Brioss (420 mm) c'e' un fattore
-    # cinque. Una linea che attraversa TUTTO il nastro del Tronky e' lunga 83
+    # nastro del wafer T1 (83 mm) e quello della brioche (420 mm) c'e' un fattore
+    # cinque. Una linea che attraversa TUTTO il nastro del wafer T1 e' lunga 83
     # mm, sotto gli 88,2 mm che servivano per essere presa sul serio, quindi
     # nessuna cordonatura verticale passava e lo steso risultava non coperto.
     # Si misura invece in frazione del tratto piu' lungo, che e' il contorno
@@ -1622,15 +1619,15 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
     # vecchie costanti.
     # La frazione puo' solo ABBASSARE la soglia, mai alzarla: `min` con la
     # costante vecchia. Renderla relativa e basta l'aveva alzata sugli steso
-    # piu' lunghi del riferimento, e su Milch-Schnitte T1 si perdeva la
+    # piu' lunghi del riferimento, e sul T1 della barretta fresca si perdeva la
     # cordonatura a 108,5 mm - il cui gruppo misura fra gli 88,2 mm della
     # vecchia soglia e i 91,5 della nuova. Senza quella piega solve_bands non
     # chiude piu', ed e' esattamente il difetto che le regole descrivono per
-    # Kinder Bueno T2: un filtro troppo stretto in ingresso e nessun solutore
+    # croccante T2: un filtro troppo stretto in ingresso e nessun solutore
     # a valle puo' rimediare. Le costanti restano la taratura buona sugli
     # impaginati gia' coperti; la frazione serve solo a non escludere gli
     # steso piccoli, dove una linea che attraversa tutto il nastro e' comunque
-    # piu' corta della costante (K Tronky, nastro 83 mm).
+    # piu' corta della costante (wafer T1, nastro 83 mm).
     ext_h = max((b - a for k, c, a, b, st in S if k == "H"), default=0.0)
     ext_v = max((b - a for k, c, a, b, st in S if k == "V"), default=0.0)
     seg_h, seg_v = min(150.0, 0.35 * ext_h), min(150.0, 0.35 * ext_v)
@@ -1643,7 +1640,7 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
         raise _StesoNonRisolto("cordonature non riconosciute: impaginato non coperto")
 
     # I due capi dello steso sono la linea PIU' ESTERNA del loro gruppo, non il
-    # centro del gruppo: sul Happy Hippo il taglio e la riga del margine, a un
+    # centro del gruppo: sul T1 cold seal il taglio e la riga del margine, a un
     # millimetro, finiscono nello stesso gruppo, e il centro metteva il capo a
     # mezzo millimetro dal taglio - nastro 114 invece dei 115 del DT.
     def capi(linee, centri):
@@ -1695,10 +1692,10 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
                                    "nastro %.1f mm" % web)
         # A pari scarto il DT non dice quale fascia e' il fronte, e l'ordine
         # in cui le pieghe si incontrano non e' un criterio: dipende dal
-        # verso del foglio. Sul Kinder Choco Fresh fronte da 42 a bordo
+        # verso del foglio. Sul T1 al cioccolato fresco fronte da 42 a bordo
         # nastro e fronte da 39 in mezzo tornano tutte e due a 1,48 mm dal
         # mezzo giro, e vinceva la prima - la striscia tecnica e il
-        # tratteggio - con "CHOCO fresh" finito sul retro. Decide la stampa,
+        # tratteggio - con "T1 al cioccolato fresco" finito sul retro. Decide la stampa,
         # come per il fronte di un astuccio a fasciatura orizzontale: il
         # fronte e' la fascia con piu' grafica.
         pari = {(q["back_a"], q["front"], q["sovrapposizione"]): q
@@ -1849,8 +1846,8 @@ def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.
                       entro=None):
     """Il rettangolo che la fustella CHIUDE, in punti PDF, o `None`.
 
-    Serve quando l'ingombro dello stampato non e' la fustella. Sul Kinder
-    Choco Fresh T1 la grafica scende sotto il tracciato - c'e' una striscia
+    Serve quando l'ingombro dello stampato non e' la fustella. Sul T1 al
+    cioccolato fresco la grafica scende sotto il tracciato - c'e' una striscia
     di fondo bianco che il disegno non comprende - e misurando lo stampato il
     nastro veniva 121 mm invece di 115: le fasce non chiudevano piu' e il file
     non si costruiva. La fustella invece si riconosce senza ambiguita', perche'
@@ -1880,7 +1877,7 @@ def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.
     if entro is not None:
         # Solo i segmenti in quel riquadro: la ricerca prova ogni coppia di
         # orizzontali con ogni coppia di verticali, e su una tavola piena di
-        # note - il Nutella B-ready T2 - sulla pagina intera non finiva.
+        # note - il pane ripieno T2 - sulla pagina intera non finiva.
         ex0, ey0, ex1, ey1 = entro
         S = [x for x in S
              if (x[0] == "H" and ey0 <= x[1] <= ey1 and x[3] >= ex0
@@ -1904,7 +1901,7 @@ def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.
         return inter / unione if unione > 0 else 0.0
 
     # I lati devono COPRIRE il rettangolo, non coincidere con esso. Una
-    # fustella sborda: sul Choco Fresh la verticale di destra scende 6 mm sotto
+    # fustella sborda: sul T1 al cioccolato fresco la verticale di destra scende 6 mm sotto
     # l'orizzontale di sotto, e pretendendo che gli estremi combaciassero il
     # rettangolo giusto veniva scartato.
     copre = lambda a, b, p, q: a <= p + tol and b >= q - tol

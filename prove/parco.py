@@ -6,11 +6,14 @@ e' pubblico. Qui c'e' solo lo strumento.
 
     python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
+    python3 prove/parco.py esito PRIMA DOPO [--ieri DIR] [--titolo TESTO] [--riassunto FILE]
     python3 prove/parco.py stesi CASI USCITA [--solo a,b]
+    python3 prove/parco.py misure CASI USCITA [--solo a,b] [--approva]
+    python3 prove/parco.py letture CASI [--codice DIR] [--solo a,b] [--approva]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
-                                [--domanda TESTO --opzione TESTO ...]
+                                [--domanda TESTO --opzione TESTO ... [--anteprima NOME]]
     python3 prove/parco.py prepara CASI CODICE [--riprendi]
     python3 prove/parco.py consegna CASI CODICE --messaggio TESTO --commento TESTO
     python3 prove/parco.py approvato CASI CODICE
@@ -21,11 +24,25 @@ e' pubblico. Qui c'e' solo lo strumento.
 repository), con il controllo dell'AI e la coda spenti, e per ogni caso di
 CASI/parco/parco.json manda i PDF a /api/build con le opzioni del caso, come
 fa la pagina. In USCITA salva per ogni caso il GLB, gli avvisi della
-costruzione e le quattro viste (`pack3d.vista`).
+costruzione e le quattro viste (`pack3d.vista`), e la lettura del PDF
+che la pagina mette accanto al modello (`pack3d.lettura`), se c'e'.
 
 `confronta` dice quali modelli sono cambiati fra due costruzioni, con gli
 avvisi che cambiano, e per ognuno affianca le viste: PRIMA sopra, DOPO sotto.
 Le immagini finiscono in DIR, di serie DOPO/confronto.
+
+`costruisci` misura anche ogni modello (`pack3d.misure`: l'ingombro, i
+pezzi, il flowpack lungo, largo e spesso, lo stiro della grafica del fronte)
+e lo confronta con le misure approvate del caso, `misure` nel manifesto: una
+misura approvata che cambia oltre la tolleranza la dice sotto il caso e in
+`misure_cambiate`. `confronta` le riassume tutte. Un modello cambiato a
+misure approvate ferme e' un cambio che non si vede; una misura cambiata va
+spiegata, o e' un difetto.
+
+`misure` rifa' il confronto su una costruzione gia' fatta, dal GLB; con
+`--approva` scrive le misure di quei modelli nel manifesto come approvate:
+dopo un rilascio, per i casi cambiati, o quando un cambio e' voluto. Il giro
+di un caso le scrive con `consegna`, insieme a `come_deve_venire`.
 
 `stesi` controlla che la texture di ogni modello sia lo steso del suo PDF
 (REGOLE.md, *La texture e' lo steso*): cerca ogni texture - e ogni zona di
@@ -66,8 +83,11 @@ mette nella cartella del caso il modello da approvare: quello che
 `costruisci --solo NOME` ha costruito col codice della settimana (il giro di
 un caso, CODA.md), o quello provato sullo Space con `spazio`. Il caso e'
 quello di CASI/casi/<data>_<CODICE>, e il nome quello che la pagina gli ha
-annunciato. La risposta a una domanda torna
-dallo Space, sulla issue del caso (`coda.aggiungi`).
+annunciato. Con `--stato domanda --anteprima NOME` la domanda porta con se'
+le viste del modello di adesso e la lettura del PDF con le misure lette di
+quel caso del parco, che la finestra dei casi mostra sopra la domanda. La
+risposta a una domanda torna dallo Space, sulla issue del caso
+(`coda.aggiungi`).
 
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
@@ -133,15 +153,19 @@ def _porta_libera():
     return porta
 
 
-def _avvia(codice, log):
+def _avvia(codice, log, casi=None):
     """Un server col codice di `codice`, solo in locale. (processo, url)
 
     Senza chiave e con il controllo spento: il parco misura il codice, non
-    l'AI, e un caso del parco non deve finire nella coda dei casi nuovi.
+    l'AI, e un caso del parco non deve finire nella coda dei casi nuovi. Con
+    `casi`, il clone del repository privato, le risorse che stanno li' (la
+    colata: e' grafica del cliente, vedi `pack3d.colata`).
     """
     porta = _porta_libera()
     env = dict(os.environ, PORT=str(porta), HOST="127.0.0.1",
                PACK3D_CONTROLLO="0")
+    if casi and os.path.isdir(os.path.join(casi, "risorse")):
+        env["PACK3D_RISORSE"] = os.path.abspath(os.path.join(casi, "risorse"))
     for k in ("ANTHROPIC_API_KEY", "PACK3D_CODA_REPO", "PACK3D_CODA_TOKEN"):
         env.pop(k, None)
     p = subprocess.Popen([sys.executable, "server.py"], cwd=codice, env=env,
@@ -160,9 +184,9 @@ def _avvia(codice, log):
     raise SystemExit("il server non risponde: vedi %s" % log.name)
 
 
-def _costruisci_caso(url, cartella, caso):
-    """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
-    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento."""
+def _richiesta(url, percorso, cartella, caso):
+    """La richiesta di un caso del parco, come la manda la pagina: i suoi PDF
+    in un corpo solo e le sue opzioni."""
     files = [os.path.join(cartella, "parco", "pdf", f) for f in caso["file"]]
     blocchi = []
     for f in files:
@@ -172,10 +196,18 @@ def _costruisci_caso(url, cartella, caso):
     opts["nomi"] = [quote(os.path.basename(f)) for f in files]
     if len(blocchi) > 1:
         opts["parti"] = [len(b) for b in blocchi]
-    req = urllib.request.Request(
-        url + "/api/build", data=b"".join(blocchi), method="POST",
+    return urllib.request.Request(
+        url + percorso, data=b"".join(blocchi), method="POST",
         headers={"Content-Type": "application/pdf",
                  "X-Pack3d": json.dumps(opts)})
+
+
+def _costruisci_caso(url, cartella, caso, lettura=None):
+    """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
+    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento. Con
+    `lettura`, un percorso, ci salva la lettura del PDF che la pagina mette
+    accanto al modello (`pack3d.lettura`), se il server l'ha fatta."""
+    req = _richiesta(url, "/api/build", cartella, caso)
     t = time.time()
     try:
         with urllib.request.urlopen(req, timeout=ATTESA_COSTRUZIONE) as r:
@@ -183,10 +215,62 @@ def _costruisci_caso(url, cartella, caso):
             avvisi = json.loads(unquote(r.headers.get("X-Pack3d-Meta") or "[]"))
             controllo = r.headers.get("X-Pack3d-Controllo")
             controllo = json.loads(unquote(controllo)) if controllo else None
-            return r.status, glb, avvisi, time.time() - t, controllo
+            gettone = r.headers.get("X-Pack3d-Lettura")
+            attesa = r.headers.get("X-Pack3d-Verdetto")
+            secondi = time.time() - t
+        if attesa:
+            # il modello e' arrivato prima del verdetto del controllo: si
+            # aspetta lui, e il modello corretto se la correzione l'ha rifatto
+            v = _verdetto(url, attesa)
+            if v is not None:
+                controllo, avvisi = v["verdetto"], v["meta"] or avvisi
+                if v["glb"]:
+                    with urllib.request.urlopen(url + "/api/verdetto/glb?id=" + attesa,
+                                                timeout=120) as rg:
+                        glb = rg.read()
+        if lettura and gettone:
+            try:
+                with urllib.request.urlopen(url + "/api/lettura/" + gettone,
+                                            timeout=60) as rl, open(lettura, "wb") as fh:
+                    fh.write(rl.read())
+            except (urllib.error.URLError, OSError) as e:
+                print("lettura del PDF non salvata: %s" % e)
+        return r.status, glb, avvisi, secondi, controllo
     except urllib.error.HTTPError as e:
         testo = e.read().decode("utf-8", "replace")
         return e.code, None, [testo[:1000]], time.time() - t, None
+
+
+def _verdetto(url, gettone):
+    """Il verdetto del controllo che arriva dopo il modello (/api/verdetto),
+    quando c'e'; None se non arriva in tempo."""
+    fine = time.time() + ATTESA_COSTRUZIONE
+    while time.time() < fine:
+        try:
+            with urllib.request.urlopen(url + "/api/verdetto?id=" + gettone,
+                                        timeout=60) as r:
+                v = json.loads(r.read().decode("utf-8"))
+            if v.get("pronto"):
+                return v
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+        except (urllib.error.URLError, OSError, ValueError):
+            pass
+        time.sleep(3)
+    print("il verdetto del controllo non e' arrivato in %d s" % ATTESA_COSTRUZIONE)
+    return None
+
+
+def _misura(glb, caso):
+    """(misure del modello, misure approvate cambiate). Mai un errore: un
+    GLB che non si misura lo dice nelle misure."""
+    from pack3d import misure
+    try:
+        m = misure.misura(glb)
+    except Exception as e:                  # noqa: BLE001
+        return {"errore": "%s: %s" % (type(e).__name__, e)}, []
+    return m, misure.confronta(caso.get("misure"), m)
 
 
 def costruisci(args):
@@ -196,12 +280,13 @@ def costruisci(args):
     codice = os.path.abspath(args.codice or QUI)
     impronta = versione.impronta(codice)
     with open(os.path.join(args.uscita, "server.log"), "w") as log:
-        p, url = _avvia(codice, log)
+        p, url = _avvia(codice, log, args.casi)
         try:
             riassunto = {}
             for caso in casi:
                 nome = caso["nome"]
-                stato, glb, avvisi, sec, _ = _costruisci_caso(url, args.casi, caso)
+                stato, glb, avvisi, sec, _ = _costruisci_caso(
+                    url, args.casi, caso, os.path.join(args.uscita, nome + "_lettura.jpg"))
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
                              file=caso["file"], opzioni=caso.get("opzioni"),
                              avvisi=avvisi, md5=None, versione=impronta)
@@ -209,6 +294,9 @@ def costruisci(args):
                     with open(os.path.join(args.uscita, nome + ".glb"), "wb") as fh:
                         fh.write(glb)
                     esito["md5"] = hashlib.md5(glb).hexdigest()
+                    esito["misure"], cambiate = _misura(glb, caso)
+                    if cambiate:
+                        esito["misure_cambiate"] = cambiate
                     try:
                         im, ingombro = vista.viste(
                             os.path.join(args.uscita, nome + ".glb"), 512)
@@ -223,6 +311,8 @@ def costruisci(args):
                                        secondi=esito["secondi"])
                 print("%-18s %3d %6.1f s  %s" % (nome, stato, sec,
                                                  (esito["md5"] or avvisi[0][:80])[:80]))
+                for r in esito.get("misure_cambiate") or []:
+                    print("    MISURA APPROVATA CAMBIATA  %s" % r)
                 sys.stdout.flush()
         finally:
             p.terminate()
@@ -301,6 +391,192 @@ def confronta(args):
         len(uguali), len(cambiati),
         (", %d costruiti da una parte sola" % len(spaiati)) if spaiati else "",
         (": le viste affiancate sono in %s" % uscita) if cambiati else ""))
+    # le misure approvate che DOPO cambia: un cambio che va spiegato
+    misurati = [e for e in b.values() if e.get("misure")]
+    cambiate = [(n, b[n]["misure_cambiate"]) for n in sorted(b)
+                if b[n].get("misure_cambiate")]
+    if cambiate:
+        print("\nMISURE APPROVATE CAMBIATE in %d casi:" % len(cambiate))
+        for n, righe in cambiate:
+            print("  %s" % n)
+            for r in righe:
+                print("    %s" % r)
+    elif misurati:
+        print("nessuna misura approvata cambiata (%d casi misurati)" % len(misurati))
+
+
+def esito(args):
+    """Il verdetto di un parco fatto da solo (la notte, nelle Actions del
+    repository dei casi): DOPO contro PRIMA - il codice di `main`, quello
+    approvato - e, se c'e', contro IERI. Scrive il riassunto in markdown
+    (`--riassunto`, di serie a video) ed esce con 1 se qualcosa si e' rotto:
+    un caso che con PRIMA si costruiva e con DOPO no, un caso nuovo che non
+    si costruisce, o una misura approvata cambiata. Un modello solo cambiato
+    no: il ramo della settimana cambia i modelli apposta, e si guarda al
+    rilascio."""
+    a, b = _esiti(args.prima), _esiti(args.dopo)
+    ieri = _esiti(args.ieri) if args.ieri and os.path.isdir(args.ieri) else {}
+    rotti = [n for n in sorted(b) if b[n]["stato"] != 200
+             and (n not in a or a[n]["stato"] == 200)]
+    cambiati = [n for n in sorted(set(a) & set(b)) if n not in rotti
+                and (a[n]["stato"], a[n]["md5"]) != (b[n]["stato"], b[n]["md5"])]
+    misure = [(n, b[n]["misure_cambiate"]) for n in sorted(b)
+              if b[n].get("misure_cambiate")]
+    da_ieri = [n for n in sorted(b) if n in ieri
+               and (ieri[n]["stato"], ieri[n]["md5"]) != (b[n]["stato"], b[n]["md5"])]
+    righe = ["## Parco%s" % (": " + args.titolo if args.titolo else ""), "",
+             "**%d casi**: %d uguali a `main` al byte, %d cambiati, **%d rotti**, "
+             "**%d con misure approvate cambiate**." % (
+                 len(b), len(b) - len(cambiati) - len(rotti), len(cambiati),
+                 len(rotti), len(misure))]
+    if ieri:
+        righe.append("Rispetto alla notte prima cambiano %d casi%s." % (
+            len(da_ieri), (": " + ", ".join("`%s`" % n for n in da_ieri)) if da_ieri else ""))
+    if rotti:
+        righe += ["", "### Rotti", ""]
+        for n in rotti:
+            prima = a[n]["stato"] if n in a else "caso nuovo"
+            righe.append("- `%s`: %s -> %s. %s" % (n, prima, b[n]["stato"],
+                                                   (b[n]["avvisi"] or [""])[0][:300]))
+    if misure:
+        righe += ["", "### Misure approvate cambiate", ""]
+        for n, cambiate in misure:
+            righe.append("- `%s`: %s" % (n, "; ".join(cambiate)))
+    if cambiati:
+        righe += ["", "### Cambiati rispetto a `main`", "",
+                  "Le viste affiancate, PRIMA sopra e DOPO sotto, sono nell'artefatto.", ""]
+        for n in cambiati:
+            nuovi = [x for x in b[n]["avvisi"] if x not in a[n]["avvisi"]]
+            righe.append("- `%s`%s%s" % (n, " (da stanotte)" if n in da_ieri else "",
+                                          (": " + nuovi[0][:200]) if nuovi else ""))
+    testo = "\n".join(righe) + "\n"
+    if args.riassunto:
+        with open(args.riassunto, "a", encoding="utf-8") as fh:
+            fh.write(testo)
+    else:
+        print(testo)
+    if rotti or misure:
+        raise SystemExit(1)
+
+
+# le letture approvate, una per caso: nel repository dei casi, accanto al
+# manifesto
+LETTURE = os.path.join("parco", "letture.json")
+
+
+def _leggi_caso(url, cartella, caso):
+    """La lettura di un caso come la chiede la pagina prima di costruire
+    (/api/analyze): il dict, o il testo dell'errore."""
+    try:
+        with urllib.request.urlopen(_richiesta(url, "/api/analyze", cartella, caso),
+                                    timeout=ATTESA_COSTRUZIONE) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return "errore %d: %s" % (e.code, e.read().decode("utf-8", "replace")[:500])
+
+
+def _differenze(a, b):
+    """Le righe che dicono come cambia una lettura: le chiavi, e le righe dei
+    cartellini tolte e aggiunte."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return ["    prima: %s" % str(a)[:300], "    dopo:  %s" % str(b)[:300]]
+    righe = []
+    for k in sorted(set(a) | set(b)):
+        if a.get(k) == b.get(k):
+            continue
+        if k == "meta" and isinstance(a.get(k), list) and isinstance(b.get(k), list):
+            righe += ["    - %s" % x for x in a[k] if x not in b[k]]
+            righe += ["    + %s" % x for x in b[k] if x not in a[k]]
+        else:
+            righe.append("    %s: %s -> %s" % (k, str(a.get(k))[:200], str(b.get(k))[:200]))
+    return righe
+
+
+def letture(args):
+    """La lettura di ogni caso del parco - famiglia, misure, cartellini -
+    contro quella approvata, in qualche minuto e senza costruire: dice a
+    quale caso una modifica ha cambiato strada prima del parco intero. Con
+    `--approva` le scrive come approvate. Esce con 1 se una e' cambiata."""
+    from concurrent.futures import ThreadPoolExecutor
+    casi = _casi(args.casi, args.solo)
+    f = os.path.join(args.casi, LETTURE)
+    approvate = {}
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            approvate = json.load(fh)
+    codice = os.path.abspath(args.codice or QUI)
+    t = time.time()
+    with open(os.devnull, "w") as log:
+        p, url = _avvia(codice, log, args.casi)
+        try:
+            # una per lavoratore: la lettura di un caso non dipende da chi
+            # e' passato prima (`pack3d.stato`)
+            with ThreadPoolExecutor(2) as pool:
+                lette = dict(zip([c["nome"] for c in casi], pool.map(
+                    lambda c: _leggi_caso(url, args.casi, c), casi)))
+        finally:
+            p.terminate()
+            try:
+                p.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                p.kill()
+    cambiate = 0
+    for nome, letta in lette.items():
+        if nome not in approvate:
+            print("%-44s nessuna lettura approvata" % nome[:44])
+            continue
+        if letta == approvate[nome]:
+            print("%-44s uguale" % nome[:44])
+            continue
+        cambiate += 1
+        print("%-44s CAMBIA" % nome[:44])
+        for r in _differenze(approvate[nome], letta):
+            print(r)
+    print("\n%d letture, %d cambiate, in %.0f s" % (len(lette), cambiate, time.time() - t))
+    if args.approva:
+        approvate.update(lette)
+        with open(f, "w", encoding="utf-8") as fh:
+            json.dump(approvate, fh, ensure_ascii=False, indent=1, sort_keys=True)
+            fh.write("\n")
+        print("letture approvate scritte per %d casi in %s: commit e push nel registro"
+              % (len(lette), LETTURE))
+    elif cambiate:
+        raise SystemExit(1)
+
+
+def misure_del_parco(args):
+    """Le misure di una costruzione gia' fatta contro quelle approvate; con
+    `--approva`, scritte nel manifesto come approvate."""
+    from pack3d import misure
+    manifesto = _manifesto(args.casi)
+    voluti = set(args.solo or [])
+    cambiati, scritti = 0, 0
+    for caso in manifesto["casi"]:
+        nome = caso["nome"]
+        f = os.path.join(args.uscita, nome + ".glb")
+        if (voluti and nome not in voluti) or not os.path.exists(f):
+            continue
+        with open(f, "rb") as fh:
+            m = misure.misura(fh.read())
+        righe = misure.confronta(caso.get("misure"), m)
+        if not caso.get("misure"):
+            righe = ["nessuna misura approvata"]
+        print("%-44s %s" % (nome[:44], "uguale" if not righe else righe[0]))
+        for r in righe[1:]:
+            print("%-44s %s" % ("", r))
+        cambiati += bool(righe)
+        if args.approva and caso.get("misure") != m:
+            caso["misure"] = m
+            scritti += 1
+    if args.approva:
+        with open(os.path.join(args.casi, "parco", "parco.json"), "w",
+                  encoding="utf-8") as fh:
+            json.dump(manifesto, fh, ensure_ascii=False, indent=1)
+            fh.write("\n")
+        print("misure approvate scritte per %d casi in parco/parco.json: commit e push "
+              "nel registro" % scritti)
+    elif cambiati:
+        raise SystemExit(1)
 
 
 def versione_del_codice(args):
@@ -704,6 +980,38 @@ def _modello_da_approvare(args, cartella):
     return [os.path.join(cartella, "modello.glb"), os.path.join(cartella, "modello.json")]
 
 
+# L'anteprima di una domanda, nella cartella del caso: il modello di adesso
+# dai quattro lati e la lettura del PDF con le misure lette, uno sotto
+# l'altra. La finestra dei casi della pagina la mostra sopra la domanda
+# (`coda.anteprima`): chi risponde vede cosa si e' costruito e cosa si e'
+# letto, non solo la domanda.
+ANTEPRIMA = "domanda.jpg"
+ANTEPRIMA_LATO = 1600
+
+
+def _anteprima(uscita, nome, cartella):
+    """Compone CARTELLA/domanda.jpg dal caso del parco NOME costruito in
+    USCITA (`costruisci --solo`): le viste e la lettura del PDF. Il percorso."""
+    from PIL import Image
+    pezzi = [Image.open(f).convert("RGB") for f in
+             (os.path.join(uscita, nome + "_viste.png"),
+              os.path.join(uscita, nome + "_lettura.jpg")) if os.path.exists(f)]
+    if not pezzi:
+        raise SystemExit("mancano le viste di %s in %s: prima `costruisci --solo %s`"
+                         % (nome, uscita, nome))
+    largo = min(ANTEPRIMA_LATO, max(im.width for im in pezzi))
+    pezzi = [im.resize((largo, max(1, round(im.height * largo / im.width)))) for im in pezzi]
+    tela = Image.new("RGB", (largo, sum(im.height for im in pezzi) + 20 * (len(pezzi) - 1)),
+                     "white")
+    y = 0
+    for im in pezzi:
+        tela.paste(im, (0, y))
+        y += im.height + 20
+    dove = os.path.join(cartella, ANTEPRIMA)
+    tela.save(dove, quality=80)
+    return dove
+
+
 def _registra_stato(casi, cartella, codice, corpo, altri=()):
     """Lo stato del caso in `stato.json`, nella sua cartella, per la pagina
     dello Space: la finestra dei casi e le notifiche di chi l'ha mandato lo
@@ -718,7 +1026,8 @@ def _registra_stato(casi, cartella, codice, corpo, altri=()):
     if not isinstance(dati, dict):
         dati = {}
     storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
-    voce = {k: corpo[k] for k in ("stato", "nome", "messaggio", "domanda", "opzioni")
+    voce = {k: corpo[k] for k in ("stato", "nome", "messaggio", "domanda", "opzioni",
+                                  "immagine")
             if corpo.get(k) not in (None, "", [])}
     voce["quando"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     dati["storia"] = (storia + [voce])[-30:]
@@ -832,6 +1141,11 @@ def caso(args):
     elif args.domanda or args.opzione:
         raise SystemExit("--domanda e --opzione vanno con --stato domanda")
     altri = []
+    if args.anteprima:
+        if args.stato != "domanda":
+            raise SystemExit("--anteprima va con --stato domanda")
+        altri = [_anteprima(args.uscita, args.anteprima, cartella)]
+        corpo["immagine"] = ANTEPRIMA
     if args.stato == "da-approvare":
         if not args.modello:
             raise SystemExit("con --stato da-approvare ci vuole --modello: il caso "
@@ -845,6 +1159,8 @@ def caso(args):
     if (_registra_stato(args.casi, cartella, args.codice, corpo, altri)
             and args.stato in ("domanda", "da-approvare")):
         _avvisa(args.spazio, args.codice)
+    # l'anteprima la mostra la pagina: Glam riceve i campi che conosce (GLAM.md)
+    corpo.pop("immagine", None)
     try:
         risposta = _stato_a_glam(args.url, corpo)
     except urllib.error.HTTPError as e:
@@ -1170,7 +1486,7 @@ def prepara(args):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
                                     stato="in-lavorazione", messaggio=None, domanda=None,
-                                    opzione=None, modello=None, uscita=uscita,
+                                    opzione=None, anteprima=None, modello=None, uscita=uscita,
                                     spazio=args.spazio))
             a_glam = "si'"
         except SystemExit:
@@ -1210,8 +1526,29 @@ def prepara(args):
         "; foto: " + ", ".join(foto) if foto else ""))
     for v in voci[-3:]:
         print("  > " + " ".join(v.split())[:600])
+    no = sum(1 for v in voci if v.startswith("**Modello NON approvato"))
+    if no:
+        print("respinto %d %s: prima di un'altra interpretazione, la domanda con "
+              "l'anteprima%s (CODA.md, *Dopo un Non approvo, prima si chiede*)"
+              % (no, "volta" if no == 1 else "volte",
+                 ", sempre: e' il secondo no" if no >= 2 else
+                 ", se la correzione non e' una sola"))
     if nuova:
         print("da fare: scrivi `come_deve_venire` della voce %s in parco/parco.json" % voce["nome"])
+
+
+def _approva_misure(casi, nome, esito):
+    """Scrive nel manifesto le misure di `esito` come quelle approvate del
+    caso `nome`. Niente, se l'esito non le ha."""
+    if not esito.get("misure") or "errore" in esito["misure"]:
+        return
+    manifesto = _manifesto(casi)
+    for caso in manifesto["casi"]:
+        if caso["nome"] == nome:
+            caso["misure"] = esito["misure"]
+    with open(os.path.join(casi, "parco", "parco.json"), "w", encoding="utf-8") as fh:
+        json.dump(manifesto, fh, ensure_ascii=False, indent=1)
+        fh.write("\n")
 
 
 def consegna(args):
@@ -1246,13 +1583,20 @@ def consegna(args):
     if esito.get("stato") != 200:
         raise SystemExit("il caso non si costruisce col codice di adesso (%s): %s"
                          % (esito.get("stato"), str((esito.get("avvisi") or [""])[0])[:300]))
+    # le misure del modello consegnato diventano quelle approvate del caso,
+    # insieme a `come_deve_venire`: il rilascio le confronta
+    if "misure" not in esito:
+        # costruito prima che le misure ci fossero: si misura il suo GLB
+        with open(os.path.join(uscita, voce["nome"] + ".glb"), "rb") as fh:
+            esito["misure"], _ = _misura(fh.read(), voce)
+    _approva_misure(args.casi, voce["nome"], esito)
     _commit_registro(args.casi, ["parco/parco.json"], "Caso %s: com'e' giusto" % cod)
     with redirect_stdout(rumore):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
                                     stato="da-approvare", messaggio=args.messaggio,
-                                    domanda=None, opzione=None, modello=voce["nome"],
-                                    uscita=uscita, spazio=args.spazio))
+                                    domanda=None, opzione=None, anteprima=None,
+                                    modello=voce["nome"], uscita=uscita, spazio=args.spazio))
         except SystemExit:
             pass
     # registrato? lo stato e il modello sono nel registro prima di Glam
@@ -1315,7 +1659,7 @@ def approvato(args):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
                                     stato="risolto", messaggio=messaggio, domanda=None,
-                                    opzione=None, modello=None, uscita="/tmp",
+                                    opzione=None, anteprima=None, modello=None, uscita="/tmp",
                                     spazio=args.spazio))
         except SystemExit:
             pass
@@ -1389,7 +1733,7 @@ def stesi(args):
         # `pagina_unica` cuoce e la copia senza livelli perderebbe - senza i
         # livelli tecnici e senza le lastre che coprono la grafica, come la
         # pulisce la costruzione (`artwork.senza_coperture`: la vernice del
-        # Nutella Donut, resa, copre tutto il foglio), resa a una risoluzione
+        # astuccio della ciambella, resa, copre tutto il foglio), resa a una risoluzione
         # per texture
         puliti = []
         for f in caso["file"]:
@@ -1475,6 +1819,15 @@ def main():
     k.add_argument("dopo")
     k.add_argument("--immagini", help="dove salvare le viste affiancate")
     k.set_defaults(fai=confronta)
+    e = sub.add_parser("esito", help="il verdetto di un parco fatto da solo: "
+                                     "esce con 1 se qualcosa si e' rotto")
+    e.add_argument("prima", help="la costruzione col codice di main")
+    e.add_argument("dopo", help="la costruzione col codice da provare")
+    e.add_argument("--ieri", help="la costruzione della notte prima, se c'e'")
+    e.add_argument("--titolo", help="cosa si e' provato, per il riassunto")
+    e.add_argument("--riassunto", help="il file dove aggiungere il riassunto "
+                                       "in markdown (nelle Actions: $GITHUB_STEP_SUMMARY)")
+    e.set_defaults(fai=esito)
     t = sub.add_parser("stesi", help="controlla che ogni texture sia lo steso "
                                      "del suo PDF, dritta")
     t.add_argument("casi", help="clone del repository privato dei casi")
@@ -1482,6 +1835,25 @@ def main():
     t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                    help="solo questi casi, separati da virgole")
     t.set_defaults(fai=stesi)
+    lt = sub.add_parser("letture", help="la lettura di ogni caso contro quella "
+                                        "approvata, senza costruire")
+    lt.add_argument("casi", help="clone del repository privato dei casi")
+    lt.add_argument("--codice", help="cartella del codice da provare "
+                                     "(di serie questo repository)")
+    lt.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                    help="solo questi casi, separati da virgole")
+    lt.add_argument("--approva", action="store_true",
+                    help="scrive le letture di questi casi come approvate")
+    lt.set_defaults(fai=letture)
+    m = sub.add_parser("misure", help="le misure di una costruzione contro quelle "
+                                      "approvate (con --approva le scrive)")
+    m.add_argument("casi", help="clone del repository privato dei casi")
+    m.add_argument("uscita", help="la cartella di una costruzione del parco")
+    m.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                   help="solo questi casi, separati da virgole")
+    m.add_argument("--approva", action="store_true",
+                   help="scrive le misure di questi modelli come approvate")
+    m.set_defaults(fai=misure_del_parco)
     s = sub.add_parser("spazio", help="prova un caso sullo Space vero, "
                                       "appena ripartito col codice di qui")
     s.add_argument("url", help="per esempio https://iccio-maurizio.hf.space")
@@ -1517,6 +1889,10 @@ def main():
                                      "parco costruito con `costruisci --solo` (o "
                                      "provato con `spazio`), il cui modello va a "
                                      "chi l'ha caricato da approvare")
+    q.add_argument("--anteprima", help="con --stato domanda: il caso del parco "
+                                       "costruito con `costruisci --solo`, le cui "
+                                       "viste e la cui lettura del PDF vanno con la "
+                                       "domanda")
     q.add_argument("--uscita", default="/tmp/parco_spazio",
                    help="la cartella dove `costruisci` (o `spazio`) ha salvato il GLB")
     q.add_argument("--spazio", default=SPAZIO,

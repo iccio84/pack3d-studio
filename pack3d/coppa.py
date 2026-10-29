@@ -1,10 +1,10 @@
 """
 La coppa di carta col tappo: sleeve conico, fondo, e tappo a corpo e anello.
 
-E' la coppa da gelato dei Nutella POT, e arriva in DUE PDF: il contenitore
+E' la coppa da gelato come la coppa da 500, e arriva in DUE PDF: il contenitore
 (sleeve e fondo) e il tappo (corpo e anello). Ognuno ha il suo disegno
 tecnico in grande - lo steso, con la grafica sopra - e una miniatura del
-disegno Ferrero con la vista MONTATA.
+disegno cliente con la vista MONTATA.
 
 Le due cose dicono cose diverse, e servono tutte e due:
 
@@ -25,10 +25,10 @@ steso che sta alla stessa distanza dalla piega, e lungo quell'arco tanta
 carta quanta e' la circonferenza della coppa li', a partire dal lato di
 taglio sinistro. Quello che avanza e' il sormonto incollato sotto il lembo:
 non si impone, si misura - e deve tornare con la riga che il DT gli
-disegna. Sul Nutella POT avanzano 8,6 mm al fondo e 7,7 alla bocca, e il DT
+disegna. Sulla coppa da 500 avanzano 8,6 mm al fondo e 7,7 alla bocca, e il DT
 ha la riga a 8,05.
 
-Qui sta anche il CONO GELATO col suo lid (il Camy Apolo): lo steso e' un
+Qui sta anche il CONO GELATO col suo lid (il cono T1 macaron): lo steso e' un
 settore pieno con l'apice sul foglio, la forma la dice il disegno 1:1
 accanto, il lato che resta sopra lo dice la fascia senza inchiostro della
 colla, e la grafica va sulle generatrici con la cucitura che segue l'orlo
@@ -45,6 +45,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from . import cup as cupmod
+from . import stato
 from . import tracciati as tr
 
 PT2MM = 25.4 / 72.0
@@ -91,9 +92,9 @@ def _bezier(p0, p1, p2, p3, n=12):
 
 
 # Le ultime pagine lette: chi riconosce il PDF e chi lo costruisce lo
-# leggono tutti e due, e sullo sleeve del Nutella POT sono 3,5 secondi. Due
+# leggono tutti e due, e sullo sleeve della coppa da 500 sono 3,5 secondi. Due
 # bastano - lo sleeve e il tappo - e piu' di due restano in memoria per niente.
-_LETTE = {}
+_LETTE = stato.per_lavoro({})
 _LETTE_MAX = 2
 _LETTE_CHIAVE = threading.Lock()
 
@@ -122,7 +123,7 @@ def tracce(pdf, page_no=0, solo_tratti=False):
 def _tracce(pdf, page_no=0, solo_tratti=False):
     """Ogni sottotracciato della pagina, appiattito, con tratto e pieno.
 
-    Le miniature dei disegni Ferrero stanno spesso dentro un form, e
+    Le miniature dei disegni cliente stanno spesso dentro un form, e
     `cup.flatten_paths` legge solo il flusso della pagina: qui si scende
     nei form componendo le matrici, come fa `tracciati`. Le bezier si
     appiattiscono in 12 tratti: sui cerchi della miniatura il raggio torna
@@ -238,8 +239,8 @@ def gemello(gruppi, tolleranza=0.004):
     Il grande e' il gruppo di anelli col cerchio piu' grande della pagina -
     il fondo della coppa, il corpo del tappo. Il gemello e' il gruppo piu'
     piccolo che ne ripete le PROPORZIONI: ogni anello del grande, diviso per
-    il suo esterno, deve ritrovarsi nel piccolo entro lo 0,4%. Sul Nutella
-    POT il fondo da' 87,5 / 72,5 / 67,2 mm e la miniatura gli stessi tre a
+    il suo esterno, deve ritrovarsi nel piccolo entro lo 0,4%. Sulla coppa
+    da 500 il fondo da' 87,5 / 72,5 / 67,2 mm e la miniatura gli stessi tre a
     1:8,169 (piu' il cerchio del Best Before, che in grande non e' un
     cerchio). `scala` e' in mm di pezzo per punto di miniatura. None se il
     gemello non c'e'.
@@ -804,7 +805,7 @@ def _rette(Q, liberi, tol=1.0, minimo=40.0):
     Ognuna e' la corsa piu' lunga di punti CONSECUTIVI entro `tol` dalla retta
     per due punti del contorno, fra i punti `liberi`; i punti presi non si
     riprendono. Un lato disegnato come una bezier quasi dritta - il lato
-    radiale del cono Camy esce 0,6 pt dalla sua corda - e' una retta lo
+    radiale del cono esce 0,6 pt dalla sua corda - e' una retta lo
     stesso.
     """
     n = len(Q)
@@ -852,7 +853,7 @@ def _archi_concentrici(T, cx, cy, colore, r0, r1, apertura):
     (cx, cy) fra `r0` e `r1` mm, lunghi almeno meta' dell'`apertura`.
 
     Sottili vuol dire 1,5 mm al piu' fra il punto piu' vicino al centro e il
-    piu' lontano: l'ultimo taglio del cono Camy e' un pieno sottile, non un
+    piu' lontano: l'ultimo taglio del cono e' un pieno sottile, non un
     tratto, e non e' nemmeno concentrico al millimetro - sta a R 169,3 +- 0,4
     dall'apice. Conta il raggio medio.
     """
@@ -1179,7 +1180,7 @@ def lato_sopra(k, im, riq):
 
     La colla non tiene sull'inchiostro: il lato che va SOTTO ha lungo il
     taglio una fascia di carta non stampata, e il sormonto dell'altro la
-    copre. Sul cono Camy la fascia e' lungo il lato radiale (11,9 mm): va
+    copre. Sul cono la fascia e' lungo il lato radiale (11,9 mm): va
     sotto, e sopra resta il lembo - quello con la linguetta, che gira
     attorno al cono verso la punta e da cui il cono si sbuccia. Senza una
     fascia su un lato solo, sopra resta il lato radiale, e si dichiara.
@@ -1297,11 +1298,11 @@ def leggi_disco(T):
     """Il disco del lid: il gruppo di cerchi concentrici piu' grande della
     pagina, o None.
 
-    Il lid Camy disegna tre cerchi: l'abbondanza, il taglio e l'area di
+    Il lid del cono disegna tre cerchi: l'abbondanza, il taglio e l'area di
     sicurezza (67, 61 e 51 mm). L'abbondanza e' il cerchio di fuori se il
     secondo le sta da 1,5 a 3,2 mm dentro - di quanto la grafica deve
     debordare - e allora il taglio e' il secondo; l'area di sicurezza sta
-    piu' dentro, di 5 mm sul Camy.
+    piu' dentro, di 5 mm sul cono.
     """
     gruppi = anelli(cerchi(T))
     if not gruppi:
@@ -1458,7 +1459,7 @@ def zona_nello_steso(riquadro, regione, dpi, steso):
 # --------------------------------------------------------------------------- #
 VIVO = 115     # max - min dei canali: i colori del marchio, non i fondi
 # Quanto vicini devono stare due colori vivi per essere lo stesso marchio:
-# il NEW sta 7 mm sopra la scritta nutella, il box "60" 20 mm a sinistra.
+# il NEW sta 7 mm sopra il nome del prodotto, il box "60" 20 mm a sinistra.
 MARCHIO_STACCO = 4.0
 
 
@@ -1479,7 +1480,7 @@ def fronte(c, sleeve, riquadro):
 
 
 # Un colore vivo che copre piu' di questa quota dello steso e' il FONDO, non
-# il marchio: il giallo del cono Camy Apolo ne copre i due terzi.
+# il marchio: il giallo del cono ne copre i due terzi.
 FONDO_VIVO = 0.30
 FONDO_DISTANZA = 60.0     # livelli RGB: quanto un colore e' "quello del fondo"
 
@@ -1498,8 +1499,8 @@ def fronte_steso(s, rho0, rho1, raggio, sleeve, riquadro):
     colori VIVI - il marrone delle fasce gira tutto attorno e non dice
     niente - e di quelli il GRUPPO piu' grande, chiusi i buchi fra lettere
     vicine: e' il marchio. Il baricentro di tutti i colori vivi lo tirava
-    verso il box "nutella 60" e il marchio usciva spostato a destra. Un
-    colore vivo che fa da fondo - il giallo del cono Camy - non e' marchio e
+    verso il box del formato e il marchio usciva spostato a destra. Un
+    colore vivo che fa da fondo - il giallo del cono - non e' marchio e
     si toglie prima di contare.
     """
     m = _marchio(s, rho0, rho1, sleeve, riquadro)
@@ -1528,7 +1529,7 @@ def fronte_steso(s, rho0, rho1, raggio, sleeve, riquadro):
 def _dalla_mezzeria(s, rho, fi):
     """L'angolo `fi` (rad) dello steso in gradi dalla mezzeria fra i due lati
     sull'arco `rho`, anche quando lo steso scavalca i 180 gradi dell'atan2
-    (il cono Camy va da -112 a -187)."""
+    (il cono va da -112 a -187)."""
     a, b = s.fi(rho, "sx"), s.fi(rho, "dx")
     mezzo = b - 0.5 * ((b - a) % (2 * math.pi))
     return math.degrees((fi - mezzo + math.pi) % (2 * math.pi) - math.pi)
@@ -1725,7 +1726,7 @@ def profilo_coppa(m, spessore=CARTA):
     steso, che il DT vuole senza inchiostro - finisce al centro del rotolo,
     e il giro che si vede e' l'ultimo, quello attaccato alla parete. Lungo
     quel giro la carta sale dal lato interno, passa sopra e scende fuori:
-    sul Nutella POT il marrone della fascia alta copre il lato interno e la
+    sulla coppa da 500 il marrone della fascia alta copre il lato interno e la
     cima, e il fuori del bordo resta bianco.
     """
     a = m.ricciolo / 2
@@ -1879,7 +1880,7 @@ def costruisci(pdf_coppa=None, pdf_tappo=None, dpi=300, lastre_extra=(),
     per il vassoio: rendere lo sleeve a 300 dpi per poi ridurlo a 1700 punti
     e' memoria buttata.
     `carta` e' lo spessore del cartoncino in mm, se l'utente l'ha
-    dichiarato; senza, quello del cartiglio del Nutella POT.
+    dichiarato; senza, quello del cartiglio della coppa da 500.
     """
     if not pdf_coppa and not pdf_tappo:
         raise ValueError("coppa: nessun PDF")
@@ -2086,7 +2087,7 @@ def profilo_cono(k, r_cima, y_cima, chiuso):
     `Maglia.falda`, riga per riga dall'orlo della carta; qui restano:
 
     - `punta`: il dischetto della punta, che il disegno tronca (2 mm sul
-      Camy);
+      cono);
     - `cima`: il taglio della carta dove la falda finisce, a raggio `r_cima`
       e quota `y_cima`. Col risvolto piegato sul lid (`chiuso`) e' lo
       spessore del suo orlo interno, e sotto il risvolto c'e' il suo

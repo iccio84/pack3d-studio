@@ -4,7 +4,7 @@ In Glam Lab ogni modello ha «Scarica Template»: un PSD su cui il grafico
 appoggia il nuovo artwork, e da cui esporta la texture da caricare sul
 modello. Per i modelli costruiti dal PDF il template lo fa lo Space, dal GLB
 che ha appena costruito, con la struttura del template ufficiale che Glam ha
-gia' (quello del Nutella 750 g): due gruppi, dal basso.
+gia' (quello del vasetto da 750 g): due gruppi, dal basso.
 
 **La tua grafica** - un livello solo, «La tua grafica», con la texture del
 modello: lo steso del PDF (REGOLE.md, *La texture e' lo steso*), alla misura

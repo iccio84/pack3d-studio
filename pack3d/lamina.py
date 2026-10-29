@@ -3,7 +3,7 @@ La lamina: il foil - a caldo o a freddo - che il DT dichiara su una lastra sua.
 
 Un foil non e' un inchiostro qualsiasi. E' un film metallico trasferito sul
 cartoncino (a caldo con una matrice, a freddo con una colla stampata), e
-sopra si puo' stampare: sul coperchio esagonale del Kusschen Darkchoc e' la
+sopra si puo' stampare: sul coperchio della scatola esagonale e' la
 cornice ramata, e nella legenda del foglio c'e' scritto `cold foil copper
 Kurz 404`. Il file lo dice con una tinta piatta che si chiama come la
 lavorazione - `..._ColdFoilCopper_Kurz404` - e un'alternativa di colore che
@@ -30,7 +30,7 @@ import tempfile
 import numpy as np
 from PIL import Image
 
-from . import techink
+from . import stato, techink
 
 # Come si chiama la lastra di una lamina: foil, Folie (Heissfolie,
 # Kaltfolie), lamina, stampa a caldo, hot stamping. "Foil" senza spazi
@@ -86,7 +86,7 @@ def copertura(pdf, quali, riquadro, misura, page_no=0, dpi=DPI):
     (punti, telaio di misura, y in giu') portato a `misura` (larghezza,
     altezza) in pixel. None se la lastra non si legge."""
     from .materiali import _ritaglio
-    cartella = tempfile.mkdtemp(prefix="lamina_")
+    cartella = tempfile.mkdtemp(prefix="lamina_", dir=stato.cartella())
     try:
         r = _ritaglio(pdf, page_no, riquadro, os.path.join(cartella, "r.pdf"))
         solo = quali[0] if len(quali) == 1 else None

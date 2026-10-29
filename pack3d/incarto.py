@@ -1,6 +1,6 @@
 """
 L'incarto a triangolo: il foglio di film che avvolge una barretta rigida e
-si chiude sulle testate a triangolo (Kinder Maxi, «KM T1 WRAPPING»).
+si chiude sulle testate a triangolo (barretta incartata T1).
 
 Il DT e' un rettangolo: il passo lungo la barretta, il nastro attorno. Le
 linee lunghe, da un taglio all'altro, sono gli spigoli della barretta e
@@ -54,7 +54,7 @@ TOLL = 0.35
 # mm: le linee lunghe devono attraversare almeno questa parte del passo
 LUNGA = 0.95
 # mm: una fascia piu' stretta di cosi', contro un taglio, non e' una faccia
-# (sul Kinder Maxi la riga a 1 mm dal taglio, dove l'eye-mark non e' stampato)
+# (sulla barretta incartata T1 la riga a 1 mm dal taglio, dove l'eye-mark non e' stampato)
 FASCIA_MIN = 3.0
 # mm: le testate della faccia stanno dentro il foglio almeno di tanto
 TESTA_MIN = 3.0

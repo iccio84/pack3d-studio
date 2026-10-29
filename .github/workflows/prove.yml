@@ -1,0 +1,31 @@
+# Le prove veloci (prove/test_veloci.py) su ogni PR e su ogni unione nel ramo
+# della settimana: la lettura della fustella, le misure, il registro delle
+# famiglie, lo stato di un lavoro, i lavoratori. Qualche secondo, e nessun
+# file dei clienti: quelli stanno nel repository dei casi, e il parco gira la'
+# (pack3d-casi, .github/workflows/parco.yml).
+name: Prove veloci
+
+on:
+  pull_request:
+  push:
+    branches: [ coda-settimana ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prove:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: Le dipendenze
+        run: pip install -q -r requirements.txt
+      - name: Le prove
+        run: python -m unittest discover -s prove -p "test_*.py" -v

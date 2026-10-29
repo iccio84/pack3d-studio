@@ -18,7 +18,7 @@ texture e' HD (`risoluzione`).
 
 Stanno qui, e non nel server, perche' non sono questioni di HTTP: sono
 dell'artwork. Finche' stavano nel server le applicava solo lui, e la riga di
-comando consegnava astucci diversi da quelli del prodotto - sul Nutella Donut
+comando consegnava astucci diversi da quelli del prodotto - sull'astuccio della ciambella
 una scatola rosa piena, con la vernice ancora sopra.
 """
 from __future__ import annotations
@@ -28,13 +28,14 @@ import tempfile
 
 from PIL import Image
 
+from . import stato
 from .dieline import PT2MM
 
 
 # La risoluzione della texture, (dpi, lato massimo in px), per qualita'.
 #
 # Di serie e' HD, per tutte le famiglie. Sul piano Free di Render la texture
-# di un flowpack stava in 1700 px, e un foglio come Colazione - 460 mm di
+# di un flowpack stava in 1700 px, e un foglio come il wafer da colazione - 460 mm di
 # nastro - usciva a 3,7 px/mm, meno di 100 dpi: sgranato appena ci si
 # avvicinava. Il limite era la memoria, e sugli Spaces non c'e' piu' (vedi
 # DEPLOY.md). A 300 dpi quel foglio fa 5433 px di lato; il tetto a 8192 e'
@@ -59,7 +60,7 @@ def risoluzione(quality):
 # Le copie a pagina unica gia' fatte: impronta del file -> (copia, pagine).
 # L'interfaccia chiede /api/analyze e subito dopo /api/build sullo stesso
 # file, e l'analisi in memoria si ritrova solo se la copia e' la stessa.
-_UNA_PAGINA = {}
+_UNA_PAGINA = stato.per_lavoro({})
 _UNA_PAGINA_MAX = 8
 
 
@@ -67,7 +68,7 @@ def pagina_unica(pdf):
     """`(pdf con la sola prima pagina, quante pagine aveva il file)`.
 
     Si lavora sulla PRIMA pagina e basta: un artwork su piu' pagine e' quasi
-    sempre lo stesso pack ripetuto per lingua - sul Kinder Cards T2
+    sempre lo stesso pack ripetuto per lingua - sul T2 di cialde
     "64-GERMANY" e "01-ITALY", identici tranne il piede. Leggere sempre la
     pagina 0 non bastava a dirlo: le altre restavano nel file, e chi lo
     passava tutto a Ghostscript senza limiti le rendeva tutte. Tolte qui,
@@ -111,7 +112,7 @@ def _pagina_unica(pdf):
         w = pypdf.PdfWriter(clone_from=pdf)
         for i in range(len(w.pages) - 1, 0, -1):
             w.remove_page(i)
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
         tmp.close()
         with open(tmp.name, "wb") as fh:
             w.write(fh)
@@ -161,7 +162,7 @@ def riquadro_girato(pdf, riq, gradi):
 
 # Le copie girate gia' fatte: (impronta del file, gradi) -> copia. Stessa
 # ragione di _UNA_PAGINA: /api/analyze e /api/build girano lo stesso file.
-_GIRATE = {}
+_GIRATE = stato.per_lavoro({})
 _GIRATE_MAX = 8
 
 
@@ -192,7 +193,7 @@ def pagina_girata(pdf, gradi):
     cuoce soltanto il /Rotate, se c'e' (vedi `pagina_unica`).
 
     Il contenuto si avvolge fra `q cm` e `Q` senza rileggerlo: su un foglio
-    come Colazione sono centinaia di migliaia di operazioni, e qui basta
+    come il wafer da colazione sono centinaia di migliaia di operazioni, e qui basta
     spostarle tutte insieme. MediaBox e gli altri riquadri si portano con la
     stessa matrice; livelli, separazioni e risorse restano quelli che erano.
     Un giro nullo torna il file com'e'.
@@ -233,7 +234,7 @@ def pagina_girata(pdf, gradi):
     nuovo.set_data(b"q " + " ".join("%.6f" % v for v in m).encode()
                    + b" cm\n" + dati + b"\nQ\n")
     page.replace_contents(nuovo.flate_encode())
-    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+    tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
     tmp.close()
     with open(tmp.name, "wb") as fh:
         w.write(fh)
@@ -346,7 +347,7 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
     # g, rg e k - che dipingono in grigio, RGB e quadricromia - e Q lo
     # riporta a com'era al q. Seguendo solo `cs`, dopo il riempimento di
     # un'area riservata tutto quello che veniva in quadricromia con `k` era
-    # ancora "di quella lastra" e veniva tolto: sul Kinder Cards T2 106
+    # ancora "di quella lastra" e veniva tolto: sul T2 di cialde 106
     # riempimenti su 112, per fortuna tutti fuori dal DT - il fondo del
     # cartiglio, le pastiglie della legenda - ma sulla grafica sarebbe stato
     # lo stesso.
@@ -537,7 +538,7 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                                 conta_scritte(via)
                             else:
                                 # Un BT con scritte dentro e fuori - sul
-                                # Kinder Country "Bar Code Area" sul DT e le
+                                # T1 ai cereali "Bar Code Area" sul DT e le
                                 # didascalie delle copie tecniche sotto: le
                                 # scritte fuori non si tolgono, si rendono
                                 # invisibili (modo 3), cosi' quelle dopo non
@@ -649,7 +650,7 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                         # di una nota: la penna lo spegne come DT, ma il
                         # pallino pieno sulla sua punta resterebbe grafica.
                         # Si segna la punta che sta dentro.
-                        # Fuori basta un millimetro: sul B-ready un richiamo
+                        # Fuori basta un millimetro: sul pane ripieno un richiamo
                         # finisce sul bordo del riquadro della sua nota, 2,5
                         # mm oltre il DT, dentro il margine.
                         a, z = tracciato[0], tracciato[-1]
@@ -658,7 +659,7 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                                     and fuori(riquadro([altra]), 1.0 / PT2MM)):
                                 teste.append(riquadro([punta]))
                     elif not via and op in FILL and teste:
-                        # Sul Nutella B-ready T2 ogni richiamo delle note
+                        # Sul pane ripieno T2 ogni richiamo delle note
                         # finisce con un pallino di 0,7 mm, disegnato subito
                         # dopo la sua linea: sulla texture erano punti neri
                         # sparsi.
@@ -672,7 +673,7 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
                     if not via and solo_percorso and len(pezzi) > 1:
                         # Un tracciato solo puo' disegnare il DT e, nello
                         # stesso colpo, la vista tecnica accanto o una quota:
-                        # sul Kinder Country la penna del DT traccia anche la
+                        # sul T1 ai cereali la penna del DT traccia anche la
                         # vista interna. Via i sottotracciati tutti fuori: un
                         # sottotracciato non tocca nulla fuori dal suo
                         # riquadro, ne' col riempimento ne' col tratto, e
@@ -791,7 +792,7 @@ def strip_separations(src, dst, drop, riquadri=None, aree=None,
         except Exception:
             ereditano = True
     # la matrice si segue solo se serve - un'area riservata da cercare, un DT
-    # fuori dal quale togliere: su un foglio come Colazione il flusso sono
+    # fuori dal quale togliere: su un foglio come il wafer da colazione il flusso sono
     # centinaia di migliaia di operazioni
     page.replace_contents(filt(page.get_contents(), res,
                                IDENTITA if aree or regione is not None
@@ -848,7 +849,7 @@ def gira_sulla_grafica(tex, panels, verso, attesi=None, restano=None,
     fasciatura verticale si stampa capovolto, perche' la piega gli fa fare
     mezzo giro, e letto a 180 gradi sul foglio e' gia' giusto. Si gira solo
     lo scarto dal verso atteso per la faccia, `attesi` (vedi `verso_atteso`).
-    Prima si girava ogni verso diverso da zero, e sul Kinder Pingui T6 la
+    Prima si girava ogni verso diverso da zero, e sul T6 aperto la
     falda del retro con "6 Pezzi - 180 g", stampata giusta, finiva a testa
     in giu'.
 
@@ -980,9 +981,9 @@ def astuccio_sulla_grafica(pdf, page_no=0):
     Il solutore legge il foglio come sta sulla tavola: il cielo e' la fascia
     SOPRA il fronte, il fondo quella sotto, le falde del retro nell'ordine in
     cui le incontra. Ma come un DT sta sulla tavola lo decide chi impagina: il
-    Kinder Pingui T6 arriva con il foglio dritto sulla grafica (FERRERO_1742…)
+    T6 aperto arriva con il foglio dritto sulla grafica (file 1742…)
     e con il DT dritto sul disegno tecnico e la grafica capovolta
-    (KPI_T6_base). Stesso astuccio, e il secondo usciva rovesciato: il fronte
+    (T6 aperto). Stesso astuccio, e il secondo usciva rovesciato: il fronte
     lo raddrizzava la texture, ma cielo e fondo erano scambiati, il retro
     aveva la fascia rossa in alto e i fianchi erano a testa in giu'.
 
@@ -997,7 +998,7 @@ def astuccio_sulla_grafica(pdf, page_no=0):
     alti uguali, e quale dei due e' il fronte il solutore lo decide dalla
     fustella; girato il foglio di mezzo giro puo' scegliere l'altro, e il
     retro - stampato capovolto - si legge dritto come un fronte. Lo smentisce
-    il cielo, che fra i due deve leggersi dritto col fronte: sul Nutella Donut
+    il cielo, che fra i due deve leggersi dritto col fronte: sull'astuccio della ciambella
     girato di 90 gradi il fronte era la faccia di PREPARAZIONE, e il cielo
     capovolto l'ha detto.
 
@@ -1096,6 +1097,20 @@ def astuccio_sulla_grafica(pdf, page_no=0):
     return scelto, d, giro, avviso
 
 
+def lastre_fisse(pagina, fisse):
+    """Le lastre di un caso calibrato, per nome. Un nome che finisce con `*`
+    vale per tutte le lastre della pagina che cominciano cosi': il nome intero
+    di certe lastre porta quello del cliente, che nel codice non si scrive."""
+    from . import techink
+    nomi = [str(n) for n in fisse if str(n).strip()]
+    lastre = {techink._norm(n) for n in nomi if not n.endswith("*")}
+    prefissi = tuple(techink._norm(n[:-1]) for n in nomi if n.endswith("*"))
+    if prefissi:
+        lastre |= set(techink.technical_separations(
+            pagina, prova=lambda n: n.startswith(prefissi)).values())
+    return lastre
+
+
 def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
                     fisse=None):
     """(pdf da cui ritagliare la texture, nomi delle coperture togliute).
@@ -1107,7 +1122,7 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
     l'agente: la costruzione deterministica non le guardava, e strappava le
     separazioni solo se un caso calibrato le elencava a mano.
 
-    Il caso che l'ha fatto vedere: su un astuccio Nutella Donut la vernice si
+    Il caso che l'ha fatto vedere: su un astuccio della ciambella la vernice si
     chiama `Water Based Gloss Varnish` e copre tutto il pannello. pdfium la
     rende opaca, quindi la texture uscirebbe rosa piena. Nessuna euristica su
     spessore e colore la puo' prendere - non e' un tratto sottile, e' un pieno
@@ -1126,8 +1141,8 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
     aggiungono quelli che il file scrive ma non nomina - una Pantone per
     nome, e una didascalia sul disegno o in legenda: vedi
     `techink.aree_riservate`. Si cercano su OGNI file. Prima solo su quelli
-    senza livelli tecnici, per risparmiare una passata di testo, e sul Kinder
-    Country i due box verdi e la fascia coperta restavano stampati: i suoi
+    senza livelli tecnici, per risparmiare una passata di testo, e sul T1 ai
+    cereali i due box verdi e la fascia coperta restavano stampati: i suoi
     livelli tecnici sono `Check` e `Guides and grids`, e i box non ci sono.
     Il prefiltro sulla parola AREA tiene il costo a zero sui file che non la
     scrivono.
@@ -1157,7 +1172,7 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
         # solo le coperture: il limite era il costo della passata. Vedi
         # `techink.disegno` per quali, e perche' non tutte le tecniche.
         if fisse is not None:
-            lastre = {techink._norm(n) for n in fisse if str(n).strip()}
+            lastre = lastre_fisse(pagina, fisse)
             lastre |= set(techink.technical_separations(
                 pagina, prova=techink.area).values())
         else:
@@ -1203,12 +1218,12 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
     if not lastre and regione is None and not zone:
         return pdf, []
     try:
-        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
         tmp.close()
         # Tolto il box resta la sua DIDASCALIA, se non e' scritta in bianco:
-        # sul Kinder Cards T2 "Best Before Area" e "POSITIONING AREA FOR EAN
+        # sul T2 di cialde "Best Before Area" e "POSITIONING AREA FOR EAN
         # CODE (if requested)", marrone scuro, restavano stampate sui fianchi
-        # del pack; sul Nutella B-ready T2 "INGREDIENTS", "WEIGHT", "GDA",
+        # del pack; sul pane ripieno T2 "INGREDIENTS", "WEIGHT", "GDA",
         # "F8 LEGAL TEXT" sul retro. I riquadri dei box tolti vanno a chi
         # rende la texture, che dentro spegne le scritte: vedi `strati.dividi`.
         riquadri = []

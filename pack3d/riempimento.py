@@ -19,7 +19,7 @@ La disposizione la decide il vano del vassoio:
   conta;
 - i pack stanno frontali: la faccia stampata verso il davanti del vassoio e il
   marchio dritto, come stanno nel loro modello, in file dal davanti al fondo e
-  a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
+  a strati uguali. Il T1 della barretta fresca al lampone T1x40: 2 file da 20, una sull'altra.
   Sdraiati, la faccia in su, solo se in piedi non ci stanno, o se i pezzi
   contati frontali vengono a strati diversi e sdraiati fanno una griglia
   piena (`_griglia`, il T15: 5 x 3). Sdraiati stanno in piano: inclinati
@@ -40,12 +40,16 @@ from dataclasses import dataclass, replace
 
 import numpy as np
 
+from .verifica import DIFETTO
+
 SPESSORE_VASSOIO = 1.0      # mm, come `vassoio.SPESSORE`
 GIOCO = 0.6                 # mm fra le punte piegate e la parete
 COMPRIME = 0.02             # quanto si schiaccia un pezzo gonfio fra i vicini
 PIEGA_PINNA = math.radians(80.0)
 SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto meta'
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
+FUORI_MODELLO = 0.01        # mm: il corpo nel vassoio e' il suo modello, schiacciato come consentito
+FUORI_VANO = 1.0            # mm: quanto un pezzo puo' passare le pareti del vano
 SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
 STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
 
@@ -648,6 +652,43 @@ def adatta(P, N, p, d):
     return P, N, piegate
 
 
+def fuori_dal_modello(P, P2, p):
+    """Di quanto il corpo del pezzo adattato `P2` si scosta dal suo modello
+    `P`, schiacciato come consentito, in mm.
+
+    Nel riempimento il CU e' il suo modello (*Nel riempimento il CU resta il
+    suo modello*): si accorcia (`accorcia`), si schiaccia nello spessore
+    (`schiaccia`) e di lato (`stringe`), a UV ferme, e le pinne si stringono e
+    si piegano. Il corpo, cioe' tutto quello che non e' pinna, deve essere il
+    modello scalato cosi' e basta: il cuscino, la pressa e il fronte rimappato
+    del vassoio da 36 (caso 838cbae0ac) lo cambiavano, e chi l'ha caricato
+    vedeva «protuberanze e grafiche stirate»."""
+    lungo, largo, spesso = p.assi
+    c = p.centro
+    atteso = P.copy()
+    for j, k in ((lungo, p.accorcia), (largo, p.stringe), (spesso, p.schiaccia)):
+        atteso[:, j] = c[j] + (P[:, j] - c[j]) * k
+    corpo = np.abs(atteso[:, lungo] - c[lungo]) <= p.corpo / 2.0
+    if not corpo.any():
+        return 0.0
+    return float(np.abs(P2[corpo] - atteso[corpo]).max())
+
+
+def fuori_dal_vano(vano, p, poste, V_prodotto):
+    """Di quanto il pezzo che sporge di piu' passa le pareti o il fondo del
+    vano, in mm: le pareti di lato e davanti-dietro, e il fondo. Sopra puo'
+    sporgere: un pezzo piu' alto delle pareti sta in piedi e sporge, come i
+    T1 del vassoio da 36. Ruotata di 10 gradi, la pila del display da 15
+    usciva dal vano e si intersecava con il display."""
+    peggio = 0.0
+    for R, t in poste:
+        W = (V_prodotto - p.centro) @ R.T + t
+        peggio = max(peggio, vano.x0 - W[:, 0].min(), W[:, 0].max() - vano.x1,
+                     vano.z0 - W[:, 2].min(), W[:, 2].max() - vano.z1,
+                     vano.fondo - W[:, 1].min())
+    return peggio
+
+
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
@@ -754,6 +795,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None)
     for m in Jp.get("materials", []):
         J.setdefault("materials", []).append(rinumera(m))
     piegate = 0
+    scarto = 0.0
     for me in Jp.get("meshes", []):
         me = json.loads(json.dumps(me))
         for prim in me["primitives"]:
@@ -770,6 +812,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None)
             P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
             Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
             P2, N2, piegate = adatta(P, Nn, p, d)
+            scarto = max(scarto, fuori_dal_modello(P, P2, p))
             for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2)):
                 if arr is None:
                     continue
@@ -826,9 +869,18 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None)
         if u:
             J[chiave] = u
     righe = list(accorciato)
+    # il display e' fatto per il suo numero: con meno pezzi e' sbagliato
     if chiesti is not None and chiesti > quanti:
-        righe.append("ne hai chiesti %d, ma %s nel vassoio ce ne stanno al massimo %d: "
-                     "ne ho messi %d" % (chiesti, d.posa, massimo, quanti))
+        righe.append(DIFETTO + "ne hai chiesti %d, ma %s nel vassoio ce ne stanno al "
+                     "massimo %d: ne ho messi %d" % (chiesti, d.posa, massimo, quanti))
+    fuori = fuori_dal_vano(vano, p, poste, Vp)
+    if fuori > FUORI_VANO:
+        righe.append(DIFETTO + "un pezzo esce dal vano di %.1f mm: si interseca con il "
+                     "vassoio" % fuori)
+    if scarto > FUORI_MODELLO:
+        righe.append(DIFETTO + "il pezzo nel vassoio non e' il suo modello: il corpo si "
+                     "scosta di %.2f mm da quello costruito da solo, oltre lo "
+                     "schiacciamento consentito" % scarto)
     conti = _strati(d, quanti)
     pezzi = "pezzo" if quanti == 1 else "pezzi"
     strati = "%d %s" % (len(conti), "strato" if len(conti) == 1 else "strati")

@@ -7,6 +7,7 @@ JSON piccolo di parametri. La mesh la costruisce il codice.
 """
 from __future__ import annotations
 
+import glob
 import json
 import os
 import re
@@ -44,7 +45,7 @@ come UN BLOCCO solo, senza feritoie fra fondo, pareti e alette - lo dice la
 verifica "blocco unico", e un avviso FERITOIA e' un difetto da riportare - e la
 plancia e' un elemento a se', un nodo separato nel GLB.
 
-La COPPA CON TAPPO (la coppa da gelato di carta, come il Nutella POT) arriva in
+La COPPA CON TAPPO (la coppa da gelato di carta, come la coppa da 500) arriva in
 due PDF, lo sleeve col fondo e il tappo: l'utente la dichiara Cartotecnico in
 due pezzi, un PDF ciascuno. La
 misura il codice e non l'agente: la forma dalla vista montata in miniatura,
@@ -52,7 +53,7 @@ scalata sui cerchi del fondo e del corpo che il foglio disegna in grande e in
 piccolo, la grafica dallo steso. Le verifiche "sormonto", "cono" e "tappo"
 devono dire "torna" e "calza"; un NON TORNA e' un difetto da riportare.
 
-Il CONO GELATO COL LID (come il Camy Apolo) e' anche lui un Cartotecnico in due
+Il CONO GELATO COL LID (come il cono T1 macaron) e' anche lui un Cartotecnico in due
 pezzi: lo steso del cono - un settore pieno con l'apice sul foglio, il DT
 sulla lastra TROQUEL - e il lid, un disco. La forma viene dal disegno 1:1
 accanto allo steso, la grafica dallo steso; il lato che resta sopra lo dice la
@@ -108,7 +109,7 @@ Metodo:
   miniatura. Se discordano dillo negli avvisi, con i due numeri. Le quote
   servono a VERIFICARE, non a costruire: non metterle nei parametri.
 - Non misurare mai il pack dal contenuto, su nessuna famiglia. La grafica puo'
-  avere del bianco, e un margine bianco non e' una pinna: su Colazione il
+  avere del bianco, e un margine bianco non e' una pinna: sul wafer da colazione il
   margine dava 41,2 mm e la saldatura del DT, confermata dal cartiglio, 20. Lo
   stesso vale per un'aletta d'astuccio o la parete di un vassoio: la misura e'
   quella della fustella, la stampa dice solo dove finisce l'inchiostro.
@@ -172,8 +173,9 @@ Pulizia dell'artwork:
   quell'elenco la costruzione non le toglie e il lavoro che hai fatto si perde.
   Dichiara negli avvisi quali hai tolto e come le hai riconosciute.
 - Una lastra piena dentro un rettangolo puo' essere anche il fondo della
-  grafica, e i numeri non lo dicono: su K Colazione Piu' la fascia TEXT AREA
-  copre il 6,5% del foglio e Kinder ORANGE, che e' grafica, il 7,9%. Decide
+  grafica, e i numeri non lo dicono: sul wafer da colazione la fascia TEXT
+  AREA copre il 6,5% del foglio e l'arancio del marchio, che e' grafica, il
+  7,9%. Decide
   l'occhio, non la percentuale.
 - Sulla colata NON usare reconstruct_area: non le mancano pixel, le manca
   l'inchiostro giusto, e un modello generativo la reinventa - gocce diverse,
@@ -195,7 +197,7 @@ Pulizia dell'artwork:
 - Il riquadro confermato va in parametri_costruzione.colata come
   {"x_mm":..., "y_mm":..., "w_mm":..., "h_mm":...}.
 - NON decidere dai numeri: l'azzurro da solo non distingue un'ombra rotta da
-  una grafica blu. Sul Kinder Pingui T6 BOX la macchia azzurra piu' grande del
+  una grafica blu. Sul T6 aperto la macchia azzurra piu' grande del
   foglio e' il FONDO del pack - gocce d'acqua su azzurro - e ripararla sarebbe
   un disastro. Guarda le due immagini: se cambia un fondo, un marchio o una
   foto, il riquadro e' sbagliato e non lo dichiari.
@@ -205,17 +207,16 @@ Pulizia dell'artwork:
   avvisi della costruzione: se c'e' "sovrastampa simulata" l'ombra e' gia'
   giusta. Se no, scrivilo negli avvisi come cosa da chiedere a chi prepara
   l'artwork.
-- Non rigenerare mai loghi, marchi, testo di prodotto e il marchio `kinder`,
-  nemmeno dentro una maschera: se la maschera li tocca, e' la maschera a
-  essere sbagliata.
-- Il marchio `kinder` e' `k` NERA piu' `inder` ARANCIO KINDER, e sono due
-  colori distinti. E' il controllo piu' veloce che hai su una texture: se la
+- Non rigenerare mai loghi, marchi e testo di prodotto, nemmeno dentro una
+  maschera: se la maschera li tocca, e' la maschera a essere sbagliata.
+- Nel marchio la prima lettera, la `k`, e' NERA e le altre sono ARANCIO: sono
+  due colori distinti. E' il controllo piu' veloce che hai su una texture: se la
   `k` esce azzurra o l'arancio vira, non e' il file a sbagliare, e' la
   sovrastampa che non e' stata simulata. Dillo negli avvisi.
 
 Sezione del pack chiuso:
 - Le cordonature dicono dove il film e' cordonato, non che forma prende una
-  volta riempito: su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in
+  volta riempito: sul croccante T2 i pannelli danno 50 x 11, ma il pack in
   mano e' 41 x 20. Hanno lo stesso perimetro, quindi dalla fustella non si
   distinguono.
 - Riporta quindi in quote.larghezza e quote.spessore, in mm, la sezione del
@@ -236,17 +237,18 @@ Film su scatola:
 - Se c'e' la scatola riportalo in parametri_costruzione.avvolge_scatola come
   true, e metti rigonfiamento 1. Cambia la pinna: le ganasce appiattiscono un
   tubo solo se dentro c'e' aria, quindi con la scatola la pinna esce larga
-  quanto la faccia del pack invece di svasarsi fino a meta' perimetro. Kinder
-  Brioss T10 e' il caso di scuola.
+  quanto la faccia del pack invece di svasarsi fino a meta' perimetro. La
+  brioche T10 e' il caso di scuola.
 
 Apertura delle pinne:
 - Riporta parametri_costruzione.apertura_pinne come 1, 2 o 3. Dice come si
   comporta il film alle ganasce, e non si deduce dal rigonfiamento.
 - 3, il caso normale: il tubo si appiattisce e il bordo della pinna arriva a
-  meta' perimetro, quindi la pinna e' piu' alta del pack. E' Milch-Schnitte.
+  meta' perimetro, quindi la pinna e' piu' alta del pack. E' il T1 della
+  barretta fresca.
 - 1: la pinna e' alta quanto il pack e non si allarga. Succede quando il film
   avvolge un corpo rigido che arriva fino alla saldatura, perche' non c'e'
-  niente da appiattire. E' Kinder Brioss, e va insieme ad avvolge_scatola.
+  niente da appiattire. E' la brioche, e va insieme ad avvolge_scatola.
 - 2 quando il prodotto occupa quasi tutta la sezione ma lascia respiro alle
   estremita'.
 
@@ -285,6 +287,9 @@ def analyse(pdf_path, kind, answers=None, regole_path=None, client=None):
     p = regole_path or os.path.join(os.path.dirname(os.path.abspath(__file__)), "REGOLE.md")
     if os.path.exists(p):
         regole = open(p, encoding="utf-8").read()
+        # le regole di ogni famiglia stanno accanto, in regole/
+        for f in sorted(glob.glob(os.path.join(os.path.dirname(p), "regole", "*.md"))):
+            regole += "\n\n" + open(f, encoding="utf-8").read()
 
     msgs = [{"role": "user", "content":
              "Tipologia dichiarata dall'utente: %s.\nRisposte alle domande: %s.\n"

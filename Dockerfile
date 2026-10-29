@@ -7,7 +7,7 @@ WORKDIR /app
 # Ghostscript serve a una cosa sola, e non c'e' altro modo di farla: simulare
 # la SOVRASTAMPA. pdfium non la simula - verificato con un PDF costruito
 # apposta, un ciano sopra un magenta con /OP true e senza: esce identico - e
-# senza sovrastampa la colata Kinder perde l'ombra sulle gocce, che diventa un
+# senza sovrastampa la colata di latte perde l'ombra sulle gocce, che diventa un
 # alone azzurro piatto. Vedi REGOLE.md, *La colata si rimette con l'inchiostro
 # del file*.
 #
@@ -38,8 +38,11 @@ USER app
 # anche il lavoro di chi non c'entrava niente. Questo limite non si compra con
 # la RAM: per farne due davvero servono due PROCESSI, non due thread.
 #
-# La seconda richiesta prende un 503 con invito a riprovare. Meglio respingere
-# che far cadere il servizio.
-ENV HOST=0.0.0.0 PORT=7860 PACK3D_MAX_JOBS=1
+# Quindi PACK3D_MAX_JOBS=1 vale per processo, e le costruzioni insieme le fanno
+# i lavoratori: PACK3D_LAVORATORI processi, uno per lavoro, con la fila per chi
+# arriva coi lavoratori occupati (pack3d/lavoratori.py). `auto`: uno per vCPU
+# del container, finche' stanno nella memoria - due sullo Space gratuito, otto
+# su 8 vCPU e 32 GB. Con piu' vCPU cresce questo da solo, non MAX_JOBS.
+ENV HOST=0.0.0.0 PORT=7860 PACK3D_MAX_JOBS=1 PACK3D_LAVORATORI=auto
 EXPOSE 7860
 CMD ["python", "server.py"]

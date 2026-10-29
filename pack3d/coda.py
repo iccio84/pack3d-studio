@@ -168,6 +168,84 @@ def _carica(cod, *args):
             evento.set()
 
 
+# Le attese, in secondi, prima di riprovare a mettere un file nel registro.
+RIPROVE_S = (2, 4)
+
+
+def _metti_file(repo, percorso, messaggio, dati):
+    """Mette un file nel registro. True se c'e' (anche se c'era gia').
+
+    I file di un caso vanno su uno dopo l'altro, un commit ciascuno: un 409
+    (il ramo e' appena andato avanti), un 5xx o la rete che cade su un PDF
+    grosso lo perdevano, e il caso restava con un pezzo solo. Si riprova."""
+    corpo = {"message": messaggio, "content": base64.b64encode(dati).decode("ascii")}
+    errore = "?"
+    for k in range(len(RIPROVE_S) + 1):
+        if k:
+            time.sleep(RIPROVE_S[k - 1])
+        try:
+            _richiesta("PUT", "/repos/%s/contents/%s" % (repo, percorso), corpo, timeout=180)
+            return True
+        except urllib.error.HTTPError as e:
+            # 422: c'e' gia' (stesso caso caricato prima, stesso giorno, o il
+            # tentativo di prima era arrivato e la risposta no)
+            if e.code == 422:
+                print("coda: %s c'era gia' (HTTP 422)" % percorso, file=sys.stderr)
+                return True
+            errore = "HTTP %s" % e.code
+            if e.code != 409 and e.code < 500:
+                break
+        except (OSError, ValueError) as e:
+            errore = str(e)
+    print("coda: %s non caricato (%s)" % (percorso, errore), file=sys.stderr)
+    return False
+
+
+def _completa(repo, cod, issue, blocchi, nomi):
+    """Lo stesso caso rimandato, con la issue ancora aperta: mette nella sua
+    cartella i file che non c'erano. Gli stessi PDF danno lo stesso codice, e
+    prima il secondo invio si fermava a «gia' in coda»: il PDF perso al primo
+    non arrivava mai. Torna i nomi dei file arrivati."""
+    cartella = _cartella(issue)
+    if not cartella or not isinstance(issue.get("number"), int):
+        return []
+    try:
+        ci = _richiesta("GET", "/repos/%s/contents/%s" % (repo, cartella), timeout=30)
+    except urllib.error.HTTPError as e:
+        # 404: al primo invio non e' arrivato niente, nemmeno la cartella
+        if e.code != 404:
+            print("coda: cartella del caso %s non letta (HTTP %s)" % (cod, e.code),
+                  file=sys.stderr)
+            return []
+        ci = []
+    except (OSError, ValueError) as e:
+        print("coda: cartella del caso %s non letta (%s)" % (cod, e), file=sys.stderr)
+        return []
+    presenti = {f.get("name") for f in (ci if isinstance(ci, list) else [])
+                if isinstance(f, dict)}
+    arrivati = [_nome_file(n) for n, b in zip(nomi, blocchi)
+                if _nome_file(n) not in presenti
+                and _metti_file(repo, "%s/%s" % (cartella, _nome_file(n)),
+                                "Caso nuovo %s: %s" % (cod, _nome_file(n)), b)]
+    if not arrivati:
+        return []
+    n = issue["number"]
+    try:
+        _richiesta("POST", "/repos/%s/issues/%d/comments" % (repo, n),
+                   {"body": "**File arrivati col nuovo invio:** %s." % ", ".join(arrivati)},
+                   timeout=30)
+        # fermo per il file che mancava: adesso c'e', e il caso riparte
+        etichette = _togli_etichette(issue, "da-guardare")
+    except (OSError, ValueError) as e:
+        print("coda: issue del caso %s non aggiornata (%s)" % (cod, e), file=sys.stderr)
+        return arrivati
+    _dimentica("issue:%d" % n, "aperte")
+    if "da-guardare" in etichette:
+        avvia_routine(cod, issue.get("html_url", ""),
+                      "Il caso %s ha ricevuto i file che mancavano: %s")
+    return arrivati
+
+
 def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     repo = os.environ["PACK3D_CODA_REPO"].strip().strip("/")
     # gia' chiesto da `metti`, e in cassa: qui e' la cintura con le bretelle
@@ -185,6 +263,7 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
     if gia:
         print("coda: caso %s gia' in coda, issue %s" % (cod, gia[0].get("html_url", "?")),
               file=sys.stderr)
+        _completa(repo, cod, gia[0], blocchi, nomi)
         # chi lo ricarica vuole le domande anche lui
         _salva_email(cod, email)
         return
@@ -195,23 +274,24 @@ def _carica_davvero(cod, blocchi, nomi, verdetto, viste, contesto, email=None):
         file.append(("viste_modello.jpg", viste))
     file.append(("verdetto.json", json.dumps(dict(verdetto, codice=cod, contesto=contesto),
                                              ensure_ascii=False, indent=2).encode("utf-8")))
-    caricati = []
+    caricati, mancanti = [], []
     for nome, dati in file:
-        try:
-            _richiesta("PUT", "/repos/%s/contents/%s/%s" % (repo, cartella, nome),
-                       {"message": "Caso nuovo %s: %s" % (cod, nome),
-                        "content": base64.b64encode(dati).decode("ascii")}, timeout=180)
+        if _metti_file(repo, "%s/%s" % (cartella, nome),
+                       "Caso nuovo %s: %s" % (cod, nome), dati):
             caricati.append(nome)
-        except urllib.error.HTTPError as e:
-            # 422: c'e' gia' (stesso caso caricato prima, stesso giorno)
-            if e.code != 422:
-                print("coda: %s non caricato (HTTP %s)" % (nome, e.code), file=sys.stderr)
-        except (OSError, ValueError) as e:
-            print("coda: %s non caricato (%s)" % (nome, e), file=sys.stderr)
+        else:
+            mancanti.append(nome)
+    corpo = _corpo_issue(cod, nomi, verdetto, contesto, cartella)
+    if mancanti:
+        # Un PDF che non arriva nel registro lascia la sessione senza il pezzo
+        # da guardare, e la issue li elencava tutti lo stesso: lo dice qui.
+        corpo += ("\n\n**File non arrivati nel registro:** %s. Senza, il caso "
+                  "non si ricostruisce: chi l'ha caricato lo rimandi, e arrivano "
+                  "quelli che mancano." % ", ".join(mancanti))
     try:
         issue = _richiesta("POST", "/repos/%s/issues" % repo, {
             "title": "Caso nuovo %s: %s" % (cod, ", ".join(nomi))[:250],
-            "body": _corpo_issue(cod, nomi, verdetto, contesto, cartella)})
+            "body": corpo})
         print("coda: caso %s in %s, issue %s, file %s"
               % (cod, repo, issue.get("html_url", "?"), ", ".join(caricati)), file=sys.stderr)
     except (OSError, ValueError) as e:
@@ -886,13 +966,10 @@ def _in_glam(cod, issue, cartella, nome):
                       "Space), ma stato e etichette non sono aggiornati: %s")
 
 
-def modello(cod):
-    """Il GLB corretto che il caso aspetta di far approvare, o None.
-
-    La routine lo mette in `modello.glb`, nella cartella del caso, insieme
-    allo stato "da-approvare". Solo per codice, come lo stato: chi non ha il
-    codice del caso non lo vede. Dopo l'approvazione resta guardabile finche'
-    il caso non e' chiuso."""
+def _caso_aperto(cod):
+    """(cartella del caso nel registro, ultimo stato) di un caso con la issue
+    aperta, o None. Solo per codice: chi non ha il codice del caso non legge
+    niente."""
     if not CODICE_RE.match(cod or "") or not pronta():
         return None
     issue = _issue_del_caso(cod, fresca=True)
@@ -900,41 +977,86 @@ def modello(cod):
         return None
     m = re.search(r"File: \[`(casi/[^`]+)`\]", str(issue.get("body") or ""))
     storia = _storia(issue, fresca=True)
-    if not m or not storia or storia[-1].get("stato") not in ("da-approvare", "approvato"):
+    if not m or not storia:
         return None
-    percorso = m.group(1) + "/modello.glb"
+    return m.group(1), storia[-1]
 
-    def leggi():
-        req = urllib.request.Request(
-            API + "/repos/%s/contents/%s" % (_repo(), percorso),
-            headers={"Authorization": "Bearer " + os.environ["PACK3D_CODA_TOKEN"].strip(),
-                     "Accept": "application/vnd.github.raw",
-                     "X-GitHub-Api-Version": "2022-11-28",
-                     "User-Agent": "pack3d-studio"})
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                dati = r.read(MODELLO_MAX + 1)
-        except urllib.error.HTTPError as e:
-            if e.code == 404:
-                return None
-            raise
-        if len(dati) > MODELLO_MAX or dati[:4] != b"glTF":
+
+def _grezzo(percorso, massimo):
+    """Un file del registro dei casi cosi' com'e', o None se non c'e' o se
+    supera `massimo` byte."""
+    req = urllib.request.Request(
+        API + "/repos/%s/contents/%s" % (_repo(), percorso),
+        headers={"Authorization": "Bearer " + os.environ["PACK3D_CODA_TOKEN"].strip(),
+                 "Accept": "application/vnd.github.raw",
+                 "X-GitHub-Api-Version": "2022-11-28",
+                 "User-Agent": "pack3d-studio"})
+    try:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            dati = r.read(massimo + 1)
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
             return None
-        return dati
+        raise
+    return dati if len(dati) <= massimo else None
+
+
+def modello(cod):
+    """Il GLB corretto che il caso aspetta di far approvare, o None.
+
+    La routine lo mette in `modello.glb`, nella cartella del caso, insieme
+    allo stato "da-approvare". Solo per codice, come lo stato: chi non ha il
+    codice del caso non lo vede. Dopo l'approvazione resta guardabile finche'
+    il caso non e' chiuso."""
+    caso = _caso_aperto(cod)
+    if caso is None or caso[1].get("stato") not in ("da-approvare", "approvato"):
+        return None
+    percorso = caso[0] + "/modello.glb"
     # una cache sua, di due modelli al massimo: sono megabyte, non stati
-    chiave = percorso + ":" + str(storia[-1].get("quando"))
+    chiave = percorso + ":" + str(caso[1].get("quando"))
     with _CACHE_LOCK:
         if chiave in _MODELLI:
             return _MODELLI[chiave]
-    dati = leggi()
-    if dati is not None:
-        with _CACHE_LOCK:
-            while len(_MODELLI) >= 2:
-                _MODELLI.pop(next(iter(_MODELLI)))
-            _MODELLI[chiave] = dati
+    dati = _grezzo(percorso, MODELLO_MAX)
+    if dati is None or dati[:4] != b"glTF":
+        return None
+    with _CACHE_LOCK:
+        while len(_MODELLI) >= 2:
+            _MODELLI.pop(next(iter(_MODELLI)))
+        _MODELLI[chiave] = dati
     return dati
 
 
+def anteprima(cod):
+    """L'anteprima della domanda che il caso aspetta, in JPEG, o None.
+
+    La routine la mette nella cartella del caso con la domanda (`prove/parco.py
+    caso --stato domanda --anteprima`): le viste del modello di adesso e la
+    lettura del PDF con le misure lette. Solo per codice, come lo stato, e
+    solo finche' la domanda e' l'ultima cosa successa al caso."""
+    caso = _caso_aperto(cod)
+    if caso is None or caso[1].get("stato") != "domanda":
+        return None
+    nome = str(caso[1].get("immagine") or "")
+    if not re.match(r"^[a-z_]+\.jpg$", nome):
+        return None
+    percorso = caso[0] + "/" + nome
+    chiave = percorso + ":" + str(caso[1].get("quando"))
+    with _CACHE_LOCK:
+        if chiave in _ANTEPRIME:
+            return _ANTEPRIME[chiave]
+    dati = _grezzo(percorso, ANTEPRIMA_MAX)
+    if dati is None or dati[:3] != b"\xff\xd8\xff":
+        return None
+    with _CACHE_LOCK:
+        while len(_ANTEPRIME) >= 4:
+            _ANTEPRIME.pop(next(iter(_ANTEPRIME)))
+        _ANTEPRIME[chiave] = dati
+    return dati
+
+
+ANTEPRIMA_MAX = 8 * 1024 * 1024
+_ANTEPRIME = {}
 _MODELLI = {}
 
 
@@ -1218,6 +1340,9 @@ def stato_caso(cod):
     if st == "domanda":
         out["domanda"] = str(ultimo.get("domanda") or "")[:500]
         out["opzioni"] = [str(o)[:120] for o in ultimo.get("opzioni") or []][:4]
+        if ultimo.get("immagine"):
+            # il modello di adesso e la lettura del PDF: /api/anteprima
+            out["anteprima"] = True
     if st in ("da-approvare", "approvato"):
         out["modello"] = True
     return out

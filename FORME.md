@@ -41,12 +41,14 @@ regole. Texture, template, atlante e controllo dell'AI vengono da se'.
 Il modulo nuovo si prova **dopo** quelli che ci sono, quando l'hanno
 rifiutata: cosi' i casi del parco non cambiano strada e non pagano la prova.
 
-- **Un pezzo solo** (un PDF): in `server.py`, `_analyze_pdf`, nel ramo del
-  cartotecnico dopo l'astuccio, dove oggi c'e' `punta.riconosci`: se il
-  solutore astuccio fallisce e il pack e' dichiarato cartotecnico, si prova
-  la forma nuova. L'eccezione e' una forma che il solutore astuccio
-  **risolve male** invece di rifiutare: allora va prima, con un prefiltro
-  che su un astuccio esce subito (il ballotin cerca le lenti agli spigoli, il
+- **Un pezzo solo** (un PDF): una riga in `RICONOSCIMENTO` (`server.py`),
+  dopo `astuccio` e accanto a `scatola a punta`, per `["carton"]`, con la
+  sua `_prova_<forma>`: torna None subito se `lettura.errore_astuccio` e'
+  None - si prova solo se il solutore astuccio ha rifiutato il foglio - e
+  torna None anche se il foglio non e' suo, cosi' si passa alla riga dopo.
+  L'eccezione e' una forma che il solutore astuccio **risolve male** invece
+  di rifiutare: allora la riga va prima di `astuccio`, con un prefiltro che
+  su un astuccio esce subito (il ballotin cerca le lenti agli spigoli, il
   cono il settore pieno, in qualche decimo di secondo).
 - **Piu' pezzi** (un PDF per pezzo, dichiarato cartotecnico in N pezzi): la
   richiesta passa da `server.in_piu_pezzi` ad `analisi_coppa` e a
@@ -131,10 +133,12 @@ PDF con `lo_steso.INDIETRO`, come in `build_coppa`.
 
 **I due fili da collegare in `server.py`**:
 
-- la lettura (`_analyze_pdf`, o `analisi_coppa` per i pezzi) restituisce
-  `dict(kind="<forma>", title="...", meta=dichiara(p))`;
-- in `/api/build`, accanto a `elif info["kind"] == "punta":`, il ramo che
-  chiama `build_<forma>` con lo spessore della carta (`carta=carta`).
+- la lettura (`_prova_<forma>` in `RICONOSCIMENTO`, o `analisi_coppa` per
+  i pezzi) restituisce `dict(kind="<forma>", title="...", meta=dichiara(p))`;
+- la costruzione: una voce in `COSTRUZIONI` (`server.py`), accanto a
+  `"punta": _costruisci_punta`, e la sua `_costruisci_<forma>(r, info)` che
+  chiama `build_<forma>` con lo spessore della carta (`carta=r.carta`). `r`
+  ha il PDF e le scelte della pagina.
 
 La pagina non si tocca: legge `title` e `meta` per qualunque forma.
 
@@ -172,7 +176,8 @@ quest'ordine:
 
 ## 7. Le regole
 
-- **REGOLE.md**, una sezione nuova come *La scatola a punta*: cos'e' e come
+- **Le regole**: un file nuovo in `regole/`, come `regole/punta.md` per
+  *La scatola a punta*, e le sue sezioni nell'indice di REGOLE.md: cos'e' e come
   si dichiara, il caso da cui e' nata (il codice del caso, mai il nome del
   cliente), *La firma in fustella* coi numeri, *Il solido* con le formule,
   la texture, e *Cosa manca*.

@@ -2,7 +2,7 @@
 Le incisioni: i tagli della fustella che stanno DENTRO le facce di un astuccio
 chiuso, modellati come sono sul cartone.
 
-Il primo e' il Kinder Choco Fresh T5 "with frontal opening": sul fronte c'e'
+Il primo e' il T5 a strappo "with frontal opening": sul fronte c'e'
 una finestra che si apre a strappo. Chi la guarda chiusa, in mano, ne vede i
 tagli - due lati e due diagonali, la linguetta che gira sotto il fondo, la
 mezzaluna per il dito - e il modello li deve far vedere allo stesso modo: come
@@ -18,7 +18,7 @@ Quali tagli, lo dice la fustella:
 - un rettangolo chiuso dentro un pannello non e' un taglio, e' il riquadro di
   un'area (scadenza, codice a barre, vernice): lo spegne gia' la pulizia;
 - un tratto con le SPUNTE - trattini corti che lo attraversano a intervalli -
-  e' il taglio parziale dal rovescio: nella legenda dei disegni Ferrero e'
+  e' il taglio parziale dal rovescio: nella legenda dei disegni cliente e'
   proprio la riga con le stanghette. Sta sulla faccia interna del cartone e da
   fuori non si vede: non si incide;
 - le spunte stesse non sono tagli.
@@ -60,7 +60,7 @@ CORTO = 1.0
 # puo' stare un taglio che le appartiene (la mezzaluna per il dito).
 ACCANTO = 10.0
 VICINO = 3.0
-# La seconda firma, la PERFORAZIONE: una fila di trattini - sul KMS T10 13 mm
+# La seconda firma, la PERFORAZIONE: una fila di trattini - sul T10 al lampone 13 mm
 # di taglio e 1,7 di ponticello - che parte da una piega, gira attorno alla
 # finestra e torna sulla stessa piega. Il ponticello piu' lungo fra due
 # trattini, in mm; quanti ponticelli almeno; quanto e' lunga almeno, in mm;
@@ -310,7 +310,7 @@ def perforata(pdf, panels, facce, page_no=0):
     "vicini": i tagli attaccati al contorno coi due capi, come la mezzaluna
     per il dito}.
 
-    Sul KMS T10 l'apertura non ha il taglio dal rovescio: e' una fila di
+    Sul T10 al lampone l'apertura non ha il taglio dal rovescio: e' una fila di
     trattini che parte dalla piega fra fronte e cielo, scende sui due lati,
     passa sul fondo e torna. La fila si segue di trattino in trattino - il
     prossimo e' quello il cui capo sta a meno di PONTE mm e che gira di meno -

@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import io
 import json
 import math
 import os
@@ -24,6 +25,7 @@ import traceback
 import threading
 from collections import OrderedDict
 from dataclasses import replace
+from types import SimpleNamespace
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -46,6 +48,9 @@ from pack3d import quote as quotature
 # la texture e' lo steso del PDF; `steso` e' anche il nome della tela in
 # piu' di un costruttore
 from pack3d import atlante
+from pack3d import lettura as lettura_pdf
+from pack3d import lavoratori
+from pack3d import stato
 from pack3d import steso as lo_steso
 from pack3d import sormonto as lo_sormonto
 from pack3d import template as il_template
@@ -96,14 +101,13 @@ GONFIORE = {k: gonfiore(k) for k in FASCE}
 # pagina (larghezza x altezza in punti, arrotondate).
 CASI = {
     (1672, 737): dict(
-        name="FULFIL Chocolate Hazelnut Whip",
+        name="barretta proteica",
         sheet=(481.78, 120.34, 481.78 + 142 / PT2MM, 120.34 + 141 / PT2MM),
         girth_span=(120.34 + 15 / PT2MM, 120.34 + 126 / PT2MM),
         W=36.0, T=19.5, L=116.0, end_fin=13.0, side_fin=15.0,
         back_a=18.0, back_b=18.0, web=141.0, step=142.0,
         fin_open=52.6, teeth=20, soft="morbido",
-        drop_seps=["Coldseal", "White", "Stand Blau", "All",
-                   "Label_ferrero", "Label_linked"],
+        drop_seps=["Coldseal", "White", "Stand Blau", "All", "Label_*"],
     ),
 }
 
@@ -162,8 +166,8 @@ def analisi_flowpack(pdf):
         fp = fpk.analyze_auto(pdf, bbox=box)
     except Exception as e:
         # Secondo tentativo, sul RIQUADRO DELLA FUSTELLA invece che
-        # sull'ingombro stampato. Non sono la stessa cosa: sul Kinder Choco
-        # Fresh T1 la grafica scende sotto il tracciato - c'e' una striscia di
+        # sull'ingombro stampato. Non sono la stessa cosa: sul T1 al
+        # cioccolato fresco la grafica scende sotto il tracciato - c'e' una striscia di
         # fondo bianco che il disegno non comprende - e misurando lo stampato
         # il nastro veniva 121 mm invece di 115. Con quel numero le fasce non
         # chiudono e il file non si costruisce; con la fustella si risolve.
@@ -222,8 +226,8 @@ def flowpack_sulla_grafica(pdf):
     ragione: uno steso non deve dare un pack diverso secondo come sta sulla
     tavola. Il solutore gli 90 gradi li regge gia' - traspone i suoi ingressi
     e ritrova le pinne - ma la texture seguiva il FOGLIO: girato lo steso di
-    mezzo giro, il Milch-Schnitte usciva a testa in giu', e sul KP T1
-    Mandarino girato di un quarto la colata, che si allinea su un'onda
+    mezzo giro, il T1 della barretta fresca usciva a testa in giu', e sul T1 della merendina
+    al mandarino girato di un quarto la colata, che si allinea su un'onda
     orizzontale, si incollava storta e la fascia rossa spariva.
 
     Il verso lo da' il testo vivo del FRONTE (`fpk.fronte_in_pagina`): se e'
@@ -315,7 +319,7 @@ def avviso_pagine(pdf):
     """La riga sulle pagine, se il file ne ha piu' di una.
 
     Si lavora sempre e solo sulla PRIMA pagina: un artwork su piu' pagine e'
-    quasi sempre lo stesso pack ripetuto per lingua - sul Kinder Cards T2
+    quasi sempre lo stesso pack ripetuto per lingua - sul T2 di cialde
     "64-GERMANY" e "01-ITALY", identici tranne il piede - e mescolarle vuol
     dire misurare un pack su una pagina e stamparne un altro. Lo si dice,
     perche' chi ha caricato il file sappia quale pagina e' diventata il
@@ -362,6 +366,20 @@ def nota_incisioni(meta):
             "incisi nel cartone come solchi, come si vedono sulla scatola "
             "vera chiusa: non sono disegno tecnico rimasto stampato, e la "
             "grafica sotto e' intera." % " e ".join(quali))
+
+
+def nota_riempimento(info, nomi):
+    """La riga "da sapere" per il controllo di un riempimento: e' un
+    RIEMPIMENTO, e quale PDF e' il contenitore e quale il pack."""
+    def nome(k):
+        return nomi[k] if isinstance(k, int) and 0 <= k < len(nomi) else None
+    contenitore, pack = nome(info.get("vassoio")), nome(info.get("flowpack"))
+    cosa = "un astuccio" if info.get("cu") == "carton" else "un flowpack"
+    if contenitore and pack:
+        return ("e' un RIEMPIMENTO: il PDF \"%s\" e' il contenitore, il PDF \"%s\" "
+                "e' il pack, %s, di cui il contenitore e' pieno." % (contenitore, pack, cosa))
+    return "e' un RIEMPIMENTO: un contenitore pieno di %s." % (
+        "astucci" if info.get("cu") == "carton" else "flowpack")
 
 
 def nota_gelato(meta):
@@ -588,6 +606,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
+    # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
+    scrivi_lettura(out_glb, lambda: lettura_pdf.astuccio(pdf, d, gradi))
     # Coperture via per nome e texture girate sul verso della grafica: sono
     # regole dell'artwork, e stanno in `pack3d.artwork` perche' le applichi
     # anche la riga di comando.
@@ -797,6 +817,8 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
             raise ValueError("non e' un vassoio: la griglia della fustella "
                              "non ha cinque colonne e tre fasce, e non e' un "
                              "display con plancia")
+    # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
+    scrivi_lettura(out_glb, lambda: lettura_pdf.vassoio(pdf, v, gradi))
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     # La texture e' lo STESO INTERO, una sola, e le UV sono la posizione nel
     # piano: la piega sposta i vertici e la grafica se li porta dietro,
@@ -891,11 +913,13 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
 
     Come il vassoio: una texture sola - lo steso - e le UV sono la posizione
     sul foglio. Ma lo steso si rende sul solo riquadro della fustella, non
-    sulla pagina intera: sul Tronky la pagina e' 940 x 800 mm e la fustella
+    sulla pagina intera: sul wafer T1 la pagina e' 940 x 800 mm e la fustella
     515 x 486, e con lo stesso lato massimo la texture tiene quasi il doppio
     dei punti per millimetro.
     """
     dpi, tmax = risoluzione(quality)
+    # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
+    scrivi_lettura(out_glb, lambda: lettura_pdf.plancia(pdf, p, gradi))
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     px_mm = 4.0
     pz = forma.pezzi(pdf, p, d, px_mm)
@@ -966,6 +990,8 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     del rovescio. Nel GLB la plancia e' un nodo a parte, come nel display con
     plancia: il riempimento misura il vano senza di lei."""
     dpi, tmax = risoluzione(quality)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Display a scatola letto cosi'", scatola_plancia.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -1005,6 +1031,55 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
                                     ("plancia", inizio, len(T))],
                              tinte=tinte)
     return scatola_plancia.dichiara(p) + avvisi
+
+
+def lettura_tondi(pezzi, giri):
+    """La lettura dei pezzi tondi (`pack3d.lettura`): lo steso a settore
+    dello sleeve o del cono, il tappo o il lid, riletti sulle loro pagine gia'
+    orientate - la costruzione li legge dentro `pack3d.coppa` e restituisce
+    solo la maglia. Uno sotto l'altro."""
+    from pack3d import coppa as cp
+    letture = []
+    for nome, pdf in pezzi.items():
+        if pdf is None:
+            continue
+        T = cp.tracce(pdf)
+        gradi = giri.get(nome, 0) if giri else 0
+        if nome == "coppa":
+            c = cp.leggi_coppa(pdf, T)
+            s = c.steso
+            letture.append(lettura_pdf.steso_tondo(
+                pdf, s, "Sleeve della coppa letto cosi'",
+                ["carta fra i raggi %s e %s mm" % (_mm(s.R1), _mm(s.R2)),
+                 "parete dalla piega del fondo alla bocca: %s mm" % _mm(c.parete),
+                 "coppa alta %s mm, bocca %s mm" % (_mm(c.montata.altezza),
+                                                     _mm(2 * c.montata.r_bordo))],
+                parete=(s.piega, s.piega + c.parete), gradi=gradi))
+        elif nome == "cono":
+            k = cp.leggi_cono(T)
+            if k is not None:
+                letture.append(lettura_pdf.cono(
+                    pdf, k, "Cono letto cosi'",
+                    ["steso a settore pieno, raggio %s mm" % _mm(k.steso.R2),
+                     "cono alto %s mm, bocca %s mm" % (_mm(k.altezza), _mm(2 * k.r_bocca)),
+                     "lembo di colla %s mm" % _mm(k.lembo)], gradi=gradi))
+        elif nome == "tappo":
+            t = cp.leggi_tappo(pdf, T)
+            letture.append(lettura_pdf.disco(
+                pdf, t.centro, t.r_taglio, "Tappo letto cosi'",
+                ["taglio %s mm, alto %s mm" % (_mm(2 * t.r_taglio), _mm(t.altezza))],
+                gradi=gradi))
+        elif nome == "lid":
+            d = cp.leggi_disco(T)
+            if d is not None:
+                letture.append(lettura_pdf.disco(
+                    pdf, d.centro, d.r_taglio, "Lid letto cosi'",
+                    ["taglio %s mm" % _mm(2 * d.r_taglio)], gradi=gradi))
+    return lettura_pdf.accosta(*letture)
+
+
+def _mm(x):
+    return ("%.1f" % x).replace(".", ",")
 
 
 def _pezzi_tondi(pdfs, dichiarato="coppa", giri=None):
@@ -1270,7 +1345,7 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     `carta` e la fustella dell'apertura a strappo se `incisioni`."""
     from pack3d import riempimento
     astuccio = info.get("cu") == "carton"
-    with tempfile.TemporaryDirectory() as td:
+    with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
         gv = os.path.join(td, "vassoio.glb")
         gf = os.path.join(td, "pack.glb")
         av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality)
@@ -1282,6 +1357,17 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             # allarga a perimetro costante e la grafica del fronte si stira
             # (il T15 al livello 8: «il T1 non corrisponde al DT»)
             av_f = build_flowpack(pdfs[info["flowpack"]], gf, *flowpack)
+        # la lettura del vassoio e quella del CU, una sotto l'altra, accanto
+        # al GLB del riempimento
+
+        def due_letture():
+            letture = []
+            for g in (gv, gf):
+                if os.path.exists(g + lettura_pdf.ACCANTO):
+                    with open(g + lettura_pdf.ACCANTO, "rb") as fh:
+                        letture.append(fh.read())
+            return lettura_pdf.accosta(*letture)
+        scrivi_lettura(out_glb, due_letture)
         with open(gv, "rb") as fh:
             glb_v = fh.read()
         with open(gf, "rb") as fh:
@@ -1318,6 +1404,7 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
             raise
         return build_prisma(pdfs, pr, out_glb, quality, lastre_extra,
                             dichiarato, carta)
+    scrivi_lettura(out_glb, lambda: lettura_tondi(pezzi, giri))
     if _cono(pezzi):
         cono, lid = pezzi.get("cono"), pezzi.get("lid")
         V, UV, T, A, parti, meta, bianchi = cp.costruisci_cono(
@@ -1368,7 +1455,7 @@ def sezione_da_agente(params):
     """Larghezza e spessore del pack CHIUSO, se l'agente li ha misurati.
 
     Le cordonature dicono dove il film e' cordonato, non che forma prende una
-    volta riempito: su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in
+    volta riempito: sul croccante T2 i pannelli danno 50 x 11, ma il pack in
     mano e' 41 x 20. Hanno lo stesso perimetro, quindi dalla fustella non si
     distinguono: il rapporto puo' arrivare solo da chi guarda il prodotto.
     """
@@ -1610,11 +1697,11 @@ def printed_bbox(pdf):
 
 # Falde misurate sui pack che conosciamo, dal piu' piccolo al piu' grande:
 #
-#   Milch-Schnitte T1  nastro 144   falda 14,0
-#   Kinder Country     nastro 122   falda 16,0
-#   Kinder Paradiso    nastro 165   falda 12,5
-#   K Brioss T10 Promo nastro 420   falda  4,1
-#   FULFIL             nastro 141   falda 15,0
+#   T1 della barretta fresca  nastro 144   falda 14,0
+#   T1 ai cereali     nastro 122   falda 16,0
+#   T1 farcito    nastro 165   falda 12,5
+#   brioche T10 Promo nastro 420   falda  4,1
+#   barretta proteica             nastro 141   falda 15,0
 #
 # Fra 4 e 16 mm, su nastri che vanno da 122 a 420. E' fisica, non statistica:
 # la falda e' il lembo che schiacciano le ganasce, e le ganasce non diventano
@@ -1688,6 +1775,8 @@ def build_pouch(pdf, out_glb, quality="hd", lastre_extra=(),
     dpi, tmax = risoluzione(quality)
     pdf, n_pagine = artwork.pagina_unica(pdf)
     pu = analisi_pouch(pdf)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, pu.foglio, "Pouch letto cosi'", pouch.dichiara(pu)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=pu.foglio, conti=conti)
@@ -1741,6 +1830,8 @@ def build_ballotin(pdf, out_glb, quality="hd", lastre_extra=(),
     if b is None:
         raise ValueError("ballotin: la fustella non si legge come un ballotin "
                          "(fondo quadrato con quattro lenti agli spigoli)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, b.regione, "Ballotin letto cosi'", ballotin.dichiara(b)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=b.regione, conti=conti)
@@ -1822,6 +1913,14 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
                     and q.regione == p.regione and id(q) not in per_pdf:
                 per_pdf[id(q)] = (pagina, n_pagine)
                 break
+    # la riga di ogni pezzo: il fondo dice anche se manca il coperchio
+    righe = prisma.dichiara(fondo, coperchio)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.accosta(*[
+        lettura_pdf.generica(per_pdf[id(pr)][0], pr.regione,
+                             "Scatola a prisma, %s, letta cosi'" % nome, r)
+        for nome, pr, r in (("fondo", fondo, righe if coperchio is None else righe[:1]),
+                            ("coperchio", coperchio, righe[1:]))
+        if pr is not None and id(pr) in per_pdf]))
     avvisi, V, UV, T, A, parti, quali = [], [], [], [], [], [], []
     colori, MR = [], []
     for nome, pr, M, quota, cop in (
@@ -1913,6 +2012,8 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
         raise ValueError("scatola a punta: la fustella non si legge come una "
                          "scatola a punta (fronte e retro chiusi in cima, "
                          "fianchi a soffietto)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Scatola a punta letta cosi'", punta.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -1971,6 +2072,8 @@ def build_tubo(pdf, out_glb, quality="hd", lastre_extra=(),
         raise ValueError("tubo a cono: la fustella non si legge come un "
                          "settore di corona (due archi e due lati verso il "
                          "loro centro)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Tubo a cono letto cosi'", tubo.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -2026,6 +2129,8 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
         raise ValueError("incarto a triangolo: il DT non si legge come il "
                          "foglio di una barretta incartata (cinque fasce fra "
                          "righe intere, testate dritte sulla faccia)")
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        pdf, p.regione, "Incarto letto cosi'", incarto.dichiara(p)))
     conti = {}
     clean, lastre = artwork.senza_coperture(pdf, extra=lastre_extra,
                                             regione=p.regione, conti=conti)
@@ -2118,7 +2223,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro,
                                                   gradi)
         # Stessa analisi di /api/analyze, non una seconda uguale: il ripiego
-        # muto (che su Milch-Schnitte T1 dava corpo e pinne 136,5 e 8,0 invece
+        # muto (che sul T1 della barretta fresca dava corpo e pinne 136,5 e 8,0 invece
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
         # dichiarato, perche' il motivo viaggia insieme alle quote.
         box, fp0, ripiego = analisi_flowpack(pdf)
@@ -2137,6 +2242,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         clean, lastre = artwork.senza_coperture(
             pdf, extra=list(lastre_extra) + materiali.da_togliere(lettura),
             regione=fpk.foglio_in_pagina(fp0), conti=conti)
+    # la lettura del PDF, da mettere accanto al modello (`pack3d.lettura`):
+    # accanto al GLB, dove il server la va a prendere. Mai un errore: se non
+    # si disegna, il modello si costruisce lo stesso
+    scrivi_lettura(out_glb, lambda: lettura_pdf.flowpack(pdf, fp0, gradi))
     # Il nero sul file pulito, prima di rendere: vedi `nero.spia`. Sugli
     # Spaces la memoria per il fork di Ghostscript c'e'.
     deciso_nero = nero.spia(clean, 0, dpi / 72.0)
@@ -2197,7 +2306,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # allunga: dal centro del fronte alla cucitura ci sono gli stessi
         # millimetri di film comunque si riempia il pack, quindi se il fronte
         # chiuso e' piu' stretto della fascia del DT la cucitura sul retro si
-        # avvicina allo spigolo di (W - W')/2 - 4,5 mm sul Bueno T2, 50 x 11
+        # avvicina allo spigolo di (W - W')/2 - 4,5 mm sul croccante T2, 50 x 11
         # sulla fustella e 41 x 20 in mano. Tenendo fermo `back_a` i nodi del
         # giro sommavano a W + W' + 2T' invece che al perimetro, e il riscalo
         # che li riporta sul giro stirava la grafica fra un nodo e l'altro. Il
@@ -2234,7 +2343,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # fisico - con quel film non si puo' essere piu' tondi. Il livello dice
         # quanto ci si avvicina, in frazione del diametro del cerchio.
         #
-        # La scala e' tarata sul GLB di riferimento del K Tronky T1, che e'
+        # La scala e' tarata sul GLB di riferimento del wafer T1, che e'
         # l'unica misura che abbiamo per questa famiglia: sezione a ellisse di
         # rapporto 1,466 e bbox 26,7 x 18,2 su un giro di 71, cioe' 0,806 del
         # diametro del cerchio. Il livello 5 ci cade sopra.
@@ -2269,24 +2378,24 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # stesso film, e' piu' grande: vale quando dentro c'e' aria. Con una
         # scatola la sezione la detta la scatola, e i pochi millimetri che la
         # superellisse taglia agli spigoli se li prende la piega, non il pack.
-        # Senza questo il Brioss usciva 155,9 x 59,7 invece di 148,9 x 57,0.
+        # Senza questo la brioche usciva 155,9 x 59,7 invece di 148,9 x 57,0.
         scala = 1.0
     # superellipse_section torna il SEMIASSE, non la larghezza come faceva
     # soft_section_fit: senza il raddoppio width_end esce doppio e le pinne si
     # aprono fino al perimetro intero invece che a meta'
-    # Quanto misura la fustella oltre il corpo — 37,5 mm sul Brioss — non e'
+    # Quanto misura la fustella oltre il corpo — 37,5 mm sulla brioche — non e'
     # tutto pinna. Prima il tubo deve collassare, e la gola piegata sullo
     # spigolo costa mezzo spessore; quello che avanza e' la pinna vera. Con una
     # scatola dentro il collasso non puo' mangiare il corpo, perche' la scatola
     # tiene la sezione fino alla sua faccia: la gola sta tutta oltre. Sul
-    # Brioss: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
+    # brioche: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
     # La somma L/2 + end_fin non cambia, quindi le UV restano quelle e la
     # grafica non si sposta di un pixel.
     #
     # Ma solo se la gola non la dice gia' il DT. Quando disegna la saldatura
     # E dove finisce il prodotto, la testata e' gia' divisa: la pinna finisce
     # alla saldatura, la gola sta fra lei e il prodotto, e il corpo la
-    # comprende. Su K Colazione Piu' T10 le quote del file sono 20 | 37,5 |
+    # comprende. Sul wafer da colazione T10 le quote del file sono 20 | 37,5 |
     # 215 | 37,5 | 20: corpo 290 con la gola, pinna 20. Dividendo la pinna
     # un'altra volta ne restavano 2 mm, e il pack usciva una scatola senza
     # pinne con la grafica delle testate stirata di 2,07 volte.
@@ -2310,11 +2419,11 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     #
     # Un tubo si appiattisce perche' dentro c'e' aria, e appiattito misura meta'
     # perimetro: quello e' il massimo geometrico, oltre il quale il film
-    # dovrebbe allungarsi. E' il caso di Milch-Schnitte, pinne aperte e piu'
+    # dovrebbe allungarsi. E' il caso del T1 della barretta fresca, pinne aperte e piu'
     # alte del pack, ed e' il 3. All'altro capo, quando il film avvolge una
     # scatola che arriva fino alla saldatura, non c'e' niente da appiattire: la
     # pellicola si ripiega sugli spigoli e la pinna esce larga esattamente
-    # quanto la faccia. E' Kinder Brioss, ed e' l'1. Il 2 sta in mezzo.
+    # quanto la faccia. E' la brioche, ed e' l'1. Il 2 sta in mezzo.
     #
     # Non e' deducibile dal rigonfiamento: dice come si comporta il film alle
     # ganasce, non che forma prende il corpo.
@@ -2335,7 +2444,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     rastremo = gola if scatola else (fp0.gola or max(fp0.end_fin, 6.0))
     # E la spalla deve starci col film. Dalla sezione piena alla saldatura il
     # tubo cala di mezzo spessore, e il film, che non si allunga, quel calo lo
-    # copre solo se la spalla e' abbastanza lunga: sul Paradiso la gola del
+    # copre solo se la spalla e' abbastanza lunga: sul T1 farcito la gola del
     # DT e' 10 mm e il calo 14,1, e dieci millimetri di film su una discesa
     # di quattordici sono una grafica stirata fino a 3,7 volte - la scritta
     # LATTE del bollino. Allora la spalla comincia prima, dentro il prodotto,
@@ -2490,7 +2599,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     foglio = tex
     # Il materiale, nel telaio dello steso com'e' uscito: le copie del DT
     # stanno sulla tavola come lui. Solo se cambia davvero qualcosa - sul
-    # Kinder Country alluminio e white plate coprono la stessa parte del
+    # T1 ai cereali alluminio e white plate coprono la stessa parte del
     # film, e il metallo non resta da nessuna parte.
     colore, mr = tex, None
     if lettura is not None and lettura.applicabile():
@@ -2544,6 +2653,9 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     colore, UVm, mr = lo_steso.nel_verso_del_pdf(
         gradi + (90 if fp.ruotato else 0), colore, UVm, mr)
     exporters.write_glb_mesh(Vm, UVm, Tm, colore, out_glb, tex_max=tmax, mr=mr)
+    # a modello finito, la grafica del fronte: troppo stirata e' un DIFETTO
+    with open(out_glb, "rb") as fh:
+        avvisi_sez += verifica.grafica_flowpack(fh.read())
 
     base = fin_open / max(int(teeth), 1)
     if fp.pillow:
@@ -2600,8 +2712,8 @@ def _panel_knots(Ps, d, G, fp):
         #
         # Nell'ordine in cui le incontra il film: prima la piega a +y, a
         # back_a dalla cucitura, poi l'altra mezzo giro dopo. Ordinarle per
-        # valore sbagliava quando il retro sta tutto da un lato - Kinder Choco
-        # Fresh - e la cucitura cade sulla seconda piega: quella veniva a
+        # valore sbagliava quando il retro sta tutto da un lato - il T1 al
+        # cioccolato fresco - e la cucitura cade sulla seconda piega: quella veniva a
         # zero, prima dell'altra, e il fronte finiva sul retro.
         try:
             ia = int(np.argmax(Ps[:-1, 0]))
@@ -2710,7 +2822,7 @@ OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
 # astucci e delle coppe; 3 un cartoncino spesso. Senza dichiarazione ogni
 # famiglia tiene il suo: 0,45 mm l'astuccio (`folding.SPESSORE_CRT`), 0,35 la
-# coppa (dal cartiglio del Nutella POT), 0,10 il cono.
+# coppa (dal cartiglio della coppa da 500), 0,10 il cono.
 SPESSORI_CARTA = {1: 0.10, 2: 0.40, 3: 0.70}
 
 
@@ -2794,7 +2906,7 @@ def pellicola_sicura(fa, *args, **kw):
 
 def finestra_astuccio(d):
     """Vero se l'astuccio ha la finestra sul retro: aperto, con le due falde
-    che lasciano in mezzo un'apertura (il Kinder Pingui T6). Un astuccio
+    che lasciano in mezzo un'apertura (il T6 aperto). Un astuccio
     senza retro, tipo vassoio, non ha una finestra: e' aperto."""
     return bool(not d.chiuso and d.finestra_mm > 0
                 and all(k in d.panels for k in folding.FASCE_RETRO))
@@ -2880,8 +2992,427 @@ def analyze_pdf(pdf, kind=None, domande=False):
     return info
 
 
+# ---------------------------------------------------------------------------
+# Le famiglie: chi riconosce un PDF, e in che ordine.
+#
+# Era una catena di `if` in `_analyze_pdf`, trecento righe, con la tipologia
+# dichiarata intrecciata dentro ogni ramo: per sapere chi si prova prima di
+# chi bisognava leggerla tutta, e una forma nuova si infilava a meta'. Adesso
+# e' una tabella, `RICONOSCIMENTO`: una riga per prova, nell'ordine in cui si
+# fanno, con le tipologie dichiarate per cui valgono. La prima prova che dice
+# «e' mio» da' la lettura; una prova che dice «e' mio ma non si legge» ferma
+# tutto con un errore che lo dice. L'ordine e' quello di prima, prova per
+# prova: i casi del parco non cambiano strada.
+#
+# Una forma nuova: il suo modulo, una funzione `_prova_<forma>` qui sotto e
+# una riga nella tabella, DOPO quelle che ci sono (FORME.md, *Dove entra*);
+# e la sua costruzione in `COSTRUZIONI`.
+
+class _Lettura:
+    """Quello che le prove di una lettura si passano.
+
+    `pdf` puo' cambiare strada facendo: la prova dell'astuccio lo gira nel
+    verso della grafica, e le prove dopo leggono il foglio girato, come
+    prima. `errore_astuccio` e' il motivo per cui il solutore astuccio ha
+    rifiutato un cartotecnico dichiarato: le forme che vengono dopo si
+    provano solo allora, e se nessuna e' sua l'errore resta quello."""
+
+    def __init__(self, pdf, kind, domande):
+        self.pdf, self.kind, self.domande = pdf, kind, domande
+        self.errore_astuccio = None
+
+
+class Famiglia:
+    """Una prova del riconoscimento: `prova(lettura)` torna la lettura se il
+    PDF e' suo, None se no; un errore se e' suo e non si legge. Si fa solo
+    per le tipologie `dichiarate` (None: senza dichiarazione)."""
+
+    def __init__(self, nome, dichiarate, prova):
+        self.nome, self.dichiarate, self.prova = nome, tuple(dichiarate), prova
+
+    def __repr__(self):
+        return "Famiglia(%r)" % self.nome
+
+
+def _prova_coppa_dichiarata(l):
+    return analisi_coppa([l.pdf])
+
+
+def _prova_riempimento(l):
+    # due PDF, non uno: vedi `analisi_riempimento`. Qui non deve mai
+    # arrivare, e se arriva non deve cadere nel ramo del flowpack.
+    raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
+
+
+def _prova_incarto_dichiarato(l):
+    # dichiarato senza dire come si chiude: a pieghe, vedi
+    # `analisi_incarto_dichiarato` (la pagina passa da li')
+    return analisi_incarto_dichiarato(l.pdf, "pieghe")
+
+
+def _prova_pouch(l):
+    pu = analisi_pouch(l.pdf)
+    return dict(kind="pouch", title="Pouch",
+                meta=pouch.dichiara(pu) + list(pu.avvisi))
+
+
+def _prova_caso_calibrato(l):
+    # la firma si legge per tutte le tipologie che arrivano qui, come prima;
+    # il caso vale solo per il flowpack
+    case = CASI.get(_sig(l.pdf))
+    if case and l.kind in (None, "flowpack"):
+        return dict(kind="flowpack", title=case["name"],
+                    teeth_default=case["teeth"], soft_default=case["soft"],
+                    meta=["caso calibrato: " + case["name"],
+                          "nastro %.0f x passo %.0f mm" % (case["web"], case["step"])])
+    return None
+
+
+def _prova_vassoio(l):
+    """Il vassoio espositore e i display: con plancia, con lo sportello,
+    a scatola, sagomato. Dichiarato vassoio, se nessuno e' suo si ferma: la
+    dichiarazione vale anche quando dice di no."""
+    pdf, kind = l.pdf, l.kind
+    grezza = None
+    giro_v = None
+    try:
+        if kind == "vassoio":
+            # dichiarato: vale la pena di provarlo anche di traverso,
+            # vedi `vassoio.riconosci_sulla_tavola`. Senza dichiarazione
+            # no: la prova la pagherebbe ogni astuccio e ogni flowpack.
+            _p, grezza, v, _g, giro_v = vassoio.riconosci_sulla_tavola(pdf)
+        else:
+            grezza = dl.extract(pdf)
+            v = vassoio.riconosci(grezza)
+    except Exception:
+        v = None
+    finally:
+        dl.scarta_resa()
+    if v is None and kind in (None, "vassoio"):
+        # Non e' un vassoio aperto: puo' essere il display con plancia, la
+        # scatola chiusa che si apre in espositore (`pack3d.plancia`).
+        # Dichiarato si prova anche di traverso, come il vassoio; senza
+        # dichiarazione si guarda la griglia gia' letta, e non costa
+        # niente. E' qui che il display T1x48 smette di uscire flowpack.
+        pl, giro_p = None, None
+        try:
+            if kind == "vassoio":
+                _p, _g, pl, _gr, giro_p = plancia.riconosci_sulla_tavola(pdf)
+            elif grezza is not None:
+                pl = plancia.riconosci(grezza)
+                if pl is None:
+                    # di traverso sulla tavola: la griglia trasposta lo
+                    # dice senza rileggere il file, e la costruzione poi
+                    # il foglio lo gira davvero
+                    pl = plancia.di_traverso(grezza)
+                    if pl is not None:
+                        giro_p = ("foglio di traverso sulla tavola: la "
+                                  "costruzione lo gira di un quarto")
+        except Exception:
+            pl = None
+        finally:
+            dl.scarta_resa()
+        if pl is not None:
+            return dict(kind="vassoio", title="Display con plancia",
+                        meta=plancia.dichiara(pl)
+                        + ([giro_p] if giro_p else []))
+        if kind == "vassoio":
+            # la plancia ricavata dentro il coperchio (`pack3d.sportello`):
+            # solo dichiarato, la prova gira il foglio e costa
+            try:
+                _p, _g, sp, _gr, giro_s = sportello.riconosci_sulla_tavola(pdf)
+            except Exception:
+                sp = None
+            finally:
+                dl.scarta_resa()
+            if sp is not None:
+                return dict(kind="vassoio", title="Display con plancia",
+                            meta=sportello.dichiara(sp)
+                            + ([giro_s] if giro_s else []))
+    if v is None and kind == "vassoio":
+        # la scatola che resta chiusa, con la plancia ricavata dal
+        # coperchio (`pack3d.scatola_plancia`): si prova solo dichiarata
+        try:
+            sp = scatola_plancia.riconosci(pdf)
+        except Exception:
+            sp = None
+        if sp is not None:
+            return dict(kind="vassoio", title="Display a scatola",
+                        meta=scatola_plancia.dichiara(sp))
+    sagomato = False
+    if v is None and kind == "vassoio":
+        # per ultimo il vassoio sagomato, come in `build_vassoio`
+        try:
+            _p, _g, v, _gr, giro_v = vassoio.riconosci_sulla_tavola(
+                pdf, sagomato=True)
+        except Exception:
+            v = None
+        finally:
+            dl.scarta_resa()
+        sagomato = v is not None
+    if v is None and kind == "vassoio":
+        # La dichiarazione deve valere anche quando dice di NO. Senza
+        # questo ramo "vassoio" scivolava fino in fondo e usciva un
+        # FLOWPACK: un modello plausibile della famiglia sbagliata, cioe' il
+        # difetto peggiore che questo progetto possa avere. Chi ha
+        # dichiarato la tipologia merita di sapere che la fustella non gli
+        # da' ragione, non un altro pack.
+        # Il messaggio sta dentro i 200 caratteri che l'interfaccia
+        # mostra: piu' lungo, e il consiglio finale - quello che dice
+        # cosa fare - veniva tagliato via proprio lui.
+        letto = "non si legge"
+        if grezza is not None:
+            # stesso arrotondamento di `vassoio.riconosci`, altrimenti
+            # il conto che si legge nel messaggio non e' quello su cui la
+            # decisione e' stata presa
+            letto = "ne ha %d e %d" % (
+                max(0, len({round(t, 2) for t in grezza.xs}) - 1),
+                max(0, len({round(t, 2) for t in grezza.ys}) - 1))
+        raise ValueError(
+            "vassoio: un espositore ha cinque colonne e tre fasce, un "
+            "display con plancia un coperchio sul fianco o sul retro; "
+            "questa fustella "
+            "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
+    if v is not None:
+        return dict(kind="vassoio", title="Vassoio espositore", sagomato=sagomato,
+                    meta=["vassoio espositore",
+                          "fondo %.1f x %.1f mm, pareti %s mm"
+                          % (v.fondo_w, v.fondo_h,
+                             " / ".join("%s %.1f" % (k, a)
+                                        for k, a in v.pareti.items()))]
+                         + ([giro_v] if giro_v else [])
+                         + list(v.warnings))
+    return None
+
+
+def _prova_cono(l):
+    # Lo steso di un cono si riconosce dai soli tratti in due decimi di
+    # secondo, e va provato PRIMA dell'astuccio: sul cono T1 macaron il
+    # solutore astuccio trovava fra le icone un "astuccio vwrap" di 18,7 x
+    # 5,9 x 2,5 mm, e il cono non veniva mai provato. La coppa invece
+    # l'astuccio la rifiuta da se', e resta in fondo.
+    from pack3d import coppa as cp
+    if cp.e_un_cono(l.pdf):
+        return analisi_coppa([l.pdf], l.kind or "coppa")
+    return None
+
+
+def _prova_ballotin(l):
+    # Il ballotin anche, e per la stessa ragione: il solutore astuccio lo
+    # risolve, e male - sul ballotin al frutto della passione una torre da
+    # 465 x 120,7 x 90 mm. Su un astuccio la prova si ferma al prefiltro
+    # delle lenti: sugli astucci del parco da 0,15 a 0,7 s, quasi tutti per
+    # leggere le penne del DT.
+    try:
+        b = ballotin.riconosci(l.pdf)
+    except Exception:
+        traceback.print_exc()
+        b = None
+    if b is None:
+        return None
+    meta = ballotin.dichiara(b)
+    rgb = avviso_quadricromia(l.pdf, regione=b.regione)
+    if rgb:
+        meta.insert(0, rgb)
+    letto = dict(kind="ballotin", title="Ballotin", meta=meta)
+    if l.domande and b.finestre:
+        letto["finestre"] = finestre_da_chiedere(
+            len(b.finestre), ballotin.dove_finestre(b))
+    return letto
+
+
+def _prova_film(l):
+    # Il file dice di essere un film: il flowpack si prova PRIMA
+    # dell'astuccio. Il solutore astuccio risolve anche certi film - sul T1
+    # cold seal, 1 | 15 | 83 | 15 | 1 per 15 | 85 | 15, trovava un astuccio
+    # vwrap 52,5 x 51,2 x 9,7 - e il flowpack non veniva mai provato. Se il
+    # flowpack non si risolve si va avanti come sempre.
+    if not _dice_film(l.pdf):
+        return None
+    letto = _analisi_incarto(l.pdf)
+    if letto is not None:
+        return letto
+    try:
+        return _analisi_flowpack_dichiarata(l.pdf, esigente=True)
+    except Exception:
+        return None
+
+
+# Il messaggio sta dentro i 200 caratteri che l'interfaccia mostra, col
+# consiglio in fondo: e' quello che dice cosa fare.
+CARTOTECNICO_SENZA_PANNELLI = (
+    "cartotecnico: la fustella non si divide in pannelli, e non e' una "
+    "scatola a punta, una coppa o un tubo. Se e' un film, dichiara 'flowpack'.")
+
+
+def _prova_astuccio(l):
+    """L'astuccio. Se il solutore lo rifiuta e il pack e' dichiarato
+    cartotecnico, il motivo resta in `errore_astuccio` per le forme dopo."""
+    try:
+        # nel verso della grafica, come la costruzione: i cartellini
+        # devono dire le falde nell'ordine in cui le vedra' il modello
+        l.pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(l.pdf)
+        if not d.panels:
+            if l.kind == "carton":
+                # Dichiarato cartotecnico, e il solutore astuccio non trova
+                # pannelli senza fermarsi: e' un rifiuto come gli altri.
+                # Prima si scivolava fino al flowpack, cioe' la famiglia
+                # sbagliata senza dirlo (REGOLE.md, *La dichiarazione vale
+                # anche quando dice di no*).
+                l.errore_astuccio = ValueError(CARTOTECNICO_SENZA_PANNELLI)
+            return None
+        meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
+                "%.1f x %.1f x %.1f mm" % d.dims_mm]
+        if giro:
+            meta.append(giro)
+        apertura = dl.dichiara_apertura(d)
+        if apertura:
+            meta.append(apertura)
+        rgb = avviso_quadricromia(l.pdf, regione=d.bbox)
+        if rgb:
+            meta.insert(0, rgb)
+        letto = dict(kind="carton", title="Astuccio %s" % d.layout, meta=meta)
+        s = strappo_astuccio(l.pdf, d) if l.domande else None
+        if s:
+            meta.append("apertura a strappo: %s - si puo' avere chiusa, "
+                        "coi tagli modellati, o aperta" % s["dove"])
+            letto["strappo"] = s
+        if l.domande and finestra_astuccio(d):
+            letto["finestre"] = finestre_da_chiedere(
+                1, "sul retro, fra le due falde: alta %.1f mm" % d.finestra_mm)
+        return letto
+    except Exception as e:
+        if l.kind == "carton":
+            l.errore_astuccio = e
+        return None
+
+
+def _prova_punta(l):
+    # Dichiarato cartotecnico e non e' un astuccio: puo' essere la scatola
+    # a punta, che il solutore astuccio rifiuta perche' non ha cielo. Solo
+    # qui, dopo l'astuccio: gli astucci non la pagano e non ne possono
+    # essere scambiati.
+    if l.errore_astuccio is None:
+        return None
+    try:
+        pu = punta.riconosci(l.pdf)
+    except Exception:
+        traceback.print_exc()
+        pu = None
+    if pu is None:
+        return None
+    meta = punta.dichiara(pu)
+    rgb = avviso_quadricromia(l.pdf, regione=pu.regione)
+    if rgb:
+        meta.insert(0, rgb)
+    return dict(kind="punta", title="Scatola a punta", meta=meta)
+
+
+def _prova_pezzo_di_coppa(l):
+    # Non e' nemmeno quella: puo' essere un pezzo di una coppa, che e'
+    # cartotecnica anche lei.
+    if l.errore_astuccio is None:
+        return None
+    from pack3d import coppa as cp
+    if cp.riconosci(l.pdf) is not None:
+        return analisi_coppa([l.pdf], "carton")
+    return None
+
+
+def _prova_tubo(l):
+    # Un tubo a cono, lo sleeve lungo e stretto col fondo saldato piatto: un
+    # settore di corona che la coppa non prende (non ha fondo ne' vista
+    # montata). Vedi `pack3d.tubo`.
+    if l.errore_astuccio is None:
+        return None
+    try:
+        tb = tubo.riconosci(l.pdf)
+    except Exception:
+        traceback.print_exc()
+        tb = None
+    if tb is None:
+        return None
+    meta = tubo.dichiara(tb)
+    rgb = avviso_quadricromia(l.pdf, regione=tb.regione)
+    if rgb:
+        meta.insert(0, rgb)
+    return dict(kind="tubo", title="Tubo a cono", meta=meta,
+                gusti=list(gelato.GUSTI))
+
+
+def _ferma_cartotecnico(l):
+    # Dichiarato cartotecnico e nessuna forma l'ha preso: l'errore resta
+    # quello dell'astuccio. Un disco da solo non dice di essere un lid
+    # (`coppa.orienta`): se c'e', prima viene il consiglio, che
+    # l'interfaccia mostra solo i primi 200 caratteri.
+    e = l.errore_astuccio
+    if e is None:
+        return None
+    from pack3d import coppa as cp
+    disco = cp.leggi_disco(cp.tracce(l.pdf))
+    if disco is not None:
+        raise ValueError("Non si risolve come astuccio, e ha un disco "
+                         "di %.0f mm: se e' il lid di un cono, "
+                         "dichiara 2 pezzi e carica anche il PDF del "
+                         "cono. (astuccio: %s)"
+                         % (2 * disco.r_taglio, e)) from e
+    raise e
+
+
+def _prova_incarto(l):
+    return _analisi_incarto(l.pdf)
+
+
+def _prova_flowpack(l):
+    # nel verso della grafica, come la costruzione; e se fallisce anche il
+    # ripiego, l'errore va al client
+    try:
+        return _analisi_flowpack_dichiarata(l.pdf)
+    except Exception:
+        if l.kind is None:
+            # Senza dichiarazione, l'ultima possibilita' e' una coppa: lo
+            # sleeve o il tappo. Si prova per ULTIMA, quando tutto il resto ha
+            # fallito, cosi' gli altri pack non la pagano e non ne possono
+            # essere scambiati; sulla coppa da 500 il ripiego flowpack falliva
+            # con "saldature di testa non riconosciute".
+            from pack3d import coppa as cp
+            if cp.riconosci(l.pdf) is not None:
+                return analisi_coppa([l.pdf])
+        raise
+
+
+# L'ordine e' la regola. Le dichiarate solo: si fanno subito, e non cadono
+# mai in un'altra famiglia. Poi, senza dichiarazione o dichiarate, le forme
+# che il solutore astuccio risolverebbe male - vassoio e display, cono,
+# ballotin, il film che lo dice - PRIMA dell'astuccio; quelle che il solutore
+# astuccio rifiuta DOPO, e solo se e' stato lui a rifiutarle; il flowpack per
+# ultimo.
+RICONOSCIMENTO = (
+    Famiglia("coppa", ["coppa"], _prova_coppa_dichiarata),
+    Famiglia("riempimento", ["riempimento"], _prova_riempimento),
+    Famiglia("incarto dichiarato", ["incarto"], _prova_incarto_dichiarato),
+    Famiglia("pouch", ["pouch"], _prova_pouch),
+    Famiglia("caso calibrato", [None, "flowpack", "carton", "vassoio"],
+             _prova_caso_calibrato),
+    Famiglia("vassoio e display", [None, "carton", "vassoio"], _prova_vassoio),
+    Famiglia("cono", [None, "carton"], _prova_cono),
+    Famiglia("ballotin", [None, "carton"], _prova_ballotin),
+    Famiglia("film che lo dice", [None], _prova_film),
+    Famiglia("astuccio", [None, "carton"], _prova_astuccio),
+    Famiglia("scatola a punta", ["carton"], _prova_punta),
+    Famiglia("pezzo di coppa", ["carton"], _prova_pezzo_di_coppa),
+    Famiglia("tubo a cono", ["carton"], _prova_tubo),
+    Famiglia("cartotecnico che non si legge", ["carton"], _ferma_cartotecnico),
+    Famiglia("incarto", [None, "flowpack"], _prova_incarto),
+    Famiglia("flowpack", [None, "flowpack"], _prova_flowpack),
+)
+
+
 def _analyze_pdf(pdf, kind=None, domande=False):
-    """`domande`: preparare le domande che la pagina fa prima di costruire -
+    """La lettura del PDF: la prima famiglia di `RICONOSCIMENTO` che dice
+    che e' suo.
+
+    `domande`: preparare le domande che la pagina fa prima di costruire -
     sull'astuccio, se ha un'apertura a strappo la vuole chiusa o aperta
     (`strappo_astuccio`); su un pack con le finestre, se le vuole con la
     pellicola trasparente o senza (`finestre_da_chiedere`). Solo
@@ -2890,281 +3421,131 @@ def _analyze_pdf(pdf, kind=None, domande=False):
     kind = normalizza_kind(kind)
     if kind is not None and kind not in KIND_NOTI:
         # Cadere nel ramo flowpack e' peggio che fermarsi: e' lo stesso difetto
-        # del sinonimo mancante, solo sull'altro capo. Su questo file - un
-        # astuccio Nutella Donut - passando "auto" invece di niente il solutore
-        # astuccio veniva saltato e usciva un flowpack.
+        # del sinonimo mancante, solo sull'altro capo. Su questo file -
+        # l'astuccio della ciambella - passando "auto" invece di niente il
+        # solutore astuccio veniva saltato e usciva un flowpack.
         raise ValueError("tipologia '%s' non riconosciuta: dichiara %s"
                          % (kind, " o ".join("'%s'" % k for k in KIND_NOTI)))
-    if kind == "coppa":
-        return analisi_coppa([pdf])
-    if kind == "riempimento":
-        # due PDF, non uno: vedi `analisi_riempimento`. Qui non deve mai
-        # arrivare, e se arriva non deve cadere nel ramo del flowpack.
-        raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
-    if kind == "incarto":
-        # dichiarato senza dire come si chiude: a pieghe, vedi
-        # `analisi_incarto_dichiarato` (la pagina passa da li')
-        return analisi_incarto_dichiarato(pdf, "pieghe")
-    if kind == "pouch":
-        pu = analisi_pouch(pdf)
-        return dict(kind="pouch", title="Pouch",
-                    meta=pouch.dichiara(pu) + list(pu.avvisi))
-    case = CASI.get(_sig(pdf))
-    if case and kind in (None, "flowpack"):
-        return dict(kind="flowpack", title=case["name"],
-                    teeth_default=case["teeth"], soft_default=case["soft"],
-                    meta=["caso calibrato: " + case["name"],
-                          "nastro %.0f x passo %.0f mm" % (case["web"], case["step"])])
-    if kind in (None, "carton", "vassoio"):
-        grezza = None
-        giro_v = None
-        try:
-            if kind == "vassoio":
-                # dichiarato: vale la pena di provarlo anche di traverso,
-                # vedi `vassoio.riconosci_sulla_tavola`. Senza dichiarazione
-                # no: la prova la pagherebbe ogni astuccio e ogni flowpack.
-                _p, grezza, v, _g, giro_v = vassoio.riconosci_sulla_tavola(pdf)
-            else:
-                grezza = dl.extract(pdf)
-                v = vassoio.riconosci(grezza)
-        except Exception:
-            v = None
-        finally:
-            dl.scarta_resa()
-        if v is None and kind in (None, "vassoio"):
-            # Non e' un vassoio aperto: puo' essere il display con plancia, la
-            # scatola chiusa che si apre in espositore (`pack3d.plancia`).
-            # Dichiarato si prova anche di traverso, come il vassoio; senza
-            # dichiarazione si guarda la griglia gia' letta, e non costa
-            # niente. E' qui che il Tronky T48 smette di uscire flowpack.
-            pl, giro_p = None, None
-            try:
-                if kind == "vassoio":
-                    _p, _g, pl, _gr, giro_p = plancia.riconosci_sulla_tavola(pdf)
-                elif grezza is not None:
-                    pl = plancia.riconosci(grezza)
-                    if pl is None:
-                        # di traverso sulla tavola: la griglia trasposta lo
-                        # dice senza rileggere il file, e la costruzione poi
-                        # il foglio lo gira davvero
-                        pl = plancia.di_traverso(grezza)
-                        if pl is not None:
-                            giro_p = ("foglio di traverso sulla tavola: la "
-                                      "costruzione lo gira di un quarto")
-            except Exception:
-                pl = None
-            finally:
-                dl.scarta_resa()
-            if pl is not None:
-                return dict(kind="vassoio", title="Display con plancia",
-                            meta=plancia.dichiara(pl)
-                            + ([giro_p] if giro_p else []))
-            if kind == "vassoio":
-                # la plancia ricavata dentro il coperchio (`pack3d.sportello`):
-                # solo dichiarato, la prova gira il foglio e costa
-                try:
-                    _p, _g, sp, _gr, giro_s = sportello.riconosci_sulla_tavola(pdf)
-                except Exception:
-                    sp = None
-                finally:
-                    dl.scarta_resa()
-                if sp is not None:
-                    return dict(kind="vassoio", title="Display con plancia",
-                                meta=sportello.dichiara(sp)
-                                + ([giro_s] if giro_s else []))
-        if v is None and kind == "vassoio":
-            # la scatola che resta chiusa, con la plancia ricavata dal
-            # coperchio (`pack3d.scatola_plancia`): si prova solo dichiarata
-            try:
-                sp = scatola_plancia.riconosci(pdf)
-            except Exception:
-                sp = None
-            if sp is not None:
-                return dict(kind="vassoio", title="Display a scatola",
-                            meta=scatola_plancia.dichiara(sp))
-        sagomato = False
-        if v is None and kind == "vassoio":
-            # per ultimo il vassoio sagomato, come in `build_vassoio`
-            try:
-                _p, _g, v, _gr, giro_v = vassoio.riconosci_sulla_tavola(
-                    pdf, sagomato=True)
-            except Exception:
-                v = None
-            finally:
-                dl.scarta_resa()
-            sagomato = v is not None
-        if v is None and kind == "vassoio":
-            # La dichiarazione deve valere anche quando dice di NO. Senza
-            # questo ramo "vassoio" scivolava fino in fondo alla funzione e
-            # usciva un FLOWPACK: un modello plausibile della famiglia
-            # sbagliata, cioe' il difetto peggiore che questo progetto possa
-            # avere. Chi ha dichiarato la tipologia merita di sapere che la
-            # fustella non gli da' ragione, non un altro pack.
-            # Il messaggio sta dentro i 200 caratteri che l'interfaccia
-            # mostra: piu' lungo, e il consiglio finale - quello che dice
-            # cosa fare - veniva tagliato via proprio lui.
-            letto = "non si legge"
-            if grezza is not None:
-                # stesso arrotondamento di `vassoio.riconosci`, altrimenti
-                # il conto che si legge nel messaggio non e' quello su cui la
-                # decisione e' stata presa
-                letto = "ne ha %d e %d" % (
-                    max(0, len({round(t, 2) for t in grezza.xs}) - 1),
-                    max(0, len({round(t, 2) for t in grezza.ys}) - 1))
-            raise ValueError(
-                "vassoio: un espositore ha cinque colonne e tre fasce, un "
-                "display con plancia un coperchio sul fianco o sul retro; "
-                "questa fustella "
-                "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
-        if v is not None:
-            return dict(kind="vassoio", title="Vassoio espositore", sagomato=sagomato,
-                        meta=["vassoio espositore",
-                              "fondo %.1f x %.1f mm, pareti %s mm"
-                              % (v.fondo_w, v.fondo_h,
-                                 " / ".join("%s %.1f" % (k, a)
-                                            for k, a in v.pareti.items()))]
-                             + ([giro_v] if giro_v else [])
-                             + list(v.warnings))
-    if kind in (None, "carton"):
-        # Lo steso di un cono si riconosce dai soli tratti in due decimi di
-        # secondo, e va provato PRIMA dell'astuccio: sul cono Camy Apolo il
-        # solutore astuccio trovava fra le icone un "astuccio vwrap" di 18,7 x
-        # 5,9 x 2,5 mm, e il cono non veniva mai provato. La coppa invece
-        # l'astuccio la rifiuta da se', e resta in fondo.
-        from pack3d import coppa as cp
-        if cp.e_un_cono(pdf):
-            return analisi_coppa([pdf], kind or "coppa")
-        # Il ballotin anche, e per la stessa ragione: il solutore astuccio
-        # lo risolve, e male - sul Raffaello Passion Fruit una torre da 465 x
-        # 120,7 x 90 mm. Su un astuccio la prova si ferma al prefiltro delle
-        # lenti: sugli astucci del parco da 0,15 a 0,7 s, quasi tutti per
-        # leggere le penne del DT.
-        try:
-            b = ballotin.riconosci(pdf)
-        except Exception:
-            traceback.print_exc()
-            b = None
-        if b is not None:
-            meta = ballotin.dichiara(b)
-            rgb = avviso_quadricromia(pdf, regione=b.regione)
-            if rgb:
-                meta.insert(0, rgb)
-            letto = dict(kind="ballotin", title="Ballotin", meta=meta)
-            if domande and b.finestre:
-                letto["finestre"] = finestre_da_chiedere(
-                    len(b.finestre), ballotin.dove_finestre(b))
-            return letto
-    if kind is None and _dice_film(pdf):
-        # Il file dice di essere un film: il flowpack si prova PRIMA
-        # dell'astuccio. Il solutore astuccio risolve anche certi film - sul
-        # Kinder Happy Hippo T1, 1 | 15 | 83 | 15 | 1 per 15 | 85 | 15, trovava
-        # un astuccio vwrap 52,5 x 51,2 x 9,7 - e il flowpack non veniva mai
-        # provato. Se il flowpack non si risolve si va avanti come sempre.
-        letto = _analisi_incarto(pdf)
-        if letto is not None:
-            return letto
-        try:
-            return _analisi_flowpack_dichiarata(pdf, esigente=True)
-        except Exception:
-            pass
-    if kind in (None, "carton"):
-        try:
-            # nel verso della grafica, come la costruzione: i cartellini
-            # devono dire le falde nell'ordine in cui le vedra' il modello
-            pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(pdf)
-            if d.panels:
-                meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso
-                                           else " aperto"),
-                        "%.1f x %.1f x %.1f mm" % d.dims_mm]
-                if giro:
-                    meta.append(giro)
-                apertura = dl.dichiara_apertura(d)
-                if apertura:
-                    meta.append(apertura)
-                rgb = avviso_quadricromia(pdf, regione=d.bbox)
-                if rgb:
-                    meta.insert(0, rgb)
-                letto = dict(kind="carton", title="Astuccio %s" % d.layout,
-                             meta=meta)
-                s = strappo_astuccio(pdf, d) if domande else None
-                if s:
-                    meta.append("apertura a strappo: %s - si puo' avere chiusa, "
-                                "coi tagli modellati, o aperta" % s["dove"])
-                    letto["strappo"] = s
-                if domande and finestra_astuccio(d):
-                    letto["finestre"] = finestre_da_chiedere(
-                        1, "sul retro, fra le due falde: alta %.1f mm"
-                        % d.finestra_mm)
+    lettura = _Lettura(pdf, kind, domande)
+    for famiglia in RICONOSCIMENTO:
+        if kind in famiglia.dichiarate:
+            letto = famiglia.prova(lettura)
+            if letto is not None:
                 return letto
-        except Exception as e:
-            if kind == "carton":
-                # Dichiarato cartotecnico e non e' un astuccio: puo' essere la
-                # scatola a punta, che il solutore astuccio rifiuta perche'
-                # non ha cielo. Solo qui, dopo l'astuccio: gli astucci non la
-                # pagano e non ne possono essere scambiati.
-                try:
-                    pu = punta.riconosci(pdf)
-                except Exception:
-                    traceback.print_exc()
-                    pu = None
-                if pu is not None:
-                    meta = punta.dichiara(pu)
-                    rgb = avviso_quadricromia(pdf, regione=pu.regione)
-                    if rgb:
-                        meta.insert(0, rgb)
-                    return dict(kind="punta", title="Scatola a punta",
-                                meta=meta)
-                # Non e' nemmeno quella: puo' essere
-                # un pezzo di una coppa, che e' cartotecnica anche lei. Se
-                # non e' nemmeno quello, l'errore resta quello dell'astuccio.
-                from pack3d import coppa as cp
-                if cp.riconosci(pdf) is not None:
-                    return analisi_coppa([pdf], "carton")
-                # Un tubo a cono, lo sleeve lungo e stretto col fondo saldato
-                # piatto: un settore di corona che la coppa non prende (non ha
-                # fondo ne' vista montata). Vedi `pack3d.tubo`.
-                try:
-                    tb = tubo.riconosci(pdf)
-                except Exception:
-                    traceback.print_exc()
-                    tb = None
-                if tb is not None:
-                    meta = tubo.dichiara(tb)
-                    rgb = avviso_quadricromia(pdf, regione=tb.regione)
-                    if rgb:
-                        meta.insert(0, rgb)
-                    return dict(kind="tubo", title="Tubo a cono", meta=meta,
-                                gusti=list(gelato.GUSTI))
-                # Un disco da solo non dice di essere un lid (`coppa.orienta`):
-                # se c'e', l'errore dell'astuccio resta, ma prima viene il
-                # consiglio, che l'interfaccia mostra solo i primi 200 caratteri
-                disco = cp.leggi_disco(cp.tracce(pdf))
-                if disco is not None:
-                    raise ValueError("Non si risolve come astuccio, e ha un disco "
-                                     "di %.0f mm: se e' il lid di un cono, "
-                                     "dichiara 2 pezzi e carica anche il PDF del "
-                                     "cono. (astuccio: %s)"
-                                     % (2 * disco.r_taglio, e)) from e
-                raise
-    if kind in (None, "flowpack"):
-        letto = _analisi_incarto(pdf)
-        if letto is not None:
-            return letto
-    # nel verso della grafica, come la costruzione; e se fallisce anche il
-    # ripiego, l'errore va al client
-    try:
-        return _analisi_flowpack_dichiarata(pdf)
-    except Exception:
-        if kind is None:
-            # Senza dichiarazione, l'ultima possibilita' e' una coppa: lo
-            # sleeve o il tappo. Si prova per ULTIMA, quando tutto il resto ha
-            # fallito, cosi' gli altri pack non la pagano e non ne possono
-            # essere scambiati; sul Nutella POT il ripiego flowpack falliva
-            # con "saldature di testa non riconosciute".
-            from pack3d import coppa as cp
-            if cp.riconosci(pdf) is not None:
-                return analisi_coppa([pdf])
-        raise
+    # il flowpack, per ultimo, o risponde o si ferma: qui non si arriva
+    raise ValueError("nessuna famiglia riconosce questo PDF")
+
+
+# Le costruzioni: per ogni famiglia letta (`info["kind"]`) la funzione che
+# prepara `costruisci(lastre, uscita)`, la costruzione che la correzione
+# dell'AI rifa' con le lastre tecniche che ha riconosciuto. `r` e' la
+# richiesta: i PDF, le scelte della pagina, la qualita' (vedi `_col_pdf`).
+# Una famiglia che qui non c'e' si costruisce come flowpack, come prima.
+
+def _costruisci_coppa(r, info):
+    def costruisci(lastre, uscita):
+        return build_coppa(r.pdfs, uscita, r.q, lastre,
+                           dichiarato=r.kind or "coppa", carta=r.carta)
+    return costruisci
+
+
+def _costruisci_vassoio(r, info):
+    def costruisci(lastre, uscita):
+        return build_vassoio(r.pdf, uscita, r.q, lastre, r.col_riq)
+    return costruisci
+
+
+def _costruisci_pouch(r, info):
+    def costruisci(lastre, uscita):
+        return build_pouch(r.pdf, uscita, r.q, lastre, r.col_riq)
+    return costruisci
+
+
+def _costruisci_ballotin(r, info):
+    def costruisci(lastre, uscita):
+        return build_ballotin(r.pdf, uscita, r.q, lastre, r.col_riq,
+                              carta=r.carta, pellicola=r.pellicola)
+    return costruisci
+
+
+def _costruisci_punta(r, info):
+    def costruisci(lastre, uscita):
+        return build_punta(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta)
+    return costruisci
+
+
+def _costruisci_incarto(r, info):
+    def costruisci(lastre, uscita):
+        return build_incarto(r.pdf, uscita, r.q, lastre, r.col_riq)
+    return costruisci
+
+
+def _costruisci_tubo(r, info):
+    def costruisci(lastre, uscita):
+        return build_tubo(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta,
+                          gelato_gusto=r.gelato)
+    return costruisci
+
+
+def _costruisci_astuccio(r, info):
+    def costruisci(lastre, uscita):
+        return build_carton(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta,
+                            apertura=r.apertura, pellicola=r.pellicola,
+                            incisioni=r.incisioni)
+    return costruisci
+
+
+def _costruisci_riempimento(r, info):
+    if info.get("cu") == "carton":
+        # un vassoio coi suoi astucci, chiusi
+        def costruisci(lastre, uscita):
+            return build_riempimento(r.pdfs, info, uscita, r.quanti, quality=r.q,
+                                     carta=r.carta, incisioni=r.incisioni,
+                                     per_fila=r.per_fila)
+        return costruisci
+    # un vassoio coi suoi flowpack: due costruzioni e un GLB solo, vedi
+    # `pack3d.riempimento`
+    pdf_fp = r.pdfs[info["flowpack"]]
+    soft, scatola, pinne, mat = r.parametri_flowpack(pdf_fp, r.nomi[info["flowpack"]])
+    case_fp = CASI.get(_sig(pdf_fp))
+
+    def costruisci(lastre, uscita):
+        opts = r.opts
+        return build_riempimento(
+            r.pdfs, info, uscita, r.quanti,
+            (int(opts.get("teeth", 20)), str(soft), case_fp, r.q,
+             sezione_da_agente(opts.get("params")),
+             scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
+             saldatura_scelta(opts), nello_spessore_scelto(opts)), r.q,
+            per_fila=r.per_fila)
+    return costruisci
+
+
+def _costruisci_flowpack(r, info):
+    soft, scatola, pinne, mat = r.parametri_flowpack(r.pdf, r.nomi[0])
+
+    def costruisci(lastre, uscita):
+        opts = r.opts
+        return build_flowpack(
+            r.pdf, uscita, int(opts.get("teeth", 20)), str(soft), r.case, r.q,
+            sezione_da_agente(opts.get("params")),
+            scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
+            saldatura_scelta(opts), nello_spessore_scelto(opts))
+    return costruisci
+
+
+COSTRUZIONI = {
+    "coppa": _costruisci_coppa,
+    "vassoio": _costruisci_vassoio,
+    "pouch": _costruisci_pouch,
+    "ballotin": _costruisci_ballotin,
+    "punta": _costruisci_punta,
+    "incarto": _costruisci_incarto,
+    "tubo": _costruisci_tubo,
+    "carton": _costruisci_astuccio,
+    "riempimento": _costruisci_riempimento,
+    "flowpack": _costruisci_flowpack,
+}
 
 
 # l'immagine del prodotto da incartare: la pagina la rimpicciolisce a 1600 px
@@ -3251,7 +3632,7 @@ def _analisi_incarto(pdf):
 def _dice_film(pdf):
     """Il file dice da se' di essere un film da flowpack?
 
-    Il cartiglio Artworkr dei Ferrero lo scrive nella descrizione - "T1 0018 |
+    Il cartiglio Artworkr del cliente lo scrive nella descrizione - "T1 0018 |
     WRAPPING/FILM" - e il disegno tecnico di un film ha FASCIA e PASSO, cioe'
     nastro e passo. Su tutti i file che abbiamo, WRAPPING lo porta ogni
     flowpack e nessun astuccio.
@@ -3341,6 +3722,11 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *a):
         sys.stderr.write("  %s\n" % (fmt % a))
 
+    def handle_one_request(self):
+        # una risposta per richiesta (`_send`): si riparte da capo a ognuna
+        self._inviata = False
+        super().handle_one_request()
+
     def _cors(self):
         # l'interfaccia puo' stare su un dominio diverso dal backend
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -3348,11 +3734,20 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Pack3d")
         # senza questo il browser nasconde l'header alla pagina, su altra origine
         self.send_header("Access-Control-Expose-Headers",
-                         "X-Pack3d-Meta, X-Pack3d-Controllo, X-Pack3d-AI")
+                         "X-Pack3d-Meta, X-Pack3d-Controllo, X-Pack3d-AI, "
+                         "X-Pack3d-Lettura, X-Pack3d-Verdetto")
         self.send_header("Access-Control-Max-Age", "86400")
 
     def _send(self, code, body, ctype="application/json", filename=None,
-              meta=None, controllo=None, ai=None):
+              meta=None, controllo=None, ai=None, lettura=None, verdetto_dopo=None):
+        if getattr(self, "_inviata", False):
+            # il modello e' partito prima del verdetto (`verdetto_dopo`): una
+            # seconda risposta finirebbe in coda alla prima, sulla stessa
+            # connessione
+            print("risposta %d non mandata: la richiesta ha gia' avuto la sua" % code,
+                  file=sys.stderr)
+            return
+        self._inviata = True
         if isinstance(body, str):
             body = body.encode()
         self.send_response(code)
@@ -3370,6 +3765,13 @@ class Handler(BaseHTTPRequestHandler):
             # quali righe di `meta` sono dell'AI: la pagina le tiene in vista
             self.send_header("X-Pack3d-AI", quote(
                 json.dumps(ai, ensure_ascii=False)))
+        if lettura:
+            # il gettone della lettura del PDF: la pagina la chiede a parte
+            self.send_header("X-Pack3d-Lettura", lettura)
+        if verdetto_dopo:
+            # il verdetto del controllo arriva dopo il modello: la pagina lo
+            # chiede con questo gettone (/api/verdetto)
+            self.send_header("X-Pack3d-Verdetto", verdetto_dopo)
         if filename:
             self.send_header("Content-Disposition",
                              'attachment; filename="%s"' % filename)
@@ -3402,15 +3804,49 @@ class Handler(BaseHTTPRequestHandler):
             # e se le email delle domande partono: senza, la pagina non chiede
             # l'email a chi manda un caso. `glam` dice se lo Space ha il token
             # d'import di Glam, per mandare da solo i modelli approvati (mai
-            # il token: solo se c'e')
-            from pack3d import avvisi
+            # il token: solo se c'e'). `colata` dice se e' arrivata la
+            # risorsa della colata, che viene dal repository privato
+            from pack3d import avvisi, colata as la_colata
             return self._send(200, json.dumps({"ok": True, "versione": VERSIONE,
                                                "email": avvisi.configurato(),
-                                               "glam": coda.glam_configurato()}))
+                                               "glam": coda.glam_configurato(),
+                                               "colata": os.path.exists(la_colata.RISORSA)}))
         if self.path.startswith("/api/casi"):
             return self._stati()
         if self.path.startswith("/api/modello"):
             return self._modello()
+        if self.path.startswith("/api/anteprima"):
+            return self._anteprima()
+        if self.path.startswith("/api/verdetto"):
+            # il verdetto del controllo che arriva dopo il modello, e il GLB
+            # corretto se la correzione l'ha rifatto (/api/verdetto/glb)
+            from urllib.parse import parse_qs, urlparse
+            gettone = (parse_qs(urlparse(self.path).query).get("id") or [""])[0][:40]
+            v = verdetto_di(gettone)
+            if v is None:
+                return self._send(404, "Il verdetto non c'e' piu': ricostruisci il "
+                                       "modello per riaverlo",
+                                  "text/plain; charset=utf-8")
+            if self.path.startswith("/api/verdetto/glb"):
+                if not v["glb"]:
+                    return self._send(404, "Nessun modello corretto", "text/plain; charset=utf-8")
+                return self._send(200, v["glb"], "model/gltf-binary", filename="modello.glb")
+            return self._send(200, json.dumps(dict(v, glb=bool(v["glb"])), ensure_ascii=False))
+        if self.path.startswith("/api/lavori"):
+            # a che punto e' il lavoro di chi aspetta: in fila, o in corso
+            from urllib.parse import parse_qs, urlparse
+            chi = (parse_qs(urlparse(self.path).query).get("id") or [""])[0][:40]
+            return self._send(200, json.dumps(dict(lavoratori.stato(),
+                                                   posizione=lavoratori.posizione(chi))))
+        if self.path.startswith("/api/lettura/"):
+            gettone = self.path.split("/api/lettura/", 1)[1].split("?")[0]
+            with _LETTURE_LOCK:
+                v = LETTURE.get(gettone)
+            if v is None:
+                return self._send(404, "La lettura del PDF non c'e' piu': "
+                                       "ricostruisci il modello per rivederla",
+                                  "text/plain; charset=utf-8")
+            return self._send(200, v[1], "image/jpeg")
         path = os.path.join(HERE, "pack3d_studio.html")
         with open(path, "rb") as fh:
             self._send(200, fh.read(), "text/html; charset=utf-8")
@@ -3446,6 +3882,88 @@ class Handler(BaseHTTPRequestHandler):
         if glb is None:
             return self._send(404, "Nessun modello da approvare per questo caso")
         return self._send(200, glb, "model/gltf-binary")
+
+    # L'anteprima di una domanda della routine (`coda.anteprima`): il modello
+    # di adesso e la lettura del PDF, che la finestra dei casi mostra sopra la
+    # domanda. Solo per codice.
+    def _anteprima(self):
+        from urllib.parse import parse_qs, urlparse
+        cod = (parse_qs(urlparse(self.path).query).get("codice") or [""])[0].strip().lower()
+        try:
+            jpg = coda.anteprima(cod)
+        except (OSError, ValueError) as e:
+            print("anteprima del caso %s non letta: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        if jpg is None:
+            return self._send(404, "Nessuna anteprima per questo caso")
+        return self._send(200, jpg, "image/jpeg")
+
+    # Un'analisi o una costruzione a un lavoratore (`pack3d.lavoratori`): qui
+    # si legge la richiesta, li' si fa, e qui tornano la risposta, i casi da
+    # mettere in coda e la lettura del PDF.
+    def _a_un_lavoratore(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        if n <= 0:
+            return self._send(400, "Nessun file ricevuto")
+        if n > MAX_UPLOAD:
+            return self._send(413, "PDF troppo grande (limite %d MB)"
+                              % (MAX_UPLOAD // (1024 * 1024)))
+        corpo = self.rfile.read(n)
+        try:
+            chi = str(json.loads(self.headers.get("X-Pack3d") or "{}").get("lavoro") or "")[:40]
+        except (ValueError, AttributeError):
+            chi = ""
+        lavoro = {"path": self.path, "corpo": corpo,
+                  "intestazioni": {"Content-Length": str(n),
+                                   "X-Pack3d": self.headers.get("X-Pack3d") or ""}}
+        # il modello che parte prima del verdetto: col suo gettone, che vale
+        # «in corso» finche' il lavoratore non manda il verdetto
+        attesa = []
+
+        def anticipo(pacco):
+            attesa.append(pacco["risposta"].get("verdetto_dopo"))
+            metti_verdetto(attesa[-1], pronto=False)
+            self._da_lavoratore(pacco)
+        try:
+            esito = lavoratori.esegui(lavoro, hashlib.sha256(corpo).hexdigest(), chi,
+                                      anticipo)
+        except lavoratori.Occupato as e:
+            print("lavoratori: occupati, %s" % e, file=sys.stderr)
+            return self._send(503, "Server occupato: troppe costruzioni in fila, "
+                                   "riprova fra qualche minuto")
+        except lavoratori.Caduto as e:
+            if attesa:
+                # il modello e' gia' arrivato: manca solo il verdetto
+                metti_verdetto(attesa[-1], None, ["controllo AI non fatto: il processo "
+                                                  "che lo faceva e' caduto (%s)" % e], [])
+                return None
+            return self._send(500, "La costruzione si e' fermata: il processo che "
+                                   "la faceva e' caduto (%s). Le altre non ne "
+                                   "risentono: riprova, e se ricapita con questo "
+                                   "PDF mandalo come caso" % e)
+        for gettone, voce in esito.get("verdetti", {}).items():
+            metti_verdetto(gettone, **voce)
+        return self._da_lavoratore(esito)
+
+    def _da_lavoratore(self, pacco):
+        """Quello che un lavoratore rimanda: i casi in coda, la lettura e la
+        risposta, se c'e' (la risposta anticipata e' gia' partita)."""
+        for a, k in pacco["casi"]:
+            coda.metti(*a, **k)
+        r = pacco["risposta"]
+        if r is None:
+            return None
+        if r.get("lettura") and pacco.get("lettura"):
+            metti_lettura(r["lettura"], pacco["lettura"])
+        return self._send(r["code"], r["body"], r.get("ctype") or "application/json",
+                          filename=r.get("filename"), meta=r.get("meta"),
+                          controllo=r.get("controllo"), ai=r.get("ai"),
+                          lettura=r.get("lettura") if pacco.get("lettura") else None,
+                          verdetto_dopo=r.get("verdetto_dopo"))
 
     def _json_corpo(self, massimo=64 * 1024):
         """Il corpo JSON di una richiesta piccola, o (codice, errore)."""
@@ -3719,6 +4237,17 @@ class Handler(BaseHTTPRequestHandler):
             return self._prossimo()
         if self.path.startswith("/api/template"):
             return self._template()
+        if lavoratori.attivi() and self.path.startswith(AI_LAVORATORI):
+            return self._a_un_lavoratore()
+        if self.path.startswith(AI_LAVORATORI):
+            # un lavoro: la sua cartella per i file temporanei e le casse
+            # vuote, uno alla volta per processo (`pack3d.stato`)
+            with stato.lavoro():
+                return self._col_pdf()
+        return self._col_pdf()
+
+    def _col_pdf(self):
+        """Le richieste che portano il PDF: analisi, costruzione, segnalazione."""
         try:
             n = int(self.headers.get("Content-Length", 0))
             if n <= 0:
@@ -3747,7 +4276,7 @@ class Handler(BaseHTTPRequestHandler):
             if blocchi is None:
                 return self._send(400, "Le parti dichiarate non tornano col "
                                        "corpo, o una non e' un PDF")
-            with tempfile.TemporaryDirectory() as td:
+            with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
                 pdfs = []
                 for k, blocco in enumerate(blocchi):
                     pdfs.append(os.path.join(td, "in.pdf" if k == 0
@@ -3821,6 +4350,26 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")
+                if self.path.startswith("/api/segnala"):
+                    # «Letto male»: chi ha costruito il modello guarda la
+                    # lettura del PDF accanto (`pack3d.lettura`) e dice che non
+                    # torna. La pagina rimanda gli stessi PDF e le stesse
+                    # opzioni, col motivo: il caso si prepara come quelli che
+                    # il controllo respinge, e parte quando lo conferma con
+                    # la descrizione. Niente costruzione: la rifa' la routine.
+                    motivo = str(opts.get("motivo") or "").strip()[:300] or "letto male"
+                    verdetto = {"esito": "sbagliato", "segnalato": True,
+                                "motivo": "Segnalato da chi l'ha costruito: il PDF e' "
+                                          "stato letto male - %s" % motivo,
+                                "difetti": ["letto male: %s" % motivo]}
+                    ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                               riconosciuto="-", avvisi=[], nomi=nomi,
+                               opzioni={k: opts[k] for k in OPZIONI_CASO
+                                        if k in opts})
+                    verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                        blocchi_caso, nomi_caso, verdetto, None, ctx)
+                    verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                    return self._send(200, json.dumps(verdetto, ensure_ascii=False))
                 if kind == "riempimento" and self.path.startswith("/api/analyze"):
                     try:
                         letto = analisi_riempimento(pdfs, cu)
@@ -3867,7 +4416,7 @@ class Handler(BaseHTTPRequestHandler):
                                                "secondo")
                     # Da qui in giu' il posto e' preso e va restituito comunque
                     # vada. Prima analyze_pdf stava FUORI da qualsiasi
-                    # protezione: su un PDF che non sa risolvere (K Tronky,
+                    # protezione: su un PDF che non sa risolvere (wafer T1,
                     # "saldature di testa non riconosciute") lanciava, il posto
                     # non tornava indietro, e dopo MAX_JOBS tentativi il server
                     # rispondeva 503 a chiunque fino al riavvio.
@@ -3959,78 +4508,16 @@ class Handler(BaseHTTPRequestHandler):
                             return (soft, scatola, pinne,
                                     materiali_dichiarati(opts.get("materiali")))
 
-                        if info["kind"] == "coppa":
-                            def costruisci(lastre, uscita):
-                                return build_coppa(pdfs, uscita, q, lastre,
-                                                   dichiarato=kind or "coppa",
-                                                   carta=carta)
-                        elif info["kind"] == "vassoio":
-                            def costruisci(lastre, uscita):
-                                return build_vassoio(pdf, uscita, q, lastre, col_riq)
-                        elif info["kind"] == "pouch":
-                            def costruisci(lastre, uscita):
-                                return build_pouch(pdf, uscita, q, lastre, col_riq)
-                        elif info["kind"] == "ballotin":
-                            def costruisci(lastre, uscita):
-                                return build_ballotin(pdf, uscita, q, lastre,
-                                                      col_riq, carta=carta,
-                                                      pellicola=con_pellicola)
-                        elif info["kind"] == "punta":
-                            def costruisci(lastre, uscita):
-                                return build_punta(pdf, uscita, q, lastre,
-                                                   col_riq, carta=carta)
-                        elif info["kind"] == "incarto":
-                            def costruisci(lastre, uscita):
-                                return build_incarto(pdf, uscita, q, lastre,
-                                                     col_riq)
-                        elif info["kind"] == "tubo":
-                            def costruisci(lastre, uscita):
-                                return build_tubo(pdf, uscita, q, lastre,
-                                                  col_riq, carta=carta,
-                                                  gelato_gusto=con_gelato)
-                        elif info["kind"] == "carton":
-                            # build_carton i suoi avvisi li restituiva gia', ed
-                            # era il chiamante a buttarli e poi a leggere una
-                            # variabile che su questo ramo non esisteva.
-                            def costruisci(lastre, uscita):
-                                return build_carton(pdf, uscita, q, lastre, col_riq,
-                                                    carta=carta,
-                                                    apertura=gradi_aperta,
-                                                    pellicola=con_pellicola,
-                                                    incisioni=con_incisioni)
-                        elif info["kind"] == "riempimento" and info.get("cu") == "carton":
-                            # un vassoio coi suoi astucci, chiusi
-                            def costruisci(lastre, uscita):
-                                return build_riempimento(
-                                    pdfs, info, uscita, quanti, quality=q,
-                                    carta=carta, incisioni=con_incisioni,
-                                    per_fila=per_fila)
-                        elif info["kind"] == "riempimento":
-                            # un vassoio coi suoi flowpack: due costruzioni e
-                            # un GLB solo, vedi `pack3d.riempimento`
-                            pdf_fp = pdfs[info["flowpack"]]
-                            soft, scatola, pinne, mat = parametri_flowpack(
-                                pdf_fp, nomi[info["flowpack"]])
-                            case_fp = CASI.get(_sig(pdf_fp))
-
-                            def costruisci(lastre, uscita):
-                                return build_riempimento(
-                                    pdfs, info, uscita, quanti,
-                                    (int(opts.get("teeth", 20)), str(soft), case_fp, q,
-                                     sezione_da_agente(opts.get("params")),
-                                     scatola, pinne, lastre, col_riq, mat, mat_ai,
-                                     saldatura_scelta(opts),
-                                     nello_spessore_scelto(opts)), q, per_fila=per_fila)
-                        else:
-                            soft, scatola, pinne, mat = parametri_flowpack(pdf, nomi[0])
-
-                            def costruisci(lastre, uscita):
-                                return build_flowpack(
-                                    pdf, uscita, int(opts.get("teeth", 20)),
-                                    str(soft), case, q,
-                                    sezione_da_agente(opts.get("params")),
-                                    scatola, pinne, lastre, col_riq, mat, mat_ai,
-                                    saldatura_scelta(opts), nello_spessore_scelto(opts))
+                        # la costruzione della famiglia letta: `COSTRUZIONI`
+                        r = SimpleNamespace(
+                            pdf=pdf, pdfs=pdfs, nomi=nomi, kind=kind, opts=opts,
+                            q=q, col_riq=col_riq, carta=carta,
+                            apertura=gradi_aperta, pellicola=con_pellicola,
+                            incisioni=con_incisioni, gelato=con_gelato,
+                            quanti=quanti, per_fila=per_fila, case=case,
+                            mat_ai=mat_ai, parametri_flowpack=parametri_flowpack)
+                        costruisci = COSTRUZIONI.get(
+                            info["kind"], _costruisci_flowpack)(r, info)
                         avvisi = costruisci(aree, out)
                         if mat_ai and not opts.get("materiali"):
                             # col caso in coda, perche' la routine lo rifaccia
@@ -4040,6 +4527,7 @@ class Handler(BaseHTTPRequestHandler):
                                 "%d kB" % (os.path.getsize(out) // 1024))
                         with open(out, "rb") as fh:
                             glb = fh.read()
+                        lettura = lettura_accanto(out)
                         meta = righe_prodotto + avvisi_ingresso + list(avvisi)
                         # Le righe dell'AI - le sue scelte, il verdetto del
                         # controllo, la correzione - viaggiano anche in un
@@ -4052,14 +4540,7 @@ class Handler(BaseHTTPRequestHandler):
                         # fuori, a posto restituito: e' solo attesa di rete, e
                         # chi viene dopo intanto costruisce.
                         quadro = None
-                        if info["kind"] == "riempimento":
-                            # il controllo confronta il modello con l'artwork
-                            # di un pack solo: sul vassoio pieno ancora no
-                            righe_ai.append("controllo AI: sui riempimenti non "
-                                            "c'e' ancora, guarda tu il vassoio "
-                                            "o il display pieno")
-                            meta.append(righe_ai[-1])
-                        elif controllo.attivo():
+                        if controllo.attivo():
                             try:
                                 quadro = controllo.prepara(pdfs, out)
                             except Exception as e:
@@ -4076,43 +4557,75 @@ class Handler(BaseHTTPRequestHandler):
                     finally:
                         _slots.release()
                     verdetto = None
+                    ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                               riconosciuto=info.get("title") or info["kind"],
+                               avvisi=list(meta), nomi=nomi,
+                               # col caso in coda, perche' chi lo riprende
+                               # lo ricostruisca uguale
+                               opzioni={k: opts[k] for k in OPZIONI_CASO
+                                        if k in opts})
+                    nota = (nota_apertura(meta) or nota_incisioni(meta)
+                            or nota_materiali(meta) or nota_gelato(meta))
+                    if info["kind"] == "riempimento":
+                        # il controllo sa che e' un riempimento, e quale PDF
+                        # e' il contenitore e quale il pack
+                        nota = " ".join(n for n in (nota_riempimento(info, nomi), nota) if n)
+                    if nota:
+                        ctx["nota"] = nota
                     if quadro is not None:
-                        t2 = traccia("controllo")
-                        ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
-                                   riconosciuto=info.get("title") or info["kind"],
-                                   avvisi=list(meta), nomi=nomi,
-                                   # col caso in coda, perche' chi lo
-                                   # riprende lo ricostruisca uguale
-                                   opzioni={k: opts[k] for k in OPZIONI_CASO
-                                            if k in opts})
-                        nota = (nota_apertura(meta) or nota_incisioni(meta)
-                                or nota_materiali(meta) or nota_gelato(meta))
-                        if nota:
-                            ctx["nota"] = nota
-                        verdetto = controllo.giudica(quadro, ctx)
-                        traccia("controllo", t2, verdetto["esito"])
-                        riga = None
-                        if (controllo.correggibile(verdetto)
-                                and controllo.correzione_attiva()):
-                            nuovo, riga = correggi(costruisci, aree, pdfs, td,
-                                                   quadro, verdetto, ctx)
-                            if nuovo is not None:
-                                glb, avvisi_corr, quadro, verdetto, ctx = nuovo
-                                meta = (righe_prodotto + avvisi_ingresso
-                                        + list(avvisi_corr))
-                            ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
-                        # anche il dubbio: il modello all'utente arriva lo
-                        # stesso, ma qualcuno deve guardarlo, e se ha un
-                        # difetto vero correggerlo come un caso respinto
-                        if verdetto["esito"] in ("sbagliato", "dubbio"):
-                            verdetto["codice"], verdetto["in_coda"] = coda.metti(
-                                blocchi_caso, nomi_caso, verdetto, quadro["viste"], ctx)
-                            verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
-                        if riga:
-                            meta.insert(0, riga)
-                            righe_ai.insert(0, riga)
-                        meta.insert(0, controllo.avviso(verdetto))
-                        righe_ai.insert(0, meta[0])
+                        # Il modello va subito a chi l'ha chiesto, e il
+                        # verdetto dell'AI - con la correzione, se serve -
+                        # arriva dopo: la pagina lo chiede col gettone
+                        # (`/api/verdetto`). Prima si aspettava qui la
+                        # risposta di Claude, e quando c'era la seconda
+                        # costruzione.
+                        attesa = nuovo_verdetto()
+                        in_corso = "controllo AI: in corso, il verdetto arriva fra poco"
+                        self._send(200, glb, "model/gltf-binary",
+                                   filename="modello.glb", meta=[in_corso] + meta,
+                                   ai=[in_corso] + righe_ai, lettura=lettura,
+                                   verdetto_dopo=attesa)
+                        glb_prima = glb
+                        try:
+                            t2 = traccia("controllo")
+                            verdetto = controllo.giudica(quadro, ctx)
+                            traccia("controllo", t2, verdetto["esito"])
+                            riga = None
+                            if (controllo.correggibile(verdetto)
+                                    and controllo.correzione_attiva()):
+                                nuovo, riga = correggi(costruisci, aree, pdfs, td,
+                                                       quadro, verdetto, ctx)
+                                if nuovo is not None:
+                                    glb, avvisi_corr, quadro, verdetto, ctx = nuovo
+                                    meta = (righe_prodotto + avvisi_ingresso
+                                            + list(avvisi_corr))
+                                ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
+                            # i difetti misurati dalle verifiche valgono come
+                            # un dubbio, anche col controllo che dice ok
+                            verdetto = con_difetti(verdetto, meta)
+                            # anche il dubbio: il modello all'utente arriva lo
+                            # stesso, ma qualcuno deve guardarlo, e se ha un
+                            # difetto vero correggerlo come un caso respinto
+                            if verdetto["esito"] in ("sbagliato", "dubbio"):
+                                verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                                    blocchi_caso, nomi_caso, verdetto, quadro["viste"],
+                                    ctx)
+                                verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                            if riga:
+                                meta.insert(0, riga)
+                                righe_ai.insert(0, riga)
+                            meta.insert(0, controllo.avviso(verdetto))
+                            righe_ai.insert(0, meta[0])
+                        except Exception as e:
+                            # il modello e' gia' partito: l'errore lo dice il
+                            # verdetto, non una seconda risposta
+                            traceback.print_exc()
+                            verdetto = None
+                            righe_ai.insert(0, "controllo AI non fatto: %s" % e)
+                            meta.insert(0, righe_ai[0])
+                        metti_verdetto(attesa, verdetto, meta, righe_ai,
+                                       glb if glb is not glb_prima else None)
+                        return None
                     elif (controllo.manca_la_chiave()
                           and info["kind"] != "riempimento"):
                         # spento perche' manca la chiave, non perche' qualcuno
@@ -4121,12 +4634,25 @@ class Handler(BaseHTTPRequestHandler):
                                         "ANTHROPIC_API_KEY fra i Secrets dello "
                                         "Space")
                         meta.append(righe_ai[-1])
+                    if quadro is None and verifica.difetti(meta):
+                        # senza controllo AI - la chiave che manca, o le viste
+                        # che non riescono - il verdetto lo danno le verifiche: il caso
+                        # va in coda senza le viste del controllo, la routine
+                        # lo ricostruisce comunque
+                        verdetto = con_difetti(None, meta)
+                        verdetto["codice"], verdetto["in_coda"] = coda.metti(
+                            blocchi_caso, nomi_caso, verdetto, None, ctx)
+                        verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                        meta.insert(0, "VERIFICHE: il modello ha dei difetti misurati - %s"
+                                    % verdetto["motivo"])
+                        righe_ai.insert(0, meta[0])
                     # gli avvisi della costruzione viaggiano in un header: il
                     # corpo e' il GLB. Finivano nel nulla, e con loro ogni
                     # diagnostica. Il verdetto del controllo in un altro.
                     return self._send(200, glb, "model/gltf-binary",
                                       filename="modello.glb", meta=meta,
-                                      controllo=verdetto, ai=righe_ai)
+                                      controllo=verdetto, ai=righe_ai,
+                                      lettura=lettura)
             return self._send(404, "endpoint sconosciuto")
         except Exception as e:
             traceback.print_exc()
@@ -4136,7 +4662,7 @@ class Handler(BaseHTTPRequestHandler):
 # Tubo piatto a sovrapposizione: quanto e' spessa la sezione in frazione del
 # diametro del cerchio, ai due estremi della scala di rigonfiamento. Il cerchio
 # e' il massimo fisico: con quel film non si puo' essere piu' tondi. Il valore
-# al livello 1 viene dalla taratura sul K Tronky T1, che al livello 5 deve
+# al livello 1 viene dalla taratura sul wafer T1, che al livello 5 deve
 # uscire con rapporto 1,466 come il suo GLB di riferimento.
 PILLOW_LENTE = float(os.environ.get("PACK3D_PILLOW_LENTE", "0.65"))
 PILLOW_CERCHIO = float(os.environ.get("PACK3D_PILLOW_CERCHIO", "1.0"))
@@ -4152,42 +4678,215 @@ FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
 # Il limite geometrico e' 0,5: la gola piegata a 45 gradi sullo spigolo costa
 # mezzo spessore. Sul pack vero pero' una parte di quel film si ripiega di lato
 # come orecchia invece di accorciare la pinna, quindi la frazione utile e' piu'
-# bassa. 0,40 e' quella che riproduce le foto del Brioss: 37,6 = 22,8 di gola
+# bassa. 0,40 e' quella che riproduce le foto della brioche: 37,6 = 22,8 di gola
 # piu' 14,8 di pinna. Tarata su un pack solo.
 GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 # La spalla, fuori dalla scatola, lunga almeno tante volte il calo del tubo
 # dalla sezione piena alla saldatura. Con la rampa morbida della mesh il punto
 # piu' ripido ha pendenza 1,87 volte il calo sulla lunghezza: a 1,7 e' 1,1,
 # cioe' 48 gradi, e il film ci si stende stirato di 1,2 in modo uniforme
-# (misurato sul bollino del Paradiso: era 2,5 in media e 3,7 di punta).
+# (misurato sul bollino del T1 farcito: era 2,5 in media e 3,7 di punta).
 SPALLA_SU_CALO = float(os.environ.get("PACK3D_SPALLA", "1.7"))
 # La pinna e' saldata: i due strati del film si toccano. Fra le loro facce si
 # lasciano pochi centesimi di millimetro, quanto basta perche' un viewer che
 # disegna anche le facce posteriori non le confonda. Prima restava il 3,5%
-# del mezzo spessore, quasi un millimetro sul B-ready piu' le nervature che
+# del mezzo spessore, quasi un millimetro sul pane ripieno piu' le nervature che
 # spingevano i due strati in fuori: la pinna usciva aperta, col bordo doppio.
 # E' meta' della distanza fra i due strati, in mm.
 PINNA_SALDATA_MM = 0.04
 # Le nervature delle ganasce sulla pinna alla saldatura piena (3/3): quanto
 # si alza il film sulla cresta. La scala della pagina va da 0 (pinna liscia)
-# a 3, e il 3 e' il rigato di prima: tarato sul B-ready, al centro della pinna
+# a 3, e il 3 e' il rigato di prima: tarato sul pane ripieno, al centro della pinna
 # le righe hanno lo stesso contrasto (9,4 contro 8,6; con 0,32 mm sull'onda
 # fitta erano 14,4).
 NERVATURA_MM = 0.15
 
 MAX_UPLOAD = 60 * 1024 * 1024
-# Uno, e non e' un numero da tarare sulla macchina: pdfium non e' thread-safe
-# nemmeno su documenti diversi, e due costruzioni insieme fanno morire il
-# processo intero con un int3 dentro libpdfium.so. Provato su 16 GB, dove la
-# memoria non c'entrava niente. Alzarlo vuol dire far cadere il servizio sotto
-# i piedi anche di chi non c'entrava. Vedi REGOLE.md, *pdfium non si chiama da
-# due thread*, e DEPLOY.md per i numeri per fase.
+# Uno per processo, e non e' un numero da tarare sulla macchina: pdfium non e'
+# thread-safe nemmeno su documenti diversi, e due costruzioni insieme fanno
+# morire il processo intero con un int3 dentro libpdfium.so. Provato su 16 GB,
+# dove la memoria non c'entrava niente. Le costruzioni insieme le fanno i
+# lavoratori, un processo ciascuno (`pack3d.lavoratori`). Vedi REGOLE.md,
+# *pdfium non si chiama da due thread*, e DEPLOY.md per i numeri per fase.
 MAX_JOBS = int(os.environ.get("PACK3D_MAX_JOBS", "1"))
 _slots = threading.Semaphore(MAX_JOBS)
 
 # Quanto la correzione aspetta che il posto di costruzione si liberi. Chi ha
 # chiesto il modello sta gia' aspettando: oltre, si consegna quello di prima.
 CORREZIONE_ATTESA = float(os.environ.get("PACK3D_CORREZIONE_ATTESA", "240"))
+
+
+def scrivi_lettura(out_glb, fai):
+    """La lettura del PDF accanto al GLB (`pack3d.lettura`): `fai()` la
+    disegna. Mai un errore: se non si disegna, il modello si costruisce lo
+    stesso e la pagina non apre la finestra."""
+    try:
+        dati = fai()
+        if dati:
+            with open(out_glb + lettura_pdf.ACCANTO, "wb") as fh:
+                fh.write(dati)
+    except Exception:
+        traceback.print_exc()
+
+
+# Le letture del PDF delle ultime costruzioni (`pack3d.lettura`), per la
+# pagina: la chiede subito dopo il modello, col gettone che le arriva in
+# X-Pack3d-Lettura. Poche e per poco: un'immagine sui 300 kB.
+LETTURE = {}
+LETTURE_MAX = 40
+LETTURE_ORE = 2 * 3600
+_LETTURE_LOCK = threading.Lock()
+
+
+def lettura_accanto(out_glb):
+    """La lettura che la costruzione ha lasciato accanto al GLB, messa da
+    parte per la pagina: il suo gettone, o None se non c'e'."""
+    import secrets
+    try:
+        with open(out_glb + lettura_pdf.ACCANTO, "rb") as fh:
+            dati = fh.read()
+    except OSError:
+        return None
+    gettone = secrets.token_hex(12)
+    metti_lettura(gettone, dati)
+    return gettone
+
+
+def metti_lettura(gettone, dati):
+    """La lettura `dati` fra quelle che la pagina puo' chiedere, col suo
+    gettone: anche quella fatta da un lavoratore, che il processo del server
+    tiene per lui (`esegui_lavoro`)."""
+    with _LETTURE_LOCK:
+        adesso = time.time()
+        for k in [k for k, (t, _d) in LETTURE.items() if adesso - t > LETTURE_ORE]:
+            del LETTURE[k]
+        while len(LETTURE) >= LETTURE_MAX:
+            del LETTURE[min(LETTURE, key=lambda k: LETTURE[k][0])]
+        LETTURE[gettone] = (adesso, dati)
+
+
+# ---------------------------------------------------------------------------
+# I lavoratori (`pack3d.lavoratori`): le analisi e le costruzioni in processi
+# a parte. Il processo del server legge la richiesta e la passa intera a un
+# lavoratore, che la fa con lo stesso codice di sempre (`Handler.do_POST`) e
+# rimanda la risposta, i casi da mettere in coda e la lettura del PDF.
+
+# le richieste che passano da pdfium vanno ai lavoratori (/api/analyze-ai
+# compresa); /api/segnala no, prepara solo il caso
+AI_LAVORATORI = ("/api/analyze", "/api/build")
+
+
+class _Lavoro(Handler):
+    """Una richiesta POST rifatta nel lavoratore: niente socket, la risposta
+    resta qui per tornare al processo del server."""
+
+    def __init__(self, path, intestazioni, corpo, casi, anticipa=None):  # pylint: disable=super-init-not-called
+        self.path = path
+        self.headers = intestazioni
+        self.rfile = io.BytesIO(corpo)
+        self.risposta = None
+        self._casi = casi
+        self._anticipa = anticipa
+
+    def _send(self, code, body, ctype="application/json", filename=None,
+              meta=None, controllo=None, ai=None, lettura=None, verdetto_dopo=None):
+        if getattr(self, "_inviata", False):
+            print("risposta %d non mandata: la richiesta ha gia' avuto la sua" % code,
+                  file=sys.stderr)
+            return
+        self._inviata = True
+        if isinstance(body, str):
+            body = body.encode()
+        r = dict(code=code, body=body, ctype=ctype, filename=filename, meta=meta,
+                 controllo=controllo, ai=ai, lettura=lettura, verdetto_dopo=verdetto_dopo)
+        if verdetto_dopo and self._anticipa:
+            # il modello parte subito, e il lavoratore va avanti col verdetto
+            self._anticipa(_pacco(r, self._casi))
+            return
+        self.risposta = r
+
+
+def _pacco(r, casi):
+    """La risposta di un lavoratore per il processo del server: coi casi da
+    mettere in coda finora (e poi via, per non rimetterli) e la lettura."""
+    lettura = None
+    if r.get("lettura"):
+        with _LETTURE_LOCK:
+            lettura = (LETTURE.pop(r["lettura"], None) or (0, None))[1]
+    pacco = {"risposta": r, "casi": list(casi), "lettura": lettura}
+    del casi[:]
+    return pacco
+
+
+def esegui_lavoro(lavoro, anticipa=None):
+    """Nel lavoratore: la richiesta com'era, rifatta da `Handler.do_POST`.
+    Torna la risposta, i casi che il processo del server deve mettere in coda
+    (`lavoratori.casi_rimandati`), i dati della lettura del PDF e i verdetti
+    del controllo. Con `anticipa` il modello parte prima del verdetto: la
+    risposta va li', e alla fine restano i casi e i verdetti."""
+    casi = []
+    h = _Lavoro(lavoro["path"], lavoro["intestazioni"], lavoro["corpo"], casi, anticipa)
+    with _VERDETTI_LOCK:
+        prima = set(VERDETTI)
+    with lavoratori.casi_rimandati(coda, casi):
+        Handler.do_POST(h)
+    esito = _pacco(h.risposta, casi) if h.risposta else {"risposta": None, "casi": list(casi),
+                                                         "lettura": None}
+    with _VERDETTI_LOCK:
+        esito["verdetti"] = {k: VERDETTI.pop(k)[1] for k in list(VERDETTI) if k not in prima}
+    return esito
+
+
+# I verdetti del controllo che arrivano dopo il modello: la pagina li chiede
+# col gettone di X-Pack3d-Verdetto (/api/verdetto). Come le letture: pochi e
+# per poco. Il GLB corretto, se la correzione l'ha rifatto, sta con loro.
+VERDETTI = {}
+VERDETTI_MAX = 40
+_VERDETTI_LOCK = threading.Lock()
+
+
+def nuovo_verdetto():
+    """Il gettone di un verdetto che arrivera': intanto e' «in corso»."""
+    import secrets
+    gettone = secrets.token_hex(12)
+    metti_verdetto(gettone, pronto=False)
+    return gettone
+
+
+def metti_verdetto(gettone, verdetto=None, meta=None, ai=None, glb=None, pronto=True):
+    with _VERDETTI_LOCK:
+        adesso = time.time()
+        for k in [k for k, (t, _v) in VERDETTI.items() if adesso - t > LETTURE_ORE]:
+            del VERDETTI[k]
+        while len(VERDETTI) >= VERDETTI_MAX and gettone not in VERDETTI:
+            del VERDETTI[min(VERDETTI, key=lambda k: VERDETTI[k][0])]
+        VERDETTI[gettone] = (adesso, {"pronto": pronto, "verdetto": verdetto,
+                                      "meta": meta, "ai": ai, "glb": glb})
+
+
+def verdetto_di(gettone):
+    with _VERDETTI_LOCK:
+        v = VERDETTI.get(gettone)
+    return v[1] if v else None
+
+
+def con_difetti(verdetto, meta):
+    """Il verdetto con i difetti che le verifiche hanno misurato sul modello
+    (`verifica.difetti`). Un difetto vale come un dubbio del controllo AI: il
+    modello arriva lo stesso, con l'avviso, e il caso va in coda. Senza
+    controllo AI - la chiave che manca, o le viste che non riescono - il
+    verdetto lo danno le verifiche da sole. None se non ce n'e' nessuno e non c'era verdetto."""
+    trovati = verifica.difetti(meta)
+    if not trovati:
+        return verdetto
+    v = dict(verdetto or {"esito": "dubbio", "motivo": ""})
+    misurato = "le verifiche hanno misurato: " + "; ".join(trovati)
+    v["motivo"] = misurato + (" - " + v["motivo"] if v.get("motivo") else "")
+    if v.get("esito") != "sbagliato":
+        v["esito"] = "dubbio"
+    v["difetti"] = list(trovati) + list(v.get("difetti") or [])
+    v["verifiche"] = list(trovati)
+    return v
 
 
 def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):
@@ -4270,4 +4969,7 @@ if __name__ == "__main__":
     print("pack3d studio in ascolto su %s:%d" % (host, port))
     if host in ("0.0.0.0", "::"):
         print("  in locale:  http://localhost:%d" % port)
+    # le analisi e le costruzioni in processi a parte, prima di aprire la
+    # porta: i lavoratori nascono da un processo che non ha ancora thread
+    lavoratori.avvia()
     ThreadingHTTPServer((host, port), Handler).serve_forever()

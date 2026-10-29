@@ -7,10 +7,19 @@ ricava le quote L x H x P in millimetri.
 """
 from __future__ import annotations
 
+import gzip
+import hashlib
+import json
 import os
+import sys
+import tempfile
+import threading
+from collections import OrderedDict
 from dataclasses import dataclass, field, asdict
 
 import pdfplumber
+
+from . import stato
 
 PT2MM = 25.4 / 72.0
 
@@ -111,7 +120,7 @@ class Dieline:
 # --------------------------------------------------------------------------- #
 # L'ultima pagina rasterizzata: {(file, pagina): (scala, immagine)}. Una sola,
 # perche' il server costruisce un modello alla volta.
-_RESA = {}
+_RESA = stato.per_lavoro({})
 
 
 def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
@@ -119,7 +128,7 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
 
     pdfium rende il CropBox, pdfplumber misura sul MediaBox. Finche' i due
     riquadri coincidono non si vede la differenza, e su quasi tutte le tavole
-    coincidono. Quando no — su K Tronky il CropBox e' 459 x 271 pt dentro un
+    coincidono. Quando no — sul wafer T1 il CropBox e' 459 x 271 pt dentro un
     MediaBox di 1332 x 958, spostato di (419, 471) — le coordinate dei segmenti
     indicizzano un raster che comincia da un'altra parte: nessuna eccezione,
     solo misure prese nel posto sbagliato.
@@ -133,7 +142,7 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
 
     # Una pagina, una rasterizzazione. Il flusso ne chiedeva TRE della stessa
     # pagina a risoluzioni diverse - 100 dpi per trovare il blocco stampato,
-    # 150 per l'analisi, quella della texture per la grafica - e su Colazione
+    # 150 per l'analisi, quella della texture per la grafica - e sul wafer da colazione
     # erano 30 secondi su 40 e tre picchi di memoria sovrapposti.
     #
     # Si tiene l'ultima resa e si SCENDE soltanto: una riduzione e' una media
@@ -151,9 +160,23 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
         return im.resize((larg, alt), Image.LANCZOS)
 
     if livello is None:
-        page = pdfium.PdfDocument(pdf_path)[page_no]
-        page.set_cropbox(*page.get_mediabox())
-        im = page.render(scale=scale).to_pil().convert("RGB")
+        # la resa nativa resta su disco per la prossima costruzione (`rese`)
+        import time
+
+        import numpy as np
+
+        from . import rese
+        k = rese.chiave("dieline.render_page", pdf_path, page_no, float(scale))
+        v = rese.leggi(k)
+        if v is not None:
+            im = Image.fromarray(v[0])
+        else:
+            t = time.time()
+            page = pdfium.PdfDocument(pdf_path)[page_no]
+            page.set_cropbox(*page.get_mediabox())
+            im = page.render(scale=scale).to_pil().convert("RGB")
+            if time.time() - t >= rese.SOGLIA_S:
+                rese.scrivi(k, np.asarray(im))
     else:
         from . import strati
         im = strati.rendi(pdf_path, page_no, scale, livello)
@@ -167,7 +190,7 @@ def scarta_resa():
     """Butta la pagina rasterizzata tenuta in cassa.
 
     Va chiamata appena l'ultimo che la usa ha preso la sua copia: tenerla
-    viva oltre costa quanto pesa (41 MB su un foglio come Colazione) proprio
+    viva oltre costa quanto pesa (41 MB su un foglio come il wafer da colazione) proprio
     mentre la costruzione alloca la texture.
     """
     _RESA.clear()
@@ -221,6 +244,174 @@ def _segments(page):
         for (ax, ay), (bx, by) in zip(pts, pts[1:]):
             add(ax, ay, bx, by, st)
     return segs
+
+
+# --------------------------------------------------------------------------- #
+# i tratti di una pagina, letti una volta per file
+# --------------------------------------------------------------------------- #
+# pdfplumber, per dare i tratti di una pagina, ne interpreta tutto il
+# contenuto, grafica compresa: da mezzo secondo a sette per pagina. E la stessa
+# pagina la chiedevano in tanti - `extract`, il riconoscimento di vassoi,
+# sportelli e plance, la fustella della punta, il ripiego del flowpack - ognuno
+# riaprendo il file: sul riempimento della T1 caramel cheesecake erano 47
+# letture di due PDF in una costruzione, e /api/build le rifaceva tutte dopo
+# /api/analyze. Ora si leggono una volta per file e per pagina: si tengono in
+# memoria (`TRATTI_MAX`) e su disco (`CACHE`), dove li trova anche l'altro
+# lavoratore e chi riparte dopo una caduta.
+#
+# La chiave e' il CONTENUTO del file, non il nome: un PDF caricato vive in un
+# file temporaneo, e lo stesso nome torna con un altro foglio. E nella chiave
+# del disco c'e' la versione di questo modulo, di pdfplumber e di pdfminer,
+# perche' un disco tenuto fra due versioni del codice non dia i tratti letti
+# da quella vecchia.
+CACHE = os.environ.get("PACK3D_CACHE",
+                       os.path.join(tempfile.gettempdir(), "pack3d-cache"))
+CACHE_MB = float(os.environ.get("PACK3D_CACHE_MB", "256"))
+TRATTI_MAX = 12
+
+
+@dataclass(frozen=True)
+class Tratti:
+    """I tratti di una pagina, come li da' pdfplumber."""
+    larghezza: float
+    altezza: float
+    segmenti: tuple     # quelli di `_segments`
+    oggetti: tuple      # (tipo, stile, oggetto) dei tratti a penna, nell'ordine
+                        # della pagina: line, poi rect, poi curve
+
+
+_TRATTI = OrderedDict()
+_TRATTI_CHIAVE = threading.Lock()
+_IMPRONTE = {}
+
+
+def _versione_tratti():
+    import pdfminer
+    h = hashlib.sha256()
+    with open(__file__, "rb") as fh:
+        h.update(fh.read())
+    h.update(("%s %s" % (pdfplumber.__version__, pdfminer.__version__)).encode())
+    return h.hexdigest()[:12]
+
+
+_VERSIONE_TRATTI = _versione_tratti()
+
+
+def impronta_file(path):
+    """sha256 del contenuto di `path`, ricordata finche' il file non cambia."""
+    st = os.stat(path)
+    chiave = (os.path.abspath(path), st.st_size, st.st_mtime_ns, st.st_ctime_ns, st.st_ino)
+    imp = _IMPRONTE.get(chiave)
+    if imp is None:
+        h = hashlib.sha256()
+        with open(path, "rb") as fh:
+            for blocco in iter(lambda: fh.read(1 << 20), b""):
+                h.update(blocco)
+        imp = h.hexdigest()
+        if len(_IMPRONTE) > 256:
+            _IMPRONTE.clear()
+        _IMPRONTE[chiave] = imp
+    return imp
+
+
+def _leggi_tratti(pdf_path, page_no):
+    with pdfplumber.open(pdf_path) as pdf:
+        page = pdf.pages[page_no]
+        segs = _segments(page)
+        oggetti = []
+        for kind in ("line", "rect", "curve"):
+            for o in page.objects.get(kind, []):
+                if not o.get("stroke"):
+                    continue
+                st = (round(o.get("linewidth") or 0, 2), str(o.get("stroking_color")))
+                oggetti.append((kind, st, {k: o[k] for k in ("x0", "top", "x1", "bottom",
+                                                              "path", "pts") if k in o}))
+        return Tratti(page.width, page.height, tuple(segs), tuple(oggetti))
+
+
+def _file_tratti(chiave):
+    return os.path.join(CACHE, "tratti-%s-%s-%d.json.gz" % ((_VERSIONE_TRATTI,) + chiave))
+
+
+def _dal_disco(chiave):
+    if not CACHE or CACHE == "0":
+        return None
+    f = _file_tratti(chiave)
+    try:
+        with gzip.open(f, "rt", encoding="utf-8") as fh:
+            d = json.load(fh)
+    except (OSError, ValueError, EOFError):
+        return None
+    try:
+        os.utime(f)         # i piu' usati restano quando la cartella si sfoltisce
+    except OSError:
+        pass
+    # JSON fa delle tuple liste: lo stile torna tupla, perche' si confronta
+    # con quelli tenuti in un set
+    return Tratti(d["larghezza"], d["altezza"],
+                  tuple((k, c, a, b, tuple(st)) for k, c, a, b, st in d["segmenti"]),
+                  tuple((k, tuple(st), o) for k, st, o in d["oggetti"]))
+
+
+def _sul_disco(chiave, t):
+    """Scrive i tratti su disco, e se la cartella passa `CACHE_MB` butta i
+    piu' vecchi. Un disco che non si scrive non ferma niente."""
+    if not CACHE or CACHE == "0":
+        return
+    try:
+        os.makedirs(CACHE, mode=0o700, exist_ok=True)
+        fd, tmp = tempfile.mkstemp(dir=CACHE, suffix=".tmp")
+        with os.fdopen(fd, "wb") as grezzo, gzip.open(grezzo, "wt", encoding="utf-8",
+                                                      compresslevel=3) as fh:
+            json.dump({"larghezza": t.larghezza, "altezza": t.altezza,
+                       "segmenti": t.segmenti, "oggetti": t.oggetti}, fh,
+                      separators=(",", ":"))
+        # chi legge trova il file vecchio o quello intero, mai uno a meta'
+        os.replace(tmp, _file_tratti(chiave))
+        voci = []
+        for nome in os.listdir(CACHE):
+            try:
+                s = os.stat(os.path.join(CACHE, nome))
+            except OSError:
+                continue
+            # le cartelle sono d'altri: le rese (`rese`) hanno il loro tetto
+            if os.path.isfile(os.path.join(CACHE, nome)):
+                voci.append((s.st_mtime, s.st_size, nome))
+        tot = sum(v[1] for v in voci)
+        for _t, n, nome in sorted(voci):
+            if tot <= CACHE_MB * 1024 * 1024:
+                break
+            try:
+                os.remove(os.path.join(CACHE, nome))
+                tot -= n
+            except OSError:
+                pass
+    except OSError as e:
+        print("cache dei tratti non scritta: %s" % e, file=sys.stderr)
+
+
+def tratti(pdf_path, page_no: int = 0) -> Tratti:
+    """I tratti della pagina, letti una volta per file e per pagina."""
+    chiave = (impronta_file(pdf_path), page_no)
+    with _TRATTI_CHIAVE:
+        t = _TRATTI.get(chiave)
+        if t is not None:
+            _TRATTI.move_to_end(chiave)
+            return t
+    t = _dal_disco(chiave)
+    if t is None:
+        t = _leggi_tratti(pdf_path, page_no)
+        _sul_disco(chiave, t)
+    with _TRATTI_CHIAVE:
+        _TRATTI[chiave] = t
+        while len(_TRATTI) > TRATTI_MAX:
+            _TRATTI.popitem(last=False)
+    return t
+
+
+def segmenti(pdf_path, page_no: int = 0):
+    """`_segments` della pagina, letti una volta sola (`tratti`)."""
+    return list(tratti(pdf_path, page_no).segmenti)
 
 
 def _technical_pens(segs, page_w, page_h, min_segs=4, keep=0.15):
@@ -327,7 +518,7 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None):
         contenute nell'altro. Per quelle il test su un asse solo va bene.
 
         Contenuto in un asse pero' NON basta, ed e' quello che rompeva gli
-        astucci con due viste sul foglio. Sul Kinder Pingui T6 la pagina porta
+        astucci con due viste sul foglio. Sul T6 aperto la pagina porta
         INSIDE VIEW e OUTSIDE VIEW affiancate piu' il cartiglio: il cartiglio
         sta 90 mm a destra della fustella, non la tocca in nessun punto, ma e'
         contenuto nella sua ALTEZZA - e tanto bastava a tirarlo dentro. Il
@@ -355,7 +546,7 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None):
 
 # Quanto deve valere una penna, in frazione della migliore, per contare come
 # fustella. Misurato: su tutti gli artwork del parco la penna di fustella e'
-# una sola e sta a 1,00; sul Kinder Pingui T6 ce n'e' una seconda a 0,14 - un
+# una sola e sta a 1,00; sul T6 aperto ce n'e' una seconda a 0,14 - un
 # rettangolo nero CMYK da 0,76 pt, quattro segmenti in tutto, che non e'
 # fustella e sballava la griglia. Il divario e' largo e la soglia sta in mezzo.
 FUSTELLA_KEEP = float(os.environ.get("PACK3D_FUSTELLA_KEEP", "0.25"))
@@ -459,57 +650,56 @@ def _colori(pdf_path, riq, page_no=0, dpi=50.0):
 
 
 def extract(pdf_path: str, page_no: int = 0) -> Dieline:
-    with pdfplumber.open(pdf_path) as pdf:
-        page = pdf.pages[page_no]
-        all_segs = _segments(page)
-        pens = _technical_pens(all_segs, page.width, page.height)
-        segs = [s for s in all_segs if s[4] in pens] or all_segs
-        segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
-            pdf_path, r, page_no))
-        # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
-        # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
-        # guardando solo quello che sta sulla fustella.
-        fustella = penne_di_fustella(segs, page.width, page.height)
-        if fustella:
-            segs = [s for s in segs if s[4] in fustella] or segs
+    t = tratti(pdf_path, page_no)
+    all_segs = list(t.segmenti)
+    pens = _technical_pens(all_segs, t.larghezza, t.altezza)
+    segs = [s for s in all_segs if s[4] in pens] or all_segs
+    segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
+        pdf_path, r, page_no))
+    # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
+    # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
+    # guardando solo quello che sta sulla fustella.
+    fustella = penne_di_fustella(segs, t.larghezza, t.altezza)
+    if fustella:
+        segs = [s for s in segs if s[4] in fustella] or segs
 
-        bx0 = by0 = 1e9
-        bx1 = by1 = -1e9
-        for kind, c, a, b, st in segs:
-            lo_x, hi_x = (c, c) if kind == "V" else (a, b)
-            lo_y, hi_y = (a, b) if kind == "V" else (c, c)
-            bx0, bx1 = min(bx0, lo_x), max(bx1, hi_x)
-            by0, by1 = min(by0, lo_y), max(by1, hi_y)
-        tol = 3.0
-        # scarta quote, frecce e riferimenti esterni al contorno
-        segs = [(k, c, a, b, st) for k, c, a, b, st in segs
-                if bx0 - tol <= (c if k == "V" else a) and (c if k == "V" else b) <= bx1 + tol
-                and by0 - tol <= (c if k == "H" else a) and (c if k == "H" else b) <= by1 + tol]
+    bx0 = by0 = 1e9
+    bx1 = by1 = -1e9
+    for kind, c, a, b, st in segs:
+        lo_x, hi_x = (c, c) if kind == "V" else (a, b)
+        lo_y, hi_y = (a, b) if kind == "V" else (c, c)
+        bx0, bx1 = min(bx0, lo_x), max(bx1, hi_x)
+        by0, by1 = min(by0, lo_y), max(by1, hi_y)
+    tol = 3.0
+    # scarta quote, frecce e riferimenti esterni al contorno
+    segs = [(k, c, a, b, st) for k, c, a, b, st in segs
+            if bx0 - tol <= (c if k == "V" else a) and (c if k == "V" else b) <= bx1 + tol
+            and by0 - tol <= (c if k == "H" else a) and (c if k == "H" else b) <= by1 + tol]
 
-        bbox = (bx0, by0, bx1, by1)
-        Wb, Hb = bx1 - bx0, by1 - by0
+    bbox = (bx0, by0, bx1, by1)
+    Wb, Hb = bx1 - bx0, by1 - by0
 
-        vlong, hlong = [], []
-        for kind, c, a, b, st in segs:
-            L = b - a
-            if kind == "V" and L > Hb * 0.05:
-                vlong.append((c, L))
-            if kind == "H" and L > Wb * 0.05:
-                hlong.append((c, L))
+    vlong, hlong = [], []
+    for kind, c, a, b, st in segs:
+        L = b - a
+        if kind == "V" and L > Hb * 0.05:
+            vlong.append((c, L))
+        if kind == "H" and L > Wb * 0.05:
+            hlong.append((c, L))
 
-        xs = [c for c, w in _cluster(vlong, 3.5) if w > Hb * 0.12]
-        ys = [c for c, w in _cluster(hlong, 3.5) if w > Wb * 0.12]
-        for v in (bx0, bx1):
-            if not any(abs(v - x) < 2.5 for x in xs):
-                xs.append(v)
-        for v in (by0, by1):
-            if not any(abs(v - y) < 2.5 for y in ys):
-                ys.append(v)
-        xs.sort(); ys.sort()
-        d = Dieline(page.width, page.height, bbox, xs, ys)
-        d.vsegs = [(c, a, b) for k, c, a, b, st in segs if k == "V"]
-        d.hsegs = [(c, a, b) for k, c, a, b, st in segs if k == "H"]
-        return d
+    xs = [c for c, w in _cluster(vlong, 3.5) if w > Hb * 0.12]
+    ys = [c for c, w in _cluster(hlong, 3.5) if w > Wb * 0.12]
+    for v in (bx0, bx1):
+        if not any(abs(v - x) < 2.5 for x in xs):
+            xs.append(v)
+    for v in (by0, by1):
+        if not any(abs(v - y) < 2.5 for y in ys):
+            ys.append(v)
+    xs.sort(); ys.sort()
+    d = Dieline(t.larghezza, t.altezza, bbox, xs, ys)
+    d.vsegs = [(c, a, b) for k, c, a, b, st in segs if k == "V"]
+    d.hsegs = [(c, a, b) for k, c, a, b, st in segs if k == "H"]
+    return d
 
 
 # --------------------------------------------------------------------------- #
@@ -532,7 +722,7 @@ def _fasce_del_corpo(d):
     """Le fasce della fasciatura, lette sulla colonna del corpo.
 
     Le `ys` del foglio sono l'unione di TUTTE le cordonature, e ci finisce
-    anche quello che non piega il corpo. Sul Kinder Pingui T6 una linea a 27 mm
+    anche quello che non piega il corpo. Sul T6 aperto una linea a 27 mm
     dal fondo - dove le alette laterali cambiano profilo - spezzava la faccia
     da 125 in 98 + 27, e il fronte spariva dalla lettura. Una cordonatura che
     separa due fasce della fasciatura deve attraversare la colonna del corpo:
@@ -564,15 +754,15 @@ def _chiuso(rows, tol=3.0, fianchi=None):
 
     Retro e fronte sono la stessa faccia vista da due parti, e hanno la STESSA
     altezza: se le due fasce piu' alte non l'hanno, questa non e' la lettura
-    giusta. Su un Kinder Pingui T6 il solutore prendeva 40,5 e 125 e ne faceva
+    giusta. Su un T6 aperto il solutore prendeva 40,5 e 125 e ne faceva
     la media, 82,8, che non e' l'altezza di niente.
 
     Quale delle due e' il retro lo dice la fustella: **i fianchi stanno sul
-    retro**. Di solito e' quella in alto, ma il Kinder Cioccolato T8 e'
+    retro**. Di solito e' quella in alto, ma l'astuccio T8 e'
     montato al contrario - CIELO - FRONTE - FONDO - RETRO - colla - e le
     chiusure di testa sono attaccate alla faccia bassa. Leggendolo alla solita
     maniera il bambino finiva sul retro, il fronte era il pannello bianco, il
-    fondo la linguetta della colla e il cielo con "kinder SCHOKOLADE" spariva.
+    fondo la linguetta della colla e il cielo col nome del prodotto spariva.
     `fianchi(i)` dice se la fascia `i` porta i fianchi; se li porta solo la
     faccia bassa, il retro e' lei. Cielo e fondo restano quello che sono per
     il fronte, sopra e sotto di lui: sono loro, non il retro, a dire da che
@@ -607,7 +797,7 @@ def _chiuso(rows, tol=3.0, fianchi=None):
     elif back_i >= 1 and "top" in r:
         # FONDO - RETRO - CIELO - FRONTE: la fasciatura parte dal fondo, e
         # oltre il fronte non c'e' niente. Il fondo e' la fascia prima del
-        # retro, se e' profonda come il cielo: sul Nutella Donut, letto nel
+        # retro, se e' profonda come il cielo: sull'astuccio della ciambella, letto nel
         # verso della grafica, e' la fascia marrone che continua l'onda del
         # retro, e senza questa lettura la faccia sotto restava bianca.
         cielo = rows[r["top"]][2] * PT2MM
@@ -622,8 +812,8 @@ def _aperto(rows, tol=1.5):
 
     Un astuccio non e' obbligato ad avere il retro. Un vassoio non ce l'ha per
     definizione; un pack con finestra ce l'ha a meta', chiuso da due falde che
-    lasciano un'apertura in mezzo da cui si vede il prodotto - il Kinder Pingui
-    T6 e' cosi'. La firma in fustella e' una faccia grande sola, con cielo e
+    lasciano un'apertura in mezzo da cui si vede il prodotto - il T6 aperto
+    e' cosi'. La firma in fustella e' una faccia grande sola, con cielo e
     fondo UGUALI sopra e sotto, e i fianchi agganciati al FRONTE e non al retro
     che non c'e'.
 
@@ -687,8 +877,8 @@ def solve_carton(d: Dieline) -> Dieline:
 
     # Se anche l'altra fascia alta porta i fianchi, quali si vedono non lo
     # dice la fustella: una coppia e' stampata, l'altra sono alette di colla
-    # che finiscono dentro. Sul Nutella Donut i fianchi del retro sono
-    # tratteggiati e quelli del fronte portano "nutella donut": la scelta la
+    # che finiscono dentro. Sull'astuccio della ciambella i fianchi del retro sono
+    # tratteggiati e quelli del fronte portano il nome del prodotto: la scelta la
     # fa la stampa, in `artwork.texture_astuccio`. Qui si preparano tutte e due.
     altra = {"back": ruoli.get("front"), "front": ruoli.get("back")}[d.fianchi_su]
     d.fianchi_alt = {}
@@ -718,7 +908,7 @@ def solve_carton(d: Dieline) -> Dieline:
     else:
         # Su un astuccio aperto i fianchi SONO la profondita', e devono
         # tornare con cielo e fondo. Senza questo controllo ci casca dentro
-        # qualunque flowpack steso: su Colazione la fascia grande e' il nastro,
+        # qualunque flowpack steso: sul wafer da colazione la fascia grande e' il nastro,
         # cielo e fondo sono le due falde da 5 mm uguali, e ne uscirebbe un
         # astuccio profondo cinque millimetri. I fianchi da 7 lo smentiscono.
         if "left" not in P or "right" not in P:
@@ -780,7 +970,7 @@ def detect_layout(d: Dieline):
     return "vwrap", {}
 
 
-_PREVIEW = {}
+_PREVIEW = stato.per_lavoro({})
 
 
 def _ink(pdf_path, box, page_no=0, dpi=72):

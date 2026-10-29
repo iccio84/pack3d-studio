@@ -99,6 +99,13 @@
   .finestra .vuoto{margin:0;padding:16px;font-size:12px;color:var(--muted-foreground)}
   .finestra .vuoto[hidden]{display:none}
   #dettagli-lista li.grido, #ai-righe li.grido{color:var(--destructive);font-weight:600}
+  /* la lettura del PDF: la pagina con le parti lette, e «letto male?» */
+  #lettura .corpo{padding:12px 16px 16px;display:flex;flex-direction:column;gap:8px;
+                  overflow-y:auto;font-size:12px}
+  #lettura img{width:100%;height:auto;display:block;border-radius:var(--radius-sm);
+               border:1px solid var(--border);cursor:zoom-in}
+  #lettura .azioni{display:flex;gap:8px}
+  #lettura select{flex:1;min-width:0}
   /* sul telefono la colonna va sotto il palco, e la pagina si allunga e
      scorre: il palco non si schiaccia e non finisce sopra le domande */
   @media (max-width:760px){
@@ -136,6 +143,12 @@
   .caso-quando{font-size:10.5px;color:var(--muted-foreground)}
   .risposta{display:flex;flex-direction:column;gap:8px;margin-top:4px}
   .risposta .q{font-weight:600;font-size:13px}
+  /* l'anteprima di una domanda: il modello di adesso e come si e' letto il PDF */
+  .risposta .anteprima-domanda{display:block;align-self:stretch;border:1px solid var(--border);
+                       border-radius:var(--radius-sm);overflow:hidden;background:#fff;
+                       color:var(--muted-foreground);text-decoration:none}
+  .risposta .anteprima-domanda img{display:block;width:100%;height:auto}
+  .risposta .anteprima-domanda span{display:block;padding:6px 10px;font-size:11px;text-align:center}
   .risposta .opzioni{display:flex;flex-wrap:wrap;gap:6px}
   .risposta .opzioni button{padding:7px 12px;text-transform:none;letter-spacing:0;font-size:12px;
                             font-weight:500;color:var(--foreground)}
@@ -505,6 +518,29 @@
   <div id="status">Nessun modello caricato</div>
 </div>
 <aside id="lato">
+  <section id="lettura" class="finestra" aria-label="Come ho letto il PDF">
+    <div class="testa">
+      <span class="tit">Come ho letto il PDF</span>
+      <button type="button" id="lettura-chiudi" aria-label="Chiudi la lettura del PDF">&times;</button>
+    </div>
+    <div class="corpo">
+      <a id="lettura-apri" target="_blank" rel="noopener" title="Apri in grande"><img id="lettura-img"
+         alt="La pagina del PDF con le parti lette: fronte, fianchi, retro e pinne, con le misure"></a>
+      <label for="lettura-motivo">Letto male? Dicci cosa non torna</label>
+      <div class="azioni">
+        <select id="lettura-motivo">
+          <option value="">Scegli cosa non torna&hellip;</option>
+          <option>il pack &egrave; girato: il fronte non &egrave; la fascia giusta</option>
+          <option>ha letto un altro disegno, non il DT vero</option>
+          <option>non &egrave; questa famiglia di pack</option>
+          <option>le misure lette sono sbagliate</option>
+          <option>altro</option>
+        </select>
+        <button type="button" id="lettura-segnala">Segnala</button>
+      </div>
+      <div id="lettura-esito" class="esito" role="status"></div>
+    </div>
+  </section>
   <section id="dettagli" class="finestra" aria-label="Dettagli tecnici della costruzione">
     <div class="testa">
       <span class="tit" id="dettagli-tit">Dettagli tecnici</span>
@@ -663,6 +699,8 @@
       <input id="soft" type="range" min="1" max="10" step="1" value="5">
       <label class="auto"><input id="softauto" type="checkbox"> Scegli tu &mdash; decide l&rsquo;AI in base al prodotto</label>
       <p class="note">Scegli quanto &egrave; gonfio il pack. 1: molto rigido, effetto simile al sottovuoto. 10: molto gonfio, per prodotti tondeggianti o con aria dentro.</p>
+      <label class="auto"><input id="spessoregonfio" type="checkbox"> Gonfio nello spessore</label>
+      <p class="note">La faccia resta larga come il fronte del DT e l&rsquo;aria va nello spessore, come un pack molto pieno. Senza, il pack gonfio si allarga un poco e la grafica del fronte con lui.</p>
     </div>
     <div class="fld solo-flowpack">
       <label for="pinne">Apertura pinne <b id="pinneval">Aperte 3/3</b></label>
@@ -688,6 +726,7 @@
     <input id="file-img" type="file" accept="image/jpeg,image/png,image/webp" hidden>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="texture-btn" type="button" style="display:none">Scarica texture</button>
+    <button id="lettura-btn" type="button" aria-expanded="false" aria-controls="lettura" hidden>Lettura del PDF</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
     <button id="casi-btn" type="button" aria-expanded="false" aria-controls="casi">Casi</button>
     <button id="notifiche-btn" type="button" aria-expanded="false" aria-controls="notifiche">Notifiche</button>
@@ -1331,10 +1370,47 @@ async function findBackend(){
   return false;
 }
 
+/** Mentre una lettura o una costruzione aspetta, il suo posto nella fila
+ *  dello Space (/api/lavori, `pack3d.lavoratori`): con le costruzioni in
+ *  corso gia' al massimo, la riga di stato dice quante ne ha davanti. Torna
+ *  la funzione che smette di guardare. */
+function seguiFila(id){
+  let prima = null, fermo = false, t = null;
+  const giro = async () => {
+    try{
+      const r = await fetch(url('/api/lavori?id=' + id), {cache: 'no-store'});
+      const n = r.ok ? (await r.json()).posizione : null;
+      if (!fermo && n >= 1){
+        if (prima === null) prima = [statusEl.textContent, statusEl.className];
+        setStatus(n === 1 ? 'In fila: le costruzioni in corso sono al massimo, la tua è la prossima…'
+                  : 'In fila: ' + (n - 1) + (n === 2 ? ' costruzione' : ' costruzioni')
+                    + ' prima della tua…', 'busy');
+      }else if (!fermo && prima !== null){
+        setStatus(prima[0], prima[1]);
+        prima = null;
+      }
+    }catch(e){ /* la fila e' un di piu': se non risponde resta la riga di prima */ }
+    if (!fermo) t = setTimeout(giro, 2000);
+  };
+  t = setTimeout(giro, 1200);
+  return () => {
+    fermo = true;
+    clearTimeout(t);
+    if (prima !== null) setStatus(prima[0], prima[1]);
+  };
+}
+
 async function post(p, buf, opts){
   const inizio = Date.now();
-  const r = await fetch(url(p), {method:'POST', body:buf,
-    headers:{'Content-Type':'application/pdf','X-Pack3d':JSON.stringify(opts||{})}});
+  // un nome per il lavoro, per chiedere allo Space a che punto e' in fila
+  const lavoro = Math.random().toString(36).slice(2, 12);
+  const smetti = seguiFila(lavoro);
+  let r;
+  try{
+    r = await fetch(url(p), {method:'POST', body:buf,
+      headers:{'Content-Type':'application/pdf',
+               'X-Pack3d':JSON.stringify(Object.assign({}, opts || {}, {lavoro}))}});
+  }finally{ smetti(); }
   if (!r.ok){
     const secondi = Math.round((Date.now() - inizio) / 1000);
     let t = (await r.text()).slice(0,300).trim();
@@ -1380,6 +1456,7 @@ async function analyze(buf, opts){
 
 async function build(buf, name, opts){
   nascondiCaso();
+  nascondiLettura();
   setStatus('Costruzione del modello…','busy');
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   let r;
@@ -1407,6 +1484,22 @@ async function build(buf, name, opts){
     if (c) verdetto = JSON.parse(decodeURIComponent(c));
   }catch(e){}
   const blob = await r.blob();
+  // la lettura del PDF, accanto al modello: c'e' anche se il controllo l'ha
+  // respinto, ed e' li' che si vede perche'
+  mostraLettura(r.headers.get('X-Pack3d-Lettura'), buf, opts);
+  const attesa = r.headers.get('X-Pack3d-Verdetto');
+  if (attesa){
+    // Il modello e' gia' qui, il verdetto del controllo arriva dopo. Si
+    // guarda subito, ma Scarica GLB aspetta il verdetto: dentro Glam Lab il
+    // tasto che compare e' il segnale con cui Glam salva il modello e chiude
+    // la finestra (`pack3d:built`, vedi GLAM.md), e un modello che l'AI poi
+    // respinge restava salvato in Glam, senza che nessuno vedesse il verdetto.
+    glbBlob = blob;
+    show(await glbBlob.arrayBuffer());
+    setFase('lavoro');
+    seguiVerdetto(attesa, blob);
+    return {esito: 'in corso'};
+  }
   if (verdetto && verdetto.esito === 'sbagliato'){
     // respinto: non va nel viewer come se fosse buono
     glbBlob = null;
@@ -1422,16 +1515,87 @@ async function build(buf, name, opts){
   return verdetto;
 }
 
+// il titolo del modello che aspetta il verdetto: lo riusa seguiVerdetto
+let titoloInAttesa = '';
+
+/** Il verdetto del controllo dell'AI, che arriva dopo il modello
+ *  (/api/verdetto, col gettone di X-Pack3d-Verdetto). Il modello si guarda
+ *  subito; col verdetto la pagina fa quello che prima faceva a costruzione
+ *  finita: il riquadro del caso se e' respinto, l'avviso se c'e' un dubbio,
+ *  il modello corretto al posto del primo se la correzione l'ha rifatto. */
+async function seguiVerdetto(gettone, blob){
+  const fine = Date.now() + 15 * 60 * 1000;
+  let d = null;
+  while (Date.now() < fine){
+    await new Promise(ok => setTimeout(ok, 1500));
+    // nel frattempo e' arrivato un altro modello, o si e' tornati all'inizio
+    if (glbBlob !== blob) return;
+    try{
+      const r = await fetch(url('/api/verdetto?id=' + encodeURIComponent(gettone)),
+                            {cache: 'no-store'});
+      if (r.status === 404) break;
+      if (r.ok){
+        d = await r.json();
+        if (d.pronto) break;
+        d = null;
+      }
+    }catch(e){ /* la rete puo' sbagliare un giro: si riprova */ }
+  }
+  if (glbBlob !== blob) return;
+  const titolo = titoloInAttesa || 'Modello pronto';
+  if (!d){
+    // senza verdetto il modello resta di chi l'ha chiesto, come a controllo spento
+    setFase('pronto');
+    setStatus(titolo + ' · il verdetto dell’AI non è arrivato', '');
+    return;
+  }
+  if (d.meta) setMeta(d.meta, d.ai || []);
+  let modello = blob;
+  if (d.glb){
+    // la correzione ha rifatto il modello: quello nuovo prende il posto del primo
+    try{
+      const g = await fetch(url('/api/verdetto/glb?id=' + encodeURIComponent(gettone)),
+                            {cache: 'no-store'});
+      if (g.ok){
+        const nuovo = await g.blob();
+        if (glbBlob !== blob) return;
+        modello = glbBlob = nuovo;
+        show(await nuovo.arrayBuffer());
+      }
+    }catch(e){ /* resta il primo modello, e il verdetto vale per lui */ }
+  }
+  const v = d.verdetto;
+  if (v && v.esito === 'sbagliato'){
+    // respinto: non resta nel viewer come se fosse buono, e Scarica GLB -
+    // cioe' Glam - non lo vede mai
+    glbBlob = null;
+    mostraCaso(v, modello);
+    setFase('lavoro');
+  }else{
+    // solo adesso Scarica GLB, e in Glam Lab il salvataggio
+    setFase('pronto');
+    if (v && v.esito === 'dubbio' && (v.in_coda || v.in_attesa)) mostraVerifica(v);
+  }
+  esitoFinale(v, titolo);
+}
+
 /** La riga di stato a costruzione finita, secondo il controllo dell'AI. */
 function esitoFinale(v, titolo){
+  if (v && v.esito === 'in corso'){
+    // il modello c'e', il verdetto no: lo porta seguiVerdetto
+    titoloInAttesa = titolo;
+    setStatus(titolo + ' · controllo dell’AI in corso: Scarica GLB arriva col verdetto…', '');
+    return;
+  }
   if (!v || v.esito === 'non controllato'){ setStatus(titolo, ''); return; }
   // corretto: l'AI ha tolto lastre tecniche e il modello e' stato rifatto
   const da = v.corretto ? 'corretto e controllato dall\u2019AI' : 'controllato dall\u2019AI';
   if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 ' + da, ''); return; }
   if (v.esito === 'dubbio'){
     // una riga sola in fondo al visore: il motivo intero e' nei cartellini
-    setStatus((v.corretto ? 'Corretto dall\u2019AI, ma resta un dubbio: '
-                          : 'Il controllo AI ha un dubbio: ')
+    setStatus(((v.verifiche && v.verifiche.length) ? 'Le verifiche hanno trovato un difetto: '
+               : v.corretto ? 'Corretto dall\u2019AI, ma resta un dubbio: '
+                            : 'Il controllo AI ha un dubbio: ')
               + (v.motivo || 'guarda bene il modello').slice(0, 160), 'dubbio');
     return;
   }
@@ -1526,12 +1690,16 @@ function mostraCaso(v, blob, tieniNota){
 const verificaEl = document.getElementById('verifica');
 
 function mostraVerifica(v){
+  // il dubbio puo' venire dalle verifiche, che misurano il modello, e non
+  // dall'AI: allora lo si dice
+  const chi = (v.verifiche && v.verifiche.length) ? 'Le verifiche hanno trovato un difetto'
+                                                  : 'Il controllo AI ha un dubbio';
   verificaEl.textContent = v.in_coda
-    ? 'Il controllo AI ha un dubbio, e il caso è andato in verifica (codice '
+    ? chi + ', e il caso è andato in verifica (codice '
       + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
       + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
       + '», col nome «' + nomeInGlam() + '». ' + STIMA
-    : 'Il controllo AI ha un dubbio su questo modello (codice ' + (v.codice || '-')
+    : chi + ' su questo modello (codice ' + (v.codice || '-')
       + '). Il modello lo puoi usare lo stesso.';
   verificaEl.classList.add('on');
   mostraInvio(v);
@@ -1775,6 +1943,70 @@ function apriFinestra(el, btn, si, ricorda){
   if (si && el === notificheEl) segnaLette();
   if (si && el === casiEl){ aGlam({type: 'pack3d:ruolo?'}); aggiornaCasi(); }
 }
+
+/* La lettura del PDF accanto al modello (`pack3d.lettura`): la pagina col
+   disegno usato e sopra le parti lette, con le misure. Si apre da sola dopo
+   la costruzione; chi vede che il PDF e' stato letto male lo segnala, e il
+   caso si prepara come quelli che il controllo respinge: parte quando lo
+   conferma con la descrizione. */
+const letturaEl = document.getElementById('lettura');
+const letturaBtn = document.getElementById('lettura-btn');
+const letturaImg = document.getElementById('lettura-img');
+const letturaMotivo = document.getElementById('lettura-motivo');
+const letturaSegnala = document.getElementById('lettura-segnala');
+let ultimaCostruzione = null;
+function esitoLettura(t, cls){
+  const e = document.getElementById('lettura-esito');
+  e.textContent = t || '';
+  e.className = 'esito' + (cls ? ' ' + cls : '');
+}
+function nascondiLettura(){
+  ultimaCostruzione = null;
+  letturaBtn.hidden = true;
+  apriFinestra(letturaEl, letturaBtn, false);
+  letturaImg.removeAttribute('src');
+}
+function mostraLettura(gettone, buf, opts){
+  if (!gettone){ nascondiLettura(); return; }
+  ultimaCostruzione = {buf, opts};
+  const u = url('/api/lettura/' + encodeURIComponent(gettone));
+  letturaImg.src = u;
+  document.getElementById('lettura-apri').href = u;
+  letturaMotivo.value = '';
+  letturaSegnala.disabled = false;
+  esitoLettura('');
+  letturaBtn.hidden = false;
+  apriFinestra(letturaEl, letturaBtn, true);
+}
+letturaBtn.onclick = () => apriFinestra(letturaEl, letturaBtn, !letturaEl.classList.contains('on'));
+document.getElementById('lettura-chiudi').onclick = () => apriFinestra(letturaEl, letturaBtn, false);
+letturaSegnala.onclick = async () => {
+  const c = ultimaCostruzione;
+  if (!c) return;
+  const motivo = letturaMotivo.value;
+  if (!motivo){
+    esitoLettura('Scegli prima cosa non torna.', 'err');
+    letturaMotivo.focus();
+    return;
+  }
+  letturaSegnala.disabled = true;
+  esitoLettura('Preparo il caso\u2026');
+  try{
+    const v = await (await post('/api/segnala', c.buf, Object.assign({}, c.opts, {motivo}))).json();
+    if (!v.codice || !v.in_attesa) throw new Error('il caso non si \u00e8 potuto preparare');
+    esitoLettura('Descrivi il pack qui sotto e manda il caso.');
+    verificaEl.textContent = 'Hai segnalato che il PDF \u00e8 stato letto male (' + motivo
+      + '). Descrivi il pack e manda il caso: chi corregge il codice lo riprende (codice '
+      + v.codice + ').';
+    verificaEl.classList.add('on');
+    mostraInvio(v);
+    aggiornaAI();
+    document.getElementById('ai').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+  }catch(err){
+    letturaSegnala.disabled = false;
+    esitoLettura('Segnalazione non partita: ' + testoErrore(err), 'err');
+  }
+};
 
 function quandoBreve(iso){
   const d = new Date(iso);
@@ -2067,6 +2299,28 @@ function moduloRisposta(c){
   q.className = 'q';
   q.textContent = c.domanda;
   box.append(q);
+  if (c.anteprima){
+    // il modello di adesso e la lettura del PDF con le misure lette: si
+    // risponde guardando cosa si e' costruito, non a memoria
+    const u = url('/api/anteprima?codice=' + encodeURIComponent(c.codice) +
+                  '&v=' + encodeURIComponent(c.chiave || ''));
+    const a = document.createElement('a');
+    a.className = 'anteprima-domanda';
+    a.href = u;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.title = 'Apri l’anteprima intera';
+    const im = document.createElement('img');
+    im.src = u;
+    im.alt = 'Il modello di adesso e come è stato letto il PDF, con le misure';
+    im.loading = 'lazy';
+    im.onerror = () => a.remove();
+    const nota = document.createElement('span');
+    nota.textContent = 'Il modello di adesso e come è stato letto il PDF, con le misure: '
+                     + 'toccala per vederla grande.';
+    a.append(im, nota);
+    box.append(a);
+  }
   let scelta = '';
   if (c.opzioni && c.opzioni.length){
     const op = document.createElement('div');
@@ -2122,6 +2376,7 @@ function moduloRisposta(c){
       c.messaggio = 'Risposta inviata: il caso è ripartito.';
       delete c.domanda;
       delete c.opzioni;
+      delete c.anteprima;
       c.chiave = 'risposta';
       salvaCasi();
       disegnaCasi();
@@ -2185,7 +2440,7 @@ async function aggiornaCasi(){
       if (chiave !== c.chiave){
         const prima = c.chiave;
         Object.assign(c, {stato: s.stato, messaggio: s.messaggio || '', domanda: s.domanda,
-                          opzioni: s.opzioni, chiave});
+                          opzioni: s.opzioni, anteprima: s.anteprima, chiave});
         // il primo giro dopo l'invio non e' una novita', una domanda o un
         // modello da approvare si'; un caso che arriva da Glam (un admin li
         // vede tutti) si mostra, ma non si notifica quello che era gia' successo
@@ -3179,6 +3434,8 @@ document.getElementById('go').onclick = async () => {
               scatola: document.getElementById('scatola').checked,
               pinne: Number(document.getElementById('pinne').value),
               saldatura: Number(document.getElementById('saldatura').value),
+              // il rigonfiamento nello spessore, se scelto per il pack
+              gonfio: document.getElementById('spessoregonfio').checked ? 'spessore' : undefined,
               soft:  document.getElementById('softauto').checked
                        ? 'auto'
                        : Number(document.getElementById('soft').value)};

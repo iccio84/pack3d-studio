@@ -3,7 +3,8 @@
 Queste sono le istruzioni per la sessione di Claude Code che prende i casi
 nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
 rilascio della settimana sta in RILASCIO.md, la mappa del codice in MAPPA.md,
-il perche' delle regole del codice in REGOLE.md, la ricetta per una forma
+il perche' delle regole del codice in REGOLE.md (i principi e l'indice) e in
+`regole/` (un file per famiglia), la ricetta per una forma
 nuova in FORME.md. I gadget non passano dalla coda: le loro regole sono in
 GADGET.md.
 
@@ -17,9 +18,10 @@ meccanici e letture che restavano li' fino alla fine. Per questo:
 - **Pochi passi.** I tre comandi del caso (`prepara`, `consegna`,
   `approvato`, qui sotto) fanno in un passo quello che ne chiedeva venti.
   Comandi indipendenti vanno in una riga sola.
-- **Mai un file intero se non serve.** REGOLE.md e' lungo come un libro,
-  `server.py` e la pagina quasi: cerca con `grep -n` e leggi solo il pezzo
-  (`sed -n 'A,Bp'`). Dove guardare lo dice MAPPA.md.
+- **Mai un file intero se non serve.** Le regole della famiglia,
+  `server.py` e la pagina sono lunghi: cerca con `grep -n` e leggi solo il
+  pezzo (`sed -n 'A,Bp'`). Dove guardare lo dice MAPPA.md; in che file sta
+  una regola lo dice l'indice in fondo a REGOLE.md.
 - **La ricerca della causa in un sotto-agente.** Quando non sai dove sta il
   difetto, chiedi a un sotto-agente (Explore) una cosa precisa - "dove si
   decide il verso della grafica del flowpack, e con quali numeri" - e fatti
@@ -54,7 +56,8 @@ per la scatola a punta o `pack3d/ballotin.py`. Il modulo:
 - se il pack e' in piu' pezzi (un PDF per pezzo), si monta come la coppa e
   il cono (`server._pezzi_tondi`): ogni PDF dice da se' che pezzo e', e
   l'ordine in cui arrivano non conta;
-- ha la sua sezione in REGOLE.md e la sua riga in MAPPA.md.
+- ha il suo file in `regole/`, la sua riga nell'indice di REGOLE.md e in
+  MAPPA.md.
 
 **La ricetta e' in FORME.md**: capire la forma, dove entra, il modulo, la
 costruzione, le prove, le regole. Seguila dall'inizio.
@@ -97,6 +100,14 @@ cartoncino, e' un cartotecnico e si costruisce.
     aprirlo e non copiarlo mai** altrove: serve solo allo Space.
   - `parco/`: i PDF di prova, il manifesto `parco/parco.json` (opzioni e
     `come_deve_venire` di ogni caso) e le viste di riferimento.
+  - Il **parco della notte** (`.github/workflows/parco.yml`): ogni notte, se
+    `coda-settimana` e' andata avanti, il parco intero contro `main`, nelle
+    Actions di questo repository, dove stanno i PDF. E' rosso se un caso che
+    con `main` si costruiva non si costruisce piu', o se una misura
+    approvata cambia (`prove/parco.py esito`); il riassunto dice anche i
+    modelli solo cambiati, con le viste affiancate nell'artefatto. Si lancia
+    anche a mano, su un ramo o una PR (**Run workflow**, `codice`:
+    `pull/<numero>/head`).
 - **Il ramo `coda-settimana`** del codice raccoglie le correzioni della
   settimana: le PR dei casi vanno li', e lo Space non lo vede. Lo Space si
   aggiorna solo da `main`, e in `main` unisce solo il rilascio della
@@ -144,13 +155,17 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 4. **Guarda il foglio** accanto ai difetti e alle voci, e scrivi
    `come_deve_venire` della voce nuova in `parco/parco.json`, con le misure.
    Se l'esito e' `dubbio` vedi *Un caso col dubbio*, se e' `errore` *Un caso
-   che non si costruisce*. Se il modello di adesso e' **gia' giusto** - l'ha
-   sistemato la correzione di un altro caso della settimana - salta al
-   punto 7, senza PR.
+   che non si costruisce*. Se il caso e' gia' stato respinto - `prepara`
+   dice quante volte - *Dopo un Non approvo, prima si chiede*. Se il
+   modello di adesso e' **gia' giusto** - l'ha sistemato la correzione di
+   un altro caso della settimana - salta al punto 7, senza PR.
 5. **Trova la causa** (MAPPA.md, un sotto-agente per la ricerca). La
    correzione e' una **regola generale**: mai il nome del file, il codice del
    cliente o misure cucite su quel PDF. Se l'errore non si spiega con una
-   regola, *Un caso che non si risolve*.
+   regola, *Un caso che non si risolve*. Se la regola cambia altri modelli
+   approvati del parco, non e' di tutti: diventa una **scelta del pack**, con
+   un valore di serie che lascia gli altri come sono (REGOLE.md, *Una regola
+   per tutti, o una scelta del pack*).
 6. **Correggi e ricostruisci solo il caso**:
 
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso_<codice> --solo <nome> | tail -3
@@ -161,9 +176,18 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 
        python3 prove/parco.py stesi ../pack3d-casi /tmp/caso_<codice> --solo <nome>
 
+   Poi le prove veloci e le letture degli altri casi, qualche minuto in
+   tutto: una lettura cambiata vuol dire che la correzione ha cambiato strada
+   a un altro caso, e va capito prima della PR (REGOLE.md, *Le prove
+   veloci*):
+
+       python3 -m unittest discover -s prove -p "test_*.py"
+       python3 prove/parco.py letture ../pack3d-casi | tail -3
+
    Niente parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
-   regola in REGOLE.md - il caso, la causa, la regola, con i numeri - nella
-   sezione della famiglia, leggendo solo le righe intorno (`grep -n`). Poi
+   regola nel file della famiglia in `regole/` - il caso, la causa, la
+   regola, con i numeri - leggendo solo le righe intorno (`grep -n`); il
+   prodotto col suo nome neutro, mai quello del cliente. Poi
    *Quando si unisce nel ramo della settimana*.
 7. **Consegna**:
 
@@ -172,7 +196,9 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    `--messaggio`: due righe per chi l'ha caricato, cosa e' cambiato.
    `--commento`: per la issue, la causa, la regola e il link alla PR (o
    perche' non serviva). Il comando ricostruisce il caso se il codice e'
-   cambiato, registra `come_deve_venire`, manda il modello da approvare
+   cambiato, registra `come_deve_venire` e le misure del modello consegnato
+   come quelle approvate del caso (il rilascio le confronta), manda il
+   modello da approvare
    (`modello.glb` nella cartella del caso), chiede allo Space l'email per chi
    l'ha lasciata, commenta, mette `da-approvare` e toglie `in-lavorazione`.
    Poi chiede allo Space se in coda c'e' un altro caso libero: se c'e', lo
@@ -270,9 +296,49 @@ approvato**» o «**Modello NON approvato**» - e in `stato.json`, e toglie
 - **Non approvato**: e' un modello sbagliato, e il motivo descrive cosa non
   va. Il caso e' di nuovo libero: si riparte dal punto 3 del giro, con
   `prepara` (il motivo e le foto sono fra le voci), fino a una nuova
-  `consegna`.
+  `consegna` o a una domanda: *Dopo un Non approvo, prima si chiede*.
 
 Un caso `da-approvare` o `da-rilasciare` non e' libero: i giri lo saltano.
+
+## Dopo un Non approvo, prima si chiede
+
+Un «Non approvo» dice che il modello e' sbagliato, non sempre come va
+fatto. Il display da 36 del caso 838cbae0ac e' stato rifatto tre volte, e
+tre volte la routine ha scelto da sola un'altra interpretazione - 4 file da
+9, il pack premuto a cuscino, il pack scalato nel largo - consegnando un
+altro modello sbagliato. La risposta giusta e' arrivata quando si e' chiesto
+a chi l'aveva caricato quanti per fila, e zigrinatura, rigonfiamento e
+apertura delle pinne. Una domanda al primo no risparmiava tre giri e tre
+modelli.
+
+Quindi, dopo un Non approvo (`prepara` dice quante volte il caso e' stato
+respinto):
+
+- **La correzione e' una sola**: il motivo, con le foto, dice cosa e'
+  sbagliato, e c'e' un modo solo di rimetterlo che non cambia altro - il
+  fronte girato di 180 gradi, una fascia sul pannello sbagliato. Correggi e
+  consegna, come sempre.
+- **La correzione non e' una sola**: il disegno si legge in due modi, o
+  serve un valore che sa solo chi ha il pack - quanti per fila, la
+  zigrinatura, il rigonfiamento, l'apertura delle pinne, come si monta,
+  quale lato e' il fronte. **Prima la domanda, poi il modello**: non si
+  costruisce e non si consegna un'altra interpretazione scelta da soli.
+- **Al secondo no si chiede sempre**: mai una terza interpretazione senza
+  una risposta.
+
+La domanda porta l'**anteprima**: il modello di adesso dai quattro lati e la
+lettura del PDF con le misure lette, il caso del parco costruito da
+`prepara`. La finestra dei casi la mostra sopra le risposte:
+
+    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..." --anteprima <nome> --uscita /tmp/caso_<codice>
+
+Nella domanda la misura che si chiede, con quella letta: «Il pack l'ho letto
+largo 40,1 mm e ne metto 3 per fila: quanti ce ne stanno nel display?».
+Prima della domanda, come in *Un caso che non si risolve*: commento sulla
+issue, `da-guardare` e via `in-lavorazione`. La risposta riapre il caso da
+sola. Se il modello giusto dipende da una scelta che vale solo per quel pack,
+la risposta diventa un'opzione del caso nel parco (REGOLE.md, *Una regola per
+tutti, o una scelta del pack*).
 
 ## Un caso col dubbio
 
@@ -319,7 +385,7 @@ come sta un pezzo, quale lato e' il fronte - chiediglielo. Prima rileggi
 `voci.md`: la risposta puo' essere gia' in una nota. Poi, **prima** della
 domanda, commento, `da-guardare` e via `in-lavorazione`, e la domanda:
 
-    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..."
+    python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..." --anteprima <nome> --uscita /tmp/caso_<codice>
 
 Una domanda sola, con parole sue, niente nomi di funzioni; da due a quattro
 risposte di cui una sola vera; se basta una foto del pack montato, chiedila.
