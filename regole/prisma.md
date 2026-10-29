@@ -9,7 +9,7 @@ Una scatola di cartoncino con il fondo a poligono - esagono, ottagono,
 pentagono - e una parete dritta su ogni lato, chiusa da un coperchio fatto
 allo stesso modo che calza sopra. Ogni pezzo e' un PDF suo: si dichiara
 **Cartotecnico in 2 pezzi** (o in un pezzo solo, il fondo aperto); il codice
-sta in `pack3d/prisma.py`, il montaggio in `server.build_prisma`.
+sta in `pack3d/prisma.py`, il montaggio in `famiglie.coppa.build_prisma`.
 
 Il primo caso e' arrivato dalla coda (8f67b58f3d) come costruzione ferma:
 «cartotecnico in 2 pezzi: per ora so montare lo sleeve e il tappo di una
@@ -22,7 +22,7 @@ cartotecnico.
 ### La firma in fustella
 
 Si prova **solo dopo** che i pezzi tondi hanno rifiutato i PDF
-(`server._pezzi_prisma`, chiamato quando `_pezzi_tondi` alza l'errore), solo
+(`famiglie.coppa._pezzi_prisma`, chiamato quando `_pezzi_tondi` alza l'errore), solo
 sul cartotecnico dichiarato in pezzi, e solo se **ogni** PDF si legge come
 un prisma; altrimenti resta l'errore di prima. La fustella si legge come
 quella del ballotin, a grafo (`ballotin.tratti_fustella`, `grafo`, `facce`):

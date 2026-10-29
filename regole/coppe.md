@@ -9,7 +9,7 @@ La coppa da gelato da 500 arriva in **due PDF**: il
 contenitore (sleeve e fondo) e il tappo (corpo e anello). Si dichiara
 **Cartotecnico in due pezzi**, un PDF ciascuno (vedi *Il cartotecnico dice di
 quanti pezzi e' fatto*): l'ordine non conta, quale e' quale lo dice la pagina
-(`server._pezzi_tondi`). Con lo sleeve solo - cartotecnico in un pezzo -
+(`famiglie.coppa._pezzi_tondi`). Con lo sleeve solo - cartotecnico in un pezzo -
 esce la coppa aperta, col tappo solo il tappo, e il primo cartellino lo dice.
 Nella home non c'e' un pulsante della coppa: era un secondo modo di dire la
 stessa cosa. L'API accetta ancora `coppa` come tipologia.

@@ -268,7 +268,7 @@ pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
 - La verifica delle pareti prende la prima e l'ultima riga della griglia,
   non la sesta e la quarta: sul sagomato le righe sono di piu'.
 - **Nel riempimento perde con un vassoio letto prima**
-  (`server.analisi_riempimento`). Le quattro cordonature non bastavano: il
+  (`famiglie.riempimento.analisi_riempimento`). Le quattro cordonature non bastavano: il
   film del flowpack del display da 26 del parco ha un fondo chiuso da
   quattro coppie di righe, si leggeva come vassoio sagomato, e il
   riempimento, che si costruiva, si fermava su «tutti e due si leggono come
@@ -606,7 +606,7 @@ pannello attaccato solo a una cordonatura tratteggiata verso il retro: si
 alza sulla cerniera, si piega a meta' e fa la plancia; nel coperchio resta la
 finestra da cui si vede il prodotto. Il caso e' c5b98dfbee, un display T15
 con quindici flowpack, dichiarato *Riempimenti* (`pack3d/scatola_plancia.py`,
-`server.build_scatola_plancia`).
+`famiglie.vassoio.build_scatola_plancia`).
 
 Prima non si costruiva: ne' vassoio (la griglia ha 9 colonne e 16 fasce) ne'
 display con plancia (non c'e' un coperchio che diventa plancia: il coperchio
@@ -734,7 +734,7 @@ parte nel fronte, con la stampa capovolta, scende davanti nella finestra.
 
 Solo dichiarato: nel vassoio dichiarato (e quindi nel riempimento), dopo il
 vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
-(`server._prova_vassoio`, `build_vassoio`). I casi del parco che passavano non
+(`famiglie.registro._prova_vassoio`, `build_vassoio`). I casi del parco che passavano non
 cambiano strada.
 
 ### Cosa manca

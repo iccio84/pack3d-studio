@@ -1816,7 +1816,7 @@ def fronte_in_pagina(fp):
     """Il riquadro della fascia del fronte nel telaio della pagina: tutto il
     passo, e sul giro la faccia larga fra i due fianchi - o, a
     sovrapposizione, dopo la prima meta' del retro. E' dove si legge il verso
-    della grafica: vedi `server.flowpack_sulla_grafica`."""
+    della grafica: vedi `famiglie.flowpack.flowpack_sulla_grafica`."""
     sh = fp.sheet
     inizio = fp.girth_span[0] + (fp.back_a + (0.0 if fp.tubo_piatto else fp.T)) / PT2MM
     r = (sh[0], inizio, sh[2], inizio + fp.W / PT2MM)

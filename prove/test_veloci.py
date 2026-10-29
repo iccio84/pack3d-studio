@@ -139,17 +139,12 @@ class Misure(unittest.TestCase):
                          ["flowpack lungo: 116,0 -> manca"])
 
 
-def _server():
-    with contextlib.redirect_stdout(io.StringIO()):
-        import server
-    return server
-
-
 class RegistroDelleFamiglie(unittest.TestCase):
-    """`server.RICONOSCIMENTO` e `server.COSTRUZIONI`."""
+    """`famiglie.registro.RICONOSCIMENTO` e `famiglie.registro.COSTRUZIONI`."""
 
     def setUp(self):
-        self.s = _server()
+        from pack3d.famiglie import registro
+        self.s = registro
         self.nomi = [f.nome for f in self.s.RICONOSCIMENTO]
 
     def test_ogni_tipologia_dichiarata_ha_una_prova(self):

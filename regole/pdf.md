@@ -17,7 +17,7 @@ copia, cosi' l'analisi in memoria si ritrova fra /api/analyze e /api/build).
 Leggere sempre la pagina 0 non bastava: le altre restavano nel file, e chi lo
 passava tutto a Ghostscript senza limiti le rendeva tutte - `colata.quadricromia`
 le metteva nello stesso PNG. Il primo cartellino dice quante pagine aveva il
-file (`server.avviso_pagine`), perche' chi l'ha caricato sappia quale e'
+file (`famiglie.comune.avviso_pagine`), perche' chi l'ha caricato sappia quale e'
 diventata il modello.
 
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
@@ -253,7 +253,7 @@ capovolta:
   dritto come un fronte. Lo smentisce il cielo, che fra i due deve leggersi
   dritto col fronte: sull'astuccio della ciambella girato di 90 gradi il fronte era la
   faccia di PREPARAZIONE, e il cielo capovolto l'ha detto;
-- **flowpack** (`server.flowpack_sulla_grafica`): vota la fascia del fronte
+- **flowpack** (`famiglie.flowpack.flowpack_sulla_grafica`): vota la fascia del fronte
   (`flowpack.fronte_in_pagina`), e il giro vale se sullo steso girato
   l'analisi si risolve senza ripiego e il fronte si legge dritto. Il solutore
   i 90 gradi li reggeva gia' - traspone i suoi ingressi - ma la texture
