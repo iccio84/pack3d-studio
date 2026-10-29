@@ -16,7 +16,7 @@ bassa e' saldata/incollata, poi sale e prende forma di un cono allungato;
 il PDF e' uno sleeve come il cono gelato».
 
 Si prova dopo l'astuccio, dopo la scatola a punta e dopo la coppa
-(`_analyze_pdf`): i casi che quelli prendono non cambiano strada.
+(`server.RICONOSCIMENTO`): i casi che quelli prendono non cambiano strada.
 
 ### La firma in fustella
 

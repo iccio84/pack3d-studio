@@ -11,12 +11,16 @@ sono in GADGET.md.
 
 ## Il giro di una costruzione
 
-- `server.py`, `_analyze_pdf`: la **lettura** del PDF e il riconoscimento
-  della famiglia, in quest'ordine: coppa, pouch, flowpack dichiarato,
-  vassoio e display con plancia, cono, ballotin, film che si dichiara
-  flowpack, astuccio; l'incarto a triangolo si prova prima del flowpack
-  (`_analisi_incarto`). Un pack che esce della famiglia sbagliata si guarda
-  qui. La famiglia **Incarti** dichiarata dalla pagina passa da
+- `server.py`, `RICONOSCIMENTO`: la **lettura** del PDF e il riconoscimento
+  della famiglia, una riga per prova nell'ordine in cui si fanno, ognuna
+  con le tipologie dichiarate per cui vale e la sua `_prova_<forma>`: le
+  dichiarate sole (coppa, riempimento, incarto, pouch), il caso calibrato,
+  vassoio e display, cono, ballotin, il film che lo dice, l'astuccio, poi -
+  solo se il solutore astuccio ha rifiutato un cartotecnico - punta, pezzo
+  di coppa e tubo, l'incarto a triangolo e per ultimo il flowpack.
+  `_analyze_pdf` prova le righe in ordine. Un pack che esce della famiglia
+  sbagliata si guarda qui. `COSTRUZIONI` dice, per la famiglia letta, quale
+  `build_*` si chiama e con quali scelte della pagina. La famiglia **Incarti** dichiarata dalla pagina passa da
   `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`); la sua
   immagine del prodotto la separa dal PDF `_separa_prodotto`, all'inizio di
   `do_POST`, e va col caso (`blocchi_caso`).

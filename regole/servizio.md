@@ -242,3 +242,39 @@ modello al byte. Lo stato non cambiava i modelli; lasciava i file e la
 memoria. Il parco intero coi lavoratori, prima e dopo: 43 modelli su 43
 identici al byte, nessuna misura approvata cambiata, 841 s invece di 850; e
 nella cartella temporanea restavano 64 file e 397 MB, ora niente.
+
+### Il registro delle famiglie
+
+Il riconoscimento era una catena di `if` in `_analyze_pdf`, trecento righe
+con la tipologia dichiarata intrecciata in ogni ramo: per sapere chi si
+provava prima di chi bisognava leggerla tutta, e una forma nuova ci si
+infilava a meta'. La scelta della costruzione, in /api/build, era un'altra
+catena di `elif`.
+
+Dal 29 ottobre 2026 sono due tabelle in `server.py`:
+
+- **`RICONOSCIMENTO`**: una riga per prova, nell'ordine in cui si fanno,
+  con le tipologie dichiarate per cui vale e la sua `_prova_<forma>`. La
+  prima che dice «e' mio» da' la lettura; una che dice «e' mio ma non si
+  legge» ferma tutto. Le forme che il solutore astuccio rifiuta si provano
+  solo se e' stato lui a rifiutarle (`errore_astuccio`), e leggono il
+  foglio come l'ha lasciato lui, girato nel verso della grafica.
+- **`COSTRUZIONI`**: per ogni famiglia letta, la funzione che prepara
+  `costruisci(lastre, uscita)` con le scelte della pagina; una famiglia che
+  non c'e' si costruisce come flowpack.
+
+**L'ordine e' la regola**, e non e' cambiato: niente punteggi, perche' un
+punteggio cambierebbe strada a qualche caso. Una forma nuova e' una
+funzione e una riga per tabella, dopo quelle che ci sono (FORME.md).
+
+Provato contro la catena di prima: ogni PDF del parco letto con ogni
+tipologia dichiarata e senza, 440 letture su 440 identiche, i 303 errori
+compresi parola per parola; le undici costruzioni chiamate con gli stessi
+argomenti, incarto compreso, che il parco non ha; il parco intero, 43
+modelli su 43 identici al byte.
+
+La tabella fa vedere una cosa che la catena nascondeva: un cartotecnico
+dichiarato, se il solutore astuccio non trova pannelli senza fermarsi,
+arriva fino alla prova del flowpack. E' com'era, ed e' lasciato com'era;
+la dichiarazione dovrebbe valere anche quando dice di no, come per il
+vassoio.
