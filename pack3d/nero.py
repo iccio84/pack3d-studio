@@ -1,15 +1,15 @@
 """
-La `k` di `kinder` e' nera, e il rasterizzatore la fa azzurra.
+La `k` del marchio e' nera, e il rasterizzatore la fa azzurra.
 
 Il marchio e' un'invariante che si controlla a occhio in un secondo: la `k`
-e' **nera** e `inder` e' **arancio Kinder**. Sul K Brioss STD la `k` uscliva
+e' **nera** e `inder` e' **arancio del marchio**. Sulla brioche STD la `k` uscliva
 azzurra, e non per un errore del file: nelle sue separazioni la `k` e' nero
 al 100%, ma e' nero **in sovrastampa** sopra l'azzurro, e pdfium la
 sovrastampa la ignora - misurato, vedi `REGOLE.md`.
 
 La strada larga non funziona. Rendere tutto il foglio con Ghostscript e
-`-sOverprint=simulate` la `k` la fa nera, ma su KP T1 Mandarino **cancella il
-logo `kinder Pingui` e la scritta `MANDARINE`, e fa azzurra la fascia rossa**:
+`-sOverprint=simulate` la `k` la fa nera, ma sul T1 al mandarino **cancella il
+logo del marchio e la scritta del gusto, e fa azzurra la fascia rossa**:
 quel file ha solo tinte piatte, e gs le compone male. Il 16% della pagina
 cambia, e cambia in peggio. Quindi niente interruttore globale.
 
@@ -18,13 +18,13 @@ dice dov'e' nero**. Dove la lastra e' piena e il render mette invece un
 colore chiaro e saturo, il render ha torto e si riporta il nero. Non si
 inventa inchiostro: si mette quello che il file dichiara, e solo li'.
 
-    K Brioss STD     nero pieno su 18.839 px, il render ne tradisce il 6,8%
-    Brioss astuccio                                                   2,3%
-    Colazione                                                         0,8%
-    Pingui T6                                                         0,7%
-    KP T1 Mandarino                                                   0,0%
+    brioche STD     nero pieno su 18.839 px, il render ne tradisce il 6,8%
+    astuccio della brioche                                                   2,3%
+    wafer da colazione                                                         0,8%
+    T6 aperto                                                         0,7%
+    T1 al mandarino                                                   0,0%
 
-Sul Brioss STD la zona tradita piu' grande e' proprio la `k`, 3.764 px su
+Sulla brioche STD la zona tradita piu' grande e' proprio la `k`, 3.764 px su
 4.938: il difetto e' quello, non un'inezia sparsa.
 
 Niente prefiltro sul flag di sovrastampa, e non per dimenticanza: **tutti e
@@ -46,7 +46,7 @@ CHIARO = 120
 SATURO = 40
 # L'orlo della lettera: attorno al pieno la lastra sfuma, e sotto SOLIDO quei
 # pixel non entravano mai. Restavano come li ha fatti il rasterizzatore - il
-# nero sfumato con l'azzurro dipinto sopra, (30, 66, 71) sul K Brioss STD - e
+# nero sfumato con l'azzurro dipinto sopra, (30, 66, 71) sulla brioche STD - e
 # in HD si vedono: un filo petrolio attorno alla `k`. Non sono chiari, quindi
 # la prova del pieno non li prende: basta che siano TINTI (ORLO_CROMA), a non
 # piu' di ORLO_PX dal pieno tradito, dove la lastra ha almeno ORLO
@@ -60,19 +60,19 @@ ORLO_CROMA = 25
 # risultano "traditi" senza che ci sia niente da riparare. Sul parco, quota
 # misurata e quanto poi cambia davvero dentro i pannelli:
 #
-#     K Brioss STD     10,1%  ->  cambia lo 0,14%, ed e' la `k`
-#     Brioss astuccio   8,8%  ->  cambia lo 0,026%, gia' nera in partenza
-#     Colazione         3,4%  ->  cambia lo 0,001%: 18 pixel. Sotto soglia
-#     FERRERO 159013    1,8%  ->  GLB identico. Sotto soglia
+#     brioche STD     10,1%  ->  cambia lo 0,14%, ed e' la `k`
+#     astuccio della brioche   8,8%  ->  cambia lo 0,026%, gia' nera in partenza
+#     wafer da colazione         3,4%  ->  cambia lo 0,001%: 18 pixel. Sotto soglia
+#     file 1590…    1,8%  ->  GLB identico. Sotto soglia
 #
 # Sopra il cinque per cento non e' detto che serva, sotto e' detto che non
-# serve: e la passata sprecata su FERRERO 159013 erano quasi sei secondi.
+# serve: e la passata sprecata sul file 1590… erano quasi sei secondi.
 #
 # Adesso la quota si conta sull'INTERNO del pieno, e sul solo DT - la
 # costruzione le note fuori dal DT le toglie prima. Vedi `_traditi`: col
 # bordo dentro la quota dipendeva da quanta altra roba nera c'era sulla
-# tavola. Sull'interno, sul parco: K Brioss STD 15,9%, K Brioss T10 0,7%,
-# K Tronky 60,9% ma sono le linee del DT, che `riporta` esclude; tutti gli
+# tavola. Sull'interno, sul parco: brioche STD 15,9%, brioche T10 0,7%,
+# wafer T1 60,9% ma sono le linee del DT, che `riporta` esclude; tutti gli
 # altri sotto l'1%. La soglia sta larga in mezzo.
 QUOTA_MINIMA = 0.05
 # la lastra si prende a questa risoluzione e si ingrandisce: una `k` e' una
@@ -127,11 +127,11 @@ def _traditi(lastra, reso, orlo=False, interno=False):
     dal bordo. E' la misura con cui decide `spia`: al bordo di ogni lettera
     nera la lastra, presa piu' grossa e ingrandita, sborda di un pixel sul
     colore accanto, e quel pixel risulta "tradito" senza che ci sia niente da
-    riparare. Contato col resto, il bordo decideva da solo: sul K Brioss T10,
+    riparare. Contato col resto, il bordo decideva da solo: sulla brioche T10,
     tolte le note fuori dal DT - scritte nere che il render fa nere e che
     tenevano bassa la quota - il 3,2% diventava 13,5% e la correzione
     scalinava di nero i bordi delle scritte sul giallo. Sull'interno sono lo
-    0,1 e lo 0,7%. La `k` azzurra del K Brioss STD e' tradita anche dentro:
+    0,1 e lo 0,7%. La `k` azzurra della brioche STD e' tradita anche dentro:
     10,2% sul foglio intero, 15,9% sul DT.
     """
     h = min(lastra.shape[0], reso.shape[0])
@@ -177,8 +177,8 @@ def spia(pdf, page_no=0, scala=None):
     Il momento conta piu' del metodo. Ghostscript lo si lancia con un `fork`,
     e il figlio parte ereditando lo spazio di indirizzi del padre: se il padre
     in quel momento tiene un foglio da 25 megapixel, quella memoria viene
-    contata due volte finche' il figlio non la rilascia. Misurato sul Pingui
-    T6: forkando a foglio pieno il conto e' 362 + 362 MB, forkando prima
+    contata due volte finche' il figlio non la rilascia. Misurato sul T6
+    aperto: forkando a foglio pieno il conto e' 362 + 362 MB, forkando prima
     362 + 105. Su un container da 512 e' la differenza fra un modello e un
     `Failed to fetch`, che e' come si vede un processo ucciso dall'OOM.
 

@@ -6,3 +6,7 @@ out/
 *.obj
 *.mtl
 istantanea_pack3d.md
+
+# la colata e' grafica del cliente: sta in pack3d-casi/risorse, e sullo
+# Space la porta il workflow di pubblicazione (pack3d/colata.py)
+risorse/colata.png

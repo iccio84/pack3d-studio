@@ -203,6 +203,27 @@ class RegistroDelleFamiglie(unittest.TestCase):
         self.assertEqual(self._leggi(None), {"kind": "flowpack"})
 
 
+class LastreDiUnCasoCalibrato(unittest.TestCase):
+    """`artwork.lastre_fisse`: per nome, e per prefisso col `*`."""
+
+    def test_il_prefisso_prende_le_lastre_che_cominciano_cosi(self):
+        import pypdf
+        from pypdf.generic import ArrayObject, DictionaryObject, NameObject
+        from pack3d import artwork
+        w = pypdf.PdfWriter()
+        pagina = w.add_blank_page(100, 100)
+        spazi = DictionaryObject()
+        for k, nome in enumerate(("/Label_uno", "/Label_due", "/Colata")):
+            spazi[NameObject("/CS%d" % k)] = ArrayObject(
+                [NameObject("/Separation"), NameObject(nome),
+                 NameObject("/DeviceCMYK"), DictionaryObject()])
+        pagina[NameObject("/Resources")] = DictionaryObject(
+            {NameObject("/ColorSpace"): spazi})
+        self.assertEqual(artwork.lastre_fisse(pagina, ["White", "Label_*"]),
+                         {"white", "label_uno", "label_due"})
+        self.assertEqual(artwork.lastre_fisse(pagina, ["White"]), {"white"})
+
+
 class StatoDiUnLavoro(unittest.TestCase):
     """`stato`: una cartella e uno stato per lavoro."""
 

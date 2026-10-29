@@ -16,8 +16,32 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: main
           fetch-depth: 0
           lfs: true
+
+      # La risorsa della colata e' grafica del cliente: sta nel repository
+      # privato dei casi (risorse/colata.png), non in questo. Si aggiunge al
+      # codice in un commit che va solo allo Space. Serve il secret CASI_TOKEN,
+      # un token di sola lettura di pack3d-casi (DEPLOY.md, *La risorsa della
+      # colata*); senza, lo Space parte senza risorsa e la colata fustellata
+      # esce com'era prima che ci fosse. /api/ping dice se e' arrivata.
+      - name: La risorsa della colata
+        env:
+          CASI_TOKEN: ${{ secrets.CASI_TOKEN }}
+        run: |
+          if [ -z "$CASI_TOKEN" ]; then
+            echo "::warning::manca il secret CASI_TOKEN: lo Space parte senza la risorsa della colata"
+            exit 0
+          fi
+          curl -fsSL -H "Authorization: Bearer $CASI_TOKEN" \
+            -H "Accept: application/vnd.github.raw" \
+            -o risorse/colata.png \
+            https://api.github.com/repos/iccio84/pack3d-casi/contents/risorse/colata.png
+          git add -f risorse/colata.png
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -q -m "Solo per lo Space: la risorsa della colata, dal repository dei casi"
 
       - name: Push to Hugging Face
         env:
@@ -25,4 +49,4 @@ jobs:
         run: |
           git remote remove hf 2>/dev/null || true
           git remote add hf https://Iccio:$HF_TOKEN@huggingface.co/spaces/Iccio/Maurizio
-          git push --force hf main:main
+          git push --force hf HEAD:main

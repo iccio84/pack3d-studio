@@ -70,7 +70,7 @@ strumenti, controlla che i conti chiudano e restituisce un JSON di venti righe.
 | `reconstruct_area` | piano B: GPT-Image-2.5 Sunburst dove il DT cade su foto |
 
 Il **residuo** e' il numero che permette a Claude di scegliere fra due contorni
-senza vederli. Sulla coppa Nutella, il DT in miniatura da' 0,000 mm contro
+senza vederli. Sulla coppa da 500, il DT in miniatura da' 0,000 mm contro
 0,564 del contorno sotto la grafica.
 
 Attenzione: residuo basso da solo non basta. Provando gli strumenti sul PDF
@@ -86,7 +86,7 @@ guardarli tutti e due.
 - **Costo** qualche centesimo a modello con un modello Sonnet.
 - **L'analisi si fa una volta sola** per file, con memoria sull'impronta
   sha256: `/api/analyze` la calcola e `/api/build` la riusa invece di rifarla.
-  Sul K Brioss sono sei secondi e mezzo di CPU e trecento MB risparmiati a
+  Sulla brioche sono sei secondi e mezzo di CPU e trecento MB risparmiati a
   ogni costruzione.
 
 ## Cosa e' stato verificato e cosa no

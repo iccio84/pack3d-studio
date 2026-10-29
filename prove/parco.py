@@ -153,15 +153,19 @@ def _porta_libera():
     return porta
 
 
-def _avvia(codice, log):
+def _avvia(codice, log, casi=None):
     """Un server col codice di `codice`, solo in locale. (processo, url)
 
     Senza chiave e con il controllo spento: il parco misura il codice, non
-    l'AI, e un caso del parco non deve finire nella coda dei casi nuovi.
+    l'AI, e un caso del parco non deve finire nella coda dei casi nuovi. Con
+    `casi`, il clone del repository privato, le risorse che stanno li' (la
+    colata: e' grafica del cliente, vedi `pack3d.colata`).
     """
     porta = _porta_libera()
     env = dict(os.environ, PORT=str(porta), HOST="127.0.0.1",
                PACK3D_CONTROLLO="0")
+    if casi and os.path.isdir(os.path.join(casi, "risorse")):
+        env["PACK3D_RISORSE"] = os.path.abspath(os.path.join(casi, "risorse"))
     for k in ("ANTHROPIC_API_KEY", "PACK3D_CODA_REPO", "PACK3D_CODA_TOKEN"):
         env.pop(k, None)
     p = subprocess.Popen([sys.executable, "server.py"], cwd=codice, env=env,
@@ -276,7 +280,7 @@ def costruisci(args):
     codice = os.path.abspath(args.codice or QUI)
     impronta = versione.impronta(codice)
     with open(os.path.join(args.uscita, "server.log"), "w") as log:
-        p, url = _avvia(codice, log)
+        p, url = _avvia(codice, log, args.casi)
         try:
             riassunto = {}
             for caso in casi:
@@ -503,7 +507,7 @@ def letture(args):
     codice = os.path.abspath(args.codice or QUI)
     t = time.time()
     with open(os.devnull, "w") as log:
-        p, url = _avvia(codice, log)
+        p, url = _avvia(codice, log, args.casi)
         try:
             # una per lavoratore: la lettura di un caso non dipende da chi
             # e' passato prima (`pack3d.stato`)
@@ -1729,7 +1733,7 @@ def stesi(args):
         # `pagina_unica` cuoce e la copia senza livelli perderebbe - senza i
         # livelli tecnici e senza le lastre che coprono la grafica, come la
         # pulisce la costruzione (`artwork.senza_coperture`: la vernice del
-        # Nutella Donut, resa, copre tutto il foglio), resa a una risoluzione
+        # astuccio della ciambella, resa, copre tutto il foglio), resa a una risoluzione
         # per texture
         puliti = []
         for f in caso["file"]:

@@ -2,7 +2,7 @@
 Il vassoio espositore: un fondo e quattro pareti che si alzano.
 
 Non e' un astuccio e non e' un flowpack, ed e' la terza famiglia. Il display
-del Milch-Schnitte Raspberry cadeva nel ramo flowpack e usciva "saldature di
+del T1 della barretta fresca al lampone cadeva nel ramo flowpack e usciva "saldature di
 testa non riconosciute": un messaggio che non dice niente a chi ha in mano un
 vassoio.
 
@@ -10,7 +10,7 @@ La forma e' la piu' semplice di tutte: un rettangolo centrale - il **fondo** -
 con una parete attaccata a ciascuno dei suoi quattro lati, e le alette agli
 angoli che tengono su le pareti. Le quattro pareti NON sono alte uguali: su un
 display da scaffale i fianchi lunghi sono alti perche' reggono la pila, e la
-parete davanti e' bassa perche' il prodotto si deve vedere. Sul Milch-Schnitte
+parete davanti e' bassa perche' il prodotto si deve vedere. Sul T1 della barretta fresca
 sono 98,6 e 98,5 contro 40,0 e 40,5.
 
 Quello che lo distingue si legge nella griglia della fustella, e non e'
@@ -191,7 +191,7 @@ def riconosci_sulla_tavola(pdf, sagomato=False):
     """`(pdf, dieline estratta, Vassoio o None, giro, avviso)`.
 
     `riconosci` legge la griglia in un verso solo - cinque colonne e tre
-    fasce - e il KMS Display girato di 90 gradi sulla tavola ne ha tre e
+    fasce - e il display T1x40 girato di 90 gradi sulla tavola ne ha tre e
     cinque: non si costruiva. Se la griglia nel verso del foglio non torna si
     prova il foglio girato di un quarto (`artwork.pagina_girata`), prima di
     dire che non e' un vassoio. Mezzo giro non serve: il vassoio si legge
@@ -262,7 +262,7 @@ def _fasce_comuni(m, i):
 
 # Lo spessore del cartoncino di un display: piu' di un astuccio, perche' e'
 # solid board e deve reggere la pila. Misurato sulle cordonature doppie del
-# Milch-Schnitte, che sono 2,0 mm fra le due righe.
+# T1 della barretta fresca, che sono 2,0 mm fra le due righe.
 SPESSORE = 1.0
 INTERNO = (238, 235, 229)
 TAGLIO = (212, 203, 188)
@@ -278,7 +278,7 @@ def testata_davanti(v: Vassoio):
     e il dietro, se e' piu' alto, regge il cartello. E' una misura del DT,
     non una scelta.
 
-    Anche quando le due testate sono alte quasi uguali - sul Milch-Schnitte
+    Anche quando le due testate sono alte quasi uguali - sul T1 della barretta fresca
     40,5 e 40,6 - decide la piu' bassa, e non la nord. Nord e sud sono il
     sopra e il sotto del FOGLIO: con la nord di serie, lo stesso steso girato
     di mezzo giro sulla tavola metteva davanti l'altra testata. Il decimo di
@@ -360,7 +360,7 @@ class Maglia:
         # Le UV si misurano sulla TEXTURE, non sulla sagoma. La coda e' CODA
         # righe in fondo alla texture (vedi `con_coda`), e la sagoma ha
         # un'altezza tutta sua - 4 px/mm contro i 2,4 della texture sul
-        # Milch-Schnitte. Prendendo `H + CODA` come altezza totale la riga
+        # T1 della barretta fresca. Prendendo `H + CODA` come altezza totale la riga
         # dell'interno cascava su quella del taglio, e tutto il dentro del
         # vassoio usciva del colore del taglio.
         ht = float(alt_texture) if alt_texture else float(H + CODA)
@@ -548,7 +548,7 @@ def _ingombro(masc, verso):
     cartoncino in comune, vedi `_fasce_comuni`, e lungo la riga arriva al bordo
     del suo ultimo pixel: un pixel da solo sul contorno - l'antialias di un
     angolo - allarga i pixel ma non la maglia. Ancorato ai pixel, il fianco
-    ovest del KMS usciva un quarto di millimetro piu' basso del DT; e sul
+    ovest del T1 della barretta fresca usciva un quarto di millimetro piu' basso del DT; e sul
     fondo, o sulla testa di un fianco, lo stesso quarto e' una feritoia.
     """
     import numpy as np
@@ -591,7 +591,7 @@ def corpo(maglia, mk, creste, px_mm, spessore=SPESSORE, dentro_alette=0.5,
         alcune pareti, lungo tutta la piega;
       - fianchi, fronte e retro si STIRANO fino agli spigoli: la loro faccia
         esterna arriva sulla faccia esterna della parete accanto, e la pelle
-        del blocco e' continua. Sul Tronky i fianchi sono 3 mm piu' corti del
+        del blocco e' continua. Sul wafer T1 i fianchi sono 3 mm piu' corti del
         fondo - lo spessore, compensato dal DT - e lasciavano una feritoia
         di un millimetro e mezzo su ogni spigolo; stirati, la grafica si
         allunga dell'1,5%, che non si vede;
@@ -606,7 +606,7 @@ def corpo(maglia, mk, creste, px_mm, spessore=SPESSORE, dentro_alette=0.5,
     profondita') sono le misure del DT: se ci sono, ogni pezzo si stira dalla
     sua piega al suo bordo su quelle, e non sui pixel. Il blocco esce allora
     uguale comunque stia il foglio sulla tavola - girando il foglio i pixel di
-    un bordo cambiano, e sul Tronky la cima della plancia, che sta sul retro,
+    un bordo cambiano, e sul wafer T1 la cima della plancia, che sta sul retro,
     ballava di mezzo millimetro fra un verso e l'altro.
     """
     t = spessore
@@ -699,8 +699,8 @@ def corpo(maglia, mk, creste, px_mm, spessore=SPESSORE, dentro_alette=0.5,
         # interna sulla faccia interna della parete, stesso colore. Cosi' dove
         # c'e' la parete l'aletta non si vede, e i suoi bordi stanno chiusi
         # nello spessore: con l'aletta mezzo millimetro in fuori, all'interno
-        # del Tronky i suoi bordi disegnavano due righe a trattini sul retro.
-        # Dove la parete e' piu' bassa - il fronte del KMS - l'aletta sporge
+        # del wafer T1 i suoi bordi disegnavano due righe a trattini sul retro.
+        # Dove la parete e' piu' bassa - il fronte del T1 della barretta fresca - l'aletta sporge
         # sopra ed e' un pannello a se', chiuso dalle sue coste.
         pezzo(mk[nome], "righe",
               lambda X, Y, h=h, piega=piega, x_p=x_p, passo=passo, z_p=z_p, dz=dz:
@@ -718,7 +718,7 @@ def misure_blocco(v: Vassoio):
 
     Non sono `fondo_w` e `pareti`: quelle sono le fasce della griglia, e sulle
     colonne la piega sta a META' della cordonatura, come in `sagoma_e_creste`.
-    Sul KMS le fasce danno un fondo di 145,5 mm, e fra le due meta' di
+    Sul T1 della barretta fresca le fasce danno un fondo di 145,5 mm, e fra le due meta' di
     cordonatura ci sono 147,5 mm: stirato sulle fasce il blocco usciva stretto
     di due millimetri e i fianchi bassi di uno.
     """
@@ -775,7 +775,7 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
     #
     # Si specchia la **z**, non la x. Le due scelte leggono uguale - il
     # marchio sta dritto su tutte e quattro le pareti - e cambiano solo quale
-    # testata guarda la camera. Sul Milch-Schnitte le due testate portano la
+    # testata guarda la camera. Sul T1 della barretta fresca le due testate portano la
     # stessa grafica, quindi da qui non si decide: se arriva un display con
     # fronte e retro diversi, quello e' il file su cui verificarlo. Lo
     # specchio sta in `corpo`: la riga di sopra del foglio va verso +z.
@@ -805,7 +805,7 @@ FOGLIO_CHIARO = 150
 def _foglio(a):
     """Il foglio attorno alla cartotecnica, come maschera.
 
-    Non e' "dove non c'e' inchiostro". Attorno al display Milch-Schnitte il
+    Non e' "dove non c'e' inchiostro". Attorno al display T1x40 il
     file ha un'OMBRA SFUMATA - un abbellimento della presentazione, che in
     macchina non ci va - e scende da 253 a 170 su quattro millimetri e mezzo.
     Una soglia sull'inchiostro se la prende tutta: la cartotecnica usciva 4,5
@@ -814,7 +814,7 @@ def _foglio(a):
 
     Il foglio si riconosce invece da DOVE STA: e' il chiaro che si raggiunge
     partendo dal bordo della pagina. Un chiaro circondato dalla grafica - il
-    bianco dentro le lettere di kinder, un pannello chiaro in mezzo - non si
+    bianco dentro le lettere del marchio, un pannello chiaro in mezzo - non si
     raggiunge e resta cartoncino, e non serve piu' tapparlo a posteriori. E il
     tratto della fustella, che e' colorato, ferma la macchia da solo: dove la
     penna c'e', anche un cartoncino stampato chiaro fino al taglio si salva.
@@ -831,12 +831,12 @@ def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None, v=None):
     """`(sagoma, creste, resa)` per costruire il vassoio.
 
     La sagoma della cartotecnica **non viene dal tracciato**. La penna della
-    fustella ha interruzioni - sul display Milch-Schnitte sono da 3 mm, e
+    fustella ha interruzioni - sul display T1x40 sono da 3 mm, e
     riempiendola si prende solo la colonna centrale, perche' le cordonature
     chiudono quella cella e il contorno esterno no. Viene invece
     dall'**impronta di stampa**: su questi display la stampa arriva al
-    taglio, e allora l'impronta E' la cartotecnica. Misurata sul Milch-
-    Schnitte: 346,5 x 466,5 mm, cioe' esattamente le quote del disegno
+    taglio, e allora l'impronta E' la cartotecnica. Misurata sul display
+    T1x40: 346,5 x 466,5 mm, cioe' esattamente le quote del disegno
     tecnico 34150.
 
     E l'impronta non e' "dove c'e' inchiostro": vedi `_foglio`.

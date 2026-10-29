@@ -675,8 +675,8 @@ il valore di inchiostro: uno scalare, `1.0`. Uno scalare non e' mai "un colore
 con tinta", percio' le Pantone restavano fuori dalla tavolozza tecnica per una
 proprieta' della rappresentazione, non per una scelta. pdfium le risolve fino
 all'RGB, e da quel momento la Pantone della fustella e la Pantone del logo sono
-lo stesso colore: sulla brioche STD la maschera ha cancellato le lettere di
-"kInder", disegnate in PANTONE 361 U come il tracciato `/Cutter`, insieme a
+lo stesso colore: sulla brioche STD la maschera ha cancellato le lettere
+del marchio, disegnate in PANTONE 361 U come il tracciato `/Cutter`, insieme a
 2.327 altre forme.
 
 Rifare i conti a mano non e' praticabile — in questi artwork ci sono funzioni di

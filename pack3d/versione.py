@@ -17,6 +17,10 @@ FILE = ("server.py", "agent.py", "pack3d_studio.html", "REGOLE.md",
         "requirements.txt")
 # regole/: le regole di ogni famiglia, che l'agente legge con REGOLE.md
 CARTELLE = ("pack3d", "risorse", "regole")
+# Le risorse che vengono dal repository privato dei casi: sullo Space le mette
+# il workflow di pubblicazione, in un clone non ci sono. Fuori dall'impronta,
+# se no lo Space non avrebbe mai quella del codice unito.
+PRIVATE = ("risorse/colata.png",)
 
 
 def impronta(radice=RADICE):
@@ -29,7 +33,8 @@ def impronta(radice=RADICE):
                 if not f.endswith(".pyc"):
                     nomi.append(os.path.relpath(os.path.join(base, f), radice))
     h = hashlib.sha256()
-    for nome in sorted(n.replace(os.sep, "/") for n in nomi):
+    for nome in sorted(n.replace(os.sep, "/") for n in nomi
+                       if n.replace(os.sep, "/") not in PRIVATE):
         h.update(nome.encode("utf-8") + b"\0")
         with open(os.path.join(radice, nome), "rb") as fh:
             h.update(fh.read())

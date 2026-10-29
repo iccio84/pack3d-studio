@@ -19,7 +19,7 @@ La disposizione la decide il vano del vassoio:
   conta;
 - i pack stanno frontali: la faccia stampata verso il davanti del vassoio e il
   marchio dritto, come stanno nel loro modello, in file dal davanti al fondo e
-  a strati uguali. Il KMS Raspberry T1x40: 2 file da 20, una sull'altra.
+  a strati uguali. Il T1 della barretta fresca al lampone T1x40: 2 file da 20, una sull'altra.
   Sdraiati, la faccia in su, solo se in piedi non ci stanno, o se i pezzi
   contati frontali vengono a strati diversi e sdraiati fanno una griglia
   piena (`_griglia`, il T15: 5 x 3). Sdraiati stanno in piano: inclinati

@@ -80,6 +80,28 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 Le chiavi vanno in **Secrets**, non in Variables: le Variables si leggono in
 chiaro dalla pagina dello Space.
 
+### La risorsa della colata
+
+`risorse/colata.png` e' grafica del cliente: non sta in questo repository,
+che e' pubblico, ma in quello privato dei casi. Il workflow di pubblicazione
+la prende da li' e la mette nel commit che va allo Space, e per farlo gli
+serve un token di sola lettura di `pack3d-casi`, una volta sola:
+
+1. GitHub -> foto in alto a destra -> **Settings** -> **Developer settings**
+   -> **Personal access tokens** -> **Fine-grained tokens** -> **Generate
+   new token**.
+2. **Repository access**: *Only select repositories* -> `iccio84/pack3d-casi`.
+   **Permissions** -> *Repository permissions* -> **Contents: Read-only**.
+   Una scadenza lunga (un anno), e segnala in calendario.
+3. Nel repository `pack3d-studio` -> **Settings** -> **Secrets and variables**
+   -> **Actions** -> **New repository secret**: nome `CASI_TOKEN`, valore il
+   token. Il token non va scritto da nessun'altra parte.
+
+Dopo la pubblicazione `/api/ping` dice `"colata": true`. Senza il secret il
+workflow avvisa e pubblica lo stesso: lo Space parte senza risorsa, e sui file
+con l'ombra della colata fustellata la colata esce com'era prima della
+risorsa, con l'alone azzurro.
+
 ### Le email delle domande (Resend)
 
 Quando un caso nuovo entra in coda, la pagina chiede a chi l'ha caricato
@@ -304,7 +326,7 @@ acceso - una ventina di dollari al mese se non dorme mai):
 ## B. Render — dove stava prima
 
 Funziona ed e' gratis, ma il piano Free da' **0,1 CPU e 512 MB**, e i file
-grandi non ci stanno. Misurato: Colazione (flowpack, foglio steso 460 x 330
+grandi non ci stanno. Misurato: il wafer da colazione (flowpack, foglio steso 460 x 330
 mm) tocca **648 MB di picco** e costa **67 secondi di CPU**, che a un decimo
 di core sono **oltre undici minuti**. Il kernel lo uccide prima e chi aspetta
 riceve un 502 vuoto.
@@ -365,8 +387,8 @@ dentro `pack3d/`) e fai commit: la build riparte e il link resta lo stesso.
 | prova | esito |
 |---|---|
 | Porta 7860 e `PORT` da ambiente | ok |
-| Astuccio KMS T10 | 200, 915 kB, 5,5 s |
-| Flowpack FULFIL, 20 denti morbido | 200, 3591 kB, 3,4 s |
+| Astuccio T10 al lampone | 200, 915 kB, 5,5 s |
+| Flowpack barretta proteica, 20 denti morbido | 200, 3591 kB, 3,4 s |
 | Tre costruzioni insieme, due lavoratori | 200, 200, 200: la terza aspetta in fila |
 | Un lavoratore ucciso a meta' costruzione | 500 per quella, 200 per l'altra, il lavoratore riparte |
 | Ripresa dopo il carico | 200 |
@@ -427,18 +449,18 @@ del processo.
 
 | file | tipo | analisi | costruzione | CPU totale | vivi | picco |
 |---|---|---|---|---|---|---|
-| Colazione | flowpack | 41,5 s (41,0 cpu) | 28,9 s (25,7 cpu) | 66,7 s | 460 MB | **648 MB** |
-| K Brioss STD | flowpack | 18,3 s (18,4 cpu) | 7,9 s (3,2 cpu) | 21,6 s | 279 MB | 387 MB |
-| K Pingui T6 BOX | astuccio | 2,2 s (2,1 cpu) | 4,4 s (3,7 cpu) | 5,8 s | 90 MB | 361 MB |
-| KMS Display | vassoio | 0,4 s (0,4 cpu) | 4,4 s (3,7 cpu) | 4,1 s | 63 MB | 240 MB |
+| wafer da colazione | flowpack | 41,5 s (41,0 cpu) | 28,9 s (25,7 cpu) | 66,7 s | 460 MB | **648 MB** |
+| brioche STD | flowpack | 18,3 s (18,4 cpu) | 7,9 s (3,2 cpu) | 21,6 s | 279 MB | 387 MB |
+| T6 aperto | astuccio | 2,2 s (2,1 cpu) | 4,4 s (3,7 cpu) | 5,8 s | 90 MB | 361 MB |
+| display T1x40 | vassoio | 0,4 s (0,4 cpu) | 4,4 s (3,7 cpu) | 4,1 s | 63 MB | 240 MB |
 
-Questi numeri **non tornano** con la tabella qui sotto, che per Colazione dava
+Questi numeri **non tornano** con la tabella qui sotto, che per il wafer da colazione dava
 434 MB e 20 s di CPU. Non so quale delle due misure sia sbagliata e non l'ho
 cercato: sono state prese a mesi di distanza, con il codice cambiato in mezzo
 e in un solo caso una per volta in un processo pulito. Mi fido di queste, e
 quelle restano per gli altri quattro file che qui non ci sono. Il numero piu'
 solido di tutti e' comunque un altro: i **460 MB ancora vivi** a fine analisi
-di Colazione, che su una macchina da 512 MB non lasciano spazio per costruire.
+del wafer da colazione, che su una macchina da 512 MB non lasciano spazio per costruire.
 
 ### In HD, di serie
 
@@ -451,20 +473,20 @@ core:
 
 | file | tipo | analisi | costruzione | picco | texture | GLB |
 |---|---|---|---|---|---|---|
-| Colazione | flowpack | 23,5 s | 85,6 s | 987 MB | 3897 x 5433 | 5,3 MB |
-| K Brioss STD | flowpack | 4,2 s | 25,8 s | 1186 MB | 3425 x 4960 | 5,9 MB |
-| K Brioss Latte e Cacao | flowpack | 4,3 s | 13,0 s | 536 MB | 3425 x 4959 | 5,5 MB |
-| KMS T1 | flowpack | 1,6 s | 13,3 s | 486 MB | 1801 x 1700 | 4,3 MB |
-| K Tronky T1 | flowpack | 1,3 s | 9,1 s | 873 MB | 1701 x 980 | 3,6 MB |
-| KP T1 Mandarino | flowpack | 1,6 s | 7,5 s | 316 MB | 1759 x 1599 | 4,1 MB |
-| Kinder Country | flowpack | 2,5 s | 4,3 s | 409 MB | 1406 x 1441 | 4,4 MB |
-| Kinder Paradiso T1 | flowpack | 1,6 s | 2,6 s | 307 MB | 1831 x 1949 | 4,3 MB |
-| KCF T1 | flowpack | 14,0 s | 1,9 s | 212 MB | 1358 x 1193 | 3,6 MB |
-| K Pingui T6 BOX | astuccio | 2,7 s | 6,1 s | 579 MB | fronte 1659 x 1476 | 0,8 MB |
-| Nutella Donut | astuccio | 3,5 s | 8,5 s | 625 MB | fronte 2254 x 2226 | 2,2 MB |
-| KMS Display | vassoio | 0,5 s | 12,9 s | 874 MB | 5846 x 8192 | 3,4 MB |
+| wafer da colazione | flowpack | 23,5 s | 85,6 s | 987 MB | 3897 x 5433 | 5,3 MB |
+| brioche STD | flowpack | 4,2 s | 25,8 s | 1186 MB | 3425 x 4960 | 5,9 MB |
+| brioche latte e cacao | flowpack | 4,3 s | 13,0 s | 536 MB | 3425 x 4959 | 5,5 MB |
+| T1 della barretta fresca | flowpack | 1,6 s | 13,3 s | 486 MB | 1801 x 1700 | 4,3 MB |
+| wafer T1 | flowpack | 1,3 s | 9,1 s | 873 MB | 1701 x 980 | 3,6 MB |
+| T1 al mandarino | flowpack | 1,6 s | 7,5 s | 316 MB | 1759 x 1599 | 4,1 MB |
+| T1 ai cereali | flowpack | 2,5 s | 4,3 s | 409 MB | 1406 x 1441 | 4,4 MB |
+| T1 farcito | flowpack | 1,6 s | 2,6 s | 307 MB | 1831 x 1949 | 4,3 MB |
+| T1 al cioccolato fresco | flowpack | 14,0 s | 1,9 s | 212 MB | 1358 x 1193 | 3,6 MB |
+| T6 aperto | astuccio | 2,7 s | 6,1 s | 579 MB | fronte 1659 x 1476 | 0,8 MB |
+| astuccio della ciambella | astuccio | 3,5 s | 8,5 s | 625 MB | fronte 2254 x 2226 | 2,2 MB |
+| display T1x40 | vassoio | 0,5 s | 12,9 s | 874 MB | 5846 x 8192 | 3,4 MB |
 
-Il file lento e' sempre Colazione: quasi due minuti, dei quali una sessantina
+Il file lento e' sempre il wafer da colazione: quasi due minuti, dei quali una sessantina
 sono la resa del foglio a 300 dpi. Non sono i tratti, sono le 21 immagini con
 trasparenza della grafica, e ritagliare la resa sul foglio non aiuta perche'
 stanno tutte dentro il foglio. Vedi REGOLE.md, *La texture e' HD di serie*.
@@ -490,17 +512,17 @@ stanno tutte dentro il foglio. Vedi REGOLE.md, *La texture e' HD di serie*.
 
   | pack | tipologia | steso | picco | CPU |
   |---|---|---|---|---|
-  | Colazione | flowpack | 460 x 330 mm | 434 MB | 20,0 s |
-  | Nutella Donut | astuccio | 452 x 265 mm | 402 MB | 6,8 s |
-  | K Pingui T6 | astuccio aperto | 261 x 270 mm | 354 MB | 4,6 s |
-  | K Country | flowpack | 122 x 119 mm | 274 MB | 3,2 s |
-  | K Brioss | flowpack | 420 x 290 mm | 247 MB | 4,4 s |
-  | K Paradiso | flowpack | 165 x 155 mm | 233 MB | 2,4 s |
-  | K Brioss STD | flowpack | 420 x 290 mm | 216 MB | 4,7 s |
-  | K Tronky T1 | flowpack | 83 x 144 mm | 199 MB | 1,7 s |
+  | wafer da colazione | flowpack | 460 x 330 mm | 434 MB | 20,0 s |
+  | astuccio della ciambella | astuccio | 452 x 265 mm | 402 MB | 6,8 s |
+  | T6 aperto | astuccio aperto | 261 x 270 mm | 354 MB | 4,6 s |
+  | T1 ai cereali | flowpack | 122 x 119 mm | 274 MB | 3,2 s |
+  | brioche | flowpack | 420 x 290 mm | 247 MB | 4,4 s |
+  | T1 farcito | flowpack | 165 x 155 mm | 233 MB | 2,4 s |
+  | brioche STD | flowpack | 420 x 290 mm | 216 MB | 4,7 s |
+  | wafer T1 | flowpack | 83 x 144 mm | 199 MB | 1,7 s |
 
   Presi tutti nello stesso giro e sulla stessa macchina, perche' il picco varia
-  di qualche decina di MB col carico: Colazione, misurata prima, dava 386 MB
+  di qualche decina di MB col carico: il wafer da colazione, misurato prima, dava 386 MB
   contro i 434 di adesso, e il codice di allora rimisurato oggi da' 442. Le
   cifre servono a dimensionare, non a confrontare due versioni: per quello si
   misurano prima e dopo di seguito.

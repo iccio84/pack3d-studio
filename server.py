@@ -101,14 +101,13 @@ GONFIORE = {k: gonfiore(k) for k in FASCE}
 # pagina (larghezza x altezza in punti, arrotondate).
 CASI = {
     (1672, 737): dict(
-        name="FULFIL Chocolate Hazelnut Whip",
+        name="barretta proteica",
         sheet=(481.78, 120.34, 481.78 + 142 / PT2MM, 120.34 + 141 / PT2MM),
         girth_span=(120.34 + 15 / PT2MM, 120.34 + 126 / PT2MM),
         W=36.0, T=19.5, L=116.0, end_fin=13.0, side_fin=15.0,
         back_a=18.0, back_b=18.0, web=141.0, step=142.0,
         fin_open=52.6, teeth=20, soft="morbido",
-        drop_seps=["Coldseal", "White", "Stand Blau", "All",
-                   "Label_ferrero", "Label_linked"],
+        drop_seps=["Coldseal", "White", "Stand Blau", "All", "Label_*"],
     ),
 }
 
@@ -167,8 +166,8 @@ def analisi_flowpack(pdf):
         fp = fpk.analyze_auto(pdf, bbox=box)
     except Exception as e:
         # Secondo tentativo, sul RIQUADRO DELLA FUSTELLA invece che
-        # sull'ingombro stampato. Non sono la stessa cosa: sul Kinder Choco
-        # Fresh T1 la grafica scende sotto il tracciato - c'e' una striscia di
+        # sull'ingombro stampato. Non sono la stessa cosa: sul T1 al
+        # cioccolato fresco la grafica scende sotto il tracciato - c'e' una striscia di
         # fondo bianco che il disegno non comprende - e misurando lo stampato
         # il nastro veniva 121 mm invece di 115. Con quel numero le fasce non
         # chiudono e il file non si costruisce; con la fustella si risolve.
@@ -227,8 +226,8 @@ def flowpack_sulla_grafica(pdf):
     ragione: uno steso non deve dare un pack diverso secondo come sta sulla
     tavola. Il solutore gli 90 gradi li regge gia' - traspone i suoi ingressi
     e ritrova le pinne - ma la texture seguiva il FOGLIO: girato lo steso di
-    mezzo giro, il Milch-Schnitte usciva a testa in giu', e sul KP T1
-    Mandarino girato di un quarto la colata, che si allinea su un'onda
+    mezzo giro, il T1 della barretta fresca usciva a testa in giu', e sul T1 della merendina
+    al mandarino girato di un quarto la colata, che si allinea su un'onda
     orizzontale, si incollava storta e la fascia rossa spariva.
 
     Il verso lo da' il testo vivo del FRONTE (`fpk.fronte_in_pagina`): se e'
@@ -320,7 +319,7 @@ def avviso_pagine(pdf):
     """La riga sulle pagine, se il file ne ha piu' di una.
 
     Si lavora sempre e solo sulla PRIMA pagina: un artwork su piu' pagine e'
-    quasi sempre lo stesso pack ripetuto per lingua - sul Kinder Cards T2
+    quasi sempre lo stesso pack ripetuto per lingua - sul T2 di cialde
     "64-GERMANY" e "01-ITALY", identici tranne il piede - e mescolarle vuol
     dire misurare un pack su una pagina e stamparne un altro. Lo si dice,
     perche' chi ha caricato il file sappia quale pagina e' diventata il
@@ -900,7 +899,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
 
     Come il vassoio: una texture sola - lo steso - e le UV sono la posizione
     sul foglio. Ma lo steso si rende sul solo riquadro della fustella, non
-    sulla pagina intera: sul Tronky la pagina e' 940 x 800 mm e la fustella
+    sulla pagina intera: sul wafer T1 la pagina e' 940 x 800 mm e la fustella
     515 x 486, e con lo stesso lato massimo la texture tiene quasi il doppio
     dei punti per millimetro.
     """
@@ -1442,7 +1441,7 @@ def sezione_da_agente(params):
     """Larghezza e spessore del pack CHIUSO, se l'agente li ha misurati.
 
     Le cordonature dicono dove il film e' cordonato, non che forma prende una
-    volta riempito: su Kinder Bueno T2 i pannelli danno 50 x 11, ma il pack in
+    volta riempito: sul croccante T2 i pannelli danno 50 x 11, ma il pack in
     mano e' 41 x 20. Hanno lo stesso perimetro, quindi dalla fustella non si
     distinguono: il rapporto puo' arrivare solo da chi guarda il prodotto.
     """
@@ -1684,11 +1683,11 @@ def printed_bbox(pdf):
 
 # Falde misurate sui pack che conosciamo, dal piu' piccolo al piu' grande:
 #
-#   Milch-Schnitte T1  nastro 144   falda 14,0
-#   Kinder Country     nastro 122   falda 16,0
-#   Kinder Paradiso    nastro 165   falda 12,5
-#   K Brioss T10 Promo nastro 420   falda  4,1
-#   FULFIL             nastro 141   falda 15,0
+#   T1 della barretta fresca  nastro 144   falda 14,0
+#   T1 ai cereali     nastro 122   falda 16,0
+#   T1 farcito    nastro 165   falda 12,5
+#   brioche T10 Promo nastro 420   falda  4,1
+#   barretta proteica             nastro 141   falda 15,0
 #
 # Fra 4 e 16 mm, su nastri che vanno da 122 a 420. E' fisica, non statistica:
 # la falda e' il lembo che schiacciano le ganasce, e le ganasce non diventano
@@ -2210,7 +2209,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro,
                                                   gradi)
         # Stessa analisi di /api/analyze, non una seconda uguale: il ripiego
-        # muto (che su Milch-Schnitte T1 dava corpo e pinne 136,5 e 8,0 invece
+        # muto (che sul T1 della barretta fresca dava corpo e pinne 136,5 e 8,0 invece
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
         # dichiarato, perche' il motivo viaggia insieme alle quote.
         box, fp0, ripiego = analisi_flowpack(pdf)
@@ -2293,7 +2292,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # allunga: dal centro del fronte alla cucitura ci sono gli stessi
         # millimetri di film comunque si riempia il pack, quindi se il fronte
         # chiuso e' piu' stretto della fascia del DT la cucitura sul retro si
-        # avvicina allo spigolo di (W - W')/2 - 4,5 mm sul Bueno T2, 50 x 11
+        # avvicina allo spigolo di (W - W')/2 - 4,5 mm sul croccante T2, 50 x 11
         # sulla fustella e 41 x 20 in mano. Tenendo fermo `back_a` i nodi del
         # giro sommavano a W + W' + 2T' invece che al perimetro, e il riscalo
         # che li riporta sul giro stirava la grafica fra un nodo e l'altro. Il
@@ -2330,7 +2329,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # fisico - con quel film non si puo' essere piu' tondi. Il livello dice
         # quanto ci si avvicina, in frazione del diametro del cerchio.
         #
-        # La scala e' tarata sul GLB di riferimento del K Tronky T1, che e'
+        # La scala e' tarata sul GLB di riferimento del wafer T1, che e'
         # l'unica misura che abbiamo per questa famiglia: sezione a ellisse di
         # rapporto 1,466 e bbox 26,7 x 18,2 su un giro di 71, cioe' 0,806 del
         # diametro del cerchio. Il livello 5 ci cade sopra.
@@ -2365,24 +2364,24 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # stesso film, e' piu' grande: vale quando dentro c'e' aria. Con una
         # scatola la sezione la detta la scatola, e i pochi millimetri che la
         # superellisse taglia agli spigoli se li prende la piega, non il pack.
-        # Senza questo il Brioss usciva 155,9 x 59,7 invece di 148,9 x 57,0.
+        # Senza questo la brioche usciva 155,9 x 59,7 invece di 148,9 x 57,0.
         scala = 1.0
     # superellipse_section torna il SEMIASSE, non la larghezza come faceva
     # soft_section_fit: senza il raddoppio width_end esce doppio e le pinne si
     # aprono fino al perimetro intero invece che a meta'
-    # Quanto misura la fustella oltre il corpo — 37,5 mm sul Brioss — non e'
+    # Quanto misura la fustella oltre il corpo — 37,5 mm sulla brioche — non e'
     # tutto pinna. Prima il tubo deve collassare, e la gola piegata sullo
     # spigolo costa mezzo spessore; quello che avanza e' la pinna vera. Con una
     # scatola dentro il collasso non puo' mangiare il corpo, perche' la scatola
     # tiene la sezione fino alla sua faccia: la gola sta tutta oltre. Sul
-    # Brioss: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
+    # brioche: 37,6 = 22,8 di gola piu' 14,8 di pinna, vedi GOLA_SU_SPESSORE.
     # La somma L/2 + end_fin non cambia, quindi le UV restano quelle e la
     # grafica non si sposta di un pixel.
     #
     # Ma solo se la gola non la dice gia' il DT. Quando disegna la saldatura
     # E dove finisce il prodotto, la testata e' gia' divisa: la pinna finisce
     # alla saldatura, la gola sta fra lei e il prodotto, e il corpo la
-    # comprende. Su K Colazione Piu' T10 le quote del file sono 20 | 37,5 |
+    # comprende. Sul wafer da colazione T10 le quote del file sono 20 | 37,5 |
     # 215 | 37,5 | 20: corpo 290 con la gola, pinna 20. Dividendo la pinna
     # un'altra volta ne restavano 2 mm, e il pack usciva una scatola senza
     # pinne con la grafica delle testate stirata di 2,07 volte.
@@ -2406,11 +2405,11 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     #
     # Un tubo si appiattisce perche' dentro c'e' aria, e appiattito misura meta'
     # perimetro: quello e' il massimo geometrico, oltre il quale il film
-    # dovrebbe allungarsi. E' il caso di Milch-Schnitte, pinne aperte e piu'
+    # dovrebbe allungarsi. E' il caso del T1 della barretta fresca, pinne aperte e piu'
     # alte del pack, ed e' il 3. All'altro capo, quando il film avvolge una
     # scatola che arriva fino alla saldatura, non c'e' niente da appiattire: la
     # pellicola si ripiega sugli spigoli e la pinna esce larga esattamente
-    # quanto la faccia. E' Kinder Brioss, ed e' l'1. Il 2 sta in mezzo.
+    # quanto la faccia. E' la brioche, ed e' l'1. Il 2 sta in mezzo.
     #
     # Non e' deducibile dal rigonfiamento: dice come si comporta il film alle
     # ganasce, non che forma prende il corpo.
@@ -2431,7 +2430,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     rastremo = gola if scatola else (fp0.gola or max(fp0.end_fin, 6.0))
     # E la spalla deve starci col film. Dalla sezione piena alla saldatura il
     # tubo cala di mezzo spessore, e il film, che non si allunga, quel calo lo
-    # copre solo se la spalla e' abbastanza lunga: sul Paradiso la gola del
+    # copre solo se la spalla e' abbastanza lunga: sul T1 farcito la gola del
     # DT e' 10 mm e il calo 14,1, e dieci millimetri di film su una discesa
     # di quattordici sono una grafica stirata fino a 3,7 volte - la scritta
     # LATTE del bollino. Allora la spalla comincia prima, dentro il prodotto,
@@ -2586,7 +2585,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     foglio = tex
     # Il materiale, nel telaio dello steso com'e' uscito: le copie del DT
     # stanno sulla tavola come lui. Solo se cambia davvero qualcosa - sul
-    # Kinder Country alluminio e white plate coprono la stessa parte del
+    # T1 ai cereali alluminio e white plate coprono la stessa parte del
     # film, e il metallo non resta da nessuna parte.
     colore, mr = tex, None
     if lettura is not None and lettura.applicabile():
@@ -2699,8 +2698,8 @@ def _panel_knots(Ps, d, G, fp):
         #
         # Nell'ordine in cui le incontra il film: prima la piega a +y, a
         # back_a dalla cucitura, poi l'altra mezzo giro dopo. Ordinarle per
-        # valore sbagliava quando il retro sta tutto da un lato - Kinder Choco
-        # Fresh - e la cucitura cade sulla seconda piega: quella veniva a
+        # valore sbagliava quando il retro sta tutto da un lato - il T1 al
+        # cioccolato fresco - e la cucitura cade sulla seconda piega: quella veniva a
         # zero, prima dell'altra, e il fronte finiva sul retro.
         try:
             ia = int(np.argmax(Ps[:-1, 0]))
@@ -2809,7 +2808,7 @@ OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
 # 1 la carta dei coni gelato, poco piu' di un foglio; 2 il cartoncino degli
 # astucci e delle coppe; 3 un cartoncino spesso. Senza dichiarazione ogni
 # famiglia tiene il suo: 0,45 mm l'astuccio (`folding.SPESSORE_CRT`), 0,35 la
-# coppa (dal cartiglio del Nutella POT), 0,10 il cono.
+# coppa (dal cartiglio della coppa da 500), 0,10 il cono.
 SPESSORI_CARTA = {1: 0.10, 2: 0.40, 3: 0.70}
 
 
@@ -2893,7 +2892,7 @@ def pellicola_sicura(fa, *args, **kw):
 
 def finestra_astuccio(d):
     """Vero se l'astuccio ha la finestra sul retro: aperto, con le due falde
-    che lasciano in mezzo un'apertura (il Kinder Pingui T6). Un astuccio
+    che lasciano in mezzo un'apertura (il T6 aperto). Un astuccio
     senza retro, tipo vassoio, non ha una finestra: e' aperto."""
     return bool(not d.chiuso and d.finestra_mm > 0
                 and all(k in d.panels for k in folding.FASCE_RETRO))
@@ -3619,7 +3618,7 @@ def _analisi_incarto(pdf):
 def _dice_film(pdf):
     """Il file dice da se' di essere un film da flowpack?
 
-    Il cartiglio Artworkr dei Ferrero lo scrive nella descrizione - "T1 0018 |
+    Il cartiglio Artworkr del cliente lo scrive nella descrizione - "T1 0018 |
     WRAPPING/FILM" - e il disegno tecnico di un film ha FASCIA e PASSO, cioe'
     nastro e passo. Su tutti i file che abbiamo, WRAPPING lo porta ogni
     flowpack e nessun astuccio.
@@ -3791,11 +3790,13 @@ class Handler(BaseHTTPRequestHandler):
             # e se le email delle domande partono: senza, la pagina non chiede
             # l'email a chi manda un caso. `glam` dice se lo Space ha il token
             # d'import di Glam, per mandare da solo i modelli approvati (mai
-            # il token: solo se c'e')
-            from pack3d import avvisi
+            # il token: solo se c'e'). `colata` dice se e' arrivata la
+            # risorsa della colata, che viene dal repository privato
+            from pack3d import avvisi, colata as la_colata
             return self._send(200, json.dumps({"ok": True, "versione": VERSIONE,
                                                "email": avvisi.configurato(),
-                                               "glam": coda.glam_configurato()}))
+                                               "glam": coda.glam_configurato(),
+                                               "colata": os.path.exists(la_colata.RISORSA)}))
         if self.path.startswith("/api/casi"):
             return self._stati()
         if self.path.startswith("/api/modello"):
@@ -4401,7 +4402,7 @@ class Handler(BaseHTTPRequestHandler):
                                                "secondo")
                     # Da qui in giu' il posto e' preso e va restituito comunque
                     # vada. Prima analyze_pdf stava FUORI da qualsiasi
-                    # protezione: su un PDF che non sa risolvere (K Tronky,
+                    # protezione: su un PDF che non sa risolvere (wafer T1,
                     # "saldature di testa non riconosciute") lanciava, il posto
                     # non tornava indietro, e dopo MAX_JOBS tentativi il server
                     # rispondeva 503 a chiunque fino al riavvio.
@@ -4650,7 +4651,7 @@ class Handler(BaseHTTPRequestHandler):
 # Tubo piatto a sovrapposizione: quanto e' spessa la sezione in frazione del
 # diametro del cerchio, ai due estremi della scala di rigonfiamento. Il cerchio
 # e' il massimo fisico: con quel film non si puo' essere piu' tondi. Il valore
-# al livello 1 viene dalla taratura sul K Tronky T1, che al livello 5 deve
+# al livello 1 viene dalla taratura sul wafer T1, che al livello 5 deve
 # uscire con rapporto 1,466 come il suo GLB di riferimento.
 PILLOW_LENTE = float(os.environ.get("PACK3D_PILLOW_LENTE", "0.65"))
 PILLOW_CERCHIO = float(os.environ.get("PACK3D_PILLOW_CERCHIO", "1.0"))
@@ -4666,25 +4667,25 @@ FIN_OPEN_RATIO = float(os.environ.get("PACK3D_FIN_OPEN", "1.0"))
 # Il limite geometrico e' 0,5: la gola piegata a 45 gradi sullo spigolo costa
 # mezzo spessore. Sul pack vero pero' una parte di quel film si ripiega di lato
 # come orecchia invece di accorciare la pinna, quindi la frazione utile e' piu'
-# bassa. 0,40 e' quella che riproduce le foto del Brioss: 37,6 = 22,8 di gola
+# bassa. 0,40 e' quella che riproduce le foto della brioche: 37,6 = 22,8 di gola
 # piu' 14,8 di pinna. Tarata su un pack solo.
 GOLA_SU_SPESSORE = float(os.environ.get("PACK3D_GOLA", "0.40"))
 # La spalla, fuori dalla scatola, lunga almeno tante volte il calo del tubo
 # dalla sezione piena alla saldatura. Con la rampa morbida della mesh il punto
 # piu' ripido ha pendenza 1,87 volte il calo sulla lunghezza: a 1,7 e' 1,1,
 # cioe' 48 gradi, e il film ci si stende stirato di 1,2 in modo uniforme
-# (misurato sul bollino del Paradiso: era 2,5 in media e 3,7 di punta).
+# (misurato sul bollino del T1 farcito: era 2,5 in media e 3,7 di punta).
 SPALLA_SU_CALO = float(os.environ.get("PACK3D_SPALLA", "1.7"))
 # La pinna e' saldata: i due strati del film si toccano. Fra le loro facce si
 # lasciano pochi centesimi di millimetro, quanto basta perche' un viewer che
 # disegna anche le facce posteriori non le confonda. Prima restava il 3,5%
-# del mezzo spessore, quasi un millimetro sul B-ready piu' le nervature che
+# del mezzo spessore, quasi un millimetro sul pane ripieno piu' le nervature che
 # spingevano i due strati in fuori: la pinna usciva aperta, col bordo doppio.
 # E' meta' della distanza fra i due strati, in mm.
 PINNA_SALDATA_MM = 0.04
 # Le nervature delle ganasce sulla pinna alla saldatura piena (3/3): quanto
 # si alza il film sulla cresta. La scala della pagina va da 0 (pinna liscia)
-# a 3, e il 3 e' il rigato di prima: tarato sul B-ready, al centro della pinna
+# a 3, e il 3 e' il rigato di prima: tarato sul pane ripieno, al centro della pinna
 # le righe hanno lo stesso contrasto (9,4 contro 8,6; con 0,32 mm sull'onda
 # fitta erano 14,4).
 NERVATURA_MM = 0.15

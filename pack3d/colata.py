@@ -1,5 +1,5 @@
 """
-La colata Kinder: rimetterle l'ombra che il nostro rasterizzatore le toglie.
+La colata di latte: rimetterle l'ombra che il nostro rasterizzatore le toglie.
 
 La colata e' costruita in **sovrastampa**: una lastra di ciano che moltiplica
 il rosso sotto, e da quella moltiplicazione vengono l'ombra sulle gocce e il
@@ -28,16 +28,16 @@ Due strade, e la prima e' sempre meglio della seconda perche' usa
 2. **la risorsa**, se la prima non ha niente da correggere. Quando l'ombra nel
    file e' FUSTELLATA invece che in sovrastampa - il ciano toglie il rosso
    invece di moltiplicarlo - sotto non c'e' piu' niente da moltiplicare, e
-   nessun rasterizzatore la puo' recuperare: misurato su KP T1 Mandarino, dove
+   nessun rasterizzatore la puo' recuperare: misurato sul T1 al mandarino, dove
    l'ombra ha Cyan al 34,9% e PANTONE Warm Red al 2,6%, contro il 98,1% del
-   rosso pieno accanto. Li' si sostituisce con `risorse/colata_kinder.png`.
+   rosso pieno accanto. Li' si sostituisce con `risorse/colata.png`.
 
 Tutte e due vogliono la colata su un **livello suo**: il livello dice dove va,
 e non si indovina niente. Il file che ha aperto la strada e'
 `KP_T1_Mandarino`, che ha un OCG chiamato `Colata`.
 
 Si incolla sempre e solo dentro l'**impronta** del livello. Non e' pignoleria:
-e' quello che tiene fuori i guai. Su KP T1 la stessa resa in quadricromia fa
+e' quello che tiene fuori i guai. Sul T1 della merendina la stessa resa in quadricromia fa
 diventare NERO il bicchierino di latte che sta sopra la colata - lui la
 sovrastampa ce l'ha davvero - ma il bicchiere sul livello `Colata` non sta, e
 fuori dall'impronta non lo tocca nessuno.
@@ -46,7 +46,7 @@ Come si trova l'impronta:
 
 - si spegne il livello in una copia, aggiungendo il suo OCG a
   `/OCProperties/D/OFF`. E' una modifica di DIZIONARIO: non costa la passata
-  di pypdf sul flusso di contenuto, che su Colazione vale 7 secondi e 100 MB;
+  di pypdf sul flusso di contenuto, che sul wafer da colazione vale 7 secondi e 100 MB;
 - si rendono le due pagine su fondo TRASPARENTE e si confronta anche l'alfa.
   Sul colore soltanto la maschera avrebbe dei buchi dove la colata e' bianca -
   la cresta e le gocce - perche' bianco su bianco non fa differenza.
@@ -64,12 +64,24 @@ from PIL import Image
 from . import stato, strati
 from .dieline import PT2MM, render_page
 
-# I nomi di livello che portano la colata, confrontati per nome intero.
-NOMI = {"colata", "colata kinder", "milk splash", "splash"}
+# I nomi di livello che portano la colata, confrontati per nome intero; e
+# «colata» seguita da un'altra parola, come la chiamano certi file col nome
+# del marchio dopo.
+NOMI = {"colata", "milk splash", "splash"}
 
-RISORSE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                       "risorse")
-RISORSA = os.path.join(RISORSE, "colata_kinder.png")
+
+def e_colata(nome):
+    """Se il livello `nome` (minuscolo) porta la colata."""
+    return nome in NOMI or nome.startswith("colata ")
+
+# La risorsa e' grafica del cliente: sta nel repository PRIVATO dei casi
+# (`risorse/colata.png`), non in questo che e' pubblico. Sullo Space la mette
+# il workflow di pubblicazione nella cartella `risorse/` del codice; il parco
+# la prende dal clone dei casi (`PACK3D_RISORSE`, vedi `prove/parco.py`).
+# Se non c'e', il ripiego si salta e resta la resa com'e'.
+RISORSE = os.environ.get("PACK3D_RISORSE") or os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "risorse")
+RISORSA = os.path.join(RISORSE, "colata.png")
 
 # Scala della resa usata per trovare l'impronta e l'allineamento, in px per
 # punto PDF. Non e' la scala della texture: serve solo a misurare, e a 2 px/pt
@@ -87,8 +99,8 @@ GS = shutil.which("gs")
 
 # Quante delle ombre azzurre deve cambiare la sovrastampa perche' la colata si
 # possa dire davvero in sovrastampa. La soglia sta larga fra i due casi
-# misurati: 1,1% su KP T1 Mandarino, dove l'ombra e' fustellata, e 49,6% sul
-# Kinder Pingui T6 BOX, dove e' in sovrastampa.
+# misurati: 1,1% sul T1 al mandarino, dove l'ombra e' fustellata, e 49,6% sul
+# T6 aperto, dove e' in sovrastampa.
 CAMBIO_MINIMO = 0.10
 
 
@@ -133,8 +145,8 @@ def allinea(banda, risorsa):
 
     Restituisce `(s, dx, dy, errore_px)`, con `dx` e `dy` in pixel della banda.
 
-    Il rapporto fra i periodi da' la scala solo APPROSSIMATA: su KP T1
-    Mandarino lo spettro, che su sette cicli ha poca risoluzione, sbaglia
+    Il rapporto fra i periodi da' la scala solo APPROSSIMATA: sul T1 della merendina
+    al mandarino lo spettro, che su sette cicli ha poca risoluzione, sbaglia
     dell'8%. E un'onda e' periodica, quindi con la scala sbagliata si trova
     comunque una fase che sembra buona - un ottimo locale a 0,27 mm invece dei
     0,10 del vero. La scala si cerca quindi in una finestra larga attorno alla
@@ -192,7 +204,7 @@ def _fase(banda, ris, s, dx, dy, periodo):
     L'onda e' periodica: spostare la risorsa di un periodo intero lascia le
     due curve sovrapposte, e una misura robusta come la mediana non se ne
     accorge - la goccia, che e' l'unica cosa aperiodica del disegno, la scarta
-    come fosse rumore. Sul KP T1 Mandarino l'allineamento tornava a 0,22 mm con
+    come fosse rumore. Sul T1 al mandarino l'allineamento tornava a 0,22 mm con
     la goccia a mezzo pack di distanza, cioe' sparita.
 
     Qui si confrontano le IMMAGINI, non le curve, e si sceglie la fase che
@@ -227,7 +239,7 @@ def _impronta(a, b, soglia=10):
     anche l'alfa. Sul colore soltanto la maschera ha dei buchi, e non sono
     dettagli: il bianco della colata sopra il bianco del foglio non fa
     differenza, quindi la cresta e le gocce - che sono bianche - risultavano
-    scoperte, e al loro posto restava il fondo. Sul KP T1 Mandarino si vedeva
+    scoperte, e al loro posto restava il fondo. Sul T1 al mandarino si vedeva
     come una mezzaluna bianca sul rosso, attorno alla goccia.
 
     Canale per canale e su uint8: `abs(a - b).max(2)` su una pagina intera
@@ -335,7 +347,7 @@ def _azzurro(a):
     viene simulata: il ciano copre il rosso invece di moltiplicarlo, e
     l'ombra diventa un alone azzurro piatto.
 
-    **Da solo non distingue niente.** Sul Kinder Pingui T6 BOX la macchia
+    **Da solo non distingue niente.** Sul T6 aperto la macchia
     azzurra piu' grande del foglio non e' un'ombra rotta: e' il fondo del
     pack, gocce d'acqua su azzurro, 15.800 px che vanno lasciati in pace.
     Serve percio' sempre dentro un riquadro che qualcuno ha guardato - il
@@ -357,7 +369,7 @@ def dal_riquadro(pdf, page_no, scala, riq):
     cambia**, dentro quel riquadro.
 
     Piu' stretta dell'impronta del livello, e piu' sicura: non puo' toccare
-    quello che azzurro non e'. Il marchio `kinder` e il bicchierino di latte,
+    quello che azzurro non e'. Il marchio e il bicchierino di latte,
     che rendendo in quadricromia diventano neri, azzurri non sono mai.
 
     Torna `(banda, maschera, quota, quanti)`, o `None` se Ghostscript non c'e'
@@ -393,8 +405,8 @@ def _peso_sovrastampa(simulata, piatta, maschera):
     domanda e': delle zone che senza sovrastampa escono AZZURRE, cioe' delle
     ombre sbagliate, quante ne rimette a posto?
 
-        KP T1 Mandarino   13.248 px azzurri, ne cambia l'1,1%
-        Kinder Pingui T6   7.672 px azzurri, ne cambia il 49,6%
+        T1 al mandarino   13.248 px azzurri, ne cambia l'1,1%
+        T6 aperto   7.672 px azzurri, ne cambia il 49,6%
 
     Il primo ha l'ombra fustellata: il ciano toglie il rosso invece di
     moltiplicarlo, sotto non c'e' piu' niente, e non c'e' niente da
@@ -429,7 +441,7 @@ def _incolla(base, banda, maschera, bx0, by0, fuori=None):
     fresca la fa gia'.
 
     Passando per numpy servirebbe invece una copia SCRIVIBILE dell'intero
-    foglio: sul Kinder Pingui T6 BOX sono 6516 x 3923 px, 76 MB, sommati ai 76
+    foglio: sul T6 aperto sono 6516 x 3923 px, 76 MB, sommati ai 76
     che `convert` ha appena fatto. Il picco della costruzione andava a 500 MB,
     cioe' a un soffio dal tetto di 512 del piano Free, per incollarne uno da
     1474 x 457.
@@ -465,7 +477,7 @@ def _gia_simulata(pdf, page_no, riq, livello):
 
     Allora qui non si tocca niente. Non e' solo risparmio: Ghostscript sotto
     un'immagine RGB con una maschera morbida la tinta piatta la cancella, e
-    sul KP T1 Mandarino - ombra in RGB ICC sul PANTONE Warm Red - diceva
+    sul T1 al mandarino - ombra in RGB ICC sul PANTONE Warm Red - diceva
     "fustellata" e faceva sostituire la colata del file con la risorsa. Vale
     solo per il livello della grafica: la pagina resa com'e' la sovrastampa
     non la simula.
@@ -547,7 +559,7 @@ def foglio(pdf, scala, page_no=0, note=None, riquadro=None, livello=None):
     comunque sulla pagina intera - e' un confronto fra due rese, e il disegno
     tecnico sta uguale in tutte e due.
     """
-    nomi = set(livelli(pdf)) & NOMI
+    nomi = {n for n in livelli(pdf) if e_colata(n)}
     if not nomi:
         if riquadro:
             return _a_occhio(pdf, scala, page_no, note, riquadro, livello)

@@ -3,7 +3,7 @@ La lamina: il foil - a caldo o a freddo - che il DT dichiara su una lastra sua.
 
 Un foil non e' un inchiostro qualsiasi. E' un film metallico trasferito sul
 cartoncino (a caldo con una matrice, a freddo con una colla stampata), e
-sopra si puo' stampare: sul coperchio esagonale del Kusschen Darkchoc e' la
+sopra si puo' stampare: sul coperchio della scatola esagonale e' la
 cornice ramata, e nella legenda del foglio c'e' scritto `cold foil copper
 Kurz 404`. Il file lo dice con una tinta piatta che si chiama come la
 lavorazione - `..._ColdFoilCopper_Kurz404` - e un'alternativa di colore che

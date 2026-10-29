@@ -3,8 +3,8 @@ Il rilievo: l'embossing - o il debossing - che il DT dichiara su una lastra sua.
 
 Un rilievo non e' un inchiostro. E' il cartoncino spinto in fuori (embossing)
 o in dentro (debossing) da una matrice a secco, quasi sempre a registro con
-la grafica: sul ballotin Raffaello Passion Fruit sono i sei marchi
-"Raffaello" e le due coppe delle praline. Il file lo dice con una tinta
+la grafica: sul ballotin al frutto della passione sono i sei marchi
+"ballotin" e le due coppe delle praline. Il file lo dice con una tinta
 piatta che si chiama come la lavorazione - `Embossing`, e un livello con lo
 stesso nome - e quella lastra sulla texture non c'e': e' fra i Processing
 Steps della norma (`techink.ISO_TYPES`), e la pulizia la toglie come ogni
@@ -44,7 +44,7 @@ _RILIEVO = re.compile(r"emboss|rilievo|goffr|pr(ae|a|\u00e4)g|gaufr|relieve|reli
 
 # mm: quanto sale il rilievo, e quanto e' larga la sua spalla (la sigma della
 # gaussiana). Un embossing su cartoncino da astucci sta fra tre e sei decimi.
-# Provati sul ballotin Raffaello in model-viewer, accanto allo stesso modello
+# Provati sul ballotin in model-viewer, accanto allo stesso modello
 # senza mappa: con 0,35 e 0,25 il marchio in rilievo quasi non si distingueva
 # da quello piatto; con 0,5 e 0,2 le lettere hanno il bordo alto in luce e
 # quello basso in ombra, e si leggono in rilievo senza sembrare scolpite.

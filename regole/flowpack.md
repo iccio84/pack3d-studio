@@ -634,7 +634,7 @@ fondo - ne trova due, e a pari scarto, 1,48 mm dal mezzo giro:
     fronte  0 - 42   retro 0 / 39    striscia tecnica e tratteggio
     fronte 42 - 81   retro 42 / 0    il marchio
 
-Vinceva la prima trovata, e "CHOCO fresh" finiva sul **retro** del modello - da
+Vinceva la prima trovata, e "T1 al cioccolato fresco" finiva sul **retro** del modello - da
 sempre, e la verifica del fronte passava, perche' confronta la texture con la
 fascia che il solutore ha chiamato fronte. L'ordine in cui le pieghe si
 incontrano non e' un criterio: dipende dal verso del foglio, e girato di mezzo

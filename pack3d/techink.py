@@ -15,7 +15,7 @@ Tre livelli, dal certo allo stimato:
 3. **Euristica** — spessore a filo di capello e colore. E' una stima, e va
    dichiarata come tale.
 
-Il livello 2 e' insidioso: su Kinder Bueno Dark il nero era davvero fustella,
+Il livello 2 e' insidioso: sul croccante T2 fondente il nero era davvero fustella,
 quindi il nome da solo non basta a decidere e conviene incrociare con lo
 spessore.
 """
@@ -45,7 +45,7 @@ ISO_TYPES = {
 # SOTTOSTRINGA e non per nome intero.
 #
 # Il confronto per nome intero e' quello che c'era, e non regge: i nomi veri
-# sono composti. Su un astuccio Nutella Donut la vernice si chiama "Water
+# sono composti. Su un astuccio della ciambella la vernice si chiama "Water
 # Based Gloss Varnish" e l'insieme conteneva "varnish", "gloss varnish" e
 # "waterbased varnish" - tre voci, nessuna delle quali e' quel nome. La
 # vernice restava quindi dentro l'artwork, e pdfium la rende opaca: copriva
@@ -152,12 +152,12 @@ def processing_steps(reader, page):
 # Una fustella, una quota, un retino print-free sono TRATTI: sottili, e
 # l'euristica su spessore e colore li prende. Una vernice, un bianco coprente,
 # un cold seal sono PIENI grandi quanto la grafica: nessuna euristica sul
-# tratto li puo' vedere, e pdfium li rende opachi. Sull'astuccio Nutella Donut
+# tratto li puo' vedere, e pdfium li rende opachi. Sull'astuccio della ciambella
 # la `Water Based Gloss Varnish` copriva tutto il pannello di rosa.
 #
 # Solo queste si strappano per nome nella costruzione. Le altre restano
 # all'euristica, e non per pigrizia: strappare anche quelle costa una passata
-# di pypdf sul flusso di contenuto, e su Colazione erano 7 secondi e 100 MB di
+# di pypdf sul flusso di contenuto, e sul wafer da colazione erano 7 secondi e 100 MB di
 # picco in piu' - oltre il tetto dei 512 MB - per togliere tratti che la
 # maschera del disegno tecnico prendeva gia'.
 # La GDA sta qui, e non fra i soli nomi tecnici, per una ragione precisa.
@@ -174,12 +174,12 @@ def processing_steps(reader, page):
 # grandi quanto la casella, con la scritta in bianco dentro. Stanno gia' fra i
 # nomi tecnici, ma finche' non sono state anche coperture l'unica cosa che
 # poteva toglierle era l'euristica sul tratto, che un pieno non lo vede: sulla
-# texture di K Colazione Piu' restavano stampate sul pack due fasce `TEXT
+# texture del wafer da colazione restavano stampate sul pack due fasce `TEXT
 # AREA`, una `COVERED AREA` e un riquadro `BEST BEFORE AREA`.
 #
 # E i RILIEVI, per la stessa ragione delle vernici: l'embossing e' una
 # lavorazione a secco, non un inchiostro, e la sua lastra e' un pieno grande
-# quanto i marchi che spinge in fuori. Sul ballotin Raffaello sta su un
+# quanto i marchi che spinge in fuori. Sul ballotin sta su un
 # livello suo, che si spegne; un file che la mettesse fra la grafica la
 # farebbe dipingere a pdfium col colore di ripiego sopra i marchi. Sul
 # modello il rilievo c'e' lo stesso: lo fa `rilievo.py`, dal file originale.
@@ -199,13 +199,13 @@ COPERTURE_FRASI = (
 COPERTURE_SIGLE = {"white", "bianco", "gda"}
 
 # I BOX AREA si tolgono sempre, come la GDA, su ogni modello 3D: flowpack,
-# astucci e vassoi. E' la regola, detta cosi' dopo il Nutella B-ready T2 e il
-# Kinder Country. Per nome e' un box area ogni lastra che si CHIAMA area,
-# anche se la frase non e' fra quelle qui sopra: sul B-ready c'e' `PIN CODE
+# astucci e vassoi. E' la regola, detta cosi' dopo il pane ripieno T2 e il
+# T1 ai cereali. Per nome e' un box area ogni lastra che si CHIAMA area,
+# anche se la frase non e' fra quelle qui sopra: sul pane ripieno c'e' `PIN CODE
 # Area`, che non c'era, e domani ci sara' un `LOT Area`. Nessun inchiostro si
 # chiama cosi'.
 #
-# Tranne la promo. L'`AREA PROMO` della legenda del K Brioss (FERRERO_1765...)
+# Tranne la promo. L'`AREA PROMO` della legenda della brioche (file 1765…)
 # e' tutta la fascia gialla con "Scopri il mondo di Quelli della COLAZIONE" e
 # "VINCI l'esclusivo SET COLAZIONE": e' la grafica della promo, e si stampa.
 AREA_NOME = _re.compile(r"\barea\b")
@@ -222,7 +222,7 @@ def area(nome):
 # I box area che sono VUOTI per definizione: il posto di un testo, di un
 # codice, di una data, o un posto dove non si stampa. Dentro c'e' solo la
 # didascalia. Gli altri possono avere grafica sotto: la COVERED AREA e' la
-# fascia che la pinna nasconde, e sul Kinder Cards T2 porta la cialda e la
+# fascia che la pinna nasconde, e sul T2 di cialde porta la cialda e la
 # banda rossa; e un'area che non si conosce - una `Emboss Area`, una
 # `Varnish Free Area` - si tratta come lei.
 _VUOTE = _re.compile(
@@ -250,22 +250,22 @@ def copertura(nome):
 
 
 # Le lastre che DISEGNANO il disegno tecnico, per come si chiamano: il tratto
-# e anche i suoi pieni. Sul Nutella B-ready T2 la lastra "Technical Drawing
+# e anche i suoi pieni. Sul pane ripieno T2 la lastra "Technical Drawing
 # light" dipinge una banda piena di 2 mm sul fianco, che l'euristica sul
 # tratto non vede - e' un pieno - e che sul modello era una riga verde.
 #
 # Solo frasi che lo dicono. Niente sigle corte, niente tinte imparate da un
-# file (`LASTRE_NOTE`: il Pantone 346 e' le quote su un Kinder e grafica su
-# un altro, e toglierlo per nome cancellava il 9% di un pannello del Pingui
-# T6), niente `All`: il registro, che sul K Brioss STD dipinge anche testo e
+# file (`LASTRE_NOTE`: il Pantone 346 e' le quote su un file e grafica su
+# un altro, e toglierlo per nome cancellava il 9% di un pannello del T6
+# aperto), niente `All`: il registro, che sulla brioche STD dipinge anche testo e
 # toglierlo cambiava il 2% della texture. E niente tacca di fotocentratura,
 # che si stampa davvero.
 DISEGNO_FRASI = (
     "technical", "tecnico", "dieline", "die line", "die-line",
     "cutcontour", "cut contour", "thru-cut", "thrucut", "kiss cut", "kisscut",
     "cutter", "cutting", "crease", "creasing", "cordonatura", "stanz",
-    # "troquel" e' la fustella in spagnolo: la lastra del DT del cono Camy
-    # Apolo, e anche del suo lid
+    # "troquel" e' la fustella in spagnolo: la lastra del DT del cono,
+    # e anche del suo lid
     "fustella", "troquel", "dimension", "legend",
 )
 
@@ -352,8 +352,8 @@ def technical_separations(page, dentro_i_form=True, prova=None):
 #
 # Per la SOVRASTAMPA invece l'RGB non e' un problema, e qui si era creduto il
 # contrario. Un oggetto RGB in sovrastampa stampa la quadricromia e lascia
-# stare le tinte piatte che trova: sul Kinder Choco Fresh T1 e sul KP T1
-# Mandarino l'ombra della colata e' un'immagine RGB indicizzata, ciano, in
+# stare le tinte piatte che trova: sul T1 al cioccolato fresco e sul T1 della merendina
+# al mandarino l'ombra della colata e' un'immagine RGB indicizzata, ciano, in
 # sovrastampa sul rosso in tinta piatta, e il rosso sotto resta - l'ombra
 # c'e'. Sembrava di no perche' Ghostscript, sotto un'immagine RGB con una
 # maschera morbida, la tinta piatta la cancella. Adesso la sovrastampa la
@@ -361,7 +361,7 @@ def technical_separations(page, dentro_i_form=True, prova=None):
 # resta per il colore, non per la colata.
 #
 # Si guardano le IMMAGINI, non gli spazi colore dichiarati, e per un motivo
-# misurato: gli spazi RGB dichiarati ci sono quasi sempre - sul K Tronky T1 ce
+# misurato: gli spazi RGB dichiarati ci sono quasi sempre - sul wafer T1 ce
 # n'e' uno usato 23 volte, e quel file l'utente l'ha validato - perche' li usa
 # anche l'arte tecnica, che dalla texture viene via comunque. Una immagine
 # grande in RGB invece e' grafica che si vede, ed e' esattamente il caso della
@@ -529,7 +529,7 @@ def classify(pdf_path, page_no: int = 0):
 
 # --- Le aree riservate che il file scrive, ma non nomina -------------------
 #
-# Il caso: K Colazione Piu'. Il foglio ha due fasce `TEXT AREA`, una `COVERED
+# Il caso: wafer da colazione. Il foglio ha due fasce `TEXT AREA`, una `COVERED
 # AREA` e un riquadro `BEST BEFORE AREA` - aree riservate, la stessa famiglia
 # della GDA - e finivano stampate sulla texture. Nel file non c'e' niente che
 # lo dica: nessun livello, e le lastre si chiamano `PANTONE 1595 C`,
@@ -537,7 +537,7 @@ def classify(pdf_path, page_no: int = 0):
 #
 # Il registro `LASTRE_NOTE` non salva: e' costruito su altri file e su questo
 # sbaglia due volte su due. Dice `PANTONE 350 C = Best Before Area`, e su
-# Colazione quella lastra e' il DISEGNO TECNICO; dice `PANTONE 346 C =
+# wafer da colazione quella lastra e' il DISEGNO TECNICO; dice `PANTONE 346 C =
 # Dimensions`, e li' e' la BEST BEFORE AREA. E' la stessa lezione del disegno
 # tecnico: un numero Pantone e' un colore, e un colore non dice mai a cosa
 # serve una lastra.
@@ -571,8 +571,8 @@ ETICHETTA_RISERVATA = _re.compile(
 # Il NOME di un'area riservata scritto sull'artwork: e' la didascalia del
 # posto, non la cosa che ci andra', e sul pack non si stampa mai. Sono le
 # etichette qui sopra piu' il posto del codice a barre scritto per esteso -
-# "POSITIONING AREA FOR EAN CODE (if requested)" sul Kinder Cards T2 - e il
-# codice scritto da solo, "EAN CODE" sul Nutella B-ready T2. Qui si puo'
+# "POSITIONING AREA FOR EAN CODE (if requested)" sul T2 di cialde - e il
+# codice scritto da solo, "EAN CODE" sul pane ripieno T2. Qui si puo'
 # largheggiare: si spegne la scritta, e solo dentro un box area tolto.
 NOME_RISERVATA = _re.compile(
     r"(?i)\b(" + _AREE + r"|positioning)\s*area\b"
@@ -585,7 +585,7 @@ INCHIOSTRO_MINIMO = 0.5   # quota di lastra su quel pixel
 PIENO_MINIMO = 0.60       # quota di pixel pieni nell'intorno dell'etichetta
 VICINO = 150.0            # punti: quanto puo' stare lontana la riga di sopra
 # Il campione della legenda: un pieno davanti alla didascalia, grande da uno a
-# dieci corpi e staccato al piu' di quattro. Sul Kinder Country e' un
+# dieci corpi e staccato al piu' di quattro. Sul T1 ai cereali e' un
 # quadrato di 14 punti a 6,5 punti dalla scritta, che ha corpo 6,5.
 CAMPIONE_CORPI = (0.8, 10.0)
 CAMPIONE_STACCO = 4.0
@@ -663,14 +663,14 @@ def _forse_etichette(pdf, page_no=0, parola="area"):
     """Vero se nel testo della pagina compare la parola `area`.
 
     Prefiltro, e costa quasi niente: da 0,01 a 0,15 secondi contro i 2,9 che
-    l'estrazione del testo di pypdf costa sul K Brioss STD.
+    l'estrazione del testo di pypdf costa sulla brioche STD.
 
     Il testo lo legge pdfium, che decodifica i font e scende nei form. Prima
     si cercava `AREA` nei byte del flusso della pagina, e bastava un font a
-    glifi codificati per non vederla: sul Kinder Paradiso T1 la legenda dice
+    glifi codificati per non vederla: sul T1 farcito la legenda dice
     "Covered Area", "Print Free Area", "Best Before Area", "Bar Code Area" e
     "Pin code area", e i box restavano tutti stampati sul pack. Stesso difetto
-    sull'astuccio Pingui T6. Si cerca la parola anche dentro altre - pdfium
+    sull'astuccio T6 aperto. Si cerca la parola anche dentro altre - pdfium
     su una didascalia girata e spezzata restituisce "BESAREA": un falso si'
     costa una lettura, un falso no costa un box stampato.
     """
@@ -696,11 +696,11 @@ def _etichette(pdf, page_no=0, cerca=None):
     `(dx, dy)` la direzione in cui si legge, `corpo` l'altezza del carattere e
     `lunghezza` quanto e' lunga, stimata: servono a trovarne il CENTRO e il
     campione della legenda che le sta davanti. Prima si guardava solo dove
-    comincia, e senza la matrice della pagina: sul Kinder Country "Bar Code
+    comincia, e senza la matrice della pagina: sul T1 ai cereali "Bar Code
     Area" comincia a un millimetro dal bordo del suo riquadro, e li' attorno
     la lastra piena era il 57%, sotto la soglia.
 
-    Un'etichetta puo' essere spezzata su due righe, e su K Colazione Piu' lo
+    Un'etichetta puo' essere spezzata su due righe, e sul wafer da colazione lo
     e': `BEST BEFORE` e `AREA` arrivano come due frammenti. Si ricuce solo
     quando il frammento e' la parola `AREA` da sola - condizione stretta, e la
     coda di un'etichetta e' l'unica cosa che la soddisfa - e solo se il
@@ -748,9 +748,9 @@ def _oggetti(pdf, page_no=0):
     dei percorsi pieni della pagina, nello spazio della pagina (y in su).
 
     Le scritte servono a controllare pypdf, che a volte ripete un testo con
-    la posizione di un altro: sul Kinder Cards T2 "Best Before Area" torna
+    la posizione di un altro: sul T2 di cialde "Best Before Area" torna
     una seconda volta sulla banda rossa, dove non c'e' scritto niente, e
-    sotto c'e' il Kinder ORANGE. I pieni sono dove si cercano i campioni
+    sotto c'e' l'arancio del marchio. I pieni sono dove si cercano i campioni
     della legenda.
     """
     import ctypes
@@ -841,7 +841,7 @@ def aree_riservate(pdf, page_no=0, dpi=36, cerca=None, parola="area",
     nessun altro modo.
 
     E se sotto la scritta non c'e' niente, si guarda DAVANTI: e' la legenda,
-    col suo campione di colore. Sul Kinder Country la fascia arancione a
+    col suo campione di colore. Sul T1 ai cereali la fascia arancione a
     tratteggio sotto la pinna non ha nessuna scritta sopra; il suo nome sta
     solo in legenda, "COVERED Area" accanto a un quadrato di PANTONE 1565 C.
     Vedi `_campione`.
@@ -951,8 +951,8 @@ def lastra_nel_riquadro(pdf, x_mm, y_mm, w_mm, h_mm, page_no=0, dpi=36):
     vuol dire che li' non c'e' un'area riservata, e non si tocca niente.
 
     **Non decide da solo che sia un'area riservata.** Una lastra piena dentro
-    un rettangolo puo' benissimo essere il fondo della grafica: su K Colazione
-    Piu' la fascia `TEXT AREA` copre il 6,5% del foglio e `Kinder ORANGE`, che
+    un rettangolo puo' benissimo essere il fondo della grafica: sul wafer da colazione
+    Piu' la fascia `TEXT AREA` copre il 6,5% del foglio e l'arancio del marchio, che
     e' grafica, il 7,9%. Nessuna soglia separa le due cose - misurato - quindi
     la conferma e' l'occhio, e `copertura_foglio_pct` serve solo a dire quanto
     c'e' in gioco.
@@ -1068,18 +1068,18 @@ def lastre_bianche(page, dentro_i_form=True):
 # --------------------------------------------------------------------------- #
 # La GDA - le icone delle Assunzioni di Riferimento, "Energia 476 kJ 114 kcal
 # 6%" - non si stampa uguale in tutti i paesi, e sul modello non ci va, dovunque
-# stia: sul fronte della Nutella Donut, sul retro del K Brioss, sul fianco del
-# Nutella B-ready. Si riconosce dal testo: kcal, kJ e la percentuale vicini. La
+# stia: sul fronte dell'astuccio della ciambella, sul retro della brioche, sul fianco del
+# pane ripieno. Si riconosce dal testo: kcal, kJ e la percentuale vicini. La
 # tabella nutrizionale NO: ha le colonne in grammi e le righe di proteine e
 # carboidrati, che le icone non hanno mai.
-# Sul K Brioss le etichette delle icone - ENERGIA, GRASSI - sono
+# Sulla brioche le etichette delle icone - ENERGIA, GRASSI - sono
 # vettorializzate, e fra il titolo "Ciascuna porzione (27g) contiene:" e i
 # valori restano sei millimetri senza testo: a cinque il titolo restava fuori.
 GDA_STACCO = 7.0 / PT2MM          # due scritte della stessa icona, al piu'
 GDA_MAX = 90.0 / PT2MM            # nessun pannello GDA e' piu' grande
 GDA_MARGINE = 4.0 / PT2MM         # il bordo dell'icona oltre le sue scritte
 # Il pannello che contiene tutte le scritte e' della GDA anche se sborda dal
-# margine - sul Brioss il fondo bianco arrotondato - purche' non sia piu' di
+# margine - sulla brioche il fondo bianco arrotondato - purche' non sia piu' di
 # tanto grande: il fondo della grafica, che la contiene pure lui, e' molto
 # piu' grande.
 GDA_CONTENITORE = 2.0

@@ -128,7 +128,7 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
 
     pdfium rende il CropBox, pdfplumber misura sul MediaBox. Finche' i due
     riquadri coincidono non si vede la differenza, e su quasi tutte le tavole
-    coincidono. Quando no — su K Tronky il CropBox e' 459 x 271 pt dentro un
+    coincidono. Quando no — sul wafer T1 il CropBox e' 459 x 271 pt dentro un
     MediaBox di 1332 x 958, spostato di (419, 471) — le coordinate dei segmenti
     indicizzano un raster che comincia da un'altra parte: nessuna eccezione,
     solo misure prese nel posto sbagliato.
@@ -142,7 +142,7 @@ def render_page(pdf_path, page_no: int = 0, scale: float = 1.0, livello=None):
 
     # Una pagina, una rasterizzazione. Il flusso ne chiedeva TRE della stessa
     # pagina a risoluzioni diverse - 100 dpi per trovare il blocco stampato,
-    # 150 per l'analisi, quella della texture per la grafica - e su Colazione
+    # 150 per l'analisi, quella della texture per la grafica - e sul wafer da colazione
     # erano 30 secondi su 40 e tre picchi di memoria sovrapposti.
     #
     # Si tiene l'ultima resa e si SCENDE soltanto: una riduzione e' una media
@@ -176,7 +176,7 @@ def scarta_resa():
     """Butta la pagina rasterizzata tenuta in cassa.
 
     Va chiamata appena l'ultimo che la usa ha preso la sua copia: tenerla
-    viva oltre costa quanto pesa (41 MB su un foglio come Colazione) proprio
+    viva oltre costa quanto pesa (41 MB su un foglio come il wafer da colazione) proprio
     mentre la costruzione alloca la texture.
     """
     _RESA.clear()
@@ -502,7 +502,7 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None):
         contenute nell'altro. Per quelle il test su un asse solo va bene.
 
         Contenuto in un asse pero' NON basta, ed e' quello che rompeva gli
-        astucci con due viste sul foglio. Sul Kinder Pingui T6 la pagina porta
+        astucci con due viste sul foglio. Sul T6 aperto la pagina porta
         INSIDE VIEW e OUTSIDE VIEW affiancate piu' il cartiglio: il cartiglio
         sta 90 mm a destra della fustella, non la tocca in nessun punto, ma e'
         contenuto nella sua ALTEZZA - e tanto bastava a tirarlo dentro. Il
@@ -530,7 +530,7 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None):
 
 # Quanto deve valere una penna, in frazione della migliore, per contare come
 # fustella. Misurato: su tutti gli artwork del parco la penna di fustella e'
-# una sola e sta a 1,00; sul Kinder Pingui T6 ce n'e' una seconda a 0,14 - un
+# una sola e sta a 1,00; sul T6 aperto ce n'e' una seconda a 0,14 - un
 # rettangolo nero CMYK da 0,76 pt, quattro segmenti in tutto, che non e'
 # fustella e sballava la griglia. Il divario e' largo e la soglia sta in mezzo.
 FUSTELLA_KEEP = float(os.environ.get("PACK3D_FUSTELLA_KEEP", "0.25"))
@@ -706,7 +706,7 @@ def _fasce_del_corpo(d):
     """Le fasce della fasciatura, lette sulla colonna del corpo.
 
     Le `ys` del foglio sono l'unione di TUTTE le cordonature, e ci finisce
-    anche quello che non piega il corpo. Sul Kinder Pingui T6 una linea a 27 mm
+    anche quello che non piega il corpo. Sul T6 aperto una linea a 27 mm
     dal fondo - dove le alette laterali cambiano profilo - spezzava la faccia
     da 125 in 98 + 27, e il fronte spariva dalla lettura. Una cordonatura che
     separa due fasce della fasciatura deve attraversare la colonna del corpo:
@@ -738,15 +738,15 @@ def _chiuso(rows, tol=3.0, fianchi=None):
 
     Retro e fronte sono la stessa faccia vista da due parti, e hanno la STESSA
     altezza: se le due fasce piu' alte non l'hanno, questa non e' la lettura
-    giusta. Su un Kinder Pingui T6 il solutore prendeva 40,5 e 125 e ne faceva
+    giusta. Su un T6 aperto il solutore prendeva 40,5 e 125 e ne faceva
     la media, 82,8, che non e' l'altezza di niente.
 
     Quale delle due e' il retro lo dice la fustella: **i fianchi stanno sul
-    retro**. Di solito e' quella in alto, ma il Kinder Cioccolato T8 e'
+    retro**. Di solito e' quella in alto, ma l'astuccio T8 e'
     montato al contrario - CIELO - FRONTE - FONDO - RETRO - colla - e le
     chiusure di testa sono attaccate alla faccia bassa. Leggendolo alla solita
     maniera il bambino finiva sul retro, il fronte era il pannello bianco, il
-    fondo la linguetta della colla e il cielo con "kinder SCHOKOLADE" spariva.
+    fondo la linguetta della colla e il cielo col nome del prodotto spariva.
     `fianchi(i)` dice se la fascia `i` porta i fianchi; se li porta solo la
     faccia bassa, il retro e' lei. Cielo e fondo restano quello che sono per
     il fronte, sopra e sotto di lui: sono loro, non il retro, a dire da che
@@ -781,7 +781,7 @@ def _chiuso(rows, tol=3.0, fianchi=None):
     elif back_i >= 1 and "top" in r:
         # FONDO - RETRO - CIELO - FRONTE: la fasciatura parte dal fondo, e
         # oltre il fronte non c'e' niente. Il fondo e' la fascia prima del
-        # retro, se e' profonda come il cielo: sul Nutella Donut, letto nel
+        # retro, se e' profonda come il cielo: sull'astuccio della ciambella, letto nel
         # verso della grafica, e' la fascia marrone che continua l'onda del
         # retro, e senza questa lettura la faccia sotto restava bianca.
         cielo = rows[r["top"]][2] * PT2MM
@@ -796,8 +796,8 @@ def _aperto(rows, tol=1.5):
 
     Un astuccio non e' obbligato ad avere il retro. Un vassoio non ce l'ha per
     definizione; un pack con finestra ce l'ha a meta', chiuso da due falde che
-    lasciano un'apertura in mezzo da cui si vede il prodotto - il Kinder Pingui
-    T6 e' cosi'. La firma in fustella e' una faccia grande sola, con cielo e
+    lasciano un'apertura in mezzo da cui si vede il prodotto - il T6 aperto
+    e' cosi'. La firma in fustella e' una faccia grande sola, con cielo e
     fondo UGUALI sopra e sotto, e i fianchi agganciati al FRONTE e non al retro
     che non c'e'.
 
@@ -861,8 +861,8 @@ def solve_carton(d: Dieline) -> Dieline:
 
     # Se anche l'altra fascia alta porta i fianchi, quali si vedono non lo
     # dice la fustella: una coppia e' stampata, l'altra sono alette di colla
-    # che finiscono dentro. Sul Nutella Donut i fianchi del retro sono
-    # tratteggiati e quelli del fronte portano "nutella donut": la scelta la
+    # che finiscono dentro. Sull'astuccio della ciambella i fianchi del retro sono
+    # tratteggiati e quelli del fronte portano il nome del prodotto: la scelta la
     # fa la stampa, in `artwork.texture_astuccio`. Qui si preparano tutte e due.
     altra = {"back": ruoli.get("front"), "front": ruoli.get("back")}[d.fianchi_su]
     d.fianchi_alt = {}
@@ -892,7 +892,7 @@ def solve_carton(d: Dieline) -> Dieline:
     else:
         # Su un astuccio aperto i fianchi SONO la profondita', e devono
         # tornare con cielo e fondo. Senza questo controllo ci casca dentro
-        # qualunque flowpack steso: su Colazione la fascia grande e' il nastro,
+        # qualunque flowpack steso: sul wafer da colazione la fascia grande e' il nastro,
         # cielo e fondo sono le due falde da 5 mm uguali, e ne uscirebbe un
         # astuccio profondo cinque millimetri. I fianchi da 7 lo smentiscono.
         if "left" not in P or "right" not in P:

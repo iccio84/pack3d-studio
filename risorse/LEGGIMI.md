@@ -2,10 +2,17 @@
 
 Grafica di riferimento che non viene dall'artwork.
 
-## colata_kinder.png
+## colata.png
 
-La colata di latte Kinder **come deve venire**, fornita dall'utente.
+La colata di latte **come deve venire**, fornita dall'utente.
 2000 x 488 px, RGB.
+
+**L'immagine non sta qui.** E' grafica del cliente, e questo repository e'
+pubblico: sta nel repository privato dei casi, `risorse/colata.png`. Allo
+Space la porta il workflow di pubblicazione, col secret `CASI_TOKEN` (DEPLOY.md,
+*La risorsa della colata*); al parco `prove/parco.py`, che la passa al codice
+con `PACK3D_RISORSE`. Senza, il ripiego si salta: `/api/ping` dice se c'e'
+(`colata`).
 
 E' il **ripiego**, non la prima scelta: quando la colata nel file e' in
 sovrastampa, la si rende in quadricromia con Ghostscript e viene fuori
@@ -17,7 +24,7 @@ file*.
 
 ### Cos'e', misurato
 
-E' un **master**: lo stesso disegno che sta negli artwork Kinder, ma non il
+E' un **master**: lo stesso disegno che sta negli artwork del marchio, ma non il
 ritaglio di un pack. Sovrapponendolo all'onda di un artwork, portato al suo
 passo, le due combaciano cresta per cresta, goccia e bollicina satellite
 comprese.
@@ -25,8 +32,8 @@ comprese.
 Il passo pero' **cambia da pack a pack**, quindi la risorsa non ha una scala
 sua: la scala si ricava file per file dal rapporto fra i due periodi.
 
-    Kinder Pingui T6 BOX   onda da 20,08 mm nell'artwork
-    KP T1 Mandarino        onda da 17,13 mm nell'artwork
+    T6 aperto   onda da 20,08 mm nell'artwork
+    T1 al mandarino        onda da 17,13 mm nell'artwork
     risorsa                onda da 80,0 px
 
 ### Cosa cambia rispetto al nostro reso
@@ -44,7 +51,7 @@ pdfium la rende come un azzurro normale e opaco. Vedi in REGOLE.md
 ### Il limite che ha: la risoluzione
 
 Portata al passo dell'artwork la risorsa sta attorno ai **110 dpi** (109 sul
-KP T1 Mandarino), mentre la texture si costruisce a 300 dpi, di serie, e a 200
+T1 al mandarino), mentre la texture si costruisce a 300 dpi, di serie, e a 200
 in qualita' web. Viene quindi ingrandita di circa 2,7 volte - 1,8 in web.
 
 Su questo disegno si puo' fare, e non e' una scusa: la colata e' fatta di campi

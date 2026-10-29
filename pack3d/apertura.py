@@ -11,14 +11,14 @@ resto lo dice la fustella:
 - la CERNIERA e' la piega su cui finiscono i due capi del contorno dei tagli
   d'apertura. Il contorno parte da una piega, gira attorno alla finestra e
   alla linguetta e torna sulla stessa piega: fra i due capi la finestra resta
-  attaccata. Sul Kinder Choco Fresh T5 e' la piega fra fronte e cielo;
+  attaccata. Sul T5 a strappo e' la piega fra fronte e cielo;
 - il taglio sul lato stampato e quello dal rovescio non coincidono, corrono a
   3 mm l'uno dall'altro, e strappando il cartoncino si SFOGLIA fra i due. La
   scatola tiene lo strato di dentro fino al taglio dal rovescio, la finestra
   lo strato di fuori fino al taglio davanti: attorno al buco resta una
   cornice di cartoncino sfogliato, e la finestra ha la stessa cornice da
   sotto. Il taglio dal rovescio che si ferma poco prima della cerniera (sul
-  Choco Fresh 2 mm) si allunga fino alla piega;
+  T1 al cioccolato fresco 2 mm) si allunga fino alla piega;
 - un taglio vicino che si attacca al contorno con i due capi chiude con lui
   un pezzo a parte: la mezzaluna per il dito, che con la punta della
   linguetta fa una lunetta. E' il pezzo che si spinge dentro per prendere la
@@ -47,7 +47,7 @@ from .dieline import PT2MM
 # scavalcano un bordo.
 PASSO = 0.25
 # Quanto lontano dal contorno puo' stare, in punti, il capo di un taglio che
-# gli si attacca: la mezzaluna del Choco Fresh tocca la linguetta a 0,15 mm.
+# gli si attacca: la mezzaluna del T1 al cioccolato fresco tocca la linguetta a 0,15 mm.
 ATTACCO = 1.5
 # Fin dove si allunga il taglio dal rovescio che si ferma prima della
 # cerniera, in mm.
@@ -60,7 +60,7 @@ GRADI_MAX = 180
 
 # le zone: chi ha cartoncino e fra quali profondita', in frazioni dello
 # spessore (0 la faccia stampata, 1 il rovescio). C e' la striscia fra i due
-# tagli quando il rovescio corre dentro la finestra, come sul Choco Fresh; D
+# tagli quando il rovescio corre dentro la finestra, come sul T1 al cioccolato fresco; D
 # la stessa striscia quando corre fuori, e gli strati si scambiano.
 SCATOLA = {"A": (0.0, 1.0), "C": (0.5, 1.0), "D": (0.0, 0.5)}
 FINESTRA = {"B": (0.0, 1.0), "C": (0.0, 0.5), "D": (0.5, 1.0)}

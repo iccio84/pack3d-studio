@@ -356,7 +356,7 @@ def _rasterizza(tela, P):
 # fa bande chiare e scure lungo le grinze; satinato, un grigio piu' chiaro e
 # uniforme. Tarato perche' il metallo visto di fronte cada sul grigio con cui
 # il DT disegna l'alluminio, e la vernice opaca sopra resti piu' chiara, come
-# la disegna la grafica del Nutella Biscuits.
+# la disegna la grafica del biscotto T3.
 AMBIENTE_BUIO, AMBIENTE_CHIARO, FINESTRA = 0.35, 1.2, 0.6
 RIFLESSO_MEDIO = 0.88
 
