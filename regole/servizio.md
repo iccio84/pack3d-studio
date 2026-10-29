@@ -221,6 +221,15 @@ modelli identici al byte a quelli del parco:
 | T10 al lampone, apertura 60 | 92 s | 16 s |
 | wafer da colazione, saldatura 1 | 48 s | 15 s |
 
+Il parco intero, con la cassa vuota e poi piena: 43 modelli su 43 identici
+al byte tutte e due le volte, letture uguali. Con la cassa vuota 732 s
+invece di 801, perche' tre casi trovano le rese di quello prima: il T10
+aperto da 88 s a 16, il riempimento col T10 da 91 a 24, il riempimento del
+display del biscotto T3 da 41 a 33. Al secondo giro poco di piu', 656 s: le
+rese di tutto il parco sono 1,9 GB, e prima di tornare ai primi casi il tetto
+le ha gia' buttate. Chi ricostruisce lo stesso PDF le trova, ed e' quello
+che conta.
+
 - **La chiave e' il contenuto del file, e tutto quello che decide i pixel.**
   I file temporanei - la pagina unica, la copia coi livelli spenti, quella
   senza le coperture - hanno sempre gli stessi byte, misurato. Nella chiave
