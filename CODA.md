@@ -176,6 +176,14 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 
        python3 prove/parco.py stesi ../pack3d-casi /tmp/caso_<codice> --solo <nome>
 
+   Poi le prove veloci e le letture degli altri casi, qualche minuto in
+   tutto: una lettura cambiata vuol dire che la correzione ha cambiato strada
+   a un altro caso, e va capito prima della PR (REGOLE.md, *Le prove
+   veloci*):
+
+       python3 -m unittest discover -s prove -p "test_*.py"
+       python3 prove/parco.py letture ../pack3d-casi | tail -3
+
    Niente parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
    regola nel file della famiglia in `regole/` - il caso, la causa, la
    regola, con i numeri - leggendo solo le righe intorno (`grep -n`); il

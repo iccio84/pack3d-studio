@@ -231,6 +231,13 @@ davvero, cosi' chi guarda impara che cos'e' che non torna. E sta **dentro i
 200 caratteri** che l'interfaccia mostra: piu' lungo, e veniva tagliato via
 proprio il consiglio finale, cioe' l'unico pezzo che dice cosa fare.
 
+Lo stesso per il cartotecnico: se il solutore astuccio non trova pannelli,
+anche senza fermarsi, si provano le forme che rifiuta (punta, coppa, tubo) e
+poi ci si ferma dicendo «se e' un film, dichiara flowpack»
+(`CARTOTECNICO_SENZA_PANNELLI`). Prima scivolava fino al flowpack, come il
+vassoio. La tabella delle famiglie lo dice riga per riga: il flowpack si prova
+solo senza dichiarazione o dichiarato flowpack (`server.RICONOSCIMENTO`).
+
 Lo stesso vale per i nomi. `SINONIMI_KIND` traduce le etichette con cui la
 tipologia puo' arrivare — `cartotecnico` e `astuccio` per l'astuccio,
 `espositore`, `display` e `tray` per il vassoio — perche' **una dichiarazione
@@ -384,6 +391,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - I tracciati di un PDF si leggono una volta
   - Un lavoro, una cartella e uno stato
   - Il registro delle famiglie
+  - Le prove veloci
 
 **`regole/flowpack.md`** - flowpack
 

@@ -9,6 +9,7 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py esito PRIMA DOPO [--ieri DIR] [--titolo TESTO] [--riassunto FILE]
     python3 prove/parco.py stesi CASI USCITA [--solo a,b]
     python3 prove/parco.py misure CASI USCITA [--solo a,b] [--approva]
+    python3 prove/parco.py letture CASI [--codice DIR] [--solo a,b] [--approva]
     python3 prove/parco.py spazio URL CASI NOME [--uscita DIR] [--attendi MIN]
     python3 prove/parco.py glam URL CASI NOME [--uscita DIR] [--categoria TESTO]
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
@@ -179,11 +180,9 @@ def _avvia(codice, log):
     raise SystemExit("il server non risponde: vedi %s" % log.name)
 
 
-def _costruisci_caso(url, cartella, caso, lettura=None):
-    """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
-    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento. Con
-    `lettura`, un percorso, ci salva la lettura del PDF che la pagina mette
-    accanto al modello (`pack3d.lettura`), se il server l'ha fatta."""
+def _richiesta(url, percorso, cartella, caso):
+    """La richiesta di un caso del parco, come la manda la pagina: i suoi PDF
+    in un corpo solo e le sue opzioni."""
     files = [os.path.join(cartella, "parco", "pdf", f) for f in caso["file"]]
     blocchi = []
     for f in files:
@@ -193,10 +192,18 @@ def _costruisci_caso(url, cartella, caso, lettura=None):
     opts["nomi"] = [quote(os.path.basename(f)) for f in files]
     if len(blocchi) > 1:
         opts["parti"] = [len(b) for b in blocchi]
-    req = urllib.request.Request(
-        url + "/api/build", data=b"".join(blocchi), method="POST",
+    return urllib.request.Request(
+        url + percorso, data=b"".join(blocchi), method="POST",
         headers={"Content-Type": "application/pdf",
                  "X-Pack3d": json.dumps(opts)})
+
+
+def _costruisci_caso(url, cartella, caso, lettura=None):
+    """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
+    la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento. Con
+    `lettura`, un percorso, ci salva la lettura del PDF che la pagina mette
+    accanto al modello (`pack3d.lettura`), se il server l'ha fatta."""
+    req = _richiesta(url, "/api/build", cartella, caso)
     t = time.time()
     try:
         with urllib.request.urlopen(req, timeout=ATTESA_COSTRUZIONE) as r:
@@ -445,6 +452,91 @@ def esito(args):
     else:
         print(testo)
     if rotti or misure:
+        raise SystemExit(1)
+
+
+# le letture approvate, una per caso: nel repository dei casi, accanto al
+# manifesto
+LETTURE = os.path.join("parco", "letture.json")
+
+
+def _leggi_caso(url, cartella, caso):
+    """La lettura di un caso come la chiede la pagina prima di costruire
+    (/api/analyze): il dict, o il testo dell'errore."""
+    try:
+        with urllib.request.urlopen(_richiesta(url, "/api/analyze", cartella, caso),
+                                    timeout=ATTESA_COSTRUZIONE) as r:
+            return json.loads(r.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        return "errore %d: %s" % (e.code, e.read().decode("utf-8", "replace")[:500])
+
+
+def _differenze(a, b):
+    """Le righe che dicono come cambia una lettura: le chiavi, e le righe dei
+    cartellini tolte e aggiunte."""
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return ["    prima: %s" % str(a)[:300], "    dopo:  %s" % str(b)[:300]]
+    righe = []
+    for k in sorted(set(a) | set(b)):
+        if a.get(k) == b.get(k):
+            continue
+        if k == "meta" and isinstance(a.get(k), list) and isinstance(b.get(k), list):
+            righe += ["    - %s" % x for x in a[k] if x not in b[k]]
+            righe += ["    + %s" % x for x in b[k] if x not in a[k]]
+        else:
+            righe.append("    %s: %s -> %s" % (k, str(a.get(k))[:200], str(b.get(k))[:200]))
+    return righe
+
+
+def letture(args):
+    """La lettura di ogni caso del parco - famiglia, misure, cartellini -
+    contro quella approvata, in qualche minuto e senza costruire: dice a
+    quale caso una modifica ha cambiato strada prima del parco intero. Con
+    `--approva` le scrive come approvate. Esce con 1 se una e' cambiata."""
+    from concurrent.futures import ThreadPoolExecutor
+    casi = _casi(args.casi, args.solo)
+    f = os.path.join(args.casi, LETTURE)
+    approvate = {}
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            approvate = json.load(fh)
+    codice = os.path.abspath(args.codice or QUI)
+    t = time.time()
+    with open(os.devnull, "w") as log:
+        p, url = _avvia(codice, log)
+        try:
+            # una per lavoratore: la lettura di un caso non dipende da chi
+            # e' passato prima (`pack3d.stato`)
+            with ThreadPoolExecutor(2) as pool:
+                lette = dict(zip([c["nome"] for c in casi], pool.map(
+                    lambda c: _leggi_caso(url, args.casi, c), casi)))
+        finally:
+            p.terminate()
+            try:
+                p.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                p.kill()
+    cambiate = 0
+    for nome, letta in lette.items():
+        if nome not in approvate:
+            print("%-44s nessuna lettura approvata" % nome[:44])
+            continue
+        if letta == approvate[nome]:
+            print("%-44s uguale" % nome[:44])
+            continue
+        cambiate += 1
+        print("%-44s CAMBIA" % nome[:44])
+        for r in _differenze(approvate[nome], letta):
+            print(r)
+    print("\n%d letture, %d cambiate, in %.0f s" % (len(lette), cambiate, time.time() - t))
+    if args.approva:
+        approvate.update(lette)
+        with open(f, "w", encoding="utf-8") as fh:
+            json.dump(approvate, fh, ensure_ascii=False, indent=1, sort_keys=True)
+            fh.write("\n")
+        print("letture approvate scritte per %d casi in %s: commit e push nel registro"
+              % (len(lette), LETTURE))
+    elif cambiate:
         raise SystemExit(1)
 
 
@@ -1739,6 +1831,16 @@ def main():
     t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                    help="solo questi casi, separati da virgole")
     t.set_defaults(fai=stesi)
+    lt = sub.add_parser("letture", help="la lettura di ogni caso contro quella "
+                                        "approvata, senza costruire")
+    lt.add_argument("casi", help="clone del repository privato dei casi")
+    lt.add_argument("--codice", help="cartella del codice da provare "
+                                     "(di serie questo repository)")
+    lt.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                    help="solo questi casi, separati da virgole")
+    lt.add_argument("--approva", action="store_true",
+                    help="scrive le letture di questi casi come approvate")
+    lt.set_defaults(fai=letture)
     m = sub.add_parser("misure", help="le misure di una costruzione contro quelle "
                                       "approvate (con --approva le scrive)")
     m.add_argument("casi", help="clone del repository privato dei casi")
