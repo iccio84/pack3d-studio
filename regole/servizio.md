@@ -300,8 +300,12 @@ non dice dove. Due prove lo dicono prima:
   famiglia, misure, cartellini, come la chiede la pagina prima di costruire
   - contro quella approvata in `parco/letture.json` del repository dei
   casi, senza costruire. Dice a quale caso una correzione ha cambiato strada,
-  e come. `--approva` le scrive approvate, come le misure: le letture
-  cambiate apposta si approvano nella PR del caso.
+  e come. Su questa macchina da due a sei minuti, secondo il carico (113 s,
+  307 s, 388 s su tre corse uguali). `--approva` le scrive approvate, come
+  le misure: le letture cambiate apposta si approvano nella PR del caso.
 
 Una prova veloce che fallisce si guarda prima del parco: il parco dice lo
-stesso, mezz'ora dopo.
+stesso, mezz'ora dopo. Provate: sul codice di prima della correzione del
+cartotecnico le due prove della dichiarazione falliscono, su questo
+passano; e le 43 letture del parco col codice nuovo sono uguali a quelle
+approvate col codice di prima.
