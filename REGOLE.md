@@ -383,6 +383,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Due processi: i lavoratori
   - I tracciati di un PDF si leggono una volta
   - Un lavoro, una cartella e uno stato
+  - Il registro delle famiglie
 
 **`regole/flowpack.md`** - flowpack
 
