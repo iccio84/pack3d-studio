@@ -263,19 +263,26 @@ def _rgba(pdf, page_no, scala, riq=None):
     Non passa dalla cassa di `render_page`: quella tiene una pagina sola e, se
     gliene chiedi una piu' piccola, te la RIDUCE invece di rifarla. Una ridotta
     e una nativa differiscono su tutto il foglio, e l'impronta del livello
-    diventa la pagina intera.
+    diventa la pagina intera. La resa resta su disco per la prossima
+    costruzione (`rese`).
     """
-    import pypdfium2 as pdfium
-    page = pdfium.PdfDocument(pdf)[page_no]
-    page.set_cropbox(*page.get_mediabox())
-    mx0, my0, mx1, my1 = page.get_mediabox()
-    W, H = mx1 - mx0, my1 - my0
-    opz = {}
-    if riq is not None:
-        x0, x1, y0, y1 = riq
-        opz["crop"] = (x0, H - y1, W - x1, y0)
-    im = page.render(scale=scala, fill_color=(255, 255, 255, 0), **opz).to_pil()
-    return np.asarray(im.convert("RGBA"))
+    from . import rese
+
+    def fai():
+        import pypdfium2 as pdfium
+        page = pdfium.PdfDocument(pdf)[page_no]
+        page.set_cropbox(*page.get_mediabox())
+        mx0, my0, mx1, my1 = page.get_mediabox()
+        W, H = mx1 - mx0, my1 - my0
+        opz = {}
+        if riq is not None:
+            x0, x1, y0, y1 = riq
+            opz["crop"] = (x0, H - y1, W - x1, y0)
+        im = page.render(scale=scala, fill_color=(255, 255, 255, 0), **opz).to_pil()
+        return np.asarray(im.convert("RGBA")), None
+
+    riquadro = None if riq is None else tuple(float(v) for v in riq)
+    return rese.tieni(rese.chiave("colata.rgba", pdf, page_no, scala, riquadro), fai)[0]
 
 
 def _su_bianco(a):

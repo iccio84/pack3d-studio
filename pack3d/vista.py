@@ -445,19 +445,26 @@ def pagina(pdf_path, lato=1400, misure=False):
 
     Con `misure=True` torna anche (larghezza, altezza) del foglio in mm.
     Usa pdfium: va chiamata dentro il posto di costruzione, come ogni altra
-    rasterizzazione (pdfium non e' thread-safe, vedi server.MAX_JOBS).
+    rasterizzazione (pdfium non e' thread-safe, vedi server.MAX_JOBS). La resa
+    resta su disco per la prossima costruzione dello stesso file (`rese`).
     """
-    import pypdfium2 as pdfium
+    from . import rese
 
-    doc = pdfium.PdfDocument(pdf_path)
-    try:
-        page = doc[0]
-        page.set_cropbox(*page.get_mediabox())
-        w, h = page.get_size()
-        scala = lato / max(w, h, 1.0)
-        im = page.render(scale=scala).to_pil().convert("RGB")
-    finally:
-        doc.close()
+    def fai():
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf_path)
+        try:
+            page = doc[0]
+            page.set_cropbox(*page.get_mediabox())
+            w, h = page.get_size()
+            scala = lato / max(w, h, 1.0)
+            im = page.render(scale=scala).to_pil().convert("RGB")
+        finally:
+            doc.close()
+        return np.asarray(im), [w, h]
+
+    a, (w, h) = rese.tieni(rese.chiave("vista.pagina", pdf_path, lato), fai)
+    im = Image.fromarray(a)
     return (im, (w * 25.4 / 72.0, h * 25.4 / 72.0)) if misure else im
 
 

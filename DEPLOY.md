@@ -58,6 +58,7 @@ obbligatoria: senza, il servizio costruisce lo stesso.
 | `PACK3D_LAVORO_MAX` | Variables | secondi, di serie `1200` | oltre, un lavoro si ferma e il suo lavoratore riparte |
 | `PACK3D_CACHE` | Variables | una cartella, di serie `pack3d-cache` nella cartella temporanea | dove si tengono i tratti dei PDF gia' letti, per tutti i lavoratori (`dieline.tratti`); `0` per tenerli solo in memoria |
 | `PACK3D_CACHE_MB` | Variables | di serie `256` | quanto puo' pesare quella cartella; oltre, si buttano i piu' vecchi |
+| `PACK3D_RESE_MB` | Variables | di serie `2048` | quanto possono pesare le rese di pdfium tenute in `rese/` sotto quella cartella, per ricostruire lo stesso PDF con un'altra opzione senza rifarle (`pack3d/rese.py`); oltre, si buttano le meno usate. Con `PACK3D_CACHE=0` sono spente anche loro |
 | `ANTHROPIC_API_KEY` | Secrets | la chiave | il **controllo dell'AI** su ogni costruzione, il rigonfiamento "Scegli tu", e `/api/analyze-ai`. Senza, si costruisce come prima e un cartellino dice che il controllo e' spento |
 | `PACK3D_MODEL` | Variables | il modello di Claude | quello dell'agente e del controllo; senza, quello scritto in `agent.py` |
 | `PACK3D_MODEL_CONTROLLO` | Variables | un modello di Claude | solo se il controllo deve usare un modello diverso dall'agente |

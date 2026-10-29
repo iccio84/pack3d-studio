@@ -981,20 +981,29 @@ def sovrastampa(pdf, page_no=0):
     giu', quelle con colori di processo rese a moltiplica - la colata, che
     `colata` allora non ripara piu'. Vedi *la sovrastampa delle immagini*.
     """
+    from . import rese
     k = _chiave(pdf)
     chiave = k + (page_no,) if k else None
     if chiave is not None and chiave in _SCELTE:
         return _SCELTE[chiave]
-    conto = dict(tinta=0, processo=0, coperte=0, spaiate=False,
-                 senza_gs=False, riquadri=[])
-    indici = set()
-    disegni = sovrastampe(pdf, page_no)
-    if disegni:
-        try:
-            indici = _scegli(pdf, page_no, disegni, conto)
-        except Exception:
-            indici = set()
-    esito = (frozenset(indici), conto)
+
+    def fai():
+        # quattro rese e le lastre di Ghostscript: su disco, per la prossima
+        # costruzione dello stesso file (`rese`)
+        conto = dict(tinta=0, processo=0, coperte=0, spaiate=False,
+                     senza_gs=False, riquadri=[])
+        indici = set()
+        disegni = sovrastampe(pdf, page_no)
+        if disegni:
+            try:
+                indici = _scegli(pdf, page_no, disegni, conto)
+            except Exception:
+                indici = set()
+        conto["riquadri"] = [[float(v) for v in r] for r in conto["riquadri"]]
+        return None, {"indici": sorted(indici), "conto": conto}
+
+    _a, dati = rese.tieni(rese.chiave("strati.sovrastampa", pdf, page_no), fai)
+    esito = (frozenset(dati["indici"]), dati["conto"])
     if chiave is not None:
         while len(_SCELTE) >= 8:
             _SCELTE.pop(next(iter(_SCELTE)))
@@ -1138,7 +1147,43 @@ def rendi(pdf, page_no=0, scala=1.0, livello=GRAFICA, riquadro=None,
     stesso livello anche sul file originale. `stampato` e' il riquadro
     dell'artwork, per mandare nel DT i testi che ne stanno fuori: vedi
     `dividi`.
+
+    La resa resta su disco per la prossima costruzione dello stesso file
+    (`rese`), coi suoi CONTI. Nella chiave c'e' tutto quello che sceglie gli
+    oggetti da spegnere oltre al file: i parametri, le aree riservate e i
+    segni scelti dall'AI (`spegnendo`).
     """
+    import time
+
+    import numpy as np
+    from PIL import Image
+
+    from . import rese
+
+    def piatto(v):
+        return None if v is None else tuple(float(x) for x in v)
+
+    k = rese.chiave("strati.rendi", pdf, page_no, float(scala), livello,
+                    piatto(riquadro), bool(trasparente),
+                    None if nomi_tecnici is None else tuple(sorted(nomi_tecnici)),
+                    piatto(stampato), tuple(piatto(r) for r in riservate(pdf)),
+                    tuple(piatto(r) for r in _SPENTI))
+    v = rese.leggi(k)
+    if v is not None:
+        a, conti = v
+        CONTI.clear()
+        CONTI.update(conti)
+        return Image.fromarray(a)
+    t = time.time()
+    im = _rendi(pdf, page_no, scala, livello, riquadro, trasparente, nomi_tecnici,
+                stampato)
+    if time.time() - t >= rese.SOGLIA_S:
+        rese.scrivi(k, np.asarray(im), dict(CONTI))
+    return im
+
+
+def _rendi(pdf, page_no, scala, livello, riquadro, trasparente, nomi_tecnici,
+           stampato):
     import pypdfium2 as pdfium
     import pypdfium2.raw as raw
     nomi = set(tecnici(pdf, page_no) if nomi_tecnici is None else nomi_tecnici)
