@@ -243,6 +243,10 @@ def _costruisci_caso(url, cartella, caso, lettura=None):
     except urllib.error.HTTPError as e:
         testo = e.read().decode("utf-8", "replace")
         return e.code, None, [testo[:1000]], time.time() - t, None
+    except urllib.error.URLError as e:
+        # il server ha chiuso la connessione (un 413 a corpo non letto): e'
+        # l'esito di questo caso, non la fine del parco
+        return 0, None, ["connessione caduta: %s" % e.reason], time.time() - t, None
 
 
 def _verdetto(url, gettone):
@@ -1888,36 +1892,90 @@ def _correlazione(P, t):
 
 
 def _pagina_variata(sorgente, destinazione, variante):
-    """Una copia del PDF con la pagina girata nel contenuto (`giro90`,
-    `giro180`, `giro270`: gradi antiorari, cotti come li cuoce
-    `artwork.pagina_girata`, non con /Rotate), in scala (`scala1.03`) o con
-    una miniatura della pagina accanto (`miniatura`).
+    """Una copia del PDF variata come la manderebbe un altro cliente. Le
+    varianti si sommano con `+` (`appiattito+giro90`), nell'ordine scritto:
+
+    - `giro90`, `giro180`, `giro270`: la pagina girata, gradi antiorari,
+      cotti nel contenuto come li cuoce `artwork.pagina_girata`;
+    - `rotate`: la pagina che si vede come l'originale, ma salvata girata
+      con /Rotate 90 (il contenuto girato all'indietro);
+    - `scala1.03`: il disegno in scala;
+    - `spostato`: il disegno spostato su una tavola piu' grande;
+    - `miniatura`: una copia della pagina a un quinto, accanto, come le
+      miniature dei cartigli;
+    - `copertina`: una pagina in piu' davanti, senza disegno;
+    - `appiattito`: ripassato da Ghostscript con le scritte in tracciati,
+      come un PDF di stampa appiattito - senza testo vivo e senza livelli.
 
     Il documento si clona intero: i livelli che la pulizia spegne per nome
     devono restare gli stessi oggetti a cui punta il contenuto. Copiati a
     parte, il livello tecnico del T10 al lampone non si spegneva piu', e le
     sue quote entravano nella fustella."""
+    import tempfile
+    passi = variante.split("+")
+    corrente = sorgente
+    for k, passo in enumerate(passi):
+        if k + 1 == len(passi):
+            uscita = destinazione
+        else:
+            fd, uscita = tempfile.mkstemp(suffix=".pdf", dir=os.path.dirname(destinazione))
+            os.close(fd)
+        _un_passo(corrente, uscita, passo)
+        if corrente != sorgente:
+            os.remove(corrente)
+        corrente = uscita
+
+
+def _un_passo(sorgente, destinazione, variante):
+    """Una variante sola di `_pagina_variata`."""
     from pypdf import PdfReader, PdfWriter, Transformation
-    from pypdf.generic import RectangleObject
+    from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject,
+                               RectangleObject)
+    if variante == "appiattito":
+        subprocess.run(["gs", "-q", "-o", destinazione, "-sDEVICE=pdfwrite",
+                        "-dNoOutputFonts", sorgente], check=True, timeout=900,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return
     w = PdfWriter(clone_from=sorgente)
+    if variante == "copertina":
+        W, H = (float(v) for v in w.pages[0].mediabox[2:])
+        p = w.insert_blank_page(W, H, index=0)
+        testo = DecodedStreamObject()
+        testo.set_data(b"0 0 0 RG 2 w 40 40 %.1f %.1f re S BT /F1 36 Tf 80 %.1f Td "
+                       b"(SCHEDA TECNICA - copertina) Tj ET\n" % (W - 80, H - 80, H - 140))
+        p[NameObject("/Contents")] = w._add_object(testo)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                                 NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        p[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+            {NameObject("/F1"): w._add_object(font)})})
+        with open(destinazione, "wb") as fh:
+            w.write(fh)
+        return
     for i, p in enumerate(w.pages):
         mb = p.mediabox
         x0, y0 = float(mb.left), float(mb.bottom)
         W, H = float(mb.width), float(mb.height)
         t = Transformation().translate(-x0, -y0)
-        if variante.startswith("giro"):
-            g = int(variante[4:])
+        girata = None
+        if variante.startswith("giro") or variante == "rotate":
+            g = 90 if variante == "rotate" else int(variante[4:])
             t = t.rotate(g).translate(*{90: (H, 0), 180: (W, H), 270: (0, W)}[g])
             if g != 180:
                 W, H = H, W
+            if variante == "rotate":
+                # chi lo apre lo vede girato indietro di un quarto: com'era
+                girata = 90
         elif variante.startswith("scala"):
             s = float(variante[5:])
             t = t.scale(s, s)
             W, H = W * s, H * s
+        elif variante == "spostato":
+            t = t.translate(150, 80)
+            W, H = W + 200, H + 120
         elif variante == "miniatura":
             # la tavola piu' larga, e a destra una copia della pagina a un
-            # quinto, come le miniature dei cartigli; nel telaio della
-            # pagina, che `t` dopo porta all'origine
+            # quinto; nel telaio della pagina, che `t` dopo porta all'origine
             p.merge_transformed_page(PdfReader(sorgente).pages[i], Transformation().translate(
                 -x0, -y0).scale(0.2, 0.2).translate(W * 1.05 + x0, H * 0.05 + y0))
             W = W * 1.3
@@ -1928,24 +1986,30 @@ def _pagina_variata(sorgente, destinazione, variante):
             if k in p:
                 del p[k]
         p.mediabox = RectangleObject([0, 0, W, H])
+        if girata:
+            p.rotate(girata)
+    # la miniatura ripete le immagini della pagina: una volta sola, o il file
+    # raddoppia e passa il limite del server
+    w.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
     with open(destinazione, "wb") as fh:
         w.write(fh)
 
 
 def varianti(args):
-    """La tolleranza del codice, misurata: ogni caso del parco di una
-    famiglia (un PDF solo, misure approvate) con la pagina girata o in scala,
-    costruito, contro l'originale costruito col codice di adesso - misure in
-    scala e viste. I PDF variati stanno in USCITA, mai nel repository. Esce
-    con 1 se una variante da' un modello diverso."""
+    """La tolleranza del codice, misurata: ogni caso del parco delle famiglie
+    chieste (con le misure approvate) con le pagine variate - tutti i PDF del
+    caso allo stesso modo; l'immagine del prodotto di un incarto resta
+    com'e' - costruito, contro l'originale costruito col codice di adesso:
+    misure in scala e viste. I PDF variati stanno in USCITA, mai nel
+    repository. Esce con 1 se una variante da' un modello diverso."""
     import shutil
     import numpy as np
     from PIL import Image
-    tutte = [c for c in _casi(args.casi, args.solo)
-             if (c.get("opzioni") or {}).get("kind") == args.famiglia
-             and len(c["file"]) == 1 and c.get("misure")]
+    famiglie = set(args.famiglia.split(","))
+    tutte = [c for c in _casi(args.casi, args.solo) if c.get("misure") and (
+        "tutte" in famiglie or ((c.get("opzioni") or {}).get("kind") or "senza") in famiglie)]
     if not tutte:
-        raise SystemExit("nessun caso %s con un PDF solo e le misure approvate" % args.famiglia)
+        raise SystemExit("nessun caso %s con le misure approvate" % args.famiglia)
     finto = os.path.join(args.uscita, "casi")
     os.makedirs(os.path.join(finto, "parco", "pdf"), exist_ok=True)
     risorse = os.path.join(args.casi, "risorse")
@@ -1954,16 +2018,24 @@ def varianti(args):
     nuovi = []
     for c in tutte:
         for v in args.varianti:
-            f = "%s__%s.pdf" % (os.path.splitext(c["file"][0])[0], v)
-            _pagina_variata(os.path.join(args.casi, "parco", "pdf", c["file"][0]),
-                            os.path.join(finto, "parco", "pdf", f), v)
-            nuovi.append(dict(nome="%s__%s" % (c["nome"], v), file=[f],
+            file = []
+            for f in c["file"]:
+                sorgente = os.path.join(args.casi, "parco", "pdf", f)
+                if not f.lower().endswith(".pdf"):
+                    # l'immagine del prodotto: la pagina la manda per nome
+                    if not os.path.exists(os.path.join(finto, "parco", "pdf", f)):
+                        shutil.copyfile(sorgente, os.path.join(finto, "parco", "pdf", f))
+                    file.append(f)
+                    continue
+                file.append("%s__%s.pdf" % (os.path.splitext(f)[0], v))
+                _pagina_variata(sorgente, os.path.join(finto, "parco", "pdf", file[-1]), v)
+            nuovi.append(dict(nome="%s__%s" % (c["nome"], v), file=file,
                               opzioni=c.get("opzioni"), originale=c, variante=v))
     with open(os.path.join(finto, "parco", "parco.json"), "w", encoding="utf-8") as fh:
         json.dump({"casi": [{k: x[k] for k in ("nome", "file", "opzioni")} for x in nuovi]},
                   fh, ensure_ascii=False, indent=1)
     originali, variate = os.path.join(args.uscita, "originali"), os.path.join(args.uscita, "varianti")
-    print("%d casi %s, %d varianti: costruisco" % (len(tutte), args.famiglia, len(nuovi)))
+    print("%d casi (%s), %d varianti: costruisco" % (len(tutte), args.famiglia, len(nuovi)))
     sys.stdout.flush()
     from contextlib import redirect_stdout
     import io
@@ -1974,7 +2046,10 @@ def varianti(args):
     diverse, conto = 0, {}
     for x in nuovi:
         c, v = x["originale"], x["variante"]
-        s = float(v[5:]) if v.startswith("scala") else 1.0
+        s = 1.0
+        for passo in v.split("+"):
+            if passo.startswith("scala"):
+                s *= float(passo[5:])
         with open(os.path.join(variate, x["nome"] + ".json"), encoding="utf-8") as fh:
             e = json.load(fh)
         motivo = None
@@ -2136,11 +2211,14 @@ def main():
     va.add_argument("uscita", help="dove mettere i PDF variati e le costruzioni "
                                    "(fuori dal repository)")
     va.add_argument("--famiglia", default="flowpack",
-                    help="il `kind` dei casi da variare (di serie flowpack)")
+                    help="i `kind` dei casi da variare, separati da virgole "
+                         "(di serie flowpack; `senza` quelli senza kind, "
+                         "`tutte` tutti)")
     va.add_argument("--varianti", default=["giro90", "giro180", "giro270", "scala1.03"],
                     type=lambda s: [x for x in s.split(",") if x],
-                    help="giroN (N = 90, 180, 270), scalaS e miniatura, separate "
-                         "da virgole")
+                    help="giroN (N = 90, 180, 270), rotate, scalaS, spostato, "
+                         "miniatura, copertina, appiattito, separate da virgole; "
+                         "si sommano con + (appiattito+giro90)")
     va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                     help="solo questi casi, separati da virgole")
     va.add_argument("--tieni", action="store_true",

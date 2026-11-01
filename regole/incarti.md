@@ -17,6 +17,18 @@ risolve male - un tubo gonfio con le pinne seghettate al posto delle testate
 non scatta mai, in qualche decimo di secondo). La pagina non chiede denti,
 rigonfiamento e pinne: costruisce subito.
 
+**Il foglio si legge dritto** (`incarto.sulla_tavola`): il passo in
+orizzontale e la scritta della faccia con la testa in su. Se le cinque
+fasce non si trovano in orizzontale si prova la pagina girata di un quarto;
+e capovolta - le fasce sono simmetriche e si riconosce lo stesso - si gira
+di mezzo giro se il testo vivo della faccia, o senza quello il testo della
+tavola fuori dal foglio, si legge a 180 gradi: la stessa regola del verso
+del flowpack. Prima la barretta incartata T1 girata di un quarto non si
+riconosceva, e capovolta usciva con la scritta a testa in giu'
+(`prove/parco.py varianti`, 1 novembre 2026). Il quarto di giro si prova
+solo sull'incarto dichiarato: quello non dichiarato si cerca su ogni
+flowpack, che non paga una lettura in piu'.
+
 Dal 29 ottobre 2026 la barretta incartata T1 e' nel parco
 (`barretta_incartata_t1`), col suo PDF e l'immagine del prodotto, chiusa a
 pieghe: gli incarti erano l'unica famiglia senza un caso, e nessuna
@@ -152,8 +164,6 @@ PDF, chiede **l'immagine del prodotto da incartare**.
 - Sul fondo il DT segna due pieghe diagonali per testata, dagli spigoli del
   fondo verso il mezzo: la carta li' e' piegata su se stessa. Il modello ha
   il fondo liscio.
-- Il foglio deve stare dritto sulla tavola, il passo in orizzontale; e la
-  scritta della faccia si legge con la testa verso la fascia di sopra.
 - L'incarto **avvolto** (l'ovetto) non si costruisce: va in coda.
 - L'immagine del prodotto non entra ancora nella misura del modello.
 - Gli incarti parzialmente scartati nella pagina.

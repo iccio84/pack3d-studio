@@ -317,6 +317,11 @@ letto ... il verso va controllato sul modello". Leggere il verso dalle
 lettere disegnate - la linea di base allineata, le aste che sporgono - e' la
 strada per quei file; con le poche lettere di un marchio non e' affidabile,
 e un verso sbagliato con sicurezza e' peggio di uno dichiarato non letto.
+Misurato il 1 novembre 2026 col riconoscimento del verso di Tesseract (OSD,
+senza AI) sul fronte dei 18 flowpack e astucci del parco il cui verso e'
+noto dal testo vivo, girato nei quattro versi: risponde 27 volte su 72 e
+indovina 7, come a caso, e con fiducia almeno 3 nessuna. I marchi
+stilizzati non li legge: non si usa.
 
 Provato girando la pagina dei file del parco di 90, 180 e 270 gradi e
 costruendo ogni copia, cinque viste per modello contro quelle dell'originale:

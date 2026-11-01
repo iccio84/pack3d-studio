@@ -332,6 +332,48 @@ def _sormonto(per_stile, x0, x1, y0, y1, fasce):
     return 0.8 * min(fasce[0], fasce[4]), False, fasce[0] >= fasce[4]
 
 
+def sulla_tavola(pdf, page_no=0, quarto=True):
+    """`(pdf, incarto, giro)`: l'incarto letto sul foglio dritto, il passo in
+    orizzontale e la scritta con la testa in su; `giro` i gradi orari di cui
+    si e' girata la pagina (`artwork.pagina_girata`). `(pdf, None, 0)` se
+    non e' un incarto in nessun verso.
+
+    `riconosci` cerca le cinque fasce in orizzontale: col foglio girato di un
+    quarto non le trova. E le fasce sono simmetriche, quindi capovolto si
+    riconosce, ma la scritta della faccia usciva a testa in giu'. Il verso lo
+    da' il testo vivo della faccia, come al flowpack il fronte; se la faccia
+    non ne ha, quello della tavola fuori dal foglio (vedi
+    `famiglie.flowpack.flowpack_sulla_grafica`).
+
+    Con `quarto` falso il foglio girato di un quarto non si prova: l'incarto
+    non dichiarato si cerca su ogni flowpack, che non deve pagare una
+    lettura in piu'."""
+    from . import artwork, tracciati
+    letto, p, giro = pdf, riconosci(pdf, page_no), 0
+    if p is None:
+        if not quarto:
+            return pdf, None, 0
+        letto = artwork.pagina_girata(pdf, 90)
+        p, giro = riconosci(letto, page_no), 90
+        if p is None:
+            return pdf, None, 0
+    x0, y0 = p.origine
+    faccia = (x0 / PT2MM, (y0 + p.linee[1]) / PT2MM,
+              (x0 + p.passo) / PT2MM, (y0 + p.linee[2]) / PT2MM)
+    # ogni carattere vota nel primo riquadro che lo contiene: il resto del
+    # foglio non vota
+    v = tracciati.verso_grafica(letto, {
+        "faccia": faccia, "foglio": p.regione,
+        "tavola": (-math.inf, -math.inf, math.inf, math.inf)}, page_no)
+    verso = v.get("faccia", v.get("tavola"))
+    if verso == 180:
+        dritto = artwork.pagina_girata(pdf, (giro + 180) % 360)
+        q = riconosci(dritto, page_no)
+        if q is not None:
+            return dritto, q, (giro + 180) % 360
+    return letto, p, giro
+
+
 def dichiara(p):
     d1, d3, h = p.sezione()
     a, B = p.faccia, p.fondo
