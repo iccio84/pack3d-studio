@@ -301,6 +301,15 @@ non vota. Prima di questa regola, con la pagina girata di 90 gradi, gli 8
 flowpack senza testo vivo uscivano coricati col marchio in verticale, e
 capovolti a 180.
 
+**Sugli astucci la tavola non si chiede.** Misurato lo stesso giorno sui
+cartotecnici del parco: dove il verso della grafica si legge dalle facce, la
+tavola lo contraddice due volte - la vernice ha la grafica a 270 gradi su
+una tavola dritta, il T6_base il disegno tecnico dritto e la grafica
+capovolta. Chi impagina un astuccio lo gira spesso sulla tavola, uno
+steso di flowpack quasi mai. L'astuccio da sette pagine, che non ha testo
+vivo sulle facce, girato di un quarto esce ancora coricato: e' il limite
+qui sotto, e resta dichiarato.
+
 **Il limite che resta: senza testo vivo ne' sul fronte ne' sulla tavola il
 verso non si legge**, e il foglio resta com'e' sulla tavola - il modello
 segue il foglio, come prima - e **lo si dice**: "verso della grafica non

@@ -218,12 +218,31 @@ def _segments(page):
     def style_of(o):
         return (round(o.get("linewidth") or 0, 2), str(o.get("stroking_color")))
 
+    def rettangolo(cv):
+        """Se la curva e' un rettangolo dritto chiuso: quattro lati H/V che
+        tornano al punto di partenza. Un `re` disegnato sotto una matrice
+        girata pdfminer non lo riconosce come rettangolo, e lo da' come
+        curva: sul T10 al lampone girato di mezzo giro le sei cornici
+        dell'artwork, che il foglio dritto scarta qui sotto, entravano nella
+        fustella come quattro tratti ciascuna, e l'astuccio non si
+        risolveva piu'."""
+        pts = [tuple(p) for p in cv.get("pts") or []]
+        if len(pts) == 4:
+            pts.append(pts[0])
+        if len(pts) != 5 or max(abs(u - v) for u, v in zip(pts[0], pts[4])) > 0.5:
+            return False
+        return all(min(abs(a[0] - b[0]), abs(a[1] - b[1])) < 0.5
+                   for a, b in zip(pts, pts[1:]))
+
     for ln in page.lines:
         add(ln["x0"], ln["top"], ln["x1"], ln["bottom"], style_of(ln))
     # i riquadri dell'artwork compaiono come coppia contorno+riempimento sullo
-    # stesso bbox: un tratto di fustella non e' mai anche riempito.
+    # stesso bbox: un tratto di fustella non e' mai anche riempito. Anche
+    # quando i rettangoli arrivano come curve (`rettangolo`).
     filled = [(r["x0"], r["top"], r["x1"], r["bottom"])
               for r in page.rects if r.get("fill")]
+    filled += [(c["x0"], c["top"], c["x1"], c["bottom"])
+               for c in page.curves if c.get("fill") and rettangolo(c)]
 
     def is_artwork_frame(rc):
         b = (rc["x0"], rc["top"], rc["x1"], rc["bottom"])
@@ -237,7 +256,7 @@ def _segments(page):
         add(x0, t, x1, t, st); add(x0, b, x1, b, st)
         add(x0, t, x0, b, st); add(x1, t, x1, b, st)
     for cv in page.curves:
-        if not cv.get("stroke"):
+        if not cv.get("stroke") or (rettangolo(cv) and is_artwork_frame(cv)):
             continue
         st = style_of(cv)
         pts = cv.get("pts") or []
