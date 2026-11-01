@@ -294,6 +294,33 @@ def riconosci(pdf, page_no=0):
     return p
 
 
+def sulla_tavola(pdf, page_no=0):
+    """`(pdf, punta, giro)`: la scatola a punta letta sul foglio con la cima
+    in alto, `giro` i gradi orari di cui si e' girata la pagina
+    (`artwork.pagina_girata`); `(pdf, None, 0)` se non e' una scatola a
+    punta in nessun verso.
+
+    `riconosci` legge le fasce lungo la colonna del corpo: col foglio girato
+    di un quarto non le trova. E capovolto la trova, ma la grafica la prende
+    dal foglio com'e': la cima tornava in alto, la destra no, e la scatola
+    usciva specchiata. Si costruisce sempre dal foglio dritto, come lo stesso
+    steso comunque stia sulla tavola."""
+    from . import artwork
+    letto, p, giro = pdf, riconosci(pdf, page_no), 0
+    if p is None:
+        letto = artwork.pagina_girata(pdf, 90)
+        p, giro = riconosci(letto, page_no), 90
+        if p is None:
+            return pdf, None, 0
+    if p.yF0 > p.yG:
+        # la cima in basso: mezzo giro in piu'
+        dritto = artwork.pagina_girata(pdf, (giro + 180) % 360)
+        q = riconosci(dritto, page_no)
+        if q is not None:
+            return dritto, q, (giro + 180) % 360
+    return letto, p, giro
+
+
 def dichiara(p):
     """Le righe che la pagina mostra prima di costruire."""
     return ["scatola a punta: %.1f x %.1f x %.1f mm" % p.dims_mm,

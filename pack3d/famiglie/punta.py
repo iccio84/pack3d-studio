@@ -28,7 +28,7 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
     rovescio."""
     dpi, tmax = risoluzione(quality)
     pdf, n_pagine = artwork.pagina_unica(pdf)
-    p = punta.riconosci(pdf)
+    pdf, p, giro = punta.sulla_tavola(pdf)
     if p is None:
         raise ValueError("scatola a punta: la fustella non si legge come una "
                          "scatola a punta (fronte e retro chiusi in cima, "
@@ -53,6 +53,9 @@ def build_punta(pdf, out_glb, quality="hd", lastre_extra=(),
     if lastre:
         avvisi.append("lastre tecniche e coperture tolte per nome: %s"
                       % ", ".join(lastre))
+    if giro:
+        avvisi.append("foglio girato di %d gradi prima di costruire: la scatola "
+                      "a punta si legge con la cima in alto" % giro)
     m = 1.0 / PT2MM
     x0, y0, x1, y1 = p.regione
     x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m

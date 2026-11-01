@@ -34,15 +34,16 @@ os.environ.setdefault("PACK3D_LAVORATORI", "0")
 from pack3d import dieline as dl, lavoratori, misure, stato  # noqa: E402
 
 
-def _pdf(cartella, tratti=(), larghezza=600.0, altezza=600.0):
+def _pdf(cartella, tratti=(), larghezza=600.0, altezza=600.0, altro=b""):
     """Un PDF di una pagina con questi tratti a penna: [(x0, y0, x1, y1)] in
-    punti, con la y dal basso come nel contenuto del PDF."""
+    punti, con la y dal basso come nel contenuto del PDF, e `altro` in coda
+    al contenuto."""
     import pypdf
     from pypdf.generic import NameObject, StreamObject
     w = pypdf.PdfWriter()
     pagina = w.add_blank_page(larghezza, altezza)
     contenuto = b"0.5 w 0 0 0 RG\n" + b"".join(
-        b"%.2f %.2f m %.2f %.2f l S\n" % t for t in tratti)
+        b"%.2f %.2f m %.2f %.2f l S\n" % t for t in tratti) + altro
     flusso = StreamObject()
     flusso.set_data(contenuto)
     pagina[NameObject("/Contents")] = w._add_object(flusso)
@@ -91,6 +92,22 @@ class LetturaDellaFustella(unittest.TestCase):
         self.assertEqual(primi, diretti)
         self.assertEqual(dal_disco, diretti)
         self.assertTrue(all(isinstance(s[4], tuple) for s in dal_disco))
+
+    def test_la_cornice_girata_non_entra_nella_fustella(self):
+        # una cornice dell'artwork - contorno e riempimento sullo stesso
+        # riquadro - disegnata sotto una matrice capovolta, coi suoi decimi
+        # di miliardesimo: pdfminer vuole i lati uguali al bit, la da' come
+        # curva, e non deve diventare quattro tratti
+        cornice = (b"q -1 0.00000000000001 -0.00000000000001 -1 600 600 cm "
+                   b"1 w 0 0 0 1 K 1 0 0 0 k "
+                   b"120 120 80 40 re f 120 120 80 40 re S Q\n")
+        import pdfplumber
+        with pdfplumber.open(_pdf(self.cartella, GRIGLIA, altro=cornice)) as doc:
+            pagina = doc.pages[0]
+            self.assertTrue(pagina.curves, "pdfminer ha cambiato idea: la "
+                            "cornice girata non e' piu' una curva")
+            stili = {s[4] for s in dl._segments(pagina)}
+        self.assertEqual(stili, {(0.5, "(0.0, 0.0, 0.0)")})
 
     def test_la_chiave_e_il_contenuto_non_il_nome(self):
         pdf = _pdf(self.cartella, GRIGLIA)

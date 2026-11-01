@@ -1890,15 +1890,21 @@ def _correlazione(P, t):
 def _pagina_variata(sorgente, destinazione, variante):
     """Una copia del PDF con la pagina girata nel contenuto (`giro90`,
     `giro180`, `giro270`: gradi antiorari, cotti come li cuoce
-    `artwork.pagina_girata`, non con /Rotate) o in scala (`scala1.03`)."""
+    `artwork.pagina_girata`, non con /Rotate), in scala (`scala1.03`) o con
+    una miniatura della pagina accanto (`miniatura`).
+
+    Il documento si clona intero: i livelli che la pulizia spegne per nome
+    devono restare gli stessi oggetti a cui punta il contenuto. Copiati a
+    parte, il livello tecnico del T10 al lampone non si spegneva piu', e le
+    sue quote entravano nella fustella."""
     from pypdf import PdfReader, PdfWriter, Transformation
-    from pypdf.generic import NameObject, RectangleObject
-    r = PdfReader(sorgente)
-    w = PdfWriter()
-    for p in r.pages:
+    from pypdf.generic import RectangleObject
+    w = PdfWriter(clone_from=sorgente)
+    for i, p in enumerate(w.pages):
         mb = p.mediabox
+        x0, y0 = float(mb.left), float(mb.bottom)
         W, H = float(mb.width), float(mb.height)
-        t = Transformation().translate(-float(mb.left), -float(mb.bottom))
+        t = Transformation().translate(-x0, -y0)
         if variante.startswith("giro"):
             g = int(variante[4:])
             t = t.rotate(g).translate(*{90: (H, 0), 180: (W, H), 270: (0, W)}[g])
@@ -1908,6 +1914,13 @@ def _pagina_variata(sorgente, destinazione, variante):
             s = float(variante[5:])
             t = t.scale(s, s)
             W, H = W * s, H * s
+        elif variante == "miniatura":
+            # la tavola piu' larga, e a destra una copia della pagina a un
+            # quinto, come le miniature dei cartigli; nel telaio della
+            # pagina, che `t` dopo porta all'origine
+            p.merge_transformed_page(PdfReader(sorgente).pages[i], Transformation().translate(
+                -x0, -y0).scale(0.2, 0.2).translate(W * 1.05 + x0, H * 0.05 + y0))
+            W = W * 1.3
         else:
             raise SystemExit("variante sconosciuta: %s" % variante)
         p.add_transformation(t)
@@ -1915,10 +1928,6 @@ def _pagina_variata(sorgente, destinazione, variante):
             if k in p:
                 del p[k]
         p.mediabox = RectangleObject([0, 0, W, H])
-        w.add_page(p)
-    # i livelli: la pulizia li legge per nome
-    if r.trailer["/Root"].get("/OCProperties") is not None:
-        w._root_object[NameObject("/OCProperties")] = r.trailer["/Root"]["/OCProperties"].clone(w)
     with open(destinazione, "wb") as fh:
         w.write(fh)
 
@@ -2130,7 +2139,8 @@ def main():
                     help="il `kind` dei casi da variare (di serie flowpack)")
     va.add_argument("--varianti", default=["giro90", "giro180", "giro270", "scala1.03"],
                     type=lambda s: [x for x in s.split(",") if x],
-                    help="giroN (N = 90, 180, 270) e scalaS, separate da virgole")
+                    help="giroN (N = 90, 180, 270), scalaS e miniatura, separate "
+                         "da virgole")
     va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                     help="solo questi casi, separati da virgole")
     va.add_argument("--tieni", action="store_true",

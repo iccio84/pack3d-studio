@@ -46,6 +46,18 @@ possono essere scambiati. Deve tornare tutto:
   fianco contro 67,6 di falda: le due gambe della V. E' questo che distingue
   una scatola a punta da una scatola con una piega qualunque sui fianchi.
 
+### Il foglio con la cima in alto
+
+La scatola a punta si costruisce sempre dal foglio con la cima in alto
+(`punta.sulla_tavola`): se le fasce non si trovano lungo la colonna del
+corpo, si prova la pagina girata di un quarto, e se la cima e' in basso si
+gira di mezzo giro in piu' (`artwork.pagina_girata`). Prima la pagina
+girata di 90 o 270 gradi non si riconosceva (e il PDF si fermava come un
+cartotecnico che non si legge), e capovolta si riconosceva ma la grafica
+si prendeva dal foglio com'era: la cima tornava in alto, la destra no, e
+la scatola usciva specchiata. Trovato con `prove/parco.py varianti
+--famiglia carton` il 1 novembre 2026.
+
 ### Il solido
 
 Dritta per l'altezza dal piede alla piega (102 mm); sopra, le falde

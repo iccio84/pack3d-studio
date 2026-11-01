@@ -358,14 +358,14 @@ def _prova_punta(l):
     if l.errore_astuccio is None:
         return None
     try:
-        pu = punta.riconosci(l.pdf)
+        letto, pu, _giro = punta.sulla_tavola(l.pdf)
     except Exception:
         traceback.print_exc()
         pu = None
     if pu is None:
         return None
     meta = punta.dichiara(pu)
-    rgb = avviso_quadricromia(l.pdf, regione=pu.regione)
+    rgb = avviso_quadricromia(letto, regione=pu.regione)
     if rgb:
         meta.insert(0, rgb)
     return dict(kind="punta", title="Scatola a punta", meta=meta)
