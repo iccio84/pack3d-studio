@@ -15,7 +15,10 @@ e' pubblico. Qui c'e' solo lo strumento.
     python3 prove/parco.py caso URL CASI CODICE --stato STATO [--messaggio TESTO]
                                 [--domanda TESTO --opzione TESTO ... [--anteprima NOME]]
     python3 prove/parco.py prepara CASI CODICE [--riprendi]
+    python3 prove/parco.py verifica CASI CODICE
+    python3 prove/parco.py varianti CASI USCITA [--famiglia KIND] [--varianti giro90,scala1.03]
     python3 prove/parco.py consegna CASI CODICE --messaggio TESTO --commento TESTO
+                                    [--senza-verifica MOTIVO]
     python3 prove/parco.py approvato CASI CODICE
     python3 prove/parco.py prossimo CASI CODICE
     python3 prove/parco.py versione [--codice DIR]
@@ -92,7 +95,8 @@ risposta a una domanda torna dallo Space, sulla issue del caso
 `versione` stampa l'impronta del codice di DIR, quella che /api/ping
 restituisce.
 
-Il giro di un caso (CODA.md) usa `prepara`, `consegna` e `approvato`, qui
+Il giro di un caso (CODA.md) usa `prepara`, `verifica`, `consegna` e
+`approvato`, qui
 sotto, e costruisce solo quel caso, col codice della settimana. Alla fine
 `prossimo` chiede allo Space di avviare una sessione nuova se in coda c'e'
 un altro caso libero (`consegna` lo chiede da sola):
@@ -492,34 +496,44 @@ def _differenze(a, b):
     return righe
 
 
-def letture(args):
-    """La lettura di ogni caso del parco - famiglia, misure, cartellini -
-    contro quella approvata, in qualche minuto e senza costruire: dice a
-    quale caso una modifica ha cambiato strada prima del parco intero. Con
-    `--approva` le scrive come approvate. Esce con 1 se una e' cambiata."""
+def _letture_approvate(casi):
+    f = os.path.join(casi, LETTURE)
+    if not os.path.exists(f):
+        return {}
+    with open(f, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _leggi_tutti(cartella, casi, codice=None):
+    """{nome: lettura} dei `casi`, con un server solo col codice di `codice`
+    (di serie questo repository)."""
     from concurrent.futures import ThreadPoolExecutor
-    casi = _casi(args.casi, args.solo)
-    f = os.path.join(args.casi, LETTURE)
-    approvate = {}
-    if os.path.exists(f):
-        with open(f, encoding="utf-8") as fh:
-            approvate = json.load(fh)
-    codice = os.path.abspath(args.codice or QUI)
-    t = time.time()
     with open(os.devnull, "w") as log:
-        p, url = _avvia(codice, log, args.casi)
+        p, url = _avvia(os.path.abspath(codice or QUI), log, cartella)
         try:
             # una per lavoratore: la lettura di un caso non dipende da chi
             # e' passato prima (`pack3d.stato`)
             with ThreadPoolExecutor(2) as pool:
-                lette = dict(zip([c["nome"] for c in casi], pool.map(
-                    lambda c: _leggi_caso(url, args.casi, c), casi)))
+                return dict(zip([c["nome"] for c in casi], pool.map(
+                    lambda c: _leggi_caso(url, cartella, c), casi)))
         finally:
             p.terminate()
             try:
                 p.wait(timeout=20)
             except subprocess.TimeoutExpired:
                 p.kill()
+
+
+def letture(args):
+    """La lettura di ogni caso del parco - famiglia, misure, cartellini -
+    contro quella approvata, in qualche minuto e senza costruire: dice a
+    quale caso una modifica ha cambiato strada prima del parco intero. Con
+    `--approva` le scrive come approvate. Esce con 1 se una e' cambiata."""
+    casi = _casi(args.casi, args.solo)
+    approvate = _letture_approvate(args.casi)
+    f = os.path.join(args.casi, LETTURE)
+    t = time.time()
+    lette = _leggi_tutti(args.casi, casi, args.codice)
     cambiate = 0
     for nome, letta in lette.items():
         if nome not in approvate:
@@ -1441,6 +1455,56 @@ def _voci(repo, n, cartella, uscita):
     return voci, foto
 
 
+def _famiglia(lettura, voce):
+    """La famiglia letta di un caso, o quella dichiarata se la lettura non c'e'."""
+    if isinstance(lettura, dict) and lettura.get("kind"):
+        return lettura["kind"]
+    return (voce.get("opzioni") or {}).get("kind")
+
+
+def _simili(casi, voce, famiglia, ingombro, quanti=3):
+    """I casi del parco gia' giusti piu' vicini a questo: della stessa
+    famiglia letta, prima quelli con l'ingombro piu' simile. Il loro
+    `come_deve_venire` dice com'e' venuto giusto un pack come questo."""
+    import math
+    lette = _letture_approvate(casi)
+    mio = sorted(ingombro or [])
+    vicini = []
+    for c in _manifesto(casi)["casi"]:
+        giusto = str(c.get("come_deve_venire") or "")
+        if c["nome"] == voce["nome"] or not giusto or giusto.startswith(SEGNAPOSTO):
+            continue
+        if _famiglia(lette.get(c["nome"]), c) != famiglia:
+            continue
+        suo = sorted((c.get("misure") or {}).get("ingombro") or [])
+        if len(suo) == 3 and len(mio) == 3 and min(suo + mio) > 0:
+            d = sum(abs(math.log(a / b)) for a, b in zip(mio, suo))
+        else:
+            d = float("inf")
+        vicini.append((d, c["nome"], c))
+    return [c for _d, _n, c in sorted(vicini, key=lambda x: x[:2])[:quanti]]
+
+
+def _schede(testo, quante=3):
+    """I titoli delle schede di DIFETTI.md le cui parole stanno in `testo`,
+    prima quelle con piu' parole trovate."""
+    try:
+        with open(os.path.join(QUI, "DIFETTI.md"), encoding="utf-8") as fh:
+            righe = fh.read().splitlines()
+    except OSError:
+        return []
+    schede, titolo = [], None
+    for r in righe:
+        if r.startswith("## "):
+            titolo = r[3:].strip()
+        elif titolo and r.startswith("Parole:"):
+            schede.append((titolo, [p.strip().lower() for p in r[7:].split(",") if p.strip()]))
+    testo = testo.lower()
+    punti = [(sum(1 for p in parole if p in testo), -i, titolo)
+             for i, (titolo, parole) in enumerate(schede)]
+    return [titolo for n, _i, titolo in sorted(punti, reverse=True) if n][:quante]
+
+
 def prepara(args):
     """Prende un caso libero e lo prepara: vedi sopra."""
     from contextlib import redirect_stdout
@@ -1533,6 +1597,22 @@ def prepara(args):
               % (no, "volta" if no == 1 else "volte",
                  ", sempre: e' il secondo no" if no >= 2 else
                  ", se la correzione non e' una sola"))
+    # da dove partire: i casi gia' giusti che gli somigliano e le schede dei
+    # difetti che il verdetto e le voci nominano
+    try:
+        lettura = _leggi_tutti(args.casi, [voce]).get(voce["nome"])
+    except SystemExit:
+        lettura = None
+    famiglia = _famiglia(lettura, voce)
+    simili = _simili(args.casi, voce, famiglia, esito.get("ingombro_mm"))
+    print("famiglia letta: %s; casi simili gia' giusti nel parco: %d" % (famiglia, len(simili)))
+    for c in simili:
+        print("  ~ %s, ingombro %s: %s" % (c["nome"], (c.get("misure") or {}).get("ingombro"),
+                                           " ".join(c["come_deve_venire"].split())[:300]))
+    schede = _schede(" ".join([str(verdetto.get("motivo") or "")]
+                              + [str(d) for d in verdetto.get("difetti") or []] + voci))
+    if schede:
+        print("schede dei difetti da leggere (DIFETTI.md): " + "; ".join(schede))
     if nuova:
         print("da fare: scrivi `come_deve_venire` della voce %s in parco/parco.json" % voce["nome"])
 
@@ -1551,11 +1631,95 @@ def _approva_misure(casi, nome, esito):
         fh.write("\n")
 
 
+def _esito_di_adesso(casi, voce, uscita):
+    """L'esito della costruzione del caso col codice di adesso: quello che
+    c'e' in `uscita`, o lo ricostruisce se e' di un altro codice o non si era
+    costruito."""
+    from contextlib import redirect_stdout
+    import io
+    from pack3d import versione
+    f = os.path.join(uscita, voce["nome"] + ".json")
+    esito = {}
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            esito = json.load(fh)
+    if esito.get("versione") != versione.impronta(QUI) or esito.get("stato") != 200:
+        with redirect_stdout(io.StringIO()):
+            costruisci(argparse.Namespace(casi=casi, uscita=uscita, codice=None,
+                                          solo=[voce["nome"]]))
+        with open(f, encoding="utf-8") as fh:
+            esito = json.load(fh)
+    return esito
+
+
+def verifica_caso(args):
+    """Prima della PR, quello che il rilascio guarderebbe dopo: il caso si
+    costruisce senza difetti, la texture e' lo steso dritto, le prove veloci
+    passano e la lettura degli altri casi del parco non cambia. Stampa anche
+    `come_deve_venire` accanto alle misure del modello, da confrontare. Esce
+    con 1 se qualcosa non va; `consegna` vuole che sia passata col codice
+    che consegna."""
+    from contextlib import redirect_stdout
+    import io
+    from pack3d import verifica as controlli
+    cod = args.codice
+    voce = _voce_del_caso(args.casi, cod)
+    nome = voce["nome"]
+    uscita = args.uscita or "/tmp/caso_" + cod
+    os.makedirs(uscita, exist_ok=True)
+    problemi = []
+    giusto = str(voce.get("come_deve_venire") or "")
+    if not giusto or giusto.startswith(SEGNAPOSTO):
+        problemi.append("`come_deve_venire` della voce %s non e' scritto" % nome)
+    esito = _esito_di_adesso(args.casi, voce, uscita)
+    if esito.get("stato") != 200:
+        problemi.append("il caso non si costruisce (%s): %s" % (
+            esito.get("stato"), str((esito.get("avvisi") or [""])[0])[:300]))
+    for d in controlli.difetti([str(a) for a in esito.get("avvisi") or []]):
+        problemi.append("difetto della costruzione: %s" % d[:300])
+    rumore = io.StringIO()
+    with redirect_stdout(rumore):
+        try:
+            stesi(argparse.Namespace(casi=args.casi, uscita=uscita, solo=[nome]))
+        except SystemExit:
+            problemi.append("la texture non e' lo steso dritto:\n" + rumore.getvalue()[-800:])
+    prove = subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "prove",
+                            "-p", "test_*.py"], cwd=QUI, capture_output=True, text=True)
+    if prove.returncode:
+        problemi.append("le prove veloci non passano:\n" + prove.stderr[-800:])
+    approvate = _letture_approvate(args.casi)
+    lette = _leggi_tutti(args.casi, _casi(args.casi))
+    cambiate = [n for n, l in lette.items() if n != nome and n in approvate
+                and l != approvate[n]]
+    for n in cambiate:
+        problemi.append("la lettura di %s cambia: se e' voluto, approvala con `letture "
+                        "--approva --solo %s` e scrivilo nella PR\n%s"
+                        % (n, n, "\n".join(_differenze(approvate[n], lette[n])[:8])))
+    if nome in approvate and lette.get(nome) != approvate[nome]:
+        print("la lettura del caso cambia rispetto a quella approvata:")
+        print("\n".join(_differenze(approvate[nome], lette.get(nome))[:8]))
+    print("come deve venire: %s" % " ".join(giusto.split())[:500])
+    print("il modello: ingombro %s mm, misure %s" % (esito.get("ingombro_mm"),
+                                                     json.dumps(esito.get("misure"))[:300]))
+    for r in esito.get("misure_cambiate") or []:
+        print("  misura approvata cambiata: %s" % r)
+    print("da guardare accanto al PDF: %s" % os.path.join(uscita, nome + "_viste.png"))
+    with open(os.path.join(uscita, "verifica.json"), "w", encoding="utf-8") as fh:
+        json.dump(dict(versione=esito.get("versione"), ok=not problemi, problemi=problemi,
+                       lettura=lette.get(nome)), fh, ensure_ascii=False, indent=1)
+    if problemi:
+        print("\nVERIFICA NON PASSATA, %d problemi:" % len(problemi))
+        for p in problemi:
+            print("- " + p)
+        raise SystemExit(1)
+    print("verifica passata: %d letture del parco uguali, prove veloci e steso a posto"
+          % (len(lette) - 1))
+
+
 def consegna(args):
     """Il modello corretto a chi ha caricato il caso, da approvare."""
     from contextlib import redirect_stdout
     import io
-    from pack3d import versione
     cod = args.codice
     _aggiorna_registro(args.casi)
     cartella, _verdetto = _caso_in_coda(args.casi, cod)
@@ -1567,22 +1731,21 @@ def consegna(args):
     if issue is None:
         raise SystemExit("nessuna issue aperta per il caso %s" % cod)
     uscita = args.uscita or "/tmp/caso_" + cod
-    f = os.path.join(uscita, voce["nome"] + ".json")
-    esito = {}
-    if os.path.exists(f):
-        with open(f, encoding="utf-8") as fh:
-            esito = json.load(fh)
-    rumore = io.StringIO()
-    if esito.get("versione") != versione.impronta(QUI) or esito.get("stato") != 200:
-        # il modello va costruito col codice che si consegna
-        with redirect_stdout(rumore):
-            costruisci(argparse.Namespace(casi=args.casi, uscita=uscita, codice=None,
-                                          solo=[voce["nome"]]))
-        with open(f, encoding="utf-8") as fh:
-            esito = json.load(fh)
+    esito = _esito_di_adesso(args.casi, voce, uscita)
     if esito.get("stato") != 200:
         raise SystemExit("il caso non si costruisce col codice di adesso (%s): %s"
                          % (esito.get("stato"), str((esito.get("avvisi") or [""])[0])[:300]))
+    try:
+        with open(os.path.join(uscita, "verifica.json"), encoding="utf-8") as fh:
+            prova = json.load(fh)
+    except (OSError, ValueError):
+        prova = {}
+    if args.senza_verifica:
+        args.commento += "\n\nConsegnato senza `verifica`: %s" % args.senza_verifica
+    elif not prova.get("ok") or prova.get("versione") != esito.get("versione"):
+        raise SystemExit("prima `verifica` col codice di adesso, e che passi (CODA.md, "
+                         "*Il giro*, punto 6)")
+    rumore = io.StringIO()
     # le misure del modello consegnato diventano quelle approvate del caso,
     # insieme a `come_deve_venire`: il rilascio le confronta
     if "misure" not in esito:
@@ -1590,7 +1753,16 @@ def consegna(args):
         with open(os.path.join(uscita, voce["nome"] + ".glb"), "rb") as fh:
             esito["misure"], _ = _misura(fh.read(), voce)
     _approva_misure(args.casi, voce["nome"], esito)
-    _commit_registro(args.casi, ["parco/parco.json"], "Caso %s: com'e' giusto" % cod)
+    registro = ["parco/parco.json"]
+    if isinstance(prova.get("lettura"), dict):
+        # e la lettura del PDF, che `letture` confronta coi casi di dopo
+        approvate = _letture_approvate(args.casi)
+        approvate[voce["nome"]] = prova["lettura"]
+        with open(os.path.join(args.casi, LETTURE), "w", encoding="utf-8") as fh:
+            json.dump(approvate, fh, ensure_ascii=False, indent=1, sort_keys=True)
+            fh.write("\n")
+        registro.append(LETTURE)
+    _commit_registro(args.casi, registro, "Caso %s: com'e' giusto" % cod)
     with redirect_stdout(rumore):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
@@ -1713,6 +1885,116 @@ def _correlazione(P, t):
     c[var < 1e-3 * h * w] = -1
     k = np.unravel_index(np.argmax(c), c.shape)
     return float(c[k]), int(k[0]), int(k[1])
+
+
+def _pagina_variata(sorgente, destinazione, variante):
+    """Una copia del PDF con la pagina girata nel contenuto (`giro90`,
+    `giro180`, `giro270`: gradi antiorari, cotti come li cuoce
+    `artwork.pagina_girata`, non con /Rotate) o in scala (`scala1.03`)."""
+    from pypdf import PdfReader, PdfWriter, Transformation
+    from pypdf.generic import NameObject, RectangleObject
+    r = PdfReader(sorgente)
+    w = PdfWriter()
+    for p in r.pages:
+        mb = p.mediabox
+        W, H = float(mb.width), float(mb.height)
+        t = Transformation().translate(-float(mb.left), -float(mb.bottom))
+        if variante.startswith("giro"):
+            g = int(variante[4:])
+            t = t.rotate(g).translate(*{90: (H, 0), 180: (W, H), 270: (0, W)}[g])
+            if g != 180:
+                W, H = H, W
+        elif variante.startswith("scala"):
+            s = float(variante[5:])
+            t = t.scale(s, s)
+            W, H = W * s, H * s
+        else:
+            raise SystemExit("variante sconosciuta: %s" % variante)
+        p.add_transformation(t)
+        for k in ("/CropBox", "/TrimBox", "/BleedBox", "/ArtBox"):
+            if k in p:
+                del p[k]
+        p.mediabox = RectangleObject([0, 0, W, H])
+        w.add_page(p)
+    # i livelli: la pulizia li legge per nome
+    if r.trailer["/Root"].get("/OCProperties") is not None:
+        w._root_object[NameObject("/OCProperties")] = r.trailer["/Root"]["/OCProperties"].clone(w)
+    with open(destinazione, "wb") as fh:
+        w.write(fh)
+
+
+def varianti(args):
+    """La tolleranza del codice, misurata: ogni caso del parco di una
+    famiglia (un PDF solo, misure approvate) con la pagina girata o in scala,
+    costruito, contro l'originale costruito col codice di adesso - misure in
+    scala e viste. I PDF variati stanno in USCITA, mai nel repository. Esce
+    con 1 se una variante da' un modello diverso."""
+    import shutil
+    import numpy as np
+    from PIL import Image
+    tutte = [c for c in _casi(args.casi, args.solo)
+             if (c.get("opzioni") or {}).get("kind") == args.famiglia
+             and len(c["file"]) == 1 and c.get("misure")]
+    if not tutte:
+        raise SystemExit("nessun caso %s con un PDF solo e le misure approvate" % args.famiglia)
+    finto = os.path.join(args.uscita, "casi")
+    os.makedirs(os.path.join(finto, "parco", "pdf"), exist_ok=True)
+    risorse = os.path.join(args.casi, "risorse")
+    if os.path.isdir(risorse) and not os.path.exists(os.path.join(finto, "risorse")):
+        os.symlink(os.path.abspath(risorse), os.path.join(finto, "risorse"))
+    nuovi = []
+    for c in tutte:
+        for v in args.varianti:
+            f = "%s__%s.pdf" % (os.path.splitext(c["file"][0])[0], v)
+            _pagina_variata(os.path.join(args.casi, "parco", "pdf", c["file"][0]),
+                            os.path.join(finto, "parco", "pdf", f), v)
+            nuovi.append(dict(nome="%s__%s" % (c["nome"], v), file=[f],
+                              opzioni=c.get("opzioni"), originale=c, variante=v))
+    with open(os.path.join(finto, "parco", "parco.json"), "w", encoding="utf-8") as fh:
+        json.dump({"casi": [{k: x[k] for k in ("nome", "file", "opzioni")} for x in nuovi]},
+                  fh, ensure_ascii=False, indent=1)
+    originali, variate = os.path.join(args.uscita, "originali"), os.path.join(args.uscita, "varianti")
+    print("%d casi %s, %d varianti: costruisco" % (len(tutte), args.famiglia, len(nuovi)))
+    sys.stdout.flush()
+    from contextlib import redirect_stdout
+    import io
+    with redirect_stdout(io.StringIO()):
+        costruisci(argparse.Namespace(casi=args.casi, uscita=originali, codice=None,
+                                      solo=[c["nome"] for c in tutte]))
+        costruisci(argparse.Namespace(casi=finto, uscita=variate, codice=None, solo=None))
+    diverse, conto = 0, {}
+    for x in nuovi:
+        c, v = x["originale"], x["variante"]
+        s = float(v[5:]) if v.startswith("scala") else 1.0
+        with open(os.path.join(variate, x["nome"] + ".json"), encoding="utf-8") as fh:
+            e = json.load(fh)
+        motivo = None
+        if e.get("stato") != 200:
+            motivo = "non si costruisce: %s" % str((e.get("avvisi") or [""])[0])[:200]
+        else:
+            a, b = c["misure"]["ingombro"], (e.get("misure") or {}).get("ingombro") or [0, 0, 0]
+            # nello stesso ordine: un pack girato ha le stesse misure in un altro
+            if max(abs(p * s - q) for p, q in zip(a, b)) > 1.5 * s:
+                motivo = "ingombro %s invece di %s" % (b, [round(p * s, 1) for p in a])
+            elif s == 1.0:
+                fa, fb = (os.path.join(originali, c["nome"] + "_viste.png"),
+                          os.path.join(variate, x["nome"] + "_viste.png"))
+                if os.path.exists(fa) and os.path.exists(fb):
+                    A = np.asarray(Image.open(fa).convert("L"), float)
+                    B = np.asarray(Image.open(fb).convert("L"), float)
+                    d = float(np.abs(A - B).mean()) if A.shape == B.shape else 255.0
+                    if d > 3:
+                        motivo = "viste diverse dall'originale (%.1f livelli di grigio)" % d
+        conto.setdefault(v, [0, 0])[motivo is not None] += 1
+        if motivo:
+            diverse += 1
+            print("  %-44s %s" % (x["nome"][:44], motivo))
+    for v, (uguali, no) in sorted(conto.items()):
+        print("%-10s %d su %d come l'originale" % (v, uguali, uguali + no))
+    if not args.tieni:
+        shutil.rmtree(finto)
+    if diverse:
+        raise SystemExit(1)
 
 
 def stesi(args):
@@ -1838,6 +2120,22 @@ def main():
     t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                    help="solo questi casi, separati da virgole")
     t.set_defaults(fai=stesi)
+    va = sub.add_parser("varianti", help="la tolleranza del codice: i casi di una "
+                                         "famiglia con la pagina girata o in scala, "
+                                         "contro l'originale")
+    va.add_argument("casi", help="clone del repository privato dei casi")
+    va.add_argument("uscita", help="dove mettere i PDF variati e le costruzioni "
+                                   "(fuori dal repository)")
+    va.add_argument("--famiglia", default="flowpack",
+                    help="il `kind` dei casi da variare (di serie flowpack)")
+    va.add_argument("--varianti", default=["giro90", "giro180", "giro270", "scala1.03"],
+                    type=lambda s: [x for x in s.split(",") if x],
+                    help="giroN (N = 90, 180, 270) e scalaS, separate da virgole")
+    va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                    help="solo questi casi, separati da virgole")
+    va.add_argument("--tieni", action="store_true",
+                    help="non cancellare i PDF variati alla fine")
+    va.set_defaults(fai=varianti)
     lt = sub.add_parser("letture", help="la lettura di ogni caso contro quella "
                                         "approvata, senza costruire")
     lt.add_argument("casi", help="clone del repository privato dei casi")
@@ -1903,6 +2201,8 @@ def main():
     q.set_defaults(fai=caso)
     for nome, fai, aiuto in (("prepara", prepara, "prende un caso libero, lo mette nel "
                               "parco, lo costruisce e fa il foglio da guardare"),
+                             ("verifica", verifica_caso, "prima della PR: il caso senza "
+                              "difetti, lo steso, le prove veloci, le letture del parco"),
                              ("consegna", consegna, "dopo la correzione: il modello a chi "
                               "l'ha caricato, da approvare"),
                              ("approvato", approvato, "dopo l'approvazione: in Glam, risolto, "
@@ -1924,6 +2224,9 @@ def main():
                            help="due righe per chi l'ha caricato: cosa e' cambiato")
             x.add_argument("--commento", required=True,
                            help="per la issue: la causa, la regola, il link alla PR")
+            x.add_argument("--senza-verifica", metavar="MOTIVO",
+                           help="consegna senza `verifica` passata; il motivo va "
+                                "nel commento della issue")
         if nome == "approvato":
             x.add_argument("--messaggio", help="due righe per chi l'ha caricato")
             x.add_argument("--categoria", default="Casi risolti",
