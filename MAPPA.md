@@ -150,3 +150,7 @@ repository dei casi.
   stato, lavoratori); girano su ogni PR.
 - `prove/parco.py letture`: la lettura di ogni caso del parco contro quella
   approvata, senza costruire: a quale caso una correzione ha cambiato strada.
+- `prove/parco.py varianti`: la tolleranza del codice, misurata - i casi di
+  una famiglia con la pagina girata di 90, 180, 270 gradi o il disegno in
+  scala, contro l'originale (misure e viste). Una tolleranza nuova si prova
+  qui, su tutto il parco della famiglia.

@@ -7,6 +7,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import replace
 import hashlib
+import math
 import os
 import threading
 import traceback
@@ -207,8 +208,14 @@ def flowpack_sulla_grafica(pdf):
     e il giro vale solo se sul foglio girato lo steso si risolve senza ripiego
     e il fronte si legge dritto. Da li' in avanti tutto - colata, nero,
     testate, texture - lavora sullo steso com'e' negli originali del parco,
-    che si leggono tutti col fronte dritto. Senza testo vivo sul fronte il
-    verso non si conosce e il foglio resta com'e'.
+    che si leggono tutti col fronte dritto. Senza testo vivo sul fronte -
+    le scritte vettorializzate - il verso lo da' il testo della tavola fuori
+    dallo steso: il cartiglio, le quote, le note. Il disegno tecnico dice
+    come e' impaginato il foglio, non come si legge il pack (vedi
+    `tracciati.verso_grafica`), ma su tutti i flowpack del parco la tavola si
+    legge dritta quando il fronte si legge dritto: una pagina girata intera
+    gira tutti e due. Senza testo vivo nemmeno sulla tavola il foglio resta
+    com'e'.
 
     Un caso calibrato non passa di qui: le sue quote sono scritte a mano sul
     foglio com'e'.
@@ -221,39 +228,60 @@ def flowpack_sulla_grafica(pdf):
         giro, avviso, resta = 0, None, 0
 
         def verso(p):
+            """`(gradi, chi li dice)`: il fronte, o se il fronte non ha testo
+            vivo la tavola; `(-1, None)` se non lo dice nessuno, None se lo
+            steso non si risolve."""
             _box, fp, ripiego = analisi_flowpack(p)
             if ripiego is not None:
                 return None
-            return tracciati.verso_grafica(
-                p, {"front": fpk.fronte_in_pagina(fp)}).get("front", -1)
+            # ogni carattere vota nel primo riquadro che lo contiene: lo
+            # steso fuori dal fronte non vota, la tavola e' tutto il resto
+            v = tracciati.verso_grafica(p, {
+                "front": fpk.fronte_in_pagina(fp), "steso": fpk.foglio_in_pagina(fp),
+                "tavola": (-math.inf, -math.inf, math.inf, math.inf)})
+            for chi in ("front", "tavola"):
+                if chi in v:
+                    return v[chi], chi
+            return -1, None
 
         try:
-            g = verso(pdf)
+            g, chi = verso(pdf) or (None, None)
         except Exception:
-            g = None
+            g, chi = None, None
         if g == -1:
             # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
             # dipendere da come lo steso sta sulla tavola.
-            avviso = ("verso della grafica non letto: sul fronte non c'e' "
-                      "testo vivo (scritte vettorializzate), e lo steso resta "
-                      "com'e' sulla tavola - il verso va controllato sul "
-                      "modello")
+            avviso = ("verso della grafica non letto: ne' sul fronte ne' sulla "
+                      "tavola c'e' testo vivo (scritte vettorializzate), e lo "
+                      "steso resta com'e' sulla tavola - il verso va "
+                      "controllato sul modello")
         elif g:
             girato = artwork.pagina_girata(pdf, (360 - g) % 360)
             try:
-                dritto = girato != pdf and verso(girato) == 0
+                dritto = girato != pdf and verso(girato) == (0, chi)
             except Exception:
                 dritto = False
             if dritto:
                 giro = (360 - g) % 360
                 avviso = ("steso girato di %d gradi prima di risolvere: sulla "
                           "tavola la grafica del fronte era girata, e pinne, "
-                          "retro e colata si leggono nel suo verso" % giro)
-            else:
+                          "retro e colata si leggono nel suo verso" % giro
+                          if chi == "front" else
+                          "steso girato di %d gradi prima di risolvere: sul "
+                          "fronte non c'e' testo vivo, e il verso l'ha dato il "
+                          "testo della tavola (cartiglio, quote, note), girato "
+                          "anche lui" % giro)
+            elif chi == "front":
                 resta = g
                 avviso = ("la grafica del fronte e' girata di %d gradi sullo "
                           "steso, ma girato il foglio non si risolve col "
                           "fronte dritto: resta letto com'e' sulla tavola" % g)
+            else:
+                # la tavola dice la pagina, non il testo del fronte: il giro
+                # del marchio non lo sa, e lo steso resta com'e'
+                avviso = ("il testo della tavola e' girato di %d gradi, ma girato "
+                          "il foglio lo steso non si risolve: resta com'e' sulla "
+                          "tavola - il verso va controllato sul modello" % g)
         noto = (giro, avviso, resta)
         with _ANALISI_CHIAVE:
             _VERSO_FP[imp] = noto

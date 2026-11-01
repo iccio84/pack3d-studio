@@ -16,6 +16,7 @@ e' pubblico. Qui c'e' solo lo strumento.
                                 [--domanda TESTO --opzione TESTO ... [--anteprima NOME]]
     python3 prove/parco.py prepara CASI CODICE [--riprendi]
     python3 prove/parco.py verifica CASI CODICE
+    python3 prove/parco.py varianti CASI USCITA [--famiglia KIND] [--varianti giro90,scala1.03]
     python3 prove/parco.py consegna CASI CODICE --messaggio TESTO --commento TESTO
                                     [--senza-verifica MOTIVO]
     python3 prove/parco.py approvato CASI CODICE
@@ -1886,6 +1887,116 @@ def _correlazione(P, t):
     return float(c[k]), int(k[0]), int(k[1])
 
 
+def _pagina_variata(sorgente, destinazione, variante):
+    """Una copia del PDF con la pagina girata nel contenuto (`giro90`,
+    `giro180`, `giro270`: gradi antiorari, cotti come li cuoce
+    `artwork.pagina_girata`, non con /Rotate) o in scala (`scala1.03`)."""
+    from pypdf import PdfReader, PdfWriter, Transformation
+    from pypdf.generic import NameObject, RectangleObject
+    r = PdfReader(sorgente)
+    w = PdfWriter()
+    for p in r.pages:
+        mb = p.mediabox
+        W, H = float(mb.width), float(mb.height)
+        t = Transformation().translate(-float(mb.left), -float(mb.bottom))
+        if variante.startswith("giro"):
+            g = int(variante[4:])
+            t = t.rotate(g).translate(*{90: (H, 0), 180: (W, H), 270: (0, W)}[g])
+            if g != 180:
+                W, H = H, W
+        elif variante.startswith("scala"):
+            s = float(variante[5:])
+            t = t.scale(s, s)
+            W, H = W * s, H * s
+        else:
+            raise SystemExit("variante sconosciuta: %s" % variante)
+        p.add_transformation(t)
+        for k in ("/CropBox", "/TrimBox", "/BleedBox", "/ArtBox"):
+            if k in p:
+                del p[k]
+        p.mediabox = RectangleObject([0, 0, W, H])
+        w.add_page(p)
+    # i livelli: la pulizia li legge per nome
+    if r.trailer["/Root"].get("/OCProperties") is not None:
+        w._root_object[NameObject("/OCProperties")] = r.trailer["/Root"]["/OCProperties"].clone(w)
+    with open(destinazione, "wb") as fh:
+        w.write(fh)
+
+
+def varianti(args):
+    """La tolleranza del codice, misurata: ogni caso del parco di una
+    famiglia (un PDF solo, misure approvate) con la pagina girata o in scala,
+    costruito, contro l'originale costruito col codice di adesso - misure in
+    scala e viste. I PDF variati stanno in USCITA, mai nel repository. Esce
+    con 1 se una variante da' un modello diverso."""
+    import shutil
+    import numpy as np
+    from PIL import Image
+    tutte = [c for c in _casi(args.casi, args.solo)
+             if (c.get("opzioni") or {}).get("kind") == args.famiglia
+             and len(c["file"]) == 1 and c.get("misure")]
+    if not tutte:
+        raise SystemExit("nessun caso %s con un PDF solo e le misure approvate" % args.famiglia)
+    finto = os.path.join(args.uscita, "casi")
+    os.makedirs(os.path.join(finto, "parco", "pdf"), exist_ok=True)
+    risorse = os.path.join(args.casi, "risorse")
+    if os.path.isdir(risorse) and not os.path.exists(os.path.join(finto, "risorse")):
+        os.symlink(os.path.abspath(risorse), os.path.join(finto, "risorse"))
+    nuovi = []
+    for c in tutte:
+        for v in args.varianti:
+            f = "%s__%s.pdf" % (os.path.splitext(c["file"][0])[0], v)
+            _pagina_variata(os.path.join(args.casi, "parco", "pdf", c["file"][0]),
+                            os.path.join(finto, "parco", "pdf", f), v)
+            nuovi.append(dict(nome="%s__%s" % (c["nome"], v), file=[f],
+                              opzioni=c.get("opzioni"), originale=c, variante=v))
+    with open(os.path.join(finto, "parco", "parco.json"), "w", encoding="utf-8") as fh:
+        json.dump({"casi": [{k: x[k] for k in ("nome", "file", "opzioni")} for x in nuovi]},
+                  fh, ensure_ascii=False, indent=1)
+    originali, variate = os.path.join(args.uscita, "originali"), os.path.join(args.uscita, "varianti")
+    print("%d casi %s, %d varianti: costruisco" % (len(tutte), args.famiglia, len(nuovi)))
+    sys.stdout.flush()
+    from contextlib import redirect_stdout
+    import io
+    with redirect_stdout(io.StringIO()):
+        costruisci(argparse.Namespace(casi=args.casi, uscita=originali, codice=None,
+                                      solo=[c["nome"] for c in tutte]))
+        costruisci(argparse.Namespace(casi=finto, uscita=variate, codice=None, solo=None))
+    diverse, conto = 0, {}
+    for x in nuovi:
+        c, v = x["originale"], x["variante"]
+        s = float(v[5:]) if v.startswith("scala") else 1.0
+        with open(os.path.join(variate, x["nome"] + ".json"), encoding="utf-8") as fh:
+            e = json.load(fh)
+        motivo = None
+        if e.get("stato") != 200:
+            motivo = "non si costruisce: %s" % str((e.get("avvisi") or [""])[0])[:200]
+        else:
+            a, b = c["misure"]["ingombro"], (e.get("misure") or {}).get("ingombro") or [0, 0, 0]
+            # nello stesso ordine: un pack girato ha le stesse misure in un altro
+            if max(abs(p * s - q) for p, q in zip(a, b)) > 1.5 * s:
+                motivo = "ingombro %s invece di %s" % (b, [round(p * s, 1) for p in a])
+            elif s == 1.0:
+                fa, fb = (os.path.join(originali, c["nome"] + "_viste.png"),
+                          os.path.join(variate, x["nome"] + "_viste.png"))
+                if os.path.exists(fa) and os.path.exists(fb):
+                    A = np.asarray(Image.open(fa).convert("L"), float)
+                    B = np.asarray(Image.open(fb).convert("L"), float)
+                    d = float(np.abs(A - B).mean()) if A.shape == B.shape else 255.0
+                    if d > 3:
+                        motivo = "viste diverse dall'originale (%.1f livelli di grigio)" % d
+        conto.setdefault(v, [0, 0])[motivo is not None] += 1
+        if motivo:
+            diverse += 1
+            print("  %-44s %s" % (x["nome"][:44], motivo))
+    for v, (uguali, no) in sorted(conto.items()):
+        print("%-10s %d su %d come l'originale" % (v, uguali, uguali + no))
+    if not args.tieni:
+        shutil.rmtree(finto)
+    if diverse:
+        raise SystemExit(1)
+
+
 def stesi(args):
     """Ogni texture contro la pagina del suo PDF: dritta, a scala uniforme."""
     import io
@@ -2009,6 +2120,22 @@ def main():
     t.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                    help="solo questi casi, separati da virgole")
     t.set_defaults(fai=stesi)
+    va = sub.add_parser("varianti", help="la tolleranza del codice: i casi di una "
+                                         "famiglia con la pagina girata o in scala, "
+                                         "contro l'originale")
+    va.add_argument("casi", help="clone del repository privato dei casi")
+    va.add_argument("uscita", help="dove mettere i PDF variati e le costruzioni "
+                                   "(fuori dal repository)")
+    va.add_argument("--famiglia", default="flowpack",
+                    help="il `kind` dei casi da variare (di serie flowpack)")
+    va.add_argument("--varianti", default=["giro90", "giro180", "giro270", "scala1.03"],
+                    type=lambda s: [x for x in s.split(",") if x],
+                    help="giroN (N = 90, 180, 270) e scalaS, separate da virgole")
+    va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
+                    help="solo questi casi, separati da virgole")
+    va.add_argument("--tieni", action="store_true",
+                    help="non cancellare i PDF variati alla fine")
+    va.set_defaults(fai=varianti)
     lt = sub.add_parser("letture", help="la lettura di ogni caso contro quella "
                                         "approvata, senza costruire")
     lt.add_argument("casi", help="clone del repository privato dei casi")
