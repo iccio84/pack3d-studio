@@ -6,7 +6,8 @@ sono lunghi (decine di migliaia di parole): si cerca con `grep -n` e si legge
 solo il pezzo
 (`sed -n 'A,Bp'`, o Read con offset e limit). Le regole stanno in REGOLE.md,
 i principi e l'indice, e in `regole/`, un file per famiglia. Per una
-forma che il codice non conosce ancora, la ricetta e' in FORME.md. I gadget
+forma che il codice non conosce ancora, la ricetta e' in FORME.md; per un
+difetto che torna, la sua scheda e' in DIFETTI.md. I gadget
 (oggetti promozionali senza DT) non hanno ancora codice qui: le loro regole
 sono in GADGET.md.
 
@@ -138,6 +139,9 @@ repository dei casi.
 
 - `prove/parco.py prepara`: prende il caso, lo mette nel parco, lo
   costruisce e fa un foglio solo da guardare (CODA.md).
+- `prove/parco.py verifica`: prima della PR, il caso senza difetti, lo
+  steso dritto, le prove veloci e le letture degli altri casi uguali;
+  `consegna` la vuole passata.
 - `prove/parco.py consegna`: manda il modello corretto da approvare.
 - `prove/parco.py approvato`: dopo l'approvazione, in Glam e `da-rilasciare`
   (se lo Space non l'ha gia' fatto da solo).

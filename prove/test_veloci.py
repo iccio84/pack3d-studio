@@ -484,5 +484,30 @@ class FileDelCasoNelRegistro(unittest.TestCase):
         self.coda.avvia_routine.assert_not_called()
 
 
+class SchedeDeiDifetti(unittest.TestCase):
+    """DIFETTI.md: ogni scheda ha le sue parole, e `prepara` le trova."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        self.parco = parco
+
+    def test_ogni_scheda_ha_le_parole(self):
+        with open(os.path.join(QUI, "DIFETTI.md"), encoding="utf-8") as fh:
+            parti = fh.read().split("\n## ")[1:]
+        self.assertTrue(parti)
+        for p in parti:
+            self.assertIn("\nParole: ", p, p.splitlines()[0])
+
+    def test_le_parole_trovano_la_scheda(self):
+        self.assertEqual(self.parco._schede("Il pack e' costruito come flowpack mentre "
+                                            "il PDF e' un astuccio")[0],
+                         "La famiglia sbagliata")
+        self.assertEqual(self.parco._schede("La fascia rossa del fronte e' finita "
+                                            "sul retro"),
+                         ["Il fronte sul retro, la grafica capovolta"])
+        self.assertEqual(self.parco._schede("tutto bene"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

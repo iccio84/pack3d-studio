@@ -5,7 +5,7 @@ nuovi dalla coda e li risolve - e per chiunque ne riprenda uno a mano. Il
 rilascio della settimana sta in RILASCIO.md, la mappa del codice in MAPPA.md,
 il perche' delle regole del codice in REGOLE.md (i principi e l'indice) e in
 `regole/` (un file per famiglia), la ricetta per una forma
-nuova in FORME.md. I gadget non passano dalla coda: le loro regole sono in
+nuova in FORME.md, i difetti che tornano in DIFETTI.md. I gadget non passano dalla coda: le loro regole sono in
 GADGET.md.
 
 ## Prima di tutto: risparmiare
@@ -151,7 +151,10 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    codice), lo costruisce col codice della settimana in `/tmp/caso_<codice>`
    e stampa in poche righe: l'esito della coda, i difetti, la costruzione di
    adesso, il **foglio da guardare** e le voci di chi l'ha caricato (tutte in
-   `voci.md`, con le foto nella cartella del caso).
+   `voci.md`, con le foto nella cartella del caso). Dice anche **da dove
+   partire**: i casi del parco gia' giusti che gli somigliano (la stessa
+   famiglia letta, l'ingombro piu' vicino), col loro `come_deve_venire`, e le
+   schede di DIFETTI.md che il verdetto e le voci nominano.
 4. **Guarda il foglio** accanto ai difetti e alle voci, e scrivi
    `come_deve_venire` della voce nuova in `parco/parco.json`, con le misure.
    Se l'esito e' `dubbio` vedi *Un caso col dubbio*, se e' `errore` *Un caso
@@ -159,7 +162,10 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    dice quante volte - *Dopo un Non approvo, prima si chiede*. Se il
    modello di adesso e' **gia' giusto** - l'ha sistemato la correzione di
    un altro caso della settimana - salta al punto 7, senza PR.
-5. **Trova la causa** (MAPPA.md, un sotto-agente per la ricerca). La
+5. **Trova la causa**: parti dalle schede dei difetti che `prepara` ha
+   stampato (DIFETTI.md: dove guardare, cosa provare prima, le regole che
+   l'hanno gia' risolto) e dai casi simili; poi MAPPA.md, e un sotto-agente
+   per la ricerca. La
    correzione e' una **regola generale**: mai il nome del file, il codice del
    cliente o misure cucite su quel PDF. Se l'errore non si spiega con una
    regola, *Un caso che non si risolve*. Se la regola cambia altri modelli
@@ -176,14 +182,21 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
 
        python3 prove/parco.py stesi ../pack3d-casi /tmp/caso_<codice> --solo <nome>
 
-   Poi le prove veloci e le letture degli altri casi, qualche minuto in
-   tutto: una lettura cambiata vuol dire che la correzione ha cambiato strada
-   a un altro caso, e va capito prima della PR (REGOLE.md, *Le prove
-   veloci*):
+   Poi **la verifica**, un paio di minuti, prima della PR:
 
-       python3 -m unittest discover -s prove -p "test_*.py"
-       python3 prove/parco.py letture ../pack3d-casi | tail -3
+       python3 prove/parco.py verifica ../pack3d-casi <codice> | tail -15
 
+   ricostruisce il caso se il codice e' cambiato e guarda quello che il
+   rilascio guarderebbe dopo: il caso si costruisce senza difetti, la
+   texture e' lo steso dritto, le prove veloci passano e la lettura degli
+   altri casi del parco non cambia - una lettura cambiata vuol dire che la
+   correzione ha cambiato strada a un altro caso (REGOLE.md, *Le prove
+   veloci*). Stampa `come_deve_venire` accanto alle misure del modello:
+   confrontale, numero per numero. **Se non passa, correggi e rifalla**, fino
+   a tre giri; se la lettura di un altro caso cambia e il cambio e' voluto,
+   approvala (`letture --approva --solo <nome>`) e scrivilo nella PR. Dopo
+   tre giri che non passano e' *Un caso col dubbio*. `consegna` non parte
+   senza una verifica passata col codice che consegna.
    Niente parco intero e niente prova sullo Space: li fa il rilascio. Scrivi la
    regola nel file della famiglia in `regole/` - il caso, la causa, la
    regola, con i numeri - leggendo solo le righe intorno (`grep -n`); il
@@ -197,7 +210,8 @@ quel giro, una volta a settimana, prima della coda c'e' il rilascio
    `--commento`: per la issue, la causa, la regola e il link alla PR (o
    perche' non serviva). Il comando ricostruisce il caso se il codice e'
    cambiato, registra `come_deve_venire` e le misure del modello consegnato
-   come quelle approvate del caso (il rilascio le confronta), manda il
+   come quelle approvate del caso (il rilascio le confronta), e la sua
+   lettura del PDF fra quelle approvate, manda il
    modello da approvare
    (`modello.glb` nella cartella del caso), chiede allo Space l'email per chi
    l'ha lasciata, commenta, mette `da-approvare` e toglie `in-lavorazione`.
@@ -240,6 +254,7 @@ tutte**:
 - il caso adesso e' giusto: le viste accanto al PDF, con l'occhio del
   controllo AI - forma, verso, fronte sul fronte, retro, nessun segno tecnico;
 - `python3 -m py_compile` passa su ogni file Python toccato;
+- `prove/parco.py verifica` e' passata, col codice della PR;
 - la correzione non cambia quello che il controllo dell'AI considera un
   difetto (`pack3d/controllo.py`): quella si propone in bozza, verso `main`.
 
