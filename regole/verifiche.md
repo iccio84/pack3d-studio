@@ -172,6 +172,44 @@ livello 10 nel rapporto del DT «flowpack largo: 31,6 -> 38,5 mm (+21,8%)» e
 lo spessore 21,3 -> 15,9: i pezzi troppo bassi. Un modello uguale a quello
 approvato non dice niente.
 
+## La tolleranza misurata: le varianti
+
+Il parco dice che i casi che conosciamo escono come devono. Non dice se lo
+stesso pack, mandato da un altro cliente in un altro modo, esce uguale.
+`prove/parco.py varianti` lo misura: ogni caso del parco con le pagine
+variate - girate di 90, 180 o 270 gradi, salvate con /Rotate, in scala,
+spostate su una tavola piu' grande, con una miniatura accanto o una
+copertina davanti (`_pagina_variata`; si sommano con `+`) - costruito e
+confrontato con l'originale, misure in scala e viste. I PDF variati stanno
+fuori dal repository e se ne vanno alla fine.
+
+Il 1 novembre 2026 ha trovato, sui 44 casi del parco, nove difetti veri,
+ognuno corretto con una regola generale e il parco intero identico al byte:
+
+- il flowpack senza testo vivo sul fronte: il verso dalla tavola
+  (`regole/pdf.md`);
+- le cornici dell'artwork che pdfminer da' come curve sotto una matrice
+  girata, nella fustella (`regole/astucci.md`);
+- la scatola a punta girata o capovolta (`regole/punta.md`);
+- l'incarto girato o capovolto, e salvato con /Rotate (`regole/incarti.md`);
+- il vassoio con la parete bassa di lato (`regole/vassoi.md`);
+- la copertina davanti al disegno (`regole/pdf.md`).
+
+E quelli che restano, detti: la scatola a prisma e l'astuccio da sette
+pagine senza testo vivo, girati, e il riempimento senza testo vivo da
+nessuna parte - il verso non si legge, e la costruzione lo dice -, e la
+coppa con una seconda miniatura del tappo, che e' un artefatto della
+variante. Le varianti diverse gia' note stanno in `parco/varianti.json` del
+registro (`varianti --approva`): una diversa che non c'e' e' un difetto
+nuovo.
+
+Una volta a settimana le Actions di `pack3d-casi` fanno girare le varianti
+(`varianti.yml`: un quarto di giro, la copertina, la miniatura) col codice di
+`coda-settimana`: rosso se una variante nuova esce diversa. `appiattito` -
+il PDF ripassato da Ghostscript, senza testo vivo ne' livelli - nel giro non
+c'e': Ghostscript butta anche gran parte del disegno tecnico (sul Tronky T1
+le linee da 1187 a 212), e misura lui, non il codice.
+
 ## La lettura del PDF accanto al modello
 
 I casi rifiutati in coda quasi mai avevano una misura sbagliata di un decimo:

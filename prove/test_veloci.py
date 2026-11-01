@@ -501,6 +501,36 @@ class FileDelCasoNelRegistro(unittest.TestCase):
         self.coda.avvia_routine.assert_not_called()
 
 
+class Statistiche(unittest.TestCase):
+    """`statistiche`: una riga per evento, sommate, senza numeri nei motivi."""
+
+    def setUp(self):
+        from pack3d import statistiche
+        self.st = statistiche
+        cartella = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(cartella, True))
+        self._f = mock.patch.object(statistiche, "FILE", os.path.join(cartella, "s.jsonl"))
+        self._f.start()
+        self.addCleanup(self._f.stop)
+
+    def test_il_motivo_perde_numeri_e_misure(self):
+        e = ValueError("astuccio: i fianchi (3.4 e 5.0 mm) non tornano con 45,3 mm. "
+                       "Fasce (mm): [45.3, 131.5]")
+        self.assertEqual(self.st.motivo(e),
+                         "ValueError: astuccio: i fianchi non tornano con # mm")
+
+    def test_le_righe_si_sommano(self):
+        for _ in range(2):
+            self.st.conta("fermata", fase="lettura", dichiarato="carton",
+                          motivo="ValueError: astuccio: x")
+        self.st.conta("lettura", dichiarato="flowpack", letto="flowpack")
+        r = self.st.riassunto()
+        self.assertEqual(r["eventi"], 3)
+        self.assertEqual(r["conti"]["fermata"],
+                         [dict(cosa="carton | lettura | ValueError: astuccio: x", quante=2)])
+        self.assertEqual(r["conti"]["lettura"][0]["quante"], 1)
+
+
 class SchedeDeiDifetti(unittest.TestCase):
     """DIFETTI.md: ogni scheda ha le sue parole, e `prepara` le trova."""
 

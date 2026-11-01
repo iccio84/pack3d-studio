@@ -349,6 +349,10 @@ def sulla_tavola(pdf, page_no=0, quarto=True):
     non dichiarato si cerca su ogni flowpack, che non deve pagare una
     lettura in piu'."""
     from . import artwork, tracciati
+    # la pagina del disegno, col /Rotate cotto: chi legge l'incarto dichiarato
+    # non passa dal registro, e un foglio salvato girato a parole non si
+    # leggeva in nessun verso
+    pdf, _n = artwork.pagina_unica(pdf)
     letto, p, giro = pdf, riconosci(pdf, page_no), 0
     if p is None:
         if not quarto:

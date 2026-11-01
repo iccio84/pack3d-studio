@@ -35,7 +35,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import coda, controllo, gelato, strati, verifica, versione
+from pack3d import coda, controllo, gelato, statistiche, strati, verifica, versione
 from pack3d import lettura as lettura_pdf
 from pack3d import lavoratori
 from pack3d import stato
@@ -200,6 +200,8 @@ def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None):
     """
     traceback.print_exc()
     errore = "%s: %s" % (type(e).__name__, e)
+    statistiche.conta("fermata", fase="costruzione" if info else "lettura",
+                      dichiarato=kind or "nessuna", motivo=statistiche.motivo(e))
     verdetto = dict(esito="errore", motivo=errore, difetti=[], pack_nel_pdf="",
                     modello="nessuno: la costruzione si e' fermata")
     ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
@@ -410,6 +412,10 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(404, "Nessun modello corretto", "text/plain; charset=utf-8")
                 return self._send(200, v["glb"], "model/gltf-binary", filename="modello.glb")
             return self._send(200, json.dumps(dict(v, glb=bool(v["glb"])), ensure_ascii=False))
+        if self.path.startswith("/api/statistiche"):
+            # dove il codice si ferma sui PDF veri, senza nomi: vedi
+            # `pack3d.statistiche`
+            return self._send(200, json.dumps(statistiche.riassunto(), ensure_ascii=False))
         if self.path.startswith("/api/lavori"):
             # a che punto e' il lavoro di chi aspetta: in fila, o in corso
             from urllib.parse import parse_qs, urlparse
@@ -987,6 +993,8 @@ class Handler(BaseHTTPRequestHandler):
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                       blocchi_caso)
                         return self._send(500, errore, controllo=verdetto)
+                    statistiche.conta("lettura", dichiarato=kind or "nessuna",
+                                      letto=letto.get("kind"))
                     return self._send(200, json.dumps(letto))
                 if self.path.startswith("/api/build"):
                     if not _slots.acquire(blocking=False):
@@ -1128,6 +1136,8 @@ class Handler(BaseHTTPRequestHandler):
                                                 "(%s)" % e)
                                 meta.append(righe_ai[-1])
                         traccia("totale", t0)
+                        statistiche.conta("costruzione", dichiarato=kind or "nessuna",
+                                          letto=info["kind"])
                     except Exception as e:
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                       blocchi_caso, info)
@@ -1181,6 +1191,9 @@ class Handler(BaseHTTPRequestHandler):
                             # i difetti misurati dalle verifiche valgono come
                             # un dubbio, anche col controllo che dice ok
                             verdetto = con_difetti(verdetto, meta)
+                            statistiche.conta("verdetto", letto=info["kind"],
+                                              esito=verdetto["esito"],
+                                              fase="corretto" if riga else None)
                             # anche il dubbio: il modello all'utente arriva lo
                             # stesso, ma qualcuno deve guardarlo, e se ha un
                             # difetto vero correggerlo come un caso respinto
@@ -1218,6 +1231,8 @@ class Handler(BaseHTTPRequestHandler):
                         # va in coda senza le viste del controllo, la routine
                         # lo ricostruisce comunque
                         verdetto = con_difetti(None, meta)
+                        statistiche.conta("verdetto", letto=info["kind"],
+                                          esito=verdetto["esito"], fase="senza AI")
                         verdetto["codice"], verdetto["in_coda"] = coda.metti(
                             blocchi_caso, nomi_caso, verdetto, None, ctx)
                         verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])

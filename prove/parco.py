@@ -167,7 +167,7 @@ def _avvia(codice, log, casi=None):
     """
     porta = _porta_libera()
     env = dict(os.environ, PORT=str(porta), HOST="127.0.0.1",
-               PACK3D_CONTROLLO="0")
+               PACK3D_CONTROLLO="0", PACK3D_STATISTICHE="0")
     if casi and os.path.isdir(os.path.join(casi, "risorse")):
         env["PACK3D_RISORSE"] = os.path.abspath(os.path.join(casi, "risorse"))
     for k in ("ANTHROPIC_API_KEY", "PACK3D_CODA_REPO", "PACK3D_CODA_TOKEN"):
@@ -470,6 +470,8 @@ def esito(args):
 # le letture approvate, una per caso: nel repository dei casi, accanto al
 # manifesto
 LETTURE = os.path.join("parco", "letture.json")
+# le varianti diverse gia' note, approvate: vedi `varianti`
+VARIANTI = os.path.join("parco", "varianti.json")
 
 
 def _leggi_caso(url, cartella, caso):
@@ -1906,6 +1908,10 @@ def _pagina_variata(sorgente, destinazione, variante):
     - `copertina`: una pagina in piu' davanti, senza disegno;
     - `appiattito`: ripassato da Ghostscript con le scritte in tracciati,
       come un PDF di stampa appiattito - senza testo vivo e senza livelli.
+      Attenzione: Ghostscript butta anche gran parte del disegno tecnico
+      (sul Tronky T1 le linee da 1187 a 212, le curve da 552 a 6), e il
+      pack non lo risolverebbe nessuno: misura Ghostscript piu' che il
+      codice, e nel giro della settimana non c'e'.
 
     Il documento si clona intero: i livelli che la pulizia spegne per nome
     devono restare gli stessi oggetti a cui punta il contenuto. Copiati a
@@ -2001,7 +2007,9 @@ def varianti(args):
     caso allo stesso modo; l'immagine del prodotto di un incarto resta
     com'e' - costruito, contro l'originale costruito col codice di adesso:
     misure in scala e viste. I PDF variati stanno in USCITA, mai nel
-    repository. Esce con 1 se una variante da' un modello diverso."""
+    repository. Esce con 1 se una variante da' un modello diverso e non e'
+    fra quelle gia' note (`VARIANTI`, scritte con `--approva`: i limiti
+    dichiarati)."""
     import shutil
     import numpy as np
     from PIL import Image
@@ -2043,7 +2051,7 @@ def varianti(args):
         costruisci(argparse.Namespace(casi=args.casi, uscita=originali, codice=None,
                                       solo=[c["nome"] for c in tutte]))
         costruisci(argparse.Namespace(casi=finto, uscita=variate, codice=None, solo=None))
-    diverse, conto = 0, {}
+    risultati, conto = {}, {}
     for x in nuovi:
         c, v = x["originale"], x["variante"]
         s = 1.0
@@ -2070,14 +2078,45 @@ def varianti(args):
                     if d > 3:
                         motivo = "viste diverse dall'originale (%.1f livelli di grigio)" % d
         conto.setdefault(v, [0, 0])[motivo is not None] += 1
-        if motivo:
-            diverse += 1
-            print("  %-44s %s" % (x["nome"][:44], motivo))
+        risultati[x["nome"]] = motivo
+    # le diverse gia' note - i limiti dichiarati - sono approvate in
+    # VARIANTI: rosso e' solo una variante diversa che non c'era
+    f = os.path.join(args.casi, VARIANTI)
+    note = {}
+    if os.path.exists(f):
+        with open(f, encoding="utf-8") as fh:
+            note = json.load(fh)
+    nuove = {n: m for n, m in risultati.items() if m and n not in note}
+    guarite = [n for n, m in risultati.items() if not m and n in note]
+    righe = []
+    for n, m in sorted(risultati.items()):
+        if m:
+            righe.append("  %-44s %s%s" % (n[:44], m, "" if n in nuove else "  (nota)"))
+    for n in guarite:
+        righe.append("  %-44s adesso come l'originale: era nota (%s)" % (n[:44], note[n]))
+    print("\n".join(righe))
     for v, (uguali, no) in sorted(conto.items()):
         print("%-10s %d su %d come l'originale" % (v, uguali, uguali + no))
+    if args.riassunto:
+        with open(args.riassunto, "a", encoding="utf-8") as fh:
+            fh.write("## Varianti (%s)\n\n| variante | come l'originale |\n|---|---|\n" % args.famiglia)
+            for v, (uguali, no) in sorted(conto.items()):
+                fh.write("| %s | %d su %d |\n" % (v, uguali, uguali + no))
+            fh.write("\n%s\n\n" % ("**%d diverse nuove**, non approvate:" % len(nuove)
+                                     if nuove else "Nessuna diversa nuova."))
+            if righe:
+                fh.write("```\n%s\n```\n" % "\n".join(righe))
+    if args.approva:
+        note = {n: m for n, m in note.items() if n not in risultati}
+        note.update({n: m for n, m in risultati.items() if m})
+        with open(f, "w", encoding="utf-8") as fh:
+            json.dump(note, fh, ensure_ascii=False, indent=1, sort_keys=True)
+            fh.write("\n")
+        print("varianti diverse approvate: %d in %s - commit e push nel registro"
+              % (len(note), VARIANTI))
     if not args.tieni:
         shutil.rmtree(finto)
-    if diverse:
+    if nuove and not args.approva:
         raise SystemExit(1)
 
 
@@ -2223,6 +2262,11 @@ def main():
                     help="solo questi casi, separati da virgole")
     va.add_argument("--tieni", action="store_true",
                     help="non cancellare i PDF variati alla fine")
+    va.add_argument("--approva", action="store_true",
+                    help="scrive le varianti diverse di adesso come note "
+                         "(limiti dichiarati), in parco/varianti.json")
+    va.add_argument("--riassunto", help="il file dove aggiungere il riassunto in "
+                                        "markdown (nelle Actions: $GITHUB_STEP_SUMMARY)")
     va.set_defaults(fai=varianti)
     lt = sub.add_parser("letture", help="la lettura di ogni caso contro quella "
                                         "approvata, senza costruire")

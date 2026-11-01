@@ -374,6 +374,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - Le verifiche: le UV sul DT prima, il fronte sul fronte dopo
 - Le verifiche che fermano il modello
 - Le misure approvate: cambiato non vuol dire peggiorato
+- La tolleranza misurata: le varianti
 - La lettura del PDF accanto al modello
 - Il controllo dell'AI prima della consegna
   - Il modello subito, il verdetto dopo
@@ -393,6 +394,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Un lavoro, una cartella e uno stato
   - Il registro delle famiglie
   - Le famiglie fuori da server.py
+  - Le statistiche: dove il codice si ferma sui PDF veri
   - Le prove veloci
 
 **`regole/flowpack.md`** - flowpack
