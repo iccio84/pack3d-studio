@@ -158,7 +158,7 @@ def analyze_flowpack(pdf):
     sul T2 di cialde la pagina porta il DT con la grafica e quattro sue
     copie tecniche, e misurate insieme davano nastro 260 x passo 168 invece di
     148 x 108. Se sul blocco le fasce non chiudono si riprova sul riquadro
-    della fustella, come fa `server.analisi_flowpack`.
+    della fustella, come fa `famiglie.flowpack.analisi_flowpack`.
     """
     from . import quote
     box = riquadro_artwork(pdf)

@@ -34,15 +34,16 @@ os.environ.setdefault("PACK3D_LAVORATORI", "0")
 from pack3d import dieline as dl, lavoratori, misure, stato  # noqa: E402
 
 
-def _pdf(cartella, tratti=(), larghezza=600.0, altezza=600.0):
+def _pdf(cartella, tratti=(), larghezza=600.0, altezza=600.0, altro=b""):
     """Un PDF di una pagina con questi tratti a penna: [(x0, y0, x1, y1)] in
-    punti, con la y dal basso come nel contenuto del PDF."""
+    punti, con la y dal basso come nel contenuto del PDF, e `altro` in coda
+    al contenuto."""
     import pypdf
     from pypdf.generic import NameObject, StreamObject
     w = pypdf.PdfWriter()
     pagina = w.add_blank_page(larghezza, altezza)
     contenuto = b"0.5 w 0 0 0 RG\n" + b"".join(
-        b"%.2f %.2f m %.2f %.2f l S\n" % t for t in tratti)
+        b"%.2f %.2f m %.2f %.2f l S\n" % t for t in tratti) + altro
     flusso = StreamObject()
     flusso.set_data(contenuto)
     pagina[NameObject("/Contents")] = w._add_object(flusso)
@@ -92,6 +93,22 @@ class LetturaDellaFustella(unittest.TestCase):
         self.assertEqual(dal_disco, diretti)
         self.assertTrue(all(isinstance(s[4], tuple) for s in dal_disco))
 
+    def test_la_cornice_girata_non_entra_nella_fustella(self):
+        # una cornice dell'artwork - contorno e riempimento sullo stesso
+        # riquadro - disegnata sotto una matrice capovolta, coi suoi decimi
+        # di miliardesimo: pdfminer vuole i lati uguali al bit, la da' come
+        # curva, e non deve diventare quattro tratti
+        cornice = (b"q -1 0.00000000000001 -0.00000000000001 -1 600 600 cm "
+                   b"1 w 0 0 0 1 K 1 0 0 0 k "
+                   b"120 120 80 40 re f 120 120 80 40 re S Q\n")
+        import pdfplumber
+        with pdfplumber.open(_pdf(self.cartella, GRIGLIA, altro=cornice)) as doc:
+            pagina = doc.pages[0]
+            self.assertTrue(pagina.curves, "pdfminer ha cambiato idea: la "
+                            "cornice girata non e' piu' una curva")
+            stili = {s[4] for s in dl._segments(pagina)}
+        self.assertEqual(stili, {(0.5, "(0.0, 0.0, 0.0)")})
+
     def test_la_chiave_e_il_contenuto_non_il_nome(self):
         pdf = _pdf(self.cartella, GRIGLIA)
         n = len(dl.segmenti(pdf))
@@ -139,17 +156,12 @@ class Misure(unittest.TestCase):
                          ["flowpack lungo: 116,0 -> manca"])
 
 
-def _server():
-    with contextlib.redirect_stdout(io.StringIO()):
-        import server
-    return server
-
-
 class RegistroDelleFamiglie(unittest.TestCase):
-    """`server.RICONOSCIMENTO` e `server.COSTRUZIONI`."""
+    """`famiglie.registro.RICONOSCIMENTO` e `famiglie.registro.COSTRUZIONI`."""
 
     def setUp(self):
-        self.s = _server()
+        from pack3d.famiglie import registro
+        self.s = registro
         self.nomi = [f.nome for f in self.s.RICONOSCIMENTO]
 
     def test_ogni_tipologia_dichiarata_ha_una_prova(self):
@@ -487,6 +499,31 @@ class FileDelCasoNelRegistro(unittest.TestCase):
                          ["/repos/io/casi/contents/casi/2026-10-29_abc/a.pdf"])
         # senza `da-guardare` la routine non riparte: il caso e' gia' libero
         self.coda.avvia_routine.assert_not_called()
+
+
+class SchedeDeiDifetti(unittest.TestCase):
+    """DIFETTI.md: ogni scheda ha le sue parole, e `prepara` le trova."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        self.parco = parco
+
+    def test_ogni_scheda_ha_le_parole(self):
+        with open(os.path.join(QUI, "DIFETTI.md"), encoding="utf-8") as fh:
+            parti = fh.read().split("\n## ")[1:]
+        self.assertTrue(parti)
+        for p in parti:
+            self.assertIn("\nParole: ", p, p.splitlines()[0])
+
+    def test_le_parole_trovano_la_scheda(self):
+        self.assertEqual(self.parco._schede("Il pack e' costruito come flowpack mentre "
+                                            "il PDF e' un astuccio")[0],
+                         "La famiglia sbagliata")
+        self.assertEqual(self.parco._schede("La fascia rossa del fronte e' finita "
+                                            "sul retro"),
+                         ["Il fronte sul retro, la grafica capovolta"])
+        self.assertEqual(self.parco._schede("tutto bene"), [])
 
 
 if __name__ == "__main__":

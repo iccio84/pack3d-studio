@@ -72,10 +72,15 @@ def versione():
         import pypdfium2
         h = hashlib.sha256()
         qui = os.path.dirname(os.path.abspath(__file__))
-        for nome in sorted(os.listdir(qui)):
-            if nome.endswith(".py"):
-                with open(os.path.join(qui, nome), "rb") as fh:
-                    h.update(nome.encode() + b"\0" + fh.read())
+        # anche i sottopacchetti: le famiglie (`pack3d.famiglie`) scelgono cosa
+        # rendere
+        for base, cartelle, nomi in os.walk(qui):
+            cartelle[:] = sorted(c for c in cartelle if c != "__pycache__")
+            for nome in sorted(nomi):
+                if nome.endswith(".py"):
+                    with open(os.path.join(base, nome), "rb") as fh:
+                        rel = os.path.relpath(os.path.join(base, nome), qui)
+                        h.update(rel.encode() + b"\0" + fh.read())
         librerie = []
         for p in ("pypdfium2", "pillow", "numpy"):
             try:

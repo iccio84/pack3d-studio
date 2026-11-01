@@ -53,6 +53,17 @@ file (T6 aperto):
 
   Nota: la funzione che da' questo punteggio, `_dieline_pen`, era scritta da
   tempo e **non la chiamava nessuno**.
+- **la cornice che arriva come curva.** Le cornici dell'artwork sono un
+  contorno e un riempimento sullo stesso riquadro, e `_segments` le scarta:
+  un tratto di fustella non e' mai anche riempito. Ma un `re` disegnato
+  sotto una matrice girata pdfminer non lo riconosce come rettangolo, e lo
+  da' come curva: sul T10 al lampone girato di mezzo giro (o di un quarto)
+  le sei cornici nere da 1 pt entravano nella fustella, 24 tratti, e
+  l'astuccio non si risolveva piu' in nessun verso girato. Adesso una curva
+  che e' un rettangolo dritto chiuso conta come un rettangolo, nel
+  riempimento e nel contorno. Trovato con `prove/parco.py varianti --famiglia
+  carton` il 1 novembre 2026; succede a ogni PDF col gruppo della grafica
+  ruotato, non solo alle prove.
 
 ### Quando il solutore non sa, deve dirlo
 

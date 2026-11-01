@@ -21,7 +21,7 @@ quanti lavori ha davanti (`posizione`).
   lavoro: chi l'aveva chiesto riceve un errore che lo dice (`Caduto`), e il
   lavoratore riparte. Prima cadeva il server, con tutti quelli collegati.
 - Lo stesso PDF va, se e' libero, al lavoratore che l'ha gia' letto: l'analisi
-  di un flowpack si fa una volta per processo (`server.analisi_flowpack`), e
+  di un flowpack si fa una volta per processo (`famiglie.flowpack.analisi_flowpack`), e
   la pagina chiede /api/analyze e subito dopo /api/build con lo stesso corpo.
 - La fila ha un limite (`FILA_MAX`) e un'attesa massima (`ATTESA_MAX`):
   oltre, si risponde «occupato» come prima (`Occupato`).

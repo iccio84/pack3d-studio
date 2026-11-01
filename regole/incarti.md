@@ -8,14 +8,20 @@ di tutte le sezioni.
 Il foglio di film che avvolge una barretta rigida e si chiude sulle testate
 ripiegato, senza saldature ne' pinne: la barretta incartata T1 (il
 disegno dice «WRAPPING (DOUBLE FOIL)»). Il codice sta in `pack3d/incarto.py`, il montaggio in
-`server.build_incarto`. Dalla pagina si dichiara **Incarti**, chiuso **a
+`famiglie.incarto.build_incarto`. Dalla pagina si dichiara **Incarti**, chiuso **a
 pieghe** (vedi *Gli incarti nella pagina*, sotto); dichiarato flowpack (e' un
 film) o senza tipo, lo si riconosce lo stesso: l'analisi
 lo prova **prima** del flowpack, perche' il flowpack non lo rifiuta ma lo
 risolve male - un tubo gonfio con le pinne seghettate al posto delle testate
-- e sui flowpack esce subito (`server._analisi_incarto`; su tutto il parco
+- e sui flowpack esce subito (`famiglie.incarto._analisi_incarto`; su tutto il parco
 non scatta mai, in qualche decimo di secondo). La pagina non chiede denti,
 rigonfiamento e pinne: costruisce subito.
+
+Dal 29 ottobre 2026 la barretta incartata T1 e' nel parco
+(`barretta_incartata_t1`), col suo PDF e l'immagine del prodotto, chiusa a
+pieghe: gli incarti erano l'unica famiglia senza un caso, e nessuna
+modifica poteva romperli senza che si vedesse. `prove/parco.py stesi` salta
+l'immagine del prodotto, che non e' un foglio.
 
 - Il **DT** e' un rettangolo, il passo lungo la barretta (141 mm) e il nastro
   attorno (70). Le righe intere, da un taglio all'altro, sono gli spigoli

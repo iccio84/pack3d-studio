@@ -6,7 +6,7 @@ di tutte le sezioni.
 ## Casi calibrati
 
 Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel
-registro `CASI` in `server.py`, riconosciuti dalla firma della pagina. Oggi
+registro `CASI` in `pack3d/famiglie/flowpack.py`, riconosciuti dalla firma della pagina. Oggi
 contiene una barretta proteica.
 
 Un caso tarato segue le tre regole come gli altri. Prima ne era fuori: la

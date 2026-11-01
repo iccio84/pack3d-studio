@@ -7,7 +7,7 @@ di tutte le sezioni.
 
 Uno sleeve di cartoncino arrotolato in un cono lungo e stretto, aperto in
 cima, col fondo schiacciato e saldato piatto: il tubo di un gelato da
-spremere. Un pezzo, cartotecnico (`pack3d/tubo.py`, `server.build_tubo`).
+spremere. Un pezzo, cartotecnico (`pack3d/tubo.py`, `famiglie.tubo.build_tubo`).
 E' nato dal caso 84c854d6a5: dichiarato cartotecnico in un pezzo, il solutore
 astuccio lo rifiutava («la sequenza delle fasce non e' ne' quella di un
 astuccio chiuso...», fasce 331, 15, 15, 24...), la scatola a punta e la coppa
@@ -16,7 +16,7 @@ bassa e' saldata/incollata, poi sale e prende forma di un cono allungato;
 il PDF e' uno sleeve come il cono gelato».
 
 Si prova dopo l'astuccio, dopo la scatola a punta e dopo la coppa
-(`server.RICONOSCIMENTO`): i casi che quelli prendono non cambiano strada.
+(`famiglie.registro.RICONOSCIMENTO`): i casi che quelli prendono non cambiano strada.
 
 ### La firma in fustella
 

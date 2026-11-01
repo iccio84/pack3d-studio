@@ -17,7 +17,7 @@ copia, cosi' l'analisi in memoria si ritrova fra /api/analyze e /api/build).
 Leggere sempre la pagina 0 non bastava: le altre restavano nel file, e chi lo
 passava tutto a Ghostscript senza limiti le rendeva tutte - `colata.quadricromia`
 le metteva nello stesso PNG. Il primo cartellino dice quante pagine aveva il
-file (`server.avviso_pagine`), perche' chi l'ha caricato sappia quale e'
+file (`famiglie.comune.avviso_pagine`), perche' chi l'ha caricato sappia quale e'
 diventata il modello.
 
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
@@ -253,7 +253,7 @@ capovolta:
   dritto come un fronte. Lo smentisce il cielo, che fra i due deve leggersi
   dritto col fronte: sull'astuccio della ciambella girato di 90 gradi il fronte era la
   faccia di PREPARAZIONE, e il cielo capovolto l'ha detto;
-- **flowpack** (`server.flowpack_sulla_grafica`): vota la fascia del fronte
+- **flowpack** (`famiglie.flowpack.flowpack_sulla_grafica`): vota la fascia del fronte
   (`flowpack.fronte_in_pagina`), e il giro vale se sullo steso girato
   l'analisi si risolve senza ripiego e il fronte si legge dritto. Il solutore
   i 90 gradi li reggeva gia' - traspone i suoi ingressi - ma la texture
@@ -282,17 +282,41 @@ grafica: sul fronte della brioche "RICICLAMI nella CARTA" sta a 303 gradi e,
 col suo corpo grande, pesava piu' di tutto il testo dritto. Vota solo chi sta
 entro 10 gradi da un multiplo di 90.
 
-**Il limite: senza testo vivo il verso non si legge**, e il foglio resta com'e'
-sulla tavola - il modello segue il foglio, come prima - e **lo si dice**:
-"verso della grafica non letto ... il verso va controllato sul modello". E'
-l'unico caso in cui il pack puo' ancora dipendere da come lo steso sta sulla
-tavola. Sul parco il testo vivo sul fronte ce l'hanno tutti gli astucci e
-sette flowpack su dodici; T1 ai cereali, T2 di cialde, T1 al cioccolato fresco,
-wafer T1 e croccante T2 fondente hanno il marchio e le scritte vettorializzati.
-Leggere il verso dalle lettere disegnate - la linea di base allineata, le
-aste che sporgono - e' la strada per loro; con le poche lettere di un marchio
-non e' affidabile, e un verso sbagliato con sicurezza e' peggio di uno
-dichiarato non letto.
+**Senza testo vivo sul fronte, il flowpack lo chiede alla tavola.** Sul
+parco il testo vivo sul fronte ce l'hanno tutti gli astucci, ma su 17
+flowpack 8 hanno il marchio e le scritte vettorializzati (T1 ai cereali, T2
+di cialde, T1 al cioccolato fresco, wafer T1, croccante T2 fondente e altri
+tre). Per loro il verso lo da' il testo vivo della **tavola fuori dallo
+steso** - il cartiglio, le quote, le note (`famiglie.flowpack.flowpack_sulla_grafica`):
+ogni carattere vota nel primo riquadro che lo contiene, il fronte, lo steso
+(che non vota) e la tavola. Il disegno tecnico dice come e' impaginato il
+foglio, non come si legge il pack - il file T6_base e' li' a ricordarlo - e
+per questo vale solo quando il fronte tace, e il giro vale solo se sul
+foglio girato lo steso si risolve senza ripiego e la tavola si legge dritta.
+Misurato prima di deciderlo, il 1 novembre 2026: sui 17 flowpack del parco la
+tavola si legge dritta tutte le volte che si legge, cioe' sempre, e anche dove
+il fronte si legge dritto; il testo dello steso fuori dal fronte invece no
+(sulla brioche, sul wafer da colazione e su altri cinque sta a 90 gradi), e
+non vota. Prima di questa regola, con la pagina girata di 90 gradi, gli 8
+flowpack senza testo vivo uscivano coricati col marchio in verticale, e
+capovolti a 180.
+
+**Sugli astucci la tavola non si chiede.** Misurato lo stesso giorno sui
+cartotecnici del parco: dove il verso della grafica si legge dalle facce, la
+tavola lo contraddice due volte - la vernice ha la grafica a 270 gradi su
+una tavola dritta, il T6_base il disegno tecnico dritto e la grafica
+capovolta. Chi impagina un astuccio lo gira spesso sulla tavola, uno
+steso di flowpack quasi mai. L'astuccio da sette pagine, che non ha testo
+vivo sulle facce, girato di un quarto esce ancora coricato: e' il limite
+qui sotto, e resta dichiarato.
+
+**Il limite che resta: senza testo vivo ne' sul fronte ne' sulla tavola il
+verso non si legge**, e il foglio resta com'e' sulla tavola - il modello
+segue il foglio, come prima - e **lo si dice**: "verso della grafica non
+letto ... il verso va controllato sul modello". Leggere il verso dalle
+lettere disegnate - la linea di base allineata, le aste che sporgono - e' la
+strada per quei file; con le poche lettere di un marchio non e' affidabile,
+e un verso sbagliato con sicurezza e' peggio di uno dichiarato non letto.
 
 Provato girando la pagina dei file del parco di 90, 180 e 270 gradi e
 costruendo ogni copia, cinque viste per modello contro quelle dell'originale:
@@ -306,6 +330,10 @@ costruendo ogni copia, cinque viste per modello contro quelle dell'originale:
     capovolti in due versi su quattro: senza testo vivo sul fronte
       flowpack  T1 ai cereali, T2 di cialde, T1 al cioccolato fresco, wafer T1,
                 croccante T2 fondente
+                (dal 1 novembre 2026, col verso dalla tavola: tutti i 17
+                flowpack del parco, girati di 90, 180 e 270 gradi, danno le
+                viste dell'originale, al decimo di livello di grigio; e il
+                disegno ingrandito del 3% le misure in scala)
 
 E un file salvato con `/Rotate 90` - l'astuccio T8 - da' il modello dell'originale.
 Sul parco nel verso di sempre cambia un solo modello, l'astuccio della ciambella, che

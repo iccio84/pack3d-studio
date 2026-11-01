@@ -1,6 +1,6 @@
 """
 Il gelato del tubo a cono: il ghiacciolo che esce dalla bocca, aggiunto al
-GLB del tubo (`server.build_tubo` con l'opzione «con il gelato»).
+GLB del tubo (`famiglie.tubo.build_tubo` con l'opzione «con il gelato»).
 
 Il ghiaccio e' aderente al tubo: dentro la bocca ha il raggio di dentro
 della parete (`STACCO` in meno) e si schiaccia come lei; sopra esce dritto,

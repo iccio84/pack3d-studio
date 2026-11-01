@@ -157,7 +157,7 @@ numero dei PDF arrivati, o la richiesta torna indietro.
   dice di essere un lid; se no resta l'errore dell'astuccio.
 - **Piu' pezzi**: va al risolutore dei pack in piu' PDF (`in_piu_pezzi`).
   Oggi sa montare la coppa col tappo e il cono col lid, e quale PDF e' quale
-  pezzo lo dice la pagina, non l'ordine (`server._pezzi_tondi`). Un PDF che
+  pezzo lo dice la pagina, non l'ordine (`famiglie.coppa._pezzi_tondi`). Un PDF che
   non e' un pezzo che sappia montare ferma la costruzione e il messaggio dice
   quale, e cosi' due PDF di pack diversi - lo sleeve di una coppa col lid di
   un cono: un pack plausibile coi pezzi sbagliati e' il difetto peggiore,
@@ -236,7 +236,7 @@ anche senza fermarsi, si provano le forme che rifiuta (punta, coppa, tubo) e
 poi ci si ferma dicendo «se e' un film, dichiara flowpack»
 (`CARTOTECNICO_SENZA_PANNELLI`). Prima scivolava fino al flowpack, come il
 vassoio. La tabella delle famiglie lo dice riga per riga: il flowpack si prova
-solo senza dichiarazione o dichiarato flowpack (`server.RICONOSCIMENTO`).
+solo senza dichiarazione o dichiarato flowpack (`famiglie.registro.RICONOSCIMENTO`).
 
 Lo stesso vale per i nomi. `SINONIMI_KIND` traduce le etichette con cui la
 tipologia puo' arrivare — `cartotecnico` e `astuccio` per l'astuccio,
@@ -389,8 +389,10 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - pdfium non si chiama da due thread
   - Due processi: i lavoratori
   - I tracciati di un PDF si leggono una volta
+  - Le rese di pdfium su disco
   - Un lavoro, una cartella e uno stato
   - Il registro delle famiglie
+  - Le famiglie fuori da server.py
   - Le prove veloci
 
 **`regole/flowpack.md`** - flowpack

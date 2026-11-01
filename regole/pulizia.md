@@ -452,7 +452,7 @@ resta colorato e' la lastra.
 
 Le lastre confermate viaggiano in `parametri_costruzione.aree_riservate` e la
 costruzione le strappa insieme alle altre, una passata sola: `aree_da_agente`
-in `server.py`, come `livello_da_agente` e gli altri. Senza quell'elenco il
+in `pack3d/famiglie/flowpack.py`, come `livello_da_agente` e gli altri. Senza quell'elenco il
 file resta com'era, che e' il comportamento di sempre.
 
 Sul T6 aperto sparisce il 9,7% della texture — i blocchi sulle falde e il
@@ -628,7 +628,7 @@ abbiamo, WRAPPING lo porta ogni flowpack e nessun astuccio.
 
 Allora, se il testo lo dice, il flowpack si prova per primo, e vince solo se
 l'analisi automatica si risolve davvero, senza ripiegare sul solutore vecchio
-(`server._dice_film`). Se non si risolve, si va avanti come sempre.
+(`famiglie.flowpack._dice_film`). Se non si risolve, si va avanti come sempre.
 
 ### Regole sempre valide
 

@@ -93,8 +93,8 @@ massimo quattro cose, e ognuna ha il suo posto:
 |---|---|
 | una regola di lettura del disegno | il file della famiglia in `regole/` (l'indice e' in `REGOLE.md`) |
 | qualcosa che l'analista deve fare diversamente | `ISTRUZIONI` in `agent.py` |
-| un conto che il codice sbagliava | `pack3d/flowpack.py`, `server.py` |
-| un impaginato che i solutori non coprono | registro `CASI` in `server.py` |
+| un conto che il codice sbagliava | `pack3d/flowpack.py`, `pack3d/famiglie/flowpack.py` |
+| un impaginato che i solutori non coprono | registro `CASI` in `pack3d/famiglie/flowpack.py` |
 
 Un ramo, un commit, un caso. Se il caso nuovo ti costringe a riscrivere mezzo
 `flowpack.py`, fermati: quasi sempre significa che stai generalizzando da un
