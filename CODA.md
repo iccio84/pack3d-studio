@@ -227,7 +227,7 @@ indietro - `coda-settimana` avanti a `main`, o casi approvati da chiudere
    **Poi il rilascio** (RILASCIO.md), se il caso ha avuto una PR unita in
    `coda-settimana`: la correzione va sullo Space subito, non a fine
    settimana - il parco intero nelle Actions, `main`, la prova del caso
-   sullo Space, tre quarti d'ora. Se un'altra sessione ha unito qualcosa nel
+   sullo Space, una mezz'ora. Se un'altra sessione ha unito qualcosa nel
    frattempo, il rilascio porta anche quello; se ne sta gia' facendo uno,
    l'unione allo SHA fissato si rifiuta e si riparte dal punto 2 di
    RILASCIO.md. **Il giro finisce qui.**

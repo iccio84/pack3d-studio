@@ -14,11 +14,12 @@ l'ha unita:
 - la routine, dopo la `consegna` di un caso corretto (CODA.md, *Il giro*);
 - una sessione che lavora sul codice, dopo l'unione della sua PR.
 
-Costa tre quarti d'ora: il parco intero nelle Actions di `pack3d-casi`, 34
-minuti il primo, il 2 novembre 2026 (`main` da ricostruire, perche' il
-rilascio prima l'aveva cambiata, e il codice nuovo), poi lo Space che
-riparte e la prova del caso. Senza correzioni non si rilascia niente: il
-giro della routine che non trova casi non pubblica.
+Costa una mezz'ora: il parco intero nelle Actions di `pack3d-casi`, una
+ventina di minuti, poi lo Space che riparte e la prova del caso. Il parco
+costruisce solo il codice nuovo: `main` la trova in cassa, perche' la cassa
+ha la chiave sull'albero del codice e `main` ha lo stesso albero che il
+rilascio prima ha appena provato. Senza correzioni non si rilascia niente:
+il giro della routine che non trova casi non pubblica.
 
 Resta una **rete di sicurezza**: il giro programmato della routine (quello
 senza `routine-fire-payload`), prima di guardare la coda, rilascia quello
@@ -46,9 +47,11 @@ approvati da chiudere (punto 1).
        gh api "repos/iccio84/pack3d-casi/actions/workflows/parco.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0] | [.id, .status, .conclusion, .created_at] | @tsv'
 
    Aspetta che il giro finisca (controlla ogni cinque minuti; un altro parco
-   in corso lo mette in fila): una mezz'ora o poco piu', perche' dopo ogni
-   rilascio `main` e' cambiata e il giro la ricostruisce (17 minuti) prima
-   del codice nuovo (16). `conclusion` e' `success` se nessun caso che con
+   in corso lo mette in fila): una ventina di minuti, il codice nuovo. Se
+   anche `main` manca in cassa (la cassa che nessuno usa per sette giorni
+   scade, o il parco e' cambiato) il giro la ricostruisce prima, altri 17
+   minuti; il riassunto del giro dice cosa ha trovato gia' costruito.
+   `conclusion` e' `success` se nessun caso che con
    `main` si costruiva si e' rotto e nessuna misura approvata e' cambiata
    (`prove/parco.py esito`). I modelli solo cambiati li dice il log del
    giro, nel passo «Le viste affiancate» (il riassunto di `confronto`, coi
@@ -84,13 +87,10 @@ approvati da chiudere (punto 1).
    bozza con la diagnosi, e scrivilo sulla issue del caso e nel riassunto.
    Il codice resta in `coda-settimana`, e la rete di sicurezza del giorno
    dopo lo ritrova.
-5. **Pubblica**. Prima, le statistiche dello Space nel registro dei casi:
-   ripartendo col codice nuovo le perde (`pack3d.statistiche`).
-
-       mkdir -p ../pack3d-casi/statistiche
-       curl -s https://iccio-maurizio.hf.space/api/statistiche > ../pack3d-casi/statistiche/<data>_<ora>.json
-
-   commit e push nel registro. Poi PR da `coda-settimana` verso `main`,
+5. **Pubblica**. Le statistiche dello Space non servono a mano: lo Space
+   le salva da solo nel registro dei casi quando si spegne per ripartire
+   col codice nuovo (`pack3d.statistiche`, `statistiche/spazio/`). PR da
+   `coda-settimana` verso `main`,
    titolo «Rilascio <data>: <cosa>», con la regola nuova, i casi per codice
    (mai i nomi dei file: il repository e' pubblico) e cosa cambia sul parco,
    e unione con merge commit **allo SHA del punto 2** (se il ramo e' andato
@@ -123,6 +123,16 @@ approvati da chiudere (punto 1).
    - **La risorsa della colata**: `curl -s https://iccio-maurizio.hf.space/api/ping`
      deve dire `"colata": true`. Se dice `false` manca il secret `CASI_TOKEN`
      (DEPLOY.md, *La risorsa della colata*): scrivilo nel riassunto.
+   - **Le statistiche della vita finita**: aggiorna il registro e guarda
+     l'ultimo salvataggio,
+
+         git -C ../pack3d-casi log -1 --format='%cr: %s' -- statistiche/spazio
+
+     Se lo Space prima del rilascio aveva lavorato (gli eventi di
+     `/api/statistiche` prima di pubblicare) e l'ultimo salvataggio e' di
+     prima del rilascio, la chiusura non le ha salvate: scrivilo nel
+     riassunto. Si perde al piu' un giorno, quello dopo il salvataggio
+     quotidiano.
 
    Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
    casi cambiati, e le loro misure approvate se la misura cambiata e'

@@ -16,6 +16,7 @@ import hmac
 import io
 import json
 import os
+import signal
 import sys
 from urllib.parse import quote, unquote
 import tempfile
@@ -1509,4 +1510,15 @@ if __name__ == "__main__":
     # le analisi e le costruzioni in processi a parte, prima di aprire la
     # porta: i lavoratori nascono da un processo che non ha ancora thread
     lavoratori.avvia()
+    # le statistiche nel registro dei casi, una volta al giorno e alla
+    # chiusura: lo Space che riparte (il rilascio, due giorni fermo) le
+    # perderebbe. Il SIGTERM arriva a questo processo, il primo del
+    # container: senza un gestore lo ignorerebbe fino al SIGKILL.
+    statistiche.avvia_salvataggio()
+
+    def _chiusura(_segnale, _quadro):
+        statistiche.salva_nel_registro(timeout=8)
+        raise SystemExit(0)
+
+    signal.signal(signal.SIGTERM, _chiusura)
     ThreadingHTTPServer((host, port), Handler).serve_forever()

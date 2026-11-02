@@ -548,6 +548,69 @@ class Statistiche(unittest.TestCase):
                          [dict(cosa="carton | lettura | ValueError: astuccio: x", quante=2)])
         self.assertEqual(r["conti"]["lettura"][0]["quante"], 1)
 
+    def _registro(self, risposte):
+        """Il registro dei casi finto: le richieste che riceve, e per ognuna
+        la risposta (un dict) o l'errore da sollevare."""
+        import urllib.error
+        from pack3d import coda
+        chieste = []
+
+        def richiesta(metodo, percorso, corpo=None, timeout=60):
+            chieste.append((metodo, percorso, dict(corpo) if corpo else None))
+            r = risposte.pop(0)
+            if isinstance(r, int):
+                raise urllib.error.HTTPError(percorso, r, "no", {}, None)
+            return r
+        for p in (mock.patch.object(coda, "_richiesta", richiesta),
+                  mock.patch.dict(os.environ, PACK3D_CODA_REPO="io/casi",
+                                  PACK3D_CODA_TOKEN="t"),
+                  mock.patch.dict(self.st._VITA, t=1000, nome="2026-11-02_100000",
+                                  parte=1, righe=0, sha=None)):
+            p.start()
+            self.addCleanup(p.stop)
+        return chieste
+
+    def test_il_registro_ha_gli_eventi_di_questa_vita(self):
+        import base64
+        import json
+        chieste = self._registro([{"content": {"sha": "s1"}}, {"content": {"sha": "s2"}}])
+        with open(self.st.FILE, "w", encoding="utf-8") as fh:
+            fh.write(json.dumps(dict(t=999, e="lettura")) + "\n")   # la vita di prima
+        with mock.patch("time.time", return_value=1001):
+            self.st.conta("lettura", dichiarato="flowpack")
+            self.st.conta("fermata", motivo="x")
+        self.assertTrue(self.st.salva_nel_registro())
+        metodo, percorso, corpo = chieste[0]
+        self.assertEqual((metodo, percorso),
+                         ("PUT", "/repos/io/casi/contents/statistiche/spazio/2026-11-02_100000.jsonl"))
+        righe = base64.b64decode(corpo["content"]).decode().splitlines()
+        self.assertEqual([json.loads(r)["e"] for r in righe], ["lettura", "fermata"])
+        self.assertNotIn("sha", corpo)
+        # niente di nuovo, niente commit
+        self.assertFalse(self.st.salva_nel_registro())
+        self.assertEqual(len(chieste), 1)
+        with mock.patch("time.time", return_value=1002):
+            self.st.conta("verdetto", esito="ok")
+        self.assertTrue(self.st.salva_nel_registro())
+        self.assertEqual(chieste[1][2]["sha"], "s1")
+
+    def test_il_registro_con_l_impronta_sbagliata_si_riprova(self):
+        chieste = self._registro([422, {"sha": "s9"}, {"content": {"sha": "s10"}}])
+        with mock.patch("time.time", return_value=1001):
+            self.st.conta("lettura")
+        self.assertTrue(self.st.salva_nel_registro())
+        self.assertEqual([c[0] for c in chieste], ["PUT", "GET", "PUT"])
+        self.assertEqual(chieste[2][2]["sha"], "s9")
+        self.assertEqual(self.st._VITA["sha"], "s10")
+
+    def test_senza_la_coda_non_si_salva(self):
+        chieste = self._registro([])
+        with mock.patch.dict(os.environ, PACK3D_CODA_TOKEN=""), \
+                mock.patch("time.time", return_value=1001):
+            self.st.conta("lettura")
+            self.assertFalse(self.st.salva_nel_registro())
+        self.assertEqual(chieste, [])
+
 
 class SchedeDeiDifetti(unittest.TestCase):
     """DIFETTI.md: ogni scheda ha le sue parole, e `prepara` le trova."""
