@@ -688,6 +688,33 @@ class GiudiceDelloSteso(unittest.TestCase):
                          [("V", 100.0, 100.0, 303.0, st), ("H", 300.0, 100.0, 300.0, st)])
 
 
+class DtFusoConLeNote(unittest.TestCase):
+    """`tools._fuso`: un gruppo di linee tecniche in cui nessuna penna da
+    sola copre meta' del gruppo e' piu' disegni uniti da un'altra penna."""
+
+    def _griglia(self, x0, y0, lato, st):
+        passi = [x0 + lato * f for f in (0.0, 0.3, 0.7, 1.0)]
+        return ([("H", y0 + (v - x0), x0, x0 + lato, st) for v in passi]
+                + [("V", v, y0, y0 + lato, st) for v in passi])
+
+    def test_due_viste_unite_dai_richiami(self):
+        from pack3d import tools
+        verde, nero = (0.5, "(43, 80, 53)"), (0.5, "(35, 31, 32)")
+        G = self._griglia(0.0, 0.0, 300.0, verde) + self._griglia(800.0, 0.0, 300.0, verde)
+        # i richiami neri: una catena di tratti che va da una vista all'altra
+        G += [("H", 150.0, 300.0 + 20.0 * i, 320.0 + 20.0 * i, nero) for i in range(25)]
+        self.assertTrue(tools._fuso(G, (0.0, 0.0, 1100.0, 300.0)))
+
+    def test_un_dt_a_due_penne_resta_uno(self):
+        # il contorno in una penna, le pieghe in un'altra (il wafer T1)
+        from pack3d import tools
+        nero, blu = (0.5, "(0, 0, 0)"), (0.3, "(0, 0, 255)")
+        G = [("H", 0.0, 0.0, 400.0, nero), ("H", 300.0, 0.0, 400.0, nero),
+             ("V", 0.0, 0.0, 300.0, nero), ("V", 400.0, 0.0, 300.0, nero)]
+        G += [("V", x, 0.0, 300.0, blu) for x in (100.0, 200.0, 300.0)]
+        self.assertFalse(tools._fuso(G, (0.0, 0.0, 400.0, 300.0)))
+
+
 class NumeriDelleQuote(unittest.TestCase):
     """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
     che `get_text_range` perde (un glifo sul codice 3, come in certi font)."""
