@@ -1,30 +1,55 @@
-# Il rilascio della settimana
+# Il rilascio: subito, ogni volta che il codice cambia
 
-Le istruzioni per il rilascio delle correzioni della settimana. Il giro di
-un caso (CODA.md) non le legge: si leggono solo quando tocca al rilascio.
-Valgono le stesse regole per risparmiare (CODA.md, *Prima di tutto:
-risparmiare*): log su file e a video il riassunto, le immagini solo dei casi
-cambiati, una per volta.
+Le istruzioni per portare sullo Space quello che e' stato unito in
+`coda-settimana`. Valgono le stesse regole per risparmiare (CODA.md, *Prima
+di tutto: risparmiare*): log su file e a video il riassunto, le immagini
+solo dei casi cambiati, una per volta.
 
-Una volta a settimana le correzioni di `coda-settimana` vanno sul sito, dopo
-le prove che i giri dei casi saltano: il parco intero, prima e dopo, e i casi
-della settimana sullo Space vero, col controllo dell'AI acceso. Lo fa il giro
-programmato della routine (quello senza `routine-fire-payload`) quando
-l'ultimo rilascio - l'ultima PR «Rilascio della settimana» unita in `main` -
-ha piu' di sei giorni, o non ce n'e' ancora nessuno; si puo' fare anche a
-mano. Si fa **prima** di guardare la coda.
+**Non si aspetta la settimana.** Fino al 2 novembre 2026 le correzioni
+restavano in `coda-settimana` fino al rilascio della domenica: chi aveva
+caricato un PDF poteva aspettare sette giorni un codice gia' pronto. Adesso
+il rilascio si fa **subito dopo ogni unione** in `coda-settimana`, da chi
+l'ha unita:
 
-1. **C'e' qualcosa da rilasciare?** Aggiorna i due repository. Se il ramo
-   `coda-settimana` non c'e', o `git diff --quiet origin/main
-   origin/coda-settimana` non trova differenze, e non ci sono issue aperte
-   con `da-rilasciare`, non c'e' niente: torna al giro.
+- la routine, dopo la `consegna` di un caso corretto (CODA.md, *Il giro*);
+- una sessione che lavora sul codice, dopo l'unione della sua PR.
+
+Costa una mezz'ora: il parco intero nelle Actions di `pack3d-casi`, 17-26
+minuti con la costruzione di `main` in cassa, poi lo Space che riparte e la
+prova del caso. Senza correzioni non si rilascia niente: il giro della
+routine che non trova casi non pubblica.
+
+Resta una **rete di sicurezza**: il giro programmato della routine (quello
+senza `routine-fire-payload`), prima di guardare la coda, rilascia quello
+che fosse rimasto indietro - `coda-settimana` avanti a `main`, o casi
+approvati da chiudere (punto 1).
+
+1. **C'e' qualcosa da rilasciare?** Aggiorna i due repository. Se
+   `git diff --quiet origin/main origin/coda-settimana` non trova differenze
+   e non ci sono issue aperte con `da-rilasciare`, non c'e' niente: torna al
+   giro. Se il codice e' uguale ma ci sono issue `da-rilasciare`, salta al
+   punto 6: il codice e' gia' sullo Space, quei casi si provano e si
+   chiudono.
 2. **Fissa il ramo.** Annota lo SHA di `origin/coda-settimana`: provi e
-   pubblichi quello, non quello che un giro di un caso unisce nel frattempo.
-3. **Parco prima e dopo**, per intero. Prima guarda l'ultimo **parco della
-   notte** (Actions di `pack3d-casi`, *Parco*): se e' rosso, la correzione
-   che ha rotto il caso e' fra quelle unite il giorno prima del rosso, e la
-   trovi prima di costruire. Il parco qui sotto si fa comunque, sullo SHA del
-   punto 2:
+   pubblichi quello, non quello che un'altra sessione unisce nel frattempo.
+3. **Il parco intero, prima e dopo, nelle Actions** di `pack3d-casi`: li' ci
+   sono i PDF, e la costruzione di `main` e' gia' in cassa.
+
+       gh api -X POST repos/iccio84/pack3d-casi/actions/workflows/parco.yml/dispatches -f ref=main -f "inputs[codice]=<SHA>"
+       gh api "repos/iccio84/pack3d-casi/actions/workflows/parco.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0] | [.id, .status, .conclusion, .created_at] | @tsv'
+
+   Aspetta che il giro finisca (controlla ogni cinque minuti; un altro parco
+   in corso lo mette in fila). `conclusion` e' `success` se nessun caso che
+   con `main` si costruiva si e' rotto e nessuna misura approvata e'
+   cambiata (`prove/parco.py esito`). I modelli solo cambiati li dice
+   `confronto.txt`, nell'artefatto del giro:
+
+       gh api repos/iccio84/pack3d-casi/actions/runs/<id>/artifacts --jq '.artifacts[0].archive_download_url'
+       gh api <url> > /tmp/parco.zip && unzip -o -q /tmp/parco.zip -d /tmp/parco && tail -20 /tmp/parco/confronto.txt
+
+   Se il comando che lancia il giro non e' permesso (le regole della
+   sessione: DEPLOY.md, *I permessi della routine*), il parco si fa in
+   locale, piu' lento - un'ora o due, la cassa e' vuota:
 
        git worktree add /tmp/prima origin/main
        git worktree add /tmp/dopo <SHA>
@@ -33,58 +58,54 @@ mano. Si fa **prima** di guardare la coda.
        python3 prove/parco.py confronta /tmp/parco_prima /tmp/parco_dopo
        python3 prove/parco.py stesi ../pack3d-casi /tmp/parco_dopo
 
-   e guarda **tutte** le immagini affiancate dei casi cambiati, una per una,
-   leggendo il `come_deve_venire` di ognuno.
 4. **Si pubblica solo se sono vere tutte**:
-   - ogni caso della settimana (le issue `da-rilasciare`, nel parco col loro
-     `codice`) e' giusto;
-   - ogni altro caso del parco e' **identico al byte**, oppure cambia e il
-     cambio e' un **miglioramento evidente**, spiegato caso per caso nella PR;
-   - `confronta` non trova **misure approvate cambiate** (in fondo, «MISURE
-     APPROVATE CAMBIATE»), oppure ognuna e' voluta e spiegata nella PR con i
-     suoi numeri: una misura che cambia senza una ragione e' un caso rotto,
-     anche se a occhio le viste sembrano uguali (il T1 del vassoio da 36 il
-     26 ottobre: 40,1 -> 37,1 mm);
-   - nessun caso del parco che prima si costruiva adesso fallisce;
-   - `stesi` non trova texture girate: ognuna e' lo steso del suo PDF;
-   - `python3 -m py_compile` passa sui file Python cambiati.
+   - il parco e' verde: nessun caso che prima si costruiva si e' rotto,
+     nessuna misura approvata cambiata, oppure ognuna voluta e spiegata
+     nella PR coi suoi numeri;
+   - i modelli cambiati sono solo quelli dei casi corretti in questo
+     rilascio - nel parco col loro `codice` - oppure ogni altro cambio e' un
+     **miglioramento evidente**, guardato sulle viste affiancate
+     dell'artefatto e spiegato caso per caso nella PR;
+   - il controllo `prove` della PR verso `main` e' verde.
 
-   Se un caso si e' rotto, trova quale correzione della settimana l'ha rotto
-   e sistemala con una regola generale, con una PR verso `coda-settimana`
-   come quelle dei casi; poi riparti dal punto 2. Se non ci riesci, non si
-   pubblica: apri (o aggiorna) la PR «Rilascio della settimana» in bozza con
-   la diagnosi, e scrivilo nel riassunto. I casi restano `da-rilasciare`: chi
-   li ha caricati ha gia' il modello approvato.
+   Se un caso si e' rotto, trova quale correzione l'ha rotto e sistemala con
+   una regola generale, con una PR verso `coda-settimana`; poi riparti dal
+   punto 2. Se non ci riesci, non si pubblica: PR «Rilascio» verso `main` in
+   bozza con la diagnosi, e scrivilo sulla issue del caso e nel riassunto.
+   Il codice resta in `coda-settimana`, e la rete di sicurezza del giorno
+   dopo lo ritrova.
 5. **Pubblica**. Prima, le statistiche dello Space nel registro dei casi:
    ripartendo col codice nuovo le perde (`pack3d.statistiche`).
 
-       curl -s https://iccio-maurizio.hf.space/api/statistiche > ../pack3d-casi/statistiche/<data>.json
+       mkdir -p ../pack3d-casi/statistiche
+       curl -s https://iccio-maurizio.hf.space/api/statistiche > ../pack3d-casi/statistiche/<data>_<ora>.json
 
-   commit e push nel registro; nel riassunto le fermate piu' frequenti, che
-   dicono dove il codice va reso piu' tollerante. Poi PR da `coda-settimana`
-   verso `main`, titolo «Rilascio della settimana <data>», con le regole della settimana, i casi per codice (mai i
-   nomi dei file: il repository e' pubblico) e cosa cambia sul parco. Unisci
-   con merge commit **allo SHA del punto 2** (l'expected head SHA: se il ramo
-   e' andato avanti, l'unione si rifiuta, e riparti dal punto 2). Controlla
-   che il workflow "Sync to Hugging Face Spaces" sul commit di unione finisca
-   con **success**.
-6. **Lo Space**: da un clone di `main` aggiornato, per ogni caso della
-   settimana,
+   commit e push nel registro. Poi PR da `coda-settimana` verso `main`,
+   titolo «Rilascio <data>: <cosa>», con la regola nuova, i casi per codice
+   (mai i nomi dei file: il repository e' pubblico) e cosa cambia sul parco,
+   e unione con merge commit **allo SHA del punto 2** (se il ramo e' andato
+   avanti l'unione si rifiuta: riparti dal punto 2). Gli stessi comandi
+   delle PR dei casi (CODA.md, *Quando si unisce*), con `base=main` e
+   `head=coda-settimana`. Controlla che il workflow "Sync to Hugging Face
+   Spaces" sul commit di unione finisca con **success**.
+6. **Lo Space**: da un clone di `main` aggiornato, per ogni caso di questo
+   rilascio e ogni issue `da-rilasciare`,
 
        python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi <nome> | tail -6
 
    che aspetta che lo Space riparta col codice nuovo e costruisce il caso
    come un utente, col controllo dell'AI acceso. Tutti i casi in un comando
    solo (un ciclo `for`): l'attesa dello Space la paga il primo.
-   - **"ok"** (uscita 0): commenta la issue col verdetto e il link al
-     rilascio, togli `da-rilasciare` e chiudila come risolta.
+   - **"ok"** (uscita 0): se la issue e' `da-rilasciare` - chi l'ha
+     caricato ha approvato - commenta col verdetto e il link al rilascio,
+     togli `da-rilasciare` e chiudila come risolta. Se e' ancora
+     `da-approvare`, commenta che la correzione e' sullo Space: la chiude il
+     rilascio dopo l'approvazione (la rete di sicurezza, punto 1).
    - **"dubbio" o "sbagliato"** (uscita 1 o 2): commenta col verdetto e i
-     difetti, metti `da-guardare` al posto di `da-rilasciare` e lasciala
-     aperta. Chi l'ha caricato ha approvato il modello, ma il controllo non
-     e' d'accordo: lo guarda chi gestisce il servizio.
+     difetti, metti `da-guardare` e lasciala aperta: il controllo non e'
+     d'accordo, lo guarda chi gestisce il servizio.
    - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
-     stato (uscita 3): scrivilo sulla issue e lasciala `da-rilasciare`; la
-     riprova il rilascio dopo.
+     stato (uscita 3): scrivilo sulla issue; la riprova il giro dopo.
    - **I lavoratori**: `curl -s https://iccio-maurizio.hf.space/api/lavori`
      dice quanti sono e la macchina che hanno visto (`macchina`). Devono
      essere tanti quante le vCPU dello Space; se no vedi DEPLOY.md, *Piu'
@@ -94,15 +115,11 @@ mano. Si fa **prima** di guardare la coda.
      (DEPLOY.md, *La risorsa della colata*): scrivilo nel riassunto.
 
    Poi in `pack3d-casi` aggiorna `parco/riferimento/` con le viste nuove dei
-   casi della settimana e dei casi cambiati, e le loro misure approvate:
-
-       python3 prove/parco.py misure ../pack3d-casi /tmp/parco_dopo --solo <casi> --approva
-
-   (solo i casi la cui misura cambiata e' voluta: le altre non si approvano),
-   commit e push.
+   casi cambiati, e le loro misure approvate se la misura cambiata e'
+   voluta (`prove/parco.py misure ... --solo <casi> --approva`), commit e
+   push.
 7. **Riallinea il ramo**: porta `main` dentro `coda-settimana` con una PR,
-   come una correzione (CODA.md, *Quando si unisce nel ramo della
-   settimana*):
+   come una correzione:
 
        gh api -X POST repos/iccio84/pack3d-studio/pulls -f base=coda-settimana -f head=main -f title="Riallinea coda-settimana a main" -f body="..." --jq .number
        gh api -X PUT repos/iccio84/pack3d-studio/pulls/<numero>/merge -f merge_method=merge -f sha=<sha di origin/main>
@@ -112,4 +129,6 @@ mano. Si fa **prima** di guardare la coda.
    L'aggiornamento diretto del riferimento del ramo e l'API "merges" di
    GitHub, da una sessione cloud, il proxy non li permette.
 
-Poi torna al giro (CODA.md): se c'e' un caso libero, lavoralo.
+Il parco della notte e le varianti della domenica (Actions di
+`pack3d-casi`) restano: sono la rete che vede quello che un rilascio non ha
+guardato.

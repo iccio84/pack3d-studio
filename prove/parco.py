@@ -103,7 +103,7 @@ un altro caso libero (`consegna` lo chiede da sola):
 
     python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso --solo <nome>
 
-Il parco intero, prima e dopo, lo fa il rilascio della settimana (vedi
+Il parco intero, prima e dopo, lo fa il rilascio (vedi
 RILASCIO.md), da un clone del ramo `coda-settimana`:
 
     git -C . worktree add /tmp/prima origin/main
@@ -1845,7 +1845,7 @@ def approvato(args):
         nome, args.categoria, detto.splitlines()[-1][:300] if detto else "")
         if in_glam else "**Glam non ha preso il modello** (%s): il caso e' risolto lo "
         "stesso, e il PDF si puo' ricostruire in Glam a mano." % detto[-300:])
-        + "\n\nResta aperta con `da-rilasciare`: la chiude il rilascio della settimana.")
+        + "\n\nResta aperta con `da-rilasciare`: la chiude il rilascio, dopo la prova sullo Space.")
     _metti(args.repo, n, "da-rilasciare")
     _togli(args.repo, n, "in-lavorazione", "da-approvare")
     print("caso %s: %s, da rilasciare (issue #%d)" % (
