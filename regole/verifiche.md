@@ -610,7 +610,8 @@ riproduce, trova la causa, scrive una regola generale e, se il caso adesso
 viene giusto, la unisce da sola nel ramo della settimana, `coda-settimana`,
 che lo Space non vede. Il modello va da approvare a chi ha caricato il PDF e,
 approvato, in Glam: li' il giro del caso finisce. Il parco intero e la prova
-sullo Space li fa, una volta a settimana, il **rilascio**. Un caso alla
+sullo Space li fa il **rilascio**, subito dopo (vedi sotto, *Il rilascio,
+subito*). Un caso alla
 volta: l'etichetta `in-lavorazione` sulla issue tiene lontane le sessioni dei
 giri dopo finche' quella che l'ha preso non ha finito. Il metodo, e le
 condizioni per unire senza chiedere, sono in CODA.md.
@@ -632,6 +633,16 @@ e, se viene gia' giusto, lo manda da approvare senza correggere niente.
 Quello che una correzione rompe su un caso gia' risolto lo trova il parco del
 rilascio, prima che arrivi sul sito: chi aveva quel caso ha gia' il suo
 modello.
+
+**Il rilascio, subito.** Dal 2 novembre 2026 non si aspetta piu' la
+settimana: una correzione unita va sullo Space mezz'ora dopo (RILASCIO.md).
+Il costo che aveva imposto la settimana veniva dal parco fatto nella
+sessione - due costruzioni intere, ognuna un giro in piu' che si porta dietro
+tutto - e oggi il parco gira nelle Actions di `pack3d-casi` (17-26 minuti,
+la costruzione di `main` gia' in cassa): la sessione lancia il giro, lo
+aspetta con qualche controllo, legge l'esito e i modelli cambiati, e prova
+il caso sullo Space con un comando solo. Il prezzo di prima - lo Space che
+per giorni costruiva col codice vecchio - non c'e' piu'.
 
 **Il giro di un caso, corto.** Anche senza le verifiche, un caso costava
 per i passi e per quello che ogni passo si porta dietro. Un giro parte gia'
@@ -690,8 +701,8 @@ costruzioni al byte, con le viste affiancate dei modelli che cambiano. Ogni
 caso risolto dalla coda entra nel parco: da quel momento nessuna modifica puo'
 romperlo senza che si veda.
 
-Dopo la pubblicazione - il rilascio della settimana - la sessione prova i
-casi della settimana **sullo Space vero**, col controllo dell'AI acceso, e
+Dopo la pubblicazione - il rilascio - la sessione prova i casi
+**sullo Space vero**, col controllo dell'AI acceso, e
 chiude le issue solo se il verdetto e' "ok". Per sapere quando lo Space e'
 ripartito col codice nuovo, `/api/ping` restituisce l'**impronta** dei file
 del codice in esecuzione (`pack3d/versione.py`): non git, che nell'immagine

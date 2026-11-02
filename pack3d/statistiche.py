@@ -14,7 +14,7 @@ lo restituisce. Il motivo di una fermata si accorcia e perde i numeri
 (`motivo`), perche' l'endpoint e' pubblico.
 
 Il file sta nella cartella delle casse (`PACK3D_CACHE`) e sullo Space se ne
-va a ogni ripartenza: il rilascio della settimana lo salva nel registro dei
+va a ogni ripartenza: il rilascio lo salva nel registro dei
 casi prima di pubblicare (RILASCIO.md). `PACK3D_STATISTICHE=0` lo spegne (il
 parco non conta: sono prove, non utenti).
 """

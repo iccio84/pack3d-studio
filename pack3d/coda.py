@@ -951,7 +951,7 @@ def _in_glam(cod, issue, cartella, nome):
         _richiesta("POST", "/repos/%s/issues/%d/comments" % (_repo(), n), {"body": "\n".join([
             "**In Glam**: «%s», cartella «%s». L'ha mandato lo Space, all'approvazione."
             % (nome, GLAM_CARTELLA), "",
-            "Resta aperta con `da-rilasciare`: la chiude il rilascio della settimana."])},
+            "Resta aperta con `da-rilasciare`: la chiude il rilascio, dopo la prova sullo Space."])},
             timeout=30)
         _richiesta("POST", "/repos/%s/issues/%d/labels" % (_repo(), n),
                    {"labels": ["da-rilasciare"]}, timeout=30)
