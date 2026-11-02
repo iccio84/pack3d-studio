@@ -722,6 +722,23 @@ class DtFusoConLeNote(unittest.TestCase):
         self.assertFalse(tools._fuso(G, (0.0, 0.0, 400.0, 300.0)))
 
 
+class GrigliaRicucita(unittest.TestCase):
+    """`tools._griglia_ricucita`: una piega disegnata a pezzi resta una
+    linea sola."""
+
+    def test_i_lati_spezzati_a_ogni_piega_fanno_griglia(self):
+        from pack3d import tools
+        st = (0.5, "(0, 0, 0)")
+        ys = (0.0, 100.0, 130.0, 230.0, 260.0)
+        # le righe attraversano tutto, le colonne si spezzano a ogni riga
+        G = [("H", y, 0.0, 200.0, st) for y in ys]
+        G += [("V", x, a, b, st) for x in (0.0, 200.0) for a, b in zip(ys, ys[1:])]
+        self.assertIsNone(tools._griglia(G))
+        t = tools._griglia_ricucita(G)
+        self.assertIsNotNone(t)
+        self.assertEqual(t[:4], (0.0, 0.0, 200.0, 260.0))
+
+
 class NumeriDelleQuote(unittest.TestCase):
     """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
     che `get_text_range` perde (un glifo sul codice 3, come in certi font)."""
