@@ -722,6 +722,29 @@ class DtFusoConLeNote(unittest.TestCase):
         self.assertFalse(tools._fuso(G, (0.0, 0.0, 400.0, 300.0)))
 
 
+class QuoteFuoriDallaFustella(unittest.TestCase):
+    """`dieline._largest_cluster` coi numeri: una quota non e' fustella, e
+    non deve portarsi via le alette."""
+
+    def test_una_quota_non_tira_fuori_le_alette(self):
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        # un'aletta a fianchi obliqui: nessun tratto H/V la attacca al corpo
+        aletta = ("H", -40.0, 20.0, 280.0, st)
+        # la quota a destra, 240 punti, coi richiami: quello in alto tocca
+        # l'aletta, quello in basso sta lontano dal corpo
+        quota = [("V", 360.0, -40.0, 200.0, st), ("H", -40.0, 283.0, 365.0, st),
+                 ("H", 200.0, 335.0, 365.0, st)]
+        tutti = corpo + [aletta] + quota
+        self.assertNotIn(aletta, dl._largest_cluster(tutti))
+        numeri = [(363.0, 80.0, round(240 * dl.PT2MM, 1))]
+        con = dl._largest_cluster(tutti, numeri=numeri)
+        self.assertIn(aletta, con)
+        self.assertFalse(any(s in con for s in quota))
+
+
 class GrigliaRicucita(unittest.TestCase):
     """`tools._griglia_ricucita`: una piega disegnata a pezzi resta una
     linea sola."""

@@ -502,7 +502,33 @@ def _gruppi(segs, gap=25.0):
 ALTRA_VISTA = 0.8
 
 
-def _largest_cluster(segs, gap=25.0, dettaglio=None):
+def _senza_quote(segs, numeri):
+    """`segs` senza le linee di quota e i loro richiami.
+
+    Una quota porta scritto accanto il numero della sua lunghezza
+    (`flowpack._quote_estese`, la linea piu' vicina fra quelle lunghe
+    quanto lui). I richiami sono i tratti perpendicolari che passano per i
+    suoi capi. Vedi `_largest_cluster`."""
+    from .flowpack import _quote_estese
+    quote = _quote_estese(segs, numeri)
+    if not quote:
+        return segs
+    tol = 3.0
+
+    def di_quota(s):
+        k, c, a, b, st = s
+        for (kq, cq), (_v, qa, qb) in quote.items():
+            if k == kq and abs(c - cq) <= tol and a >= qa - tol and b <= qb + tol:
+                return True
+            # un richiamo: perpendicolare, su un capo, attraversa la quota
+            if (k != kq and min(abs(c - qa), abs(c - qb)) <= tol
+                    and a - tol <= cq <= b + tol):
+                return True
+        return False
+    return [s for s in segs if not di_quota(s)]
+
+
+def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
     cartigli, legende e disegni di riepilogo posti a lato della fustella.
 
@@ -556,9 +582,20 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None):
         attaccato_y = y0 <= my1 + ATTACCATO and y1 >= my0 - ATTACCATO
         return ((dentro_x and attaccato_y) or (dentro_y and attaccato_x))
 
-    out = []
-    for g in groups.values():
-        if g is main or inside(g):
+    # Fuori dal corpo le quote non sono fustella. Una quota lunga quanto la
+    # fustella, coi richiami a un millimetro dagli angoli, univa le alette a
+    # fianchi obliqui - gruppi a se' - in un gruppo piu' largo del corpo su
+    # tutti e due gli assi, che `inside` non teneva piu': sul T3 di biscotti
+    # con le quote il fronte curvo, che si riconosce dalle alette, spariva.
+    # Le linee del corpo non si toccano: una piega con la sua misura scritta
+    # accanto resta piega.
+    altri = [g for g in groups.values() if g is not main]
+    if numeri and altri:
+        resto = _senza_quote([sg for g in altri for sg, _ in g], numeri)
+        altri = _gruppi(resto, gap)
+    out = [sg for sg, _ in main]
+    for g in altri:
+        if inside(g):
             out.extend(sg for sg, _ in g)
     return out
 
@@ -673,8 +710,14 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     all_segs = list(t.segmenti)
     pens = _technical_pens(all_segs, t.larghezza, t.altezza)
     segs = [s for s in all_segs if s[4] in pens] or all_segs
+    try:
+        from .quote import numeri as _numeri
+        numeri = [((x if asse == 0 else q) / PT2MM, (q if asse == 0 else x) / PT2MM, v)
+                  for v, x, q, asse in _numeri(pdf_path, page_no)]
+    except Exception:
+        numeri = []
     segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
-        pdf_path, r, page_no))
+        pdf_path, r, page_no), numeri=numeri)
     # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
     # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
     # guardando solo quello che sta sulla fustella.
