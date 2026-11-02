@@ -18,7 +18,9 @@ Costa una mezz'ora: il parco intero nelle Actions di `pack3d-casi`, una
 ventina di minuti, poi lo Space che riparte e la prova del caso. Il parco
 costruisce solo il codice nuovo: `main` la trova in cassa, perche' la cassa
 ha la chiave sull'albero del codice e `main` ha lo stesso albero che il
-rilascio prima ha appena provato. Senza correzioni non si rilascia niente:
+rilascio prima ha appena provato; e dentro la cassa ogni caso ha la sua
+impronta, cosi' il caso appena consegnato, nuovo nel parco, si costruisce
+da solo (`prove/parco.py costruisci --riusa`). Senza correzioni non si rilascia niente:
 il giro della routine che non trova casi non pubblica.
 
 Resta una **rete di sicurezza**: il giro programmato della routine (quello
@@ -47,10 +49,11 @@ approvati da chiudere (punto 1).
        gh api "repos/iccio84/pack3d-casi/actions/workflows/parco.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0] | [.id, .status, .conclusion, .created_at] | @tsv'
 
    Aspetta che il giro finisca (controlla ogni cinque minuti; un altro parco
-   in corso lo mette in fila): una ventina di minuti, il codice nuovo. Se
-   anche `main` manca in cassa (la cassa che nessuno usa per sette giorni
-   scade, o il parco e' cambiato) il giro la ricostruisce prima, altri 17
-   minuti; il riassunto del giro dice cosa ha trovato gia' costruito.
+   in corso lo mette in fila): una ventina di minuti, il codice nuovo. Di
+   `main` rifa' solo i casi nuovi o cambiati del parco - quello appena
+   consegnato, mezzo minuto; se `main` manca in cassa (la cassa che nessuno
+   usa per sette giorni scade) la ricostruisce intera, altri 17 minuti. Il
+   riassunto del giro dice quanti casi ha riusato e quanti ha costruito.
    `conclusion` e' `success` se nessun caso che con
    `main` si costruiva si e' rotto e nessuna misura approvata e' cambiata
    (`prove/parco.py esito`). I modelli solo cambiati li dice il log del

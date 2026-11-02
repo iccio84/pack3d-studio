@@ -612,6 +612,57 @@ class Statistiche(unittest.TestCase):
         self.assertEqual(chieste, [])
 
 
+class CassaDelParco(unittest.TestCase):
+    """`parco.py costruisci --riusa`: si rifanno solo i casi cambiati."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        self.parco = parco
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.dir, True))
+        os.makedirs(os.path.join(self.dir, "casi", "parco", "pdf"))
+        os.makedirs(os.path.join(self.dir, "casi", "risorse"))
+        for f, dati in (("a.pdf", b"a"), ("b.pdf", b"b")):
+            with open(os.path.join(self.dir, "casi", "parco", "pdf", f), "wb") as fh:
+                fh.write(dati)
+        self.casi = [dict(nome="a", file=["a.pdf"]), dict(nome="b", file=["b.pdf"])]
+        self.uscita = os.path.join(self.dir, "uscita")
+        os.makedirs(self.uscita)
+
+    def _impronte(self):
+        r = self.parco._impronta_risorse(os.path.join(self.dir, "casi"))
+        return {c["nome"]: self.parco._impronta_caso(os.path.join(self.dir, "casi"), c, r)
+                for c in self.casi}
+
+    def _costruito(self, nome, versione, caso):
+        import json
+        with open(os.path.join(self.uscita, nome + ".json"), "w") as fh:
+            json.dump(dict(nome=nome, stato=200, md5=None, secondi=1,
+                           versione=versione, caso=caso), fh)
+
+    def test_si_riusa_solo_lo_stesso_caso_con_lo_stesso_codice(self):
+        imp = self._impronte()
+        self._costruito("a", "v1", imp["a"])
+        self._costruito("b", "v0", imp["b"])          # codice di prima
+        self._costruito("vecchio", "v1", "x")          # tolto dal manifesto
+        r = self.parco._da_riusare(self.uscita, self.casi, "v1", imp, pulisci=True)
+        self.assertEqual(set(r), {"a"})
+        self.assertFalse(os.path.exists(os.path.join(self.uscita, "vecchio.json")))
+
+    def test_un_pdf_o_un_opzione_cambiati_cambiano_l_impronta(self):
+        prima = self._impronte()
+        with open(os.path.join(self.dir, "casi", "parco", "pdf", "a.pdf"), "wb") as fh:
+            fh.write(b"a2")
+        self.casi[1]["opzioni"] = {"x": 1}
+        dopo = self._impronte()
+        self.assertNotEqual(prima["a"], dopo["a"])
+        self.assertNotEqual(prima["b"], dopo["b"])
+        with open(os.path.join(self.dir, "casi", "risorse", "colata.png"), "wb") as fh:
+            fh.write(b"c")
+        self.assertNotEqual(dopo["a"], self._impronte()["a"])
+
+
 class SchedeDeiDifetti(unittest.TestCase):
     """DIFETTI.md: ogni scheda ha le sue parole, e `prepara` le trova."""
 

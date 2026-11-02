@@ -4,7 +4,7 @@ I PDF stanno nel repository PRIVATO dei casi (cartella `parco/` di
 iccio84/pack3d-casi), mai qui: sono artwork dei clienti, e questo repository
 e' pubblico. Qui c'e' solo lo strumento.
 
-    python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b]
+    python3 prove/parco.py costruisci CASI USCITA [--codice DIR] [--solo a,b] [--riusa]
     python3 prove/parco.py confronta PRIMA DOPO [--immagini DIR]
     python3 prove/parco.py esito PRIMA DOPO [--ieri DIR] [--titolo TESTO] [--riassunto FILE]
     python3 prove/parco.py stesi CASI USCITA [--solo a,b]
@@ -281,23 +281,81 @@ def _misura(glb, caso):
     return m, misure.confronta(caso.get("misure"), m)
 
 
+def _impronta_risorse(cartella):
+    """Le risorse del registro (la colata): entrano in ogni costruzione."""
+    h = hashlib.sha256()
+    radice = os.path.join(cartella, "risorse")
+    for base, dirs, files in os.walk(radice):
+        dirs.sort()
+        for f in sorted(files):
+            percorso = os.path.join(base, f)
+            h.update(os.path.relpath(percorso, radice).encode("utf-8") + b"\0")
+            with open(percorso, "rb") as fh:
+                h.update(hashlib.sha256(fh.read()).digest())
+    return h.hexdigest()[:16]
+
+
+def _impronta_caso(cartella, caso, risorse):
+    """Tutto quello che entra nella costruzione di un caso, fuori dal codice:
+    la sua voce del manifesto (file, opzioni, misure approvate), i suoi PDF e
+    le risorse. Uguale, col codice uguale, vuol dire lo stesso modello."""
+    h = hashlib.sha256(json.dumps(caso, sort_keys=True, ensure_ascii=False).encode("utf-8"))
+    for f in caso["file"]:
+        with open(os.path.join(cartella, "parco", "pdf", f), "rb") as fh:
+            h.update(hashlib.sha256(fh.read()).digest())
+    h.update(risorse.encode("ascii"))
+    return h.hexdigest()[:16]
+
+
+def _da_riusare(uscita, casi, impronta, impronte, pulisci):
+    """{nome: esito} dei casi gia' costruiti in `uscita` con questo codice e
+    con gli stessi file: non si ricostruiscono. Con `pulisci`, toglie dalla
+    cartella i casi che il manifesto non ha piu'."""
+    gia = _esiti(uscita) if os.path.isdir(uscita) else {}
+    riusati = {}
+    for caso in casi:
+        e = gia.get(caso["nome"])
+        if (e and e.get("versione") == impronta and e.get("caso") == impronte[caso["nome"]]
+                and (e.get("md5") is None or "viste" in e or os.path.exists(
+                    os.path.join(uscita, caso["nome"] + "_viste.png")))):
+            riusati[caso["nome"]] = e
+    if pulisci:
+        for nome in set(gia) - set(impronte):
+            for coda in (".json", "_viste.png", ".glb", "_lettura.jpg"):
+                try:
+                    os.remove(os.path.join(uscita, nome + coda))
+                except OSError:
+                    pass
+    return riusati
+
+
 def costruisci(args):
     from pack3d import versione, vista
     casi = _casi(args.casi, args.solo)
     os.makedirs(args.uscita, exist_ok=True)
     codice = os.path.abspath(args.codice or QUI)
     impronta = versione.impronta(codice)
+    risorse = _impronta_risorse(args.casi)
+    impronte = {c["nome"]: _impronta_caso(args.casi, c, risorse) for c in casi}
+    riusati = (_da_riusare(args.uscita, casi, impronta, impronte, pulisci=not args.solo)
+               if args.riusa else {})
+    riassunto = {n: dict(stato=e["stato"], md5=e["md5"], secondi=e["secondi"])
+                 for n, e in riusati.items()}
+    da_fare = [c for c in casi if c["nome"] not in riusati]
+    if riusati:
+        print("%d casi gia' costruiti con questo codice e gli stessi file: non li rifaccio"
+              % len(riusati))
     with open(os.path.join(args.uscita, "server.log"), "w") as log:
-        p, url = _avvia(codice, log, args.casi)
+        p, url = _avvia(codice, log, args.casi) if da_fare else (None, None)
         try:
-            riassunto = {}
-            for caso in casi:
+            for caso in da_fare:
                 nome = caso["nome"]
                 stato, glb, avvisi, sec, _ = _costruisci_caso(
                     url, args.casi, caso, os.path.join(args.uscita, nome + "_lettura.jpg"))
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
                              file=caso["file"], opzioni=caso.get("opzioni"),
-                             avvisi=avvisi, md5=None, versione=impronta)
+                             avvisi=avvisi, md5=None, versione=impronta,
+                             caso=impronte[nome])
                 if glb is not None:
                     with open(os.path.join(args.uscita, nome + ".glb"), "wb") as fh:
                         fh.write(glb)
@@ -323,13 +381,17 @@ def costruisci(args):
                     print("    MISURA APPROVATA CAMBIATA  %s" % r)
                 sys.stdout.flush()
         finally:
-            p.terminate()
-            try:
-                p.wait(timeout=20)
-            except subprocess.TimeoutExpired:
-                p.kill()
+            if p is not None:
+                p.terminate()
+                try:
+                    p.wait(timeout=20)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+    riassunto = {c["nome"]: riassunto[c["nome"]] for c in casi if c["nome"] in riassunto}
     with open(os.path.join(args.uscita, "riassunto.json"), "w") as fh:
         json.dump(dict(codice=codice, casi=riassunto), fh, indent=1)
+    # l'ultima riga: il workflow del parco la legge per sapere se salvare la cassa
+    print("parco: riusati %d, costruiti %d" % (len(riusati), len(da_fare)))
 
 
 def _esiti(cartella):
@@ -2221,6 +2283,9 @@ def main():
                                     "(di serie questo repository)")
     c.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                    help="solo questi casi, separati da virgole")
+    c.add_argument("--riusa", action="store_true",
+                   help="non rifare i casi gia' in USCITA con lo stesso codice e "
+                        "gli stessi file (la cassa del parco nelle Actions)")
     c.set_defaults(fai=costruisci)
     k = sub.add_parser("confronta", help="confronta due costruzioni del parco")
     k.add_argument("prima")
