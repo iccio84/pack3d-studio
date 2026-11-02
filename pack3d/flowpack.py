@@ -1739,6 +1739,11 @@ def _quote(S, numeri):
     lui: il taglio vero accanto alla quota e' lungo uguale, e a otto
     millimetri il numero lo prendeva per quota anche lui.
     """
+    return {k: v for k, (v, _a, _b) in _quote_estese(S, numeri).items()}
+
+
+def _quote_estese(S, numeri):
+    """Come `_quote`, coi due capi della linea: `{(kind, c): (valore, a, b)}`."""
     gruppi = {}
     for k, c, a, b, st in S:
         chiave = (k, round(c / 3.0))
@@ -1753,10 +1758,52 @@ def _quote(S, numeri):
             if (d <= QUOTA_ACCANTO_MM / PT2MM and a <= lungo_t <= b
                     and abs(v - (b - a) * PT2MM) <= 1.5
                     and (meglio is None or d < meglio[0])):
-                meglio = (d, k, c)
+                meglio = (d, k, c, a, b)
         if meglio:
-            fuori[meglio[1:]] = v
+            fuori[meglio[1:3]] = (v,) + meglio[3:]
     return fuori
+
+
+# Una quota d'insieme (`_smentito`) e' lunga almeno questa frazione del lato
+# che misura: le quote di una catena - la pinna, una fascia - sono pezzi, e
+# non dicono dove stanno i capi dello steso.
+QUOTA_D_INSIEME = 0.8
+# Di quanto i capi del riquadro possono stare lontani dai capi della linea di
+# quota, in mm: il capo e' la linea piu' esterna del suo gruppo (`capi`), il
+# riquadro il centro, a un millimetro.
+QUOTA_AI_CAPI_MM = 2.0
+# Fin dove, dai lati del riquadro, una quota gli appartiene, in mm: le quote
+# delle miniature stanno piu' lontano.
+QUOTA_VICINA_MM = 30.0
+
+
+def _smentito(estese, a0, a1, b0, b1):
+    """Il riquadro e' smentito da una quota scritta: `True`.
+
+    Una quota d'insieme lungo un lato - parallela, vicina, lunga almeno
+    QUOTA_D_INSIEME del lato e non piu' di lui - comincia e finisce sui capi
+    dello steso: le sue linee di richiamo partono da li'. Se il riquadro va
+    oltre, o comincia altrove, non e' lo steso. Sul T1 al cioccolato fresco
+    con le quote il riquadro chiuso piu' grande arrivava a 113 mm, fino al
+    filo dell'abbondanza, e la quota scritta dei 101 si fermava sul taglio
+    vero, disegnato solo per l'89%: il riquadro di 113 si risolveva a pillow,
+    plausibile e sbagliato. Una quota piu' lunga del lato non smentisce
+    niente: misura un'altra cosa.
+    """
+    mm = 1.0 / PT2MM
+    for (k, c), (v, qa, qb) in estese.items():
+        lo, hi, p0, p1 = (b0, b1, a0, a1) if k == "H" else (a0, a1, b0, b1)
+        lato = (hi - lo) * PT2MM
+        if not (p0 - QUOTA_VICINA_MM * mm <= c <= p1 + QUOTA_VICINA_MM * mm):
+            continue
+        if not (QUOTA_D_INSIEME * lato <= v <= lato + 1.5):
+            continue
+        if (min(qb, hi) - max(qa, lo)) * PT2MM < QUOTA_D_INSIEME * v:
+            continue
+        if (abs(qa - lo) * PT2MM > QUOTA_AI_CAPI_MM
+                or abs(qb - hi) * PT2MM > QUOTA_AI_CAPI_MM):
+            return True
+    return False
 
 
 def _quota_su(quote, kind, c):
@@ -1837,8 +1884,10 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     (TAGLIA_GRAFICA) e meno uno per ogni lato vuoto - e a pari coerenza il
     piu' grande. Un lato che copre meno di LATO_A_META conta per due lati
     dubbi. Le quote si cercano fra tutte le linee del DT (`S_quote`), anche
-    fuori dal riquadro misurato. Se nessuno torna si resta sui capi di
-    prima, e lo si dice.
+    fuori dal riquadro misurato. Una quota d'insieme che non comincia e
+    finisce sui capi li smentisce (`_smentito`): il giudice interviene anche
+    con un lato dubbio solo, e un riquadro smentito non e' candidato. Se
+    nessuno torna si resta sui capi di prima, e lo si dice.
 
     Una regola sola al posto di una per disegnatore: la quota del T1 a fondo
     argento, la cornice di una tavola e la legenda attaccata sono lo stesso
@@ -1848,7 +1897,8 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     """
     import bisect
     y0, y1, x0, x1 = hs[0], hs[-1], vs[0], vs[-1]
-    quote = _quote(S_quote if S_quote is not None else S, numeri)
+    estese = _quote_estese(S_quote if S_quote is not None else S, numeri)
+    quote = {k: v for k, (v, _a, _b) in estese.items()}
 
     def diretto(*r):
         # sul riquadro esterno, quattro strisce: l'immagine integrale costa di
@@ -1870,7 +1920,10 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     # taglio col buco, come il mandarino, copre l'89% - e conta per due: il
     # fondo di una legenda attaccata
     peso = len(dubbi) + sum(1 for k in dubbi if aperti[k] < LATO_A_META)
-    if peso < 2 or len(hs) < 4 or len(vs) < 2:
+    # una quota d'insieme che non comincia e finisce sui capi esterni li
+    # smentisce da sola (`_smentito`)
+    smentiti = _smentito(estese, y0, y1, x0, x1)
+    if (peso < 2 and not smentiti) or len(hs) < 4 or len(vs) < 2:
         hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
         return hs2, vs2, None
 
@@ -1937,6 +1990,8 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
                     # riquadro buono ne e' la gran parte, non un pezzo
                     if a1 - a0 < 0.5 * (y1 - y0) or b1 - b0 < 0.5 * (x1 - x0):
                         continue
+                    if _smentito(estese, a0, a1, b0, b1):
+                        continue
                     cop = coperture(a0, a1, b0, b1)
                     if min(cop) < CHIUSO_COERENTE:
                         continue
@@ -1962,9 +2017,11 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
         a0, a1, b0, b1 = hs[i], hs[j], vs[p], vs[q]
         avviso = ("steso per coerenza: i capi esterni hanno %d lati che non sono "
                   "tagli (%s) - quote o una cornice: nessuna linea ci arriva e "
-                  "non sono stampati, o portano il numero della loro lunghezza; "
+                  "non sono stampati, o portano il numero della loro lunghezza%s; "
                   "preso il riquadro %.1f x %.1f mm"
-                  % (len(dubbi), ", ".join(dubbi), (a1 - a0) * PT2MM, (b1 - b0) * PT2MM))
+                  % (len(dubbi), ", ".join(dubbi),
+                     " - e una quota scritta non comincia e finisce sui capi"
+                     if smentiti else "", (a1 - a0) * PT2MM, (b1 - b0) * PT2MM))
         return hs[i:j + 1], vs[p:q + 1], avviso
     hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
     return hs2, vs2, ("capi esterni dubbi: %d lati non sembrano tagli (%s), ma "
@@ -1989,9 +2046,26 @@ def _copre(linee, c, a0, a1, tol=3.0):
     return tot / (a1 - a0) if a1 > a0 else 0.0
 
 
+def _ritaglia(S, y0, y1, x0, x1, tol=3.0):
+    """I segmenti di `S` dentro il riquadro, tagliati ai suoi bordi (`tol` in
+    punti, quella del riquadro stampato in `analyze_auto`)."""
+    fuori = []
+    for k, c, a, b, st in S:
+        lo, hi, p0, p1 = (x0, x1, y0, y1) if k == "H" else (y0, y1, x0, x1)
+        if not p0 - tol <= c <= p1 + tol:
+            continue
+        a2, b2 = max(a, lo - tol), min(b, hi + tol)
+        if b2 - a2 > 1.0:
+            fuori.append((k, c, a2, b2, st))
+    return fuori
+
+
 def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None,
-                   ipotesi="giudice"):
-    """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
+                   ipotesi="giudice", ritagliato=None):
+    """Ricava il flowpack da segmenti e rasterizzazione gia' orientati.
+
+    `ritagliato` e' l'avviso del giudice quando `S` e' gia' ritagliato sul
+    riquadro che lui ha scelto: si rifa' tutto li' dentro una volta sola."""
     from .dieline import _cluster
 
     # Le soglie erano assolute, 150 e 250 punti, e non possono esserlo: fra il
@@ -2044,13 +2118,20 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None
     # le fasce ci tornano: su una variante del tubo piatto da 115 il riquadro
     # esterno era quello giusto, e il giudice ne prendeva uno da 99 x 85 in
     # cui le fasce non si risolvono.
-    hs_g, vs_g, coerenza = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri,
-                                              S_quote=S_quote)
-    if coerenza and coerenza.startswith("steso per coerenza"):
-        # i capi del riquadro scelto sono la linea piu' esterna del loro
-        # gruppo, non il centro: vedi `capi`
-        hs_g, vs_g = capi(H, hs_g), capi(V, vs_g)
-    vecchio = _riquadro_chiuso(S, hs, vs, numeri=numeri)
+    if ritagliato is None:
+        hs_g, vs_g, coerenza = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri,
+                                                  S_quote=S_quote)
+        if coerenza and coerenza.startswith("steso per coerenza"):
+            # i capi del riquadro scelto sono la linea piu' esterna del loro
+            # gruppo, non il centro: vedi `capi`
+            hs_g, vs_g = capi(H, hs_g), capi(V, vs_g)
+        vecchio = _riquadro_chiuso(S, hs, vs, numeri=numeri)
+    else:
+        # `S` e' gia' il riquadro scelto dal giudice: qui si rifanno solo i
+        # gruppi, il riquadro non si ridecide. I numeri delle quote, a otto
+        # millimetri dai capi, li facevano prendere per quote a
+        # `_riquadro_chiuso`, che tagliava lo steso vero
+        hs_g, vs_g, coerenza, vecchio = hs, vs, ritagliato, None
 
     def _dentro(hs, vs, coerenza):
         y0, y1 = hs[0], hs[-1]
@@ -2155,6 +2236,21 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None
                                      y0 + (inizio + giro) / PT2MM)))
 
     if ipotesi == "giudice":
+        if (coerenza and coerenza.startswith("steso per coerenza")
+                and ritagliato is None):
+            # Dentro il riquadro scelto si rifa' tutto da capo, come se il
+            # blocco stampato fosse lui: i gruppi di linee venivano da tutto
+            # il riquadro esterno, e una legenda attaccata che allarga il
+            # blocco fino alle miniature sotto lo steso portava dentro i loro
+            # gruppi, che il solutore prendeva per pieghe. Se cosi' non torna
+            # resta il riquadro com'era.
+            try:
+                return _risolvi_steso(
+                    _ritaglia(S, hs_g[0], hs_g[-1], vs_g[0], vs_g[-1]), raster,
+                    sc, ruotato, modo, numeri=numeri, S_quote=S_quote,
+                    ipotesi="giudice", ritagliato=coerenza)
+            except _StesoNonRisolto:
+                pass
         return _dentro(hs_g, vs_g, coerenza)
     if (hs_g, vs_g) == tuple(vecchio):
         raise _StesoNonRisolto("il riquadro di prima e' quello del giudice")

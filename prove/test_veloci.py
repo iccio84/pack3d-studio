@@ -656,6 +656,37 @@ class GiudiceDelloSteso(unittest.TestCase):
         fpk, S, hs, vs, raster = self._steso(pinna_bianca=True)
         self.assertEqual(fpk._riquadro_coerente(S, hs, vs, raster, 1.0), (hs, vs, None))
 
+    def test_una_quota_d_insieme_dice_dove_stanno_i_capi(self):
+        # la quota dei 101 sotto lo steso, dal capo sinistro al taglio: il
+        # riquadro che arriva al filo dell'abbondanza (113) e' smentito, come
+        # quello che comincia alla pinna (13); una quota di catena (20) o piu'
+        # lunga del lato (206,5 su 184) non smentisce niente
+        from pack3d import flowpack as fpk
+        mm = 1.0 / fpk.PT2MM
+        x0, y0, y1 = 50.0, 50.0, 50.0 + 115 * mm
+        quota = {("H", y1 + 8 * mm): (101.0, x0, x0 + 101 * mm)}
+        self.assertFalse(fpk._smentito(quota, y0, y1, x0, x0 + 101 * mm))
+        self.assertTrue(fpk._smentito(quota, y0, y1, x0, x0 + 113 * mm))
+        self.assertTrue(fpk._smentito(quota, y0, y1, x0 + 13 * mm, x0 + 113 * mm))
+        catena = {("H", y1 + 8 * mm): (20.0, x0, x0 + 20 * mm)}
+        self.assertFalse(fpk._smentito(catena, y0, y1, x0, x0 + 113 * mm))
+        lunga = {("H", y1 + 8 * mm): (206.5, x0 - 10 * mm, x0 + 196.5 * mm)}
+        self.assertFalse(fpk._smentito(lunga, y0, y1, x0, x0 + 184 * mm))
+        # le quote delle miniature, lontane, non sono di questo riquadro
+        lontana = {("H", y1 + 60 * mm): (101.0, x0, x0 + 101 * mm)}
+        self.assertFalse(fpk._smentito(lontana, y0, y1, x0, x0 + 113 * mm))
+
+    def test_il_ritaglio_tiene_le_linee_dello_steso(self):
+        # dentro il riquadro scelto: il capo sinistro, che prosegue nella
+        # legenda attaccata, si taglia al riquadro; la linea di una miniatura
+        # sotto lo steso resta fuori
+        from pack3d import flowpack as fpk
+        st = (0.5, "(0, 0, 0)")
+        S = [("V", 100.0, 100.0, 400.0, st), ("H", 300.0, 100.0, 300.0, st),
+             ("V", 150.0, 360.0, 500.0, st)]
+        self.assertEqual(fpk._ritaglia(S, 100.0, 300.0, 100.0, 300.0),
+                         [("V", 100.0, 100.0, 303.0, st), ("H", 300.0, 100.0, 300.0, st)])
+
 
 class NumeriDelleQuote(unittest.TestCase):
     """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
