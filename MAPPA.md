@@ -57,7 +57,8 @@ sono in GADGET.md.
   flowpack), non a pdfplumber.
 - `pack3d/statistiche.py`: dove il codice si ferma sui PDF veri, senza nomi
   - letture, costruzioni, fermate col loro motivo, verdetti dell'AI - in
-  `/api/statistiche`; il rilascio le salva nel registro (`statistiche/`).
+  `/api/statistiche`; lo Space le salva da solo nel registro ogni giorno e
+  quando si spegne (`statistiche/spazio/`).
 - `pack3d/rese.py`: le rese costose di pdfium tenute su disco, con la chiave
   sul contenuto del file e su tutto quello che decide i pixel, per
   ricostruire lo stesso PDF con un'altra opzione senza rifarle. Chi aggiunge
