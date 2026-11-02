@@ -175,7 +175,13 @@ indietro - `coda-settimana` avanti a `main`, o casi approvati da chiudere
    regola, *Un caso che non si risolve*. Se la regola cambia altri modelli
    approvati del parco, non e' di tutti: diventa una **scelta del pack**, con
    un valore di serie che lascia gli altri come sono (REGOLE.md, *Una regola
-   per tutti, o una scelta del pack*).
+   per tutti, o una scelta del pack*). Se lo steso di un flowpack e' letto
+   piu' grande o piu' piccolo del vero perche' un lato non e' un taglio, la
+   correzione va nel giudice dello steso (regole/flowpack.md, *Il giudice
+   dello steso*): l'indizio che mancava nel punteggio, che vale per tutti i
+   disegnatori, e la prova con le varianti di stile del parco:
+
+       python3 prove/parco.py varianti ../pack3d-casi /tmp/stili --famiglia flowpack --varianti quote,cornice,legenda | tail -8
 6. **Correggi e ricostruisci solo il caso**:
 
        python3 prove/parco.py costruisci ../pack3d-casi /tmp/caso_<codice> --solo <nome> | tail -3

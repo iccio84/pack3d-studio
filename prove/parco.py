@@ -1968,6 +1968,9 @@ def _pagina_variata(sorgente, destinazione, variante):
     - `miniatura`: una copia della pagina a un quinto, accanto, come le
       miniature dei cartigli;
     - `copertina`: una pagina in piu' davanti, senza disegno;
+    - `quote`, `cornice`, `legenda`: lo stesso PDF con piu' disegno nella
+      penna del DT - quote lunghe quanto lo steso, una cornice, una legenda
+      attaccata - come lo disegnano altri grafici (`_disegno_in_piu`);
     - `appiattito`: ripassato da Ghostscript con le scritte in tracciati,
       come un PDF di stampa appiattito - senza testo vivo e senza livelli.
       Attenzione: Ghostscript butta anche gran parte del disegno tecnico
@@ -1994,11 +1997,143 @@ def _pagina_variata(sorgente, destinazione, variante):
         corrente = uscita
 
 
+def _riquadro_tecnico(pdf, pagina):
+    """Il riquadro del disegno tecnico nella pagina e la sua penna:
+    `((x0, y0, x1, y1), (spessore, (r, g, b)))` nel telaio di misura (punti,
+    y dall'alto), o None. Il riquadro e' quello delle linee lunghe della
+    penna tecnica: per un flowpack, lo steso."""
+    from pack3d.dieline import _technical_pens
+    from pack3d.tracciati import segmenti, _canali
+    segs, W, H = segmenti(pdf, pagina)
+    penne = _technical_pens(segs, W, H)
+    if not penne:
+        return None
+    lunghezza = {}
+    for k, c, a, b, st in segs:
+        if st in penne:
+            lunghezza[st] = lunghezza.get(st, 0.0) + (b - a)
+    penna = max(lunghezza, key=lunghezza.get)
+    tec = [sg for sg in segs if sg[4] in penne]
+    lh = max((b - a for k, c, a, b, st in tec if k == "H"), default=0.0)
+    lv = max((b - a for k, c, a, b, st in tec if k == "V"), default=0.0)
+    hs = [c for k, c, a, b, st in tec if k == "H" and b - a >= 0.6 * lh]
+    vs = [c for k, c, a, b, st in tec if k == "V" and b - a >= 0.6 * lv]
+    if not hs or not vs:
+        return None
+    rgb = _canali(penna[1]) or [0, 0, 0]
+    riquadro = (min(vs), min(hs), max(vs), max(hs))
+    if pagina == 0:
+        # un flowpack: lo steso come lo legge il codice di adesso, che sui
+        # casi del parco e' quello giusto. Le linee lunghe da sole prendono
+        # anche la seconda vista della tavola, quando ce n'e' una
+        try:
+            from pack3d import flowpack as fpk
+            from pack3d.famiglie.flowpack import analisi_flowpack
+            _box, fp, ripiego = analisi_flowpack(pdf)
+            if ripiego is None:
+                riquadro = fpk.foglio_in_pagina(fp)
+        except Exception:
+            pass
+    return riquadro, (max(penna[0], 0.1), rgb)
+
+
+def _disegno_in_piu(pdf, pagina, variante, mx0, my1):
+    """Il contenuto da aggiungere alla pagina per le varianti di stile del
+    disegno tecnico, nella stessa penna del DT; None se il DT non si trova.
+
+    - `quote`: la quota del passo sotto lo steso e quella del giro a destra,
+      lunghe quanto lo steso, col loro numero: il T1 del biscotto argento;
+    - `cornice`: un riquadro attorno al DT, a dieci millimetri, come la
+      cornice di una tavola disegnata con la stessa penna;
+    - `legenda`: un riquadro con le scritte della legenda attaccato sotto
+      lo steso, largo meta'."""
+    from pack3d.dieline import PT2MM
+    r = _riquadro_tecnico(pdf, pagina)
+    if r is None:
+        return None
+    (x0, y0, x1, y1), (w, rgb) = r
+    mm = 1.0 / PT2MM
+    colore = " ".join("%.3f" % (v / 255.0) for v in rgb)
+
+    def X(x):
+        return x + mx0
+
+    def Y(y):
+        return my1 - y
+
+    righe = ["q %s RG %s rg %.2f w" % (colore, colore, w)]
+
+    def linea(xa, ya, xb, yb):
+        righe.append("%.2f %.2f m %.2f %.2f l S" % (X(xa), Y(ya), X(xb), Y(yb)))
+
+    def testo(x, y, t, girato=False):
+        m = "0 1 -1 0" if girato else "1 0 0 1"
+        righe.append("BT /Fq %.1f Tf %s %.2f %.2f Tm (%s) Tj ET"
+                     % (2.6 * mm, m, X(x), Y(y), t))
+
+    if variante == "quote":
+        buco = 7 * mm
+        # il passo, sotto
+        yq, xm = y1 + 8 * mm, (x0 + x1) / 2
+        linea(x0, y1 + 1 * mm, x0, yq + 2 * mm)
+        linea(x1, y1 + 1 * mm, x1, yq + 2 * mm)
+        linea(x0, yq, xm - buco / 2, yq)
+        linea(xm + buco / 2, yq, x1, yq)
+        testo(xm - buco / 2 + 0.5 * mm, yq + 1 * mm, "%g" % round((x1 - x0) * PT2MM))
+        # il giro, a destra
+        xq, ym = x1 + 8 * mm, (y0 + y1) / 2
+        linea(x1 + 1 * mm, y0, xq + 2 * mm, y0)
+        linea(x1 + 1 * mm, y1, xq + 2 * mm, y1)
+        linea(xq, y0, xq, ym - buco / 2)
+        linea(xq, ym + buco / 2, xq, y1)
+        testo(xq + 1 * mm, ym + buco / 2 - 0.5 * mm, "%g" % round((y1 - y0) * PT2MM),
+              girato=True)
+    elif variante == "cornice":
+        d = 10 * mm
+        for xa, ya, xb, yb in ((x0 - d, y0 - d, x1 + d, y0 - d), (x0 - d, y1 + d, x1 + d, y1 + d),
+                               (x0 - d, y0 - d, x0 - d, y1 + d), (x1 + d, y0 - d, x1 + d, y1 + d)):
+            linea(xa, ya, xb, yb)
+    elif variante == "legenda":
+        xl, yl = x0 + (x1 - x0) / 2, y1 + 22 * mm
+        linea(x0, y1, x0, yl)
+        linea(xl, y1, xl, yl)
+        linea(x0, yl, xl, yl)
+        for k, t in enumerate(("LEGENDA", "taglio", "cordonatura", "area non stampata")):
+            testo(x0 + 3 * mm, y1 + (5 + 4.5 * k) * mm, t)
+    else:
+        return None
+    righe.append("Q")
+    return ("\n".join(righe) + "\n").encode("ascii")
+
+
 def _un_passo(sorgente, destinazione, variante):
     """Una variante sola di `_pagina_variata`."""
     from pypdf import PdfReader, PdfWriter, Transformation
     from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject,
                                RectangleObject)
+    if variante in ("quote", "cornice", "legenda"):
+        from pypdf import PageObject
+        w = PdfWriter(clone_from=sorgente)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                                 NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        for i, p in enumerate(w.pages):
+            mb = p.mediabox
+            dati = _disegno_in_piu(sorgente, i, variante, float(mb.left), float(mb.top))
+            if not dati:
+                continue
+            sopra = PageObject.create_blank_page(w, float(mb.width), float(mb.height))
+            sopra.mediabox = RectangleObject([float(mb.left), float(mb.bottom),
+                                              float(mb.right), float(mb.top)])
+            flusso = DecodedStreamObject()
+            flusso.set_data(dati)
+            sopra[NameObject("/Contents")] = w._add_object(flusso)
+            sopra[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+                {NameObject("/Fq"): w._add_object(font)})})
+            p.merge_page(sopra)
+        with open(destinazione, "wb") as fh:
+            w.write(fh)
+        return
     if variante == "appiattito":
         subprocess.run(["gs", "-q", "-o", destinazione, "-sDEVICE=pdfwrite",
                         "-dNoOutputFonts", sorgente], check=True, timeout=900,
@@ -2321,7 +2456,8 @@ def main():
     va.add_argument("--varianti", default=["giro90", "giro180", "giro270", "scala1.03"],
                     type=lambda s: [x for x in s.split(",") if x],
                     help="giroN (N = 90, 180, 270), rotate, scalaS, spostato, "
-                         "miniatura, copertina, appiattito, separate da virgole; "
+                         "miniatura, copertina, appiattito, quote, cornice, "
+                         "legenda, separate da virgole; "
                          "si sommano con + (appiattito+giro90)")
     va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                     help="solo questi casi, separati da virgole")
