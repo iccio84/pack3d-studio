@@ -84,6 +84,14 @@ lo spessore della carta e le pareti in giu'.
   rotazione, non un altro specchio: la stampa delle pareti resta leggibile,
   dritta e non specchiata.
 
+Il fronte quindi lo decide come sta il coperchio sulla tavola, e la
+grafica non lo conferma: sulla scatola esagonale del parco il coperchio non
+ha testo vivo, e girato di un quarto la scatola esce voltata di lato
+(`prove/parco.py varianti`, 1 novembre 2026). La tavola non lo puo' dire -
+sugli astucci la contraddice due volte (`regole/pdf.md`) - e allora lo si
+dice: senza testo vivo sul coperchio, o col testo girato, la costruzione
+avvisa che il verso va controllato sul modello.
+
 La texture di ogni pezzo e' il suo DT intero, come per il ballotin, con sotto
 le strisce del rovescio e del taglio; il bordo libero di ogni parete prende
 la costa. Due nodi nel GLB, `fondo` e `coperchio`, e i due stesi

@@ -26,7 +26,7 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
     suo posto sul foglio."""
     dpi, tmax = risoluzione(quality)
     pdf, n_pagine = artwork.pagina_unica(pdf)
-    p = incarto.riconosci(pdf)
+    pdf, p, giro = incarto.sulla_tavola(pdf)
     if p is None:
         raise ValueError("incarto a triangolo: il DT non si legge come il "
                          "foglio di una barretta incartata (cinque fasce fra "
@@ -52,6 +52,9 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
         avvisi.append("lastre tecniche e coperture tolte per nome: %s"
                       % ", ".join(lastre))
     avvisi.extend(p.avvisi)
+    if giro:
+        avvisi.append("foglio girato di %d gradi prima di costruire: l'incarto "
+                      "si legge col passo in orizzontale e la scritta dritta" % giro)
     m = 1.0 / PT2MM
     x0, y0, x1, y1 = p.regione
     x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m
@@ -97,7 +100,7 @@ def analisi_incarto_dichiarato(pdf, chiusura):
         raise ValueError("incarto avvolto (tipo l'ovetto): il codice non sa "
                          "ancora costruirlo. Il caso va in coda col PDF e "
                          "l'immagine del prodotto")
-    letto = _analisi_incarto(pdf)
+    letto = _analisi_incarto(pdf, quarto=True)
     if letto is None:
         raise ValueError("incarto a pieghe: il DT non si legge come il foglio "
                          "di una barretta incartata (vuole cinque fasce fra "
@@ -106,7 +109,7 @@ def analisi_incarto_dichiarato(pdf, chiusura):
     return letto
 
 
-def _analisi_incarto(pdf):
+def _analisi_incarto(pdf, quarto=False):
     """I cartellini dell'incarto a triangolo, o None se non lo e': il film
     attorno a una barretta rigida, chiuso sulle testate (`pack3d.incarto`).
     Il flowpack non lo rifiuta, lo risolve male - le pinne seghettate al
@@ -114,14 +117,14 @@ def _analisi_incarto(pdf):
     (vuole cinque fasce fra righe intere e le testate dritte sulla faccia di
     mezzo)."""
     try:
-        ic = incarto.riconosci(pdf)
+        letto, ic, _giro = incarto.sulla_tavola(pdf, quarto=quarto)
     except Exception:
         traceback.print_exc()
         return None
     if ic is None:
         return None
     meta = incarto.dichiara(ic) + list(ic.avvisi)
-    rgb = avviso_quadricromia(pdf, regione=ic.regione)
+    rgb = avviso_quadricromia(letto, regione=ic.regione)
     if rgb:
         meta.insert(0, rgb)
     return dict(kind="incarto", title="Incarto a triangolo", meta=meta)

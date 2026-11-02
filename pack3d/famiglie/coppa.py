@@ -16,6 +16,7 @@ from .. import lettura as lettura_pdf
 from .. import nero
 from .. import prisma
 from .. import steso as lo_steso
+from .. import tracciati
 from ..artwork import risoluzione
 from ..dieline import PT2MM
 from ..dieline import Panel
@@ -355,6 +356,20 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
         if lastre:
             avvisi.append("%s: lastre tecniche e coperture tolte per nome: %s"
                           % (nome, ", ".join(lastre)))
+        if cop:
+            # Il fronte e' il lato del coperchio in basso sul foglio
+            # (`pack3d.prisma`): lo decide come sta lo steso sulla tavola.
+            # Detto, non taciuto, quando la grafica non lo conferma.
+            g = tracciati.verso_grafica(pdf, {"dt": pr.regione}).get("dt")
+            if g is None:
+                avvisi.append("verso della grafica non letto: sul coperchio "
+                              "non c'e' testo vivo, e il fronte e' il lato in "
+                              "basso sul foglio - il verso va controllato sul "
+                              "modello")
+            elif g:
+                avvisi.append("il testo del coperchio e' girato di %d gradi sul "
+                              "foglio, e il fronte e' il lato in basso sul "
+                              "foglio - il verso va controllato sul modello" % g)
         m = 1.0 / PT2MM
         x0, y0, x1, y1 = pr.regione
         x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m

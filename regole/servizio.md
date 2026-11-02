@@ -357,6 +357,23 @@ importa dalle famiglie solo quello che usa.
 - **`comune` non importa nessuna famiglia, e le famiglie non importano
   `server`**: il servizio usa le famiglie, mai il contrario.
 
+### Le statistiche: dove il codice si ferma sui PDF veri
+
+Il parco dice come vanno i casi che conosciamo; per sapere dove rendere il
+codice piu' tollerante servono quelli che arrivano. Lo Space conta, senza
+nomi ne' file (`pack3d.statistiche`): ogni lettura e costruzione con la
+famiglia dichiarata e quella letta, ogni fermata col suo motivo, ogni
+verdetto del controllo dell'AI (e se l'ha corretto). Una riga JSON per
+evento, in append - i lavoratori sono processi a parte, e una riga corta in
+append non si mescola - e `/api/statistiche` le somma. Il motivo perde i
+numeri e quello che sta fra parentesi, che sono le misure del PDF: l'endpoint
+e' pubblico.
+
+Il file sta nella cartella delle casse e lo Space lo perde quando riparte:
+il rilascio della settimana lo salva nel registro dei casi prima di
+pubblicare (RILASCIO.md, punto 5). Il parco non conta
+(`PACK3D_STATISTICHE=0`): sono prove, non utenti.
+
 ### Le prove veloci
 
 Il parco dice CHE cosa si e' rotto, ma ci mette da venti a quaranta minuti e

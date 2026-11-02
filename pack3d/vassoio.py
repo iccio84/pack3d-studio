@@ -187,6 +187,15 @@ def riconosci_sagomato(d):
     return v
 
 
+def _basso_di_lato(v, tol=1.0):
+    """Se la parete piu' bassa del vassoio e' a est o a ovest - di lato sul
+    foglio - di piu' di `tol` mm."""
+    p = v.pareti
+    if not all(k in p for k in ("nord", "sud", "est", "ovest")):
+        return False
+    return min(p["est"], p["ovest"]) < min(p["nord"], p["sud"]) - tol
+
+
 def riconosci_sulla_tavola(pdf, sagomato=False):
     """`(pdf, dieline estratta, Vassoio o None, giro, avviso)`.
 
@@ -202,6 +211,21 @@ def riconosci_sulla_tavola(pdf, sagomato=False):
     leggi = riconosci_sagomato if sagomato else riconosci
     d = dieline.extract(pdf)
     v = leggi(d)
+    if v is not None and _basso_di_lato(v):
+        # Il davanti e' la parete piu' bassa (`testata_davanti`), ma si
+        # sceglie fra nord e sud, il sopra e il sotto del foglio. Sul vassoio
+        # sagomato del riempimento T1 cheesecake, girato di un quarto, la
+        # parete bassa stava a ovest: il vassoio guardava di lato e nel vano
+        # entravano 18 pezzi invece di 36. Si legge il foglio girato, se li'
+        # la parete bassa e' una testata.
+        for giro in (90, 270):
+            girato = artwork.pagina_girata(pdf, giro)
+            d2 = dieline.extract(girato)
+            v2 = leggi(d2)
+            if v2 is not None and not _basso_di_lato(v2):
+                return girato, d2, v2, giro, (
+                    "foglio girato di %d gradi: la parete piu' bassa, il "
+                    "davanti del vassoio, sulla tavola stava di lato" % giro)
     if v is not None:
         return pdf, d, v, 0, None
     for giro in (90, 270):

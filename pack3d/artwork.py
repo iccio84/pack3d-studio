@@ -65,10 +65,11 @@ _UNA_PAGINA_MAX = 8
 
 
 def pagina_unica(pdf):
-    """`(pdf con la sola prima pagina, quante pagine aveva il file)`.
+    """`(pdf con la sola pagina del disegno, quante pagine aveva il file)`.
 
-    Si lavora sulla PRIMA pagina e basta: un artwork su piu' pagine e' quasi
-    sempre lo stesso pack ripetuto per lingua - sul T2 di cialde
+    Si lavora sulla PRIMA pagina col disegno (`_pagina_col_dt`) e basta: un
+    artwork su piu' pagine e' quasi sempre lo stesso pack ripetuto per
+    lingua - sul T2 di cialde
     "64-GERMANY" e "01-ITALY", identici tranne il piede. Leggere sempre la
     pagina 0 non bastava a dirlo: le altre restavano nel file, e chi lo
     passava tutto a Ghostscript senza limiti le rendeva tutte. Tolte qui,
@@ -94,6 +95,53 @@ def pagina_unica(pdf):
     return p, n
 
 
+# Quanti tratti - lunghi almeno 20 pt, dritti o curvi, non piu' spessi di 2
+# pt - fanno una prima pagina col disegno: il bordo e il titolo di una
+# copertina non ci arrivano
+TECNICI_MIN = 8
+# oltre, le pagine non si guardano: e' un catalogo, non un artwork
+PAGINE_GUARDATE = 10
+
+
+def _pagina_col_dt(pdf, n):
+    """L'indice della pagina col disegno: la prima, se ha i suoi tratti; se
+    no quella che ne ha di piu'.
+
+    Un artwork su piu' pagine e' quasi sempre lo stesso pack per lingua, e si
+    lavora sulla prima. Ma davanti puo' esserci una pagina senza disegno - la
+    copertina, la scheda, le note -: con la prima pagina sola il flowpack si
+    fermava con "nessun tracciato tecnico riconoscibile", e prima di tutti
+    quelli del parco con una copertina davanti (`prove/parco.py varianti`,
+    1 novembre 2026). La prima pagina coi suoi tratti resta la prima: i file
+    di sempre non cambiano strada, e le altre si contano solo quando la
+    prima ne ha pochi. Allora vince la pagina che ne ha di piu' - non una
+    soglia: il lid del cono T1 ha sei tratti in tutto, un disco e due assi."""
+    from . import dieline
+
+    def tratti(i):
+        try:
+            t = dieline.tratti(pdf, i)
+        except Exception:
+            return 0
+        dritti = sum(1 for _k, _c, a, b, st in t.segmenti
+                     if b - a > 20.0 and (st[0] or 0.0) <= 2.0)
+        # e le curve: il lid di un cono e' un disco
+        curve = sum(1 for k, st, o in t.oggetti
+                    if k == "curve" and (st[0] or 0.0) <= 2.0
+                    and max(o.get("x1", 0) - o.get("x0", 0),
+                            o.get("bottom", 0) - o.get("top", 0)) > 20.0)
+        return dritti + curve
+
+    primi = tratti(0)
+    if primi >= TECNICI_MIN:
+        return 0
+    conti = [(tratti(i), -i) for i in range(1, min(n, PAGINE_GUARDATE))]
+    if not conti:
+        return 0
+    piu, meno_i = max(conti)
+    return -meno_i if piu > primi else 0
+
+
 def _pagina_unica(pdf):
     import pypdf
     imp = _impronta(pdf)
@@ -108,10 +156,12 @@ def _pagina_unica(pdf):
         return pdf, 1
     if n <= 1:
         return pdf, n
+    scelta = _pagina_col_dt(pdf, n)
     try:
         w = pypdf.PdfWriter(clone_from=pdf)
-        for i in range(len(w.pages) - 1, 0, -1):
-            w.remove_page(i)
+        for i in range(len(w.pages) - 1, -1, -1):
+            if i != scelta:
+                w.remove_page(i)
         tmp = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False, dir=stato.cartella())
         tmp.close()
         with open(tmp.name, "wb") as fh:

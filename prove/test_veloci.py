@@ -109,6 +109,24 @@ class LetturaDellaFustella(unittest.TestCase):
             stili = {s[4] for s in dl._segments(pagina)}
         self.assertEqual(stili, {(0.5, "(0.0, 0.0, 0.0)")})
 
+    def test_la_pagina_col_disegno_dopo_una_copertina(self):
+        import pypdf
+        from pack3d import artwork
+        disegno = _pdf(self.cartella, GRIGLIA)
+        w = pypdf.PdfWriter(clone_from=disegno)
+        w.insert_blank_page(600.0, 600.0, index=0)      # la copertina, vuota
+        f = os.path.join(self.cartella, "con_copertina.pdf")
+        with open(f, "wb") as fh:
+            w.write(fh)
+        self.assertEqual(artwork._pagina_col_dt(f, 2), 1)
+        # la prima pagina col disegno resta la prima
+        w = pypdf.PdfWriter(clone_from=disegno)
+        w.add_blank_page(600.0, 600.0)
+        g = os.path.join(self.cartella, "con_retro.pdf")
+        with open(g, "wb") as fh:
+            w.write(fh)
+        self.assertEqual(artwork._pagina_col_dt(g, 2), 0)
+
     def test_la_chiave_e_il_contenuto_non_il_nome(self):
         pdf = _pdf(self.cartella, GRIGLIA)
         n = len(dl.segmenti(pdf))
@@ -499,6 +517,36 @@ class FileDelCasoNelRegistro(unittest.TestCase):
                          ["/repos/io/casi/contents/casi/2026-10-29_abc/a.pdf"])
         # senza `da-guardare` la routine non riparte: il caso e' gia' libero
         self.coda.avvia_routine.assert_not_called()
+
+
+class Statistiche(unittest.TestCase):
+    """`statistiche`: una riga per evento, sommate, senza numeri nei motivi."""
+
+    def setUp(self):
+        from pack3d import statistiche
+        self.st = statistiche
+        cartella = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(cartella, True))
+        self._f = mock.patch.object(statistiche, "FILE", os.path.join(cartella, "s.jsonl"))
+        self._f.start()
+        self.addCleanup(self._f.stop)
+
+    def test_il_motivo_perde_numeri_e_misure(self):
+        e = ValueError("astuccio: i fianchi (3.4 e 5.0 mm) non tornano con 45,3 mm. "
+                       "Fasce (mm): [45.3, 131.5]")
+        self.assertEqual(self.st.motivo(e),
+                         "ValueError: astuccio: i fianchi non tornano con # mm")
+
+    def test_le_righe_si_sommano(self):
+        for _ in range(2):
+            self.st.conta("fermata", fase="lettura", dichiarato="carton",
+                          motivo="ValueError: astuccio: x")
+        self.st.conta("lettura", dichiarato="flowpack", letto="flowpack")
+        r = self.st.riassunto()
+        self.assertEqual(r["eventi"], 3)
+        self.assertEqual(r["conti"]["fermata"],
+                         [dict(cosa="carton | lettura | ValueError: astuccio: x", quante=2)])
+        self.assertEqual(r["conti"]["lettura"][0]["quante"], 1)
 
 
 class SchedeDeiDifetti(unittest.TestCase):
