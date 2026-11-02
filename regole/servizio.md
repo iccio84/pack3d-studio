@@ -369,9 +369,23 @@ append non si mescola - e `/api/statistiche` le somma. Il motivo perde i
 numeri e quello che sta fra parentesi, che sono le misure del PDF: l'endpoint
 e' pubblico.
 
-Il file sta nella cartella delle casse e lo Space lo perde quando riparte:
-il rilascio lo salva nel registro dei casi prima di
-pubblicare (RILASCIO.md, punto 5). Il parco non conta
+Il file sta nella cartella delle casse e lo Space lo perde quando riparte -
+il rilascio, ma anche due giorni fermo, che nessuno decide. Per questo lo
+salva lui nel registro dei casi, una volta al giorno e quando si spegne (il
+server gestisce il SIGTERM: e' il primo processo del container, e senza un
+gestore lo ignorerebbe fino al SIGKILL), solo se ci sono eventi nuovi: un
+commit al giorno al piu', e nessuno se nessuno ha usato il servizio. Un file
+per ogni vita dello Space, `statistiche/spazio/<avvio>.jsonl`, riscritto ogni
+volta con tutti gli eventi da quando e' partito: la somma di tutti i file
+non conta niente due volte.
+
+    python3 -m pack3d.statistiche ../pack3d-casi/statistiche/spazio/*.jsonl
+
+I file `statistiche/*.json` piu' vecchi sono i riassunti che il rilascio
+salvava a mano fino al 2 novembre 2026. Il salvataggio usa la coda
+(`PACK3D_CODA_REPO`, `PACK3D_CODA_TOKEN`) ma non chiede se il registro e'
+privato, come per i PDF: sono gli stessi conti che `/api/statistiche` da' a
+tutti, e alla chiusura basta una richiesta sola. Il parco non conta
 (`PACK3D_STATISTICHE=0`): sono prove, non utenti.
 
 ### Le prove veloci
