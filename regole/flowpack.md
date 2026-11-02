@@ -845,13 +845,16 @@ due viste la cornice attorno alla vista stampata faceva griglia del gruppo
 unito dai richiami neri - vista, cornice, note e vista interna - e lo steso
 vero era meno di meta' del riquadro esterno. Ora quel gruppo si divide penna
 per penna (`tools._fuso`, regole/pdf.md *Un DT solo*), e la cornice e' 17 su
-18. Resta:
-
-- la pinna bianca e il margine fra lo steso e la cornice si presentano
-  uguali - un lato vuoto, una linea chiusa piu' in dentro - e il giudice non
-  li distingue. Sul T2 al cioccolato fondente lo stesso dubbio c'e' ancora,
-  ma con la cornice a 10 mm dal DT il giudice ci arriva; con una cornice
-  piu' vicina no.
+18. Restava la pinna bianca: lei e il margine fra lo steso e la cornice si
+presentano uguali - un lato vuoto, una linea chiusa piu' in la' - e il
+punto che costa un lato vuoto faceva vincere, sul T1 a pinna bianca con la
+cornice, il riquadro senza la pinna (147,5 invece di 165). La differenza
+c'e', ed e' una conoscenza di base: la pinna e' dello steso, e i tagli del
+passo la attraversano fino al bordo - gli angoli di quel lato si chiudono;
+alla cornice, dieci millimetri piu' in la', i lati dello steso non
+arrivano. Ora il lato vuoto costa solo se i suoi angoli restano aperti.
+Cornice 18 su 18, e lo stesso con la cornice piu' vicina sul T2 al
+cioccolato fondente.
 
 Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
 decide, l'immagine integrale della stampa, per non rileggere il raster
