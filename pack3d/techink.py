@@ -1113,7 +1113,10 @@ def zone_gda(pdf, page_no=0):
         n = tp.count_chars()
         if n <= 0:
             return []
-        testo = tp.get_text_range()
+        # un carattere per indice: `get_text_range` ne perde, e le posizioni
+        # di `get_charbox` scivolavano sul carattere dopo (quote.testo_per_indice)
+        from .quote import testo_per_indice
+        testo = testo_per_indice(tp)
         if "kcal" not in testo.lower():
             return []
         car = []

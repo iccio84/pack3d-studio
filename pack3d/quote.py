@@ -37,6 +37,26 @@ ALLINEATI = 2.0
 SCARTO = 0.6
 
 
+def testo_per_indice(tp):
+    """Il testo di una textpage di pdfium, un carattere per indice.
+
+    `get_text_range` perde i caratteri che non sa scrivere (un glifo che il
+    font mappa sul codice 3, per esempio), e da li' in poi l'indice nel testo
+    non e' piu' quello del carattere: `get_charbox(i)` dava la posizione di un
+    altro carattere, e un numero di quota finiva dove c'era un'altra scritta,
+    anche in un'altra vista della tavola. Qui ogni indice resta il suo.
+    """
+    import pypdfium2.raw as raw
+    fuori = []
+    for i in range(tp.count_chars()):
+        u = raw.FPDFText_GetUnicode(tp.raw, i)
+        try:
+            fuori.append(chr(u) if u else " ")
+        except (ValueError, OverflowError):
+            fuori.append(" ")
+    return "".join(fuori)
+
+
 def numeri(pdf, page_no=0):
     """I numeri scritti come testo: `[(valore, lungo, traverso, asse)]`.
 
@@ -51,7 +71,7 @@ def numeri(pdf, page_no=0):
     try:
         page = doc[page_no]
         tp = page.get_textpage()
-        testo = tp.get_text_range()
+        testo = testo_per_indice(tp)
         mx0, _my0, _mx1, my1 = page.get_mediabox()
         for m in NUMERO.finditer(testo):
             try:

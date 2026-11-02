@@ -656,6 +656,76 @@ class GiudiceDelloSteso(unittest.TestCase):
         fpk, S, hs, vs, raster = self._steso(pinna_bianca=True)
         self.assertEqual(fpk._riquadro_coerente(S, hs, vs, raster, 1.0), (hs, vs, None))
 
+    def test_una_quota_d_insieme_dice_dove_stanno_i_capi(self):
+        # la quota dei 101 sotto lo steso, dal capo sinistro al taglio: il
+        # riquadro che arriva al filo dell'abbondanza (113) e' smentito, come
+        # quello che comincia alla pinna (13); una quota di catena (20) o piu'
+        # lunga del lato (206,5 su 184) non smentisce niente
+        from pack3d import flowpack as fpk
+        mm = 1.0 / fpk.PT2MM
+        x0, y0, y1 = 50.0, 50.0, 50.0 + 115 * mm
+        quota = {("H", y1 + 8 * mm): (101.0, x0, x0 + 101 * mm)}
+        self.assertFalse(fpk._smentito(quota, y0, y1, x0, x0 + 101 * mm))
+        self.assertTrue(fpk._smentito(quota, y0, y1, x0, x0 + 113 * mm))
+        self.assertTrue(fpk._smentito(quota, y0, y1, x0 + 13 * mm, x0 + 113 * mm))
+        catena = {("H", y1 + 8 * mm): (20.0, x0, x0 + 20 * mm)}
+        self.assertFalse(fpk._smentito(catena, y0, y1, x0, x0 + 113 * mm))
+        lunga = {("H", y1 + 8 * mm): (206.5, x0 - 10 * mm, x0 + 196.5 * mm)}
+        self.assertFalse(fpk._smentito(lunga, y0, y1, x0, x0 + 184 * mm))
+        # le quote delle miniature, lontane, non sono di questo riquadro
+        lontana = {("H", y1 + 60 * mm): (101.0, x0, x0 + 101 * mm)}
+        self.assertFalse(fpk._smentito(lontana, y0, y1, x0, x0 + 113 * mm))
+
+    def test_il_ritaglio_tiene_le_linee_dello_steso(self):
+        # dentro il riquadro scelto: il capo sinistro, che prosegue nella
+        # legenda attaccata, si taglia al riquadro; la linea di una miniatura
+        # sotto lo steso resta fuori
+        from pack3d import flowpack as fpk
+        st = (0.5, "(0, 0, 0)")
+        S = [("V", 100.0, 100.0, 400.0, st), ("H", 300.0, 100.0, 300.0, st),
+             ("V", 150.0, 360.0, 500.0, st)]
+        self.assertEqual(fpk._ritaglia(S, 100.0, 300.0, 100.0, 300.0),
+                         [("V", 100.0, 100.0, 303.0, st), ("H", 300.0, 100.0, 300.0, st)])
+
+
+class NumeriDelleQuote(unittest.TestCase):
+    """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
+    che `get_text_range` perde (un glifo sul codice 3, come in certi font)."""
+
+    def test_il_numero_resta_al_suo_posto(self):
+        import pypdf
+        import pypdfium2 as pdfium
+        from pypdf.generic import DictionaryObject, NameObject, StreamObject
+        from pack3d import quote
+        from pack3d.dieline import PT2MM
+        w = pypdf.PdfWriter()
+        pagina = w.add_blank_page(300, 200)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                                 NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        flusso = StreamObject()
+        flusso.set_data(b"BT /F1 10 Tf 1 0 0 1 20 150 Tm (ab\\003cd) Tj ET\n"
+                        b"BT /F1 10 Tf 1 0 0 1 200 40 Tm (148) Tj ET\n")
+        pagina[NameObject("/Contents")] = w._add_object(flusso)
+        pagina[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+            {NameObject("/F1"): w._add_object(font)})})
+        with tempfile.TemporaryDirectory() as c:
+            f = os.path.join(c, "quote.pdf")
+            with open(f, "wb") as fh:
+                w.write(fh)
+            doc = pdfium.PdfDocument(f)
+            try:
+                tp = doc[0].get_textpage()
+                self.assertEqual(len(quote.testo_per_indice(tp)), tp.count_chars())
+                tp.close()
+            finally:
+                doc.close()
+            (valore, x, y, asse), = quote.numeri(f)
+        self.assertEqual((valore, asse), (148.0, 0))
+        # scritto a x 200 punti, con la base a 40 dal basso di una pagina alta 200
+        self.assertAlmostEqual(x, 200 * PT2MM, delta=1.0)
+        self.assertAlmostEqual(y, (200 - 47) * PT2MM, delta=1.5)
+
 
 class CassaDelParco(unittest.TestCase):
     """`parco.py costruisci --riusa`: si rifanno solo i casi cambiati."""
