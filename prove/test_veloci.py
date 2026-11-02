@@ -612,6 +612,41 @@ class Statistiche(unittest.TestCase):
         self.assertEqual(chieste, [])
 
 
+class GiudiceDelloSteso(unittest.TestCase):
+    """`flowpack._riquadro_coerente`: lati che non sono tagli, uno steso
+    disegnato dalla prova (nessun file dei clienti)."""
+
+    def _steso(self, cornice=False, pinna_bianca=False):
+        from pack3d import flowpack as fpk
+        mm = 1.0 / fpk.PT2MM
+        y0, y1, x0, x1 = 50.0, 50.0 + 100 * mm, 50.0, 50.0 + 150 * mm
+        st = (0.5, "(0, 0, 0)")
+        inizio = y0 + (15 * mm if pinna_bianca else 0.0)
+        S = [("H", y, x0, x1, st) for y in (y0, y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1)]
+        S += [("V", x0, y0, y1, st), ("V", x1, y0, y1, st)]
+        S += [("V", x, inizio, y1, st) for x in (x0 + 10 * mm, x1 - 10 * mm)]
+        hs = [y0, y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1]
+        vs = [x0, x0 + 10 * mm, x1 - 10 * mm, x1]
+        if cornice:
+            d = 10 * mm
+            S += [("H", y0 - d, x0 - d, x1 + d, st), ("H", y1 + d, x0 - d, x1 + d, st),
+                  ("V", x0 - d, y0 - d, y1 + d, st), ("V", x1 + d, y0 - d, y1 + d, st)]
+            hs, vs = [y0 - d] + hs + [y1 + d], [x0 - d] + vs + [x1 + d]
+        raster = np.full((int(y1 + 40 * mm), int(x1 + 40 * mm), 3), 255, np.int16)
+        raster[int(inizio):int(y1), int(x0):int(x1)] = 120
+        return fpk, S, hs, vs, raster
+
+    def test_la_cornice_non_e_lo_steso(self):
+        fpk, S, hs, vs, raster = self._steso(cornice=True)
+        h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
+        self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
+        self.assertIn("steso per coerenza", avviso)
+
+    def test_una_pinna_bianca_resta_dello_steso(self):
+        fpk, S, hs, vs, raster = self._steso(pinna_bianca=True)
+        self.assertEqual(fpk._riquadro_coerente(S, hs, vs, raster, 1.0), (hs, vs, None))
+
+
 class CassaDelParco(unittest.TestCase):
     """`parco.py costruisci --riusa`: si rifanno solo i casi cambiati."""
 

@@ -81,21 +81,24 @@ Parole: ruotat, 90 gradi, di traverso, proporzion, lungo nel verso, girato
 
 ## Le misure non tornano, un pannello stirato
 
-Parole: misure, non tornano, stirat, stiro, mm contro, pannello di, profondit, spessore
+Parole: misure, non tornano, stirat, stiro, mm contro, pannello di, profondit, spessore, quota, cornice, legenda
 
 - **Si riconosce**: una faccia molto piu' larga o stretta del pannello del
   DT, la grafica stirata (il controllo la ferma da solo sopra una soglia),
   uno spessore sbagliato.
 - **Dove**: `pack3d/dieline.py` (la fustella letta), `pack3d/quote.py` (il
   riscontro con le quote scritte), `pack3d/tracciati.py`; per lo stiro del
-  fronte `pack3d/verifica.py` `stiri_flowpack`.
+  fronte `pack3d/verifica.py` `stiri_flowpack`. Uno steso di flowpack piu'
+  grande del vero - una quota, una cornice, una legenda presa per taglio -
+  si corregge nel giudice (`pack3d/flowpack.py` `_riquadro_coerente`), con
+  un indizio in piu', non con una regola per quel disegnatore.
 - **Prima prova**: la lettura del PDF del caso (`<nome>_lettura.jpg` nella
   cartella di `prepara`): se le misure lette sono gia' sbagliate, il difetto
   e' nella lettura, non nella costruzione.
 - **Regole**: `regole/pdf.md` *Mezzo millimetro non puo' cambiare il pack*;
   `regole/astucci.md` *La griglia non tollera un intruso* e *Un astuccio ha
   uno spessore*; `regole/flowpack.md` *La falda dice se la soluzione e'
-  sbagliata*.
+  sbagliata* e *Il giudice dello steso*.
 
 ## La grafica manca, le facce bianche
 

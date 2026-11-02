@@ -413,6 +413,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Pieghe e guide: la piega attraversa il passo
   - I capi dello steso sono il taglio, non il centro del gruppo
   - Una linea di quota non e' un capo dello steso
+  - Il giudice dello steso: lati che non sono tagli
   - La falda sta sopra il retro anche nelle testate
   - Della falda si vede la fascia dell'altro capo del nastro
   - Il materiale del film lo dicono i DT secondari
