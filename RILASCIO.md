@@ -14,10 +14,11 @@ l'ha unita:
 - la routine, dopo la `consegna` di un caso corretto (CODA.md, *Il giro*);
 - una sessione che lavora sul codice, dopo l'unione della sua PR.
 
-Costa una mezz'ora: il parco intero nelle Actions di `pack3d-casi`, 17-26
-minuti con la costruzione di `main` in cassa, poi lo Space che riparte e la
-prova del caso. Senza correzioni non si rilascia niente: il giro della
-routine che non trova casi non pubblica.
+Costa tre quarti d'ora: il parco intero nelle Actions di `pack3d-casi`, 34
+minuti il primo, il 2 novembre 2026 (`main` da ricostruire, perche' il
+rilascio prima l'aveva cambiata, e il codice nuovo), poi lo Space che
+riparte e la prova del caso. Senza correzioni non si rilascia niente: il
+giro della routine che non trova casi non pubblica.
 
 Resta una **rete di sicurezza**: il giro programmato della routine (quello
 senza `routine-fire-payload`), prima di guardare la coda, rilascia quello
@@ -33,19 +34,28 @@ approvati da chiudere (punto 1).
 2. **Fissa il ramo.** Annota lo SHA di `origin/coda-settimana`: provi e
    pubblichi quello, non quello che un'altra sessione unisce nel frattempo.
 3. **Il parco intero, prima e dopo, nelle Actions** di `pack3d-casi`: li' ci
-   sono i PDF, e la costruzione di `main` e' gia' in cassa.
+   sono i PDF. Serve solo se cambia il codice che costruisce i modelli:
+
+       git diff --name-only origin/main <SHA> | grep -E '^(server\.py|agent\.py|pack3d/|requirements\.txt|Dockerfile|risorse/)'
+
+   Se non esce niente - documenti, prove, la pagina - i modelli non
+   possono cambiare: basta il controllo `prove` della PR, e si salta al
+   punto 5. Altrimenti si lancia il giro:
 
        gh api -X POST repos/iccio84/pack3d-casi/actions/workflows/parco.yml/dispatches -f ref=main -f "inputs[codice]=<SHA>"
        gh api "repos/iccio84/pack3d-casi/actions/workflows/parco.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0] | [.id, .status, .conclusion, .created_at] | @tsv'
 
    Aspetta che il giro finisca (controlla ogni cinque minuti; un altro parco
-   in corso lo mette in fila). `conclusion` e' `success` se nessun caso che
-   con `main` si costruiva si e' rotto e nessuna misura approvata e'
-   cambiata (`prove/parco.py esito`). I modelli solo cambiati li dice
-   `confronto.txt`, nell'artefatto del giro:
-
-       gh api repos/iccio84/pack3d-casi/actions/runs/<id>/artifacts --jq '.artifacts[0].archive_download_url'
-       gh api <url> > /tmp/parco.zip && unzip -o -q /tmp/parco.zip -d /tmp/parco && tail -20 /tmp/parco/confronto.txt
+   in corso lo mette in fila): una mezz'ora o poco piu', perche' dopo ogni
+   rilascio `main` e' cambiata e il giro la ricostruisce (17 minuti) prima
+   del codice nuovo (16). `conclusion` e' `success` se nessun caso che con
+   `main` si costruiva si e' rotto e nessuna misura approvata e' cambiata
+   (`prove/parco.py esito`). I modelli solo cambiati li dice il log del
+   giro, nel passo «Le viste affiancate» (il riassunto di `confronto`, coi
+   nomi): lo strumento GitHub delle Actions (i log di un job), o
+   `gh api repos/iccio84/pack3d-casi/actions/jobs/<job>/logs`. L'artefatto
+   con le viste affiancate si scarica da un dominio che la rete della
+   sessione non raggiunge: le viste si guardano dalla pagina del giro.
 
    Se il comando che lancia il giro non e' permesso (le regole della
    sessione: DEPLOY.md, *I permessi della routine*), il parco si fa in
