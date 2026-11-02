@@ -2020,7 +2020,6 @@ def _riquadro_tecnico(pdf, pagina):
     vs = [c for k, c, a, b, st in tec if k == "V" and b - a >= 0.6 * lv]
     if not hs or not vs:
         return None
-    rgb = _canali(penna[1]) or [0, 0, 0]
     riquadro = (min(vs), min(hs), max(vs), max(hs))
     if pagina == 0:
         # un flowpack: lo steso come lo legge il codice di adesso, che sui
@@ -2034,6 +2033,22 @@ def _riquadro_tecnico(pdf, pagina):
                 riquadro = fpk.foglio_in_pagina(fp)
         except Exception:
             pass
+    # la penna e' quella delle linee dentro il riquadro. La piu' usata della
+    # pagina puo' essere un'altra: su una tavola le viste piccole in una penna
+    # piu' sottile, e le quote disegnate con quella non erano del DT dello
+    # steso, che le cerca nella penna sua
+    x0, y0, x1, y1 = riquadro
+    dentro = {}
+    for k, c, a, b, st in tec:
+        if k == "H":
+            ok = y0 - 3 <= c <= y1 + 3 and a >= x0 - 3 and b <= x1 + 3
+        else:
+            ok = x0 - 3 <= c <= x1 + 3 and a >= y0 - 3 and b <= y1 + 3
+        if ok:
+            dentro[st] = dentro.get(st, 0.0) + (b - a)
+    if dentro:
+        penna = max(dentro, key=dentro.get)
+    rgb = _canali(penna[1]) or [0, 0, 0]
     return riquadro, (max(penna[0], 0.1), rgb)
 
 

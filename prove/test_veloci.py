@@ -657,6 +657,45 @@ class GiudiceDelloSteso(unittest.TestCase):
         self.assertEqual(fpk._riquadro_coerente(S, hs, vs, raster, 1.0), (hs, vs, None))
 
 
+class NumeriDelleQuote(unittest.TestCase):
+    """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
+    che `get_text_range` perde (un glifo sul codice 3, come in certi font)."""
+
+    def test_il_numero_resta_al_suo_posto(self):
+        import pypdf
+        import pypdfium2 as pdfium
+        from pypdf.generic import DictionaryObject, NameObject, StreamObject
+        from pack3d import quote
+        from pack3d.dieline import PT2MM
+        w = pypdf.PdfWriter()
+        pagina = w.add_blank_page(300, 200)
+        font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                                 NameObject("/Subtype"): NameObject("/Type1"),
+                                 NameObject("/BaseFont"): NameObject("/Helvetica")})
+        flusso = StreamObject()
+        flusso.set_data(b"BT /F1 10 Tf 1 0 0 1 20 150 Tm (ab\\003cd) Tj ET\n"
+                        b"BT /F1 10 Tf 1 0 0 1 200 40 Tm (148) Tj ET\n")
+        pagina[NameObject("/Contents")] = w._add_object(flusso)
+        pagina[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+            {NameObject("/F1"): w._add_object(font)})})
+        with tempfile.TemporaryDirectory() as c:
+            f = os.path.join(c, "quote.pdf")
+            with open(f, "wb") as fh:
+                w.write(fh)
+            doc = pdfium.PdfDocument(f)
+            try:
+                tp = doc[0].get_textpage()
+                self.assertEqual(len(quote.testo_per_indice(tp)), tp.count_chars())
+                tp.close()
+            finally:
+                doc.close()
+            (valore, x, y, asse), = quote.numeri(f)
+        self.assertEqual((valore, asse), (148.0, 0))
+        # scritto a x 200 punti, con la base a 40 dal basso di una pagina alta 200
+        self.assertAlmostEqual(x, 200 * PT2MM, delta=1.0)
+        self.assertAlmostEqual(y, (200 - 47) * PT2MM, delta=1.5)
+
+
 class CassaDelParco(unittest.TestCase):
     """`parco.py costruisci --riusa`: si rifanno solo i casi cambiati."""
 
