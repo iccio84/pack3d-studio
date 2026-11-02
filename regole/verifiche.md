@@ -641,9 +641,11 @@ Il costo che aveva imposto la settimana veniva dal parco fatto nella
 sessione - due costruzioni intere, ognuna un giro in piu' che si porta dietro
 tutto - e oggi il parco gira nelle Actions di `pack3d-casi`, e costruisce
 solo il codice nuovo (una ventina di minuti: `main` e' in cassa, con la
-chiave sull'albero del codice che il rilascio prima ha provato; 34 minuti
-il primo, il 2 novembre 2026, con la chiave sul commit che dopo ogni
-rilascio cambiava): la sessione lancia il giro, lo
+chiave sull'albero del codice che il rilascio prima ha provato, e ogni caso
+con la sua impronta; 34 minuti il primo, il 2 novembre 2026, con la chiave
+sul commit che dopo ogni rilascio cambiava, e 31 il primo della routine lo
+stesso giorno, con la chiave anche sul parco, che il caso consegnato
+cambia): la sessione lancia il giro, lo
 aspetta con qualche controllo, legge l'esito e i modelli cambiati, e prova
 il caso sullo Space con un comando solo. Il prezzo di prima - lo Space che
 per giorni costruiva col codice vecchio - non c'e' piu'.
