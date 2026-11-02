@@ -109,6 +109,24 @@ class LetturaDellaFustella(unittest.TestCase):
             stili = {s[4] for s in dl._segments(pagina)}
         self.assertEqual(stili, {(0.5, "(0.0, 0.0, 0.0)")})
 
+    def test_la_pagina_col_disegno_dopo_una_copertina(self):
+        import pypdf
+        from pack3d import artwork
+        disegno = _pdf(self.cartella, GRIGLIA)
+        w = pypdf.PdfWriter(clone_from=disegno)
+        w.insert_blank_page(600.0, 600.0, index=0)      # la copertina, vuota
+        f = os.path.join(self.cartella, "con_copertina.pdf")
+        with open(f, "wb") as fh:
+            w.write(fh)
+        self.assertEqual(artwork._pagina_col_dt(f, 2), 1)
+        # la prima pagina col disegno resta la prima
+        w = pypdf.PdfWriter(clone_from=disegno)
+        w.add_blank_page(600.0, 600.0)
+        g = os.path.join(self.cartella, "con_retro.pdf")
+        with open(g, "wb") as fh:
+            w.write(fh)
+        self.assertEqual(artwork._pagina_col_dt(g, 2), 0)
+
     def test_la_chiave_e_il_contenuto_non_il_nome(self):
         pdf = _pdf(self.cartella, GRIGLIA)
         n = len(dl.segmenti(pdf))

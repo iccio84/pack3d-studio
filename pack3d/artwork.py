@@ -95,41 +95,51 @@ def pagina_unica(pdf):
     return p, n
 
 
-# Quanti tratti tecnici - sottili e lunghi almeno 20 pt - fanno una pagina col
-# disegno: il bordo e il titolo di una copertina non ci arrivano
+# Quanti tratti - lunghi almeno 20 pt, dritti o curvi, non piu' spessi di 2
+# pt - fanno una prima pagina col disegno: il bordo e il titolo di una
+# copertina non ci arrivano
 TECNICI_MIN = 8
 # oltre, le pagine non si guardano: e' un catalogo, non un artwork
 PAGINE_GUARDATE = 10
 
 
 def _pagina_col_dt(pdf, n):
-    """L'indice della pagina col disegno: la prima, se ha tratti tecnici; se
-    no la prima dopo che ne ha.
+    """L'indice della pagina col disegno: la prima, se ha i suoi tratti; se
+    no quella che ne ha di piu'.
 
     Un artwork su piu' pagine e' quasi sempre lo stesso pack per lingua, e si
     lavora sulla prima. Ma davanti puo' esserci una pagina senza disegno - la
     copertina, la scheda, le note -: con la prima pagina sola il flowpack si
     fermava con "nessun tracciato tecnico riconoscibile", e prima di tutti
     quelli del parco con una copertina davanti (`prove/parco.py varianti`,
-    1 novembre 2026). La prima pagina col disegno resta la prima: i file di
-    sempre non cambiano strada, e le altre pagine si leggono solo quando la
-    prima non ha tratti."""
+    1 novembre 2026). La prima pagina coi suoi tratti resta la prima: i file
+    di sempre non cambiano strada, e le altre si contano solo quando la
+    prima ne ha pochi. Allora vince la pagina che ne ha di piu' - non una
+    soglia: il lid del cono T1 ha sei tratti in tutto, un disco e due assi."""
     from . import dieline
 
-    def tecnici(i):
+    def tratti(i):
         try:
-            segs = dieline.tratti(pdf, i).segmenti
+            t = dieline.tratti(pdf, i)
         except Exception:
             return 0
-        return sum(1 for _k, _c, a, b, st in segs
-                   if b - a > 20.0 and (st[0] or 0.0) <= 0.8)
+        dritti = sum(1 for _k, _c, a, b, st in t.segmenti
+                     if b - a > 20.0 and (st[0] or 0.0) <= 2.0)
+        # e le curve: il lid di un cono e' un disco
+        curve = sum(1 for k, st, o in t.oggetti
+                    if k == "curve" and (st[0] or 0.0) <= 2.0
+                    and max(o.get("x1", 0) - o.get("x0", 0),
+                            o.get("bottom", 0) - o.get("top", 0)) > 20.0)
+        return dritti + curve
 
-    if tecnici(0) >= TECNICI_MIN:
+    primi = tratti(0)
+    if primi >= TECNICI_MIN:
         return 0
-    for i in range(1, min(n, PAGINE_GUARDATE)):
-        if tecnici(i) >= TECNICI_MIN:
-            return i
-    return 0
+    conti = [(tratti(i), -i) for i in range(1, min(n, PAGINE_GUARDATE))]
+    if not conti:
+        return 0
+    piu, meno_i = max(conti)
+    return -meno_i if piu > primi else 0
 
 
 def _pagina_unica(pdf):

@@ -199,7 +199,8 @@ E quelli che restano, detti: la scatola a prisma e l'astuccio da sette
 pagine senza testo vivo, girati, e il riempimento senza testo vivo da
 nessuna parte - il verso non si legge, e la costruzione lo dice -, e la
 coppa con una seconda miniatura del tappo, che e' un artefatto della
-variante. Le varianti diverse gia' note stanno in `parco/varianti.json` del
+variante. Dopo le correzioni, sui 44 casi: /Rotate e spostato 44 su 44,
+copertina 44 su 44, miniatura 43, un quarto di giro 41. Le varianti diverse gia' note stanno in `parco/varianti.json` del
 registro (`varianti --approva`): una diversa che non c'e' e' un difetto
 nuovo.
 

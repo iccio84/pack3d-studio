@@ -25,12 +25,13 @@ esserci una pagina senza disegno - una copertina, una scheda, le note. Con la
 prima pagina sola tutti i 44 casi del parco con una copertina davanti si
 fermavano (`prove/parco.py varianti`, 1 novembre 2026): il flowpack con
 "nessun tracciato tecnico riconoscibile", l'astuccio con la sequenza delle
-fasce. Se la prima pagina non ha almeno otto tratti tecnici - sottili, lunghi
-almeno 20 pt - si prende la prima dopo che li ha (`artwork._pagina_col_dt`,
-fino alla decima). I file di sempre non cambiano strada: la prima pagina col
-disegno resta la prima, e le altre si leggono solo quando la prima non ha
-tratti. Una scheda piena di tabelle davanti la regola non la vede: li' il
-disegno va messo per primo.
+fasce. Se la prima pagina non ha almeno otto tratti - dritti o curvi, lunghi
+almeno 20 pt - si prende quella che ne ha di piu' (`artwork._pagina_col_dt`,
+fino alla decima): non una soglia, perche' il lid del cono T1 ne ha sei in
+tutto, un disco e due assi. I file di sempre non cambiano strada: la prima
+pagina coi suoi tratti resta la prima, e le altre si contano solo quando la
+prima ne ha pochi. Una scheda piena di tabelle davanti la regola non la
+vede: li' il disegno va messo per primo.
 
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
