@@ -155,12 +155,13 @@ carica niente, e il log lo dice.
 La coda la lavora una **routine di Claude Code** (claude.ai/code, Routines):
 una sessione nuova che segue CODA.md. Ogni correzione la unisce da sola nel
 ramo `coda-settimana`, che lo Space non vede, e il modello va da approvare a
-chi ha caricato il PDF e poi in Glam. Una volta a settimana, nel giro
-programmato, la stessa routine fa il **rilascio**: prova tutte le correzioni
-sul parco del repository privato (`parco/`), le unisce in `main` - quindi
-pubblica sullo Space - e prova i casi della settimana sullo Space vero
-(`prove/parco.py spazio`), aspettando che `/api/ping` dica l'impronta del
-codice appena unito. Per questo nella rete dell'ambiente cloud e' consentito
+chi ha caricato il PDF e poi in Glam. Subito dopo, la stessa routine fa il
+**rilascio** (RILASCIO.md): prova la correzione sul parco intero, nelle
+Actions del repository privato (`parco/`), la unisce in `main` - quindi
+pubblica sullo Space - e prova il caso sullo Space vero (`prove/parco.py
+spazio`), aspettando che `/api/ping` dica l'impronta del codice appena unito.
+Una mezz'ora dopo la correzione, non a fine settimana; il giro programmato
+di ogni giorno rilascia solo quello che fosse rimasto indietro. Per questo nella rete dell'ambiente cloud e' consentito
 il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`
 fra gli Allowed domains, con la lista di base dei package manager.
 
@@ -367,14 +368,17 @@ scrive nelle impostazioni dell'utente prima che la sessione parta:
       "permissions": {
         "allow": [
           "Bash(gh api -X POST repos/iccio84/pack3d-studio/pulls *)",
-          "Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)"
+          "Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)",
+          "Bash(gh api -X POST repos/iccio84/pack3d-casi/actions/workflows/parco.yml/dispatches *)"
         ]
       }
     }
     FINE
 
-La prima apre le PR, la seconda le unisce: anche il rilascio della settimana
-verso `main`, che aggiorna lo Space. Chi vuole approvare i rilasci a mano
+La prima apre le PR, la seconda le unisce: anche il rilascio verso `main`,
+che aggiorna lo Space. La terza lancia il parco intero nelle Actions di
+`pack3d-casi` (RILASCIO.md, punto 3): senza, il rilascio lo fa in locale, in
+un'ora o due invece di una mezz'ora. Chi vuole approvare i rilasci a mano
 toglie la seconda. `.claude/settings.json` nei due repository resta per le
 sessioni con un repository solo.
 

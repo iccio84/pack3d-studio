@@ -370,7 +370,7 @@ numeri e quello che sta fra parentesi, che sono le misure del PDF: l'endpoint
 e' pubblico.
 
 Il file sta nella cartella delle casse e lo Space lo perde quando riparte:
-il rilascio della settimana lo salva nel registro dei casi prima di
+il rilascio lo salva nel registro dei casi prima di
 pubblicare (RILASCIO.md, punto 5). Il parco non conta
 (`PACK3D_STATISTICHE=0`): sono prove, non utenti.
 
