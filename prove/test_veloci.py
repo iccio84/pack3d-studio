@@ -616,7 +616,7 @@ class GiudiceDelloSteso(unittest.TestCase):
     """`flowpack._riquadro_coerente`: lati che non sono tagli, uno steso
     disegnato dalla prova (nessun file dei clienti)."""
 
-    def _steso(self, cornice=False, pinna_bianca=False):
+    def _steso(self, cornice=False, pinna_bianca=False, legenda=False):
         from pack3d import flowpack as fpk
         mm = 1.0 / fpk.PT2MM
         y0, y1, x0, x1 = 50.0, 50.0 + 100 * mm, 50.0, 50.0 + 150 * mm
@@ -632,6 +632,11 @@ class GiudiceDelloSteso(unittest.TestCase):
             S += [("H", y0 - d, x0 - d, x1 + d, st), ("H", y1 + d, x0 - d, x1 + d, st),
                   ("V", x0 - d, y0 - d, y1 + d, st), ("V", x1 + d, y0 - d, y1 + d, st)]
             hs, vs = [y0 - d] + hs + [y1 + d], [x0 - d] + vs + [x1 + d]
+        if legenda:
+            # un riquadro attaccato sotto lo steso, largo meta'
+            xl, yl = x0 + 75 * mm, y1 + 22 * mm
+            S += [("H", yl, x0, xl, st), ("V", x0, y1, yl, st), ("V", xl, y1, yl, st)]
+            hs = hs + [yl]
         raster = np.full((int(y1 + 40 * mm), int(x1 + 40 * mm), 3), 255, np.int16)
         raster[int(inizio):int(y1), int(x0):int(x1)] = 120
         return fpk, S, hs, vs, raster
@@ -641,6 +646,11 @@ class GiudiceDelloSteso(unittest.TestCase):
         h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
         self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
         self.assertIn("steso per coerenza", avviso)
+
+    def test_la_legenda_attaccata_non_e_lo_steso(self):
+        fpk, S, hs, vs, raster = self._steso(legenda=True)
+        h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
+        self.assertEqual((h, v), (hs[:-1], vs))
 
     def test_una_pinna_bianca_resta_dello_steso(self):
         fpk, S, hs, vs, raster = self._steso(pinna_bianca=True)

@@ -1397,6 +1397,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # un decimo del tempo e un sesto della memoria. Vedi tracciati.py.
     if True:
         segs, pagina_w, pagina_h = segmenti(pdf_path, page_no)
+        tutte = segs
         if bbox:
             # una tavola contiene piu' viste: senza riquadro si misura il foglio
             bx0, by0, bx1, by1 = bbox
@@ -1408,6 +1409,10 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
             segs = [sg for sg in segs if _in(sg)]
         pens = _technical_pens(segs, pagina_w, pagina_h)
         S = _ricuci([s for s in segs if s[4] in pens])
+        # le quote si cercano fra tutte le linee del DT, anche fuori dal
+        # riquadro: una quota che ne resta fuori lascia il suo numero a
+        # pochi millimetri dal taglio vero, che se lo prendeva lui
+        S_quote = S if tutte is segs else _ricuci([s for s in tutte if s[4] in pens])
 
     # pdfplumber si tiene un oggetto Python per ogni tracciato della pagina, e
     # su un impaginato grande sono decine di migliaia: centinaia di MB che il
@@ -1452,25 +1457,34 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     except Exception:
         numeri = []
     primo = None
-    for modo in ("pinna", "pillow", "piatta"):
-        for ruotato in (False, True):
-            try:
-                return _risolvi_steso(S, raster, sc, ruotato, modo,
-                                      numeri=numeri)
-            except _StesoNonRisolto as e:
-                # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
-                # porta dietro il traceback, il traceback il frame di
-                # _risolvi_steso, e il frame tutti i suoi locali: le
-                # rasterizzazioni intermedie del tentativo fallito restavano vive
-                # per tutto il secondo tentativo. Su un foglio grande sono
-                # centinaia di MB tenuti in ostaggio da una variabile che serve
-                # solo a ricordare una frase.
-                primo = primo or str(e)
-            # si passa all'altro verso; al giro dopo si torna a questo
-            S = [("V" if k == "H" else "H", c, a0, b0, st)
-                 for k, c, a0, b0, st in S]
-            raster = raster.transpose(1, 0, 2)
-            numeri = [(y, x, v) for x, y, v in numeri]
+    # Due giri: prima il riquadro del giudice (`_riquadro_coerente`) in tutte
+    # le chiusure e i versi, poi - se nessuno torna - quello di prima. Dentro
+    # lo stesso tentativo il riquadro di prima, sbagliato, si risolveva a
+    # pinna prima che il riquadro giusto del giudice arrivasse al tubo
+    # piatto girato, dove torna.
+    for ipotesi in ("giudice", "prima"):
+        for modo in ("pinna", "pillow", "piatta"):
+            for ruotato in (False, True):
+                try:
+                    return _risolvi_steso(S, raster, sc, ruotato, modo,
+                                          numeri=numeri, S_quote=S_quote,
+                                          ipotesi=ipotesi)
+                except _StesoNonRisolto as e:
+                    # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
+                    # porta dietro il traceback, il traceback il frame di
+                    # _risolvi_steso, e il frame tutti i suoi locali: le
+                    # rasterizzazioni intermedie del tentativo fallito restavano vive
+                    # per tutto il secondo tentativo. Su un foglio grande sono
+                    # centinaia di MB tenuti in ostaggio da una variabile che serve
+                    # solo a ricordare una frase.
+                    primo = primo or str(e)
+                # si passa all'altro verso; al giro dopo si torna a questo
+                S = [("V" if k == "H" else "H", c, a0, b0, st)
+                     for k, c, a0, b0, st in S]
+                S_quote = [("V" if k == "H" else "H", c, a0, b0, st)
+                           for k, c, a0, b0, st in S_quote]
+                raster = raster.transpose(1, 0, 2)
+                numeri = [(y, x, v) for x, y, v in numeri]
     raise _StesoNonRisolto(primo)
 
 
@@ -1682,6 +1696,12 @@ CHIUSO_COERENTE = 0.8
 # Fin dove si cerca la linea di un numero di quota, in mm: poi vince la
 # linea piu' vicina (`_quote`).
 QUOTA_ACCANTO_MM = 10.0
+# Un lato che copre meno di questo dello spazio fra gli altri due conta per
+# due lati dubbi: il fondo di una legenda attaccata ne copre la meta'.
+LATO_A_META = 0.6
+# Oltre questa frazione stampata, la striscia fuori da un lato e' grafica che
+# continua: il riquadro la taglierebbe.
+TAGLIA_GRAFICA = 0.2
 # Gli angoli: i due lati perpendicolari arrivano a questo lato entro tanti mm.
 ANGOLO_MM = 2.0
 
@@ -1796,7 +1816,7 @@ def _lati(S, stampato, y0, y1, x0, x1, quote):
     return fuori
 
 
-def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
+def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     """Lo steso che torna con quello che un flowpack e': `(hs, vs, avviso)`.
 
     I capi si prendono come sempre - le linee piu' esterne dei gruppi lunghi -
@@ -1809,11 +1829,15 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
     attaccata.
 
     Allora non si sceglie una regola, si sceglie un riquadro: fra quelli dei
-    gruppi, grandi almeno la meta' di quello esterno, chiusi, senza quote e
-    con al piu' un lato vuoto, vince il piu'
+    gruppi (l'esterno compreso), grandi almeno la meta' di quello esterno,
+    chiusi, senza quote e con al piu' un lato vuoto, vince il piu'
     COERENTE - un punto per ogni lato che copre il 90%, uno per ogni angolo
-    che si chiude, due per ogni misura che una quota del disegno scrive - e
-    a pari coerenza il piu' grande. Se nessuno torna si resta sui capi di
+    che si chiude, due per ogni misura che una quota del disegno scrive;
+    meno due per ogni lato oltre il quale la grafica continua
+    (TAGLIA_GRAFICA) e meno uno per ogni lato vuoto - e a pari coerenza il
+    piu' grande. Un lato che copre meno di LATO_A_META conta per due lati
+    dubbi. Le quote si cercano fra tutte le linee del DT (`S_quote`), anche
+    fuori dal riquadro misurato. Se nessuno torna si resta sui capi di
     prima, e lo si dice.
 
     Una regola sola al posto di una per disegnatore: la quota del T1 a fondo
@@ -1824,7 +1848,7 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
     """
     import bisect
     y0, y1, x0, x1 = hs[0], hs[-1], vs[0], vs[-1]
-    quote = _quote(S, numeri)
+    quote = _quote(S_quote if S_quote is not None else S, numeri)
 
     def diretto(*r):
         # sul riquadro esterno, quattro strisce: l'immagine integrale costa di
@@ -1842,7 +1866,11 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
               "x0": _copre(lv, x0, y0, y1), "x1": _copre(lv, x1, y0, y1)}
     dubbi = [k for k, (v, q, a) in sorted(lati.items())
              if v or q or aperti[k] < CHIUSO_COERENTE]
-    if len(dubbi) < 2 or len(hs) < 4 or len(vs) < 2:
+    # un lato che copre meno di LATO_A_META' non e' un taglio di sicuro - un
+    # taglio col buco, come il mandarino, copre l'89% - e conta per due: il
+    # fondo di una legenda attaccata
+    peso = len(dubbi) + sum(1 for k in dubbi if aperti[k] < LATO_A_META)
+    if peso < 2 or len(hs) < 4 or len(vs) < 2:
         hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
         return hs2, vs2, None
 
@@ -1873,6 +1901,18 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
         k = bisect.bisect_left(valori, mm - 1.0)
         return k < len(valori) and valori[k] <= mm + 1.0
 
+    def tagliati(a0, a1, b0, b1):
+        # i lati oltre i quali, fra 6 e 12 mm, c'e' stampa: la grafica
+        # continua, e quel lato non e' il taglio. La colazione e il mandarino
+        # con la cornice sceglievano il riquadro dentro le testate, stampate
+        mm = 1.0 / PT2MM
+        dy, dx = 0.1 * (a1 - a0), 0.1 * (b1 - b0)
+        strisce = ((a0 - 12 * mm, a0 - 6 * mm, b0 + dx, b1 - dx),
+                   (a1 + 6 * mm, a1 + 12 * mm, b0 + dx, b1 - dx),
+                   (a0 + dy, a1 - dy, b0 - 12 * mm, b0 - 6 * mm),
+                   (a0 + dy, a1 - dy, b1 + 6 * mm, b1 + 12 * mm))
+        return sum(veloce(*r) > TAGLIA_GRAFICA for r in strisce)
+
     def torna(sui):
         # nessuna quota e al piu' un lato vuoto (la pinna bianca). Gli angoli
         # non si pretendono: li conta il punteggio, e la pinna bianca del
@@ -1892,8 +1932,6 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
         for j in range(len(hs) - 1, i + 2, -1):
             for p in range(len(vs)):
                 for q in range(len(vs) - 1, p, -1):
-                    if (i, j, p, q) == (0, len(hs) - 1, 0, len(vs) - 1):
-                        continue
                     a0, a1, b0, b1 = hs[i], hs[j], vs[p], vs[q]
                     # quote, cornici e legende stanno attorno allo steso: il
                     # riquadro buono ne e' la gran parte, non un pezzo
@@ -1909,7 +1947,13 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
                              + sum(a for v, q_, a in sui.values())
                              # le quote scritte: un lato lungo quanto un
                              # numero del disegno e' la prova piu' forte
-                             + 2 * sum(scritta(d * PT2MM) for d in (a1 - a0, b1 - b0)))
+                             + 2 * sum(scritta(d * PT2MM) for d in (a1 - a0, b1 - b0))
+                             # lo steso non taglia la grafica
+                             - 2 * tagliati(a0, a1, b0, b1)
+                             # un lato vuoto e' ammesso (la pinna bianca) ma
+                             # costa: a pari punti, tre lati veri e la
+                             # cornice battevano lo steso perche' piu' grandi
+                             - sum(v for v, q_, a in sui.values()))
                     chiave = (punti, (a1 - a0) * (b1 - b0))
                     if meglio is None or chiave > meglio[0]:
                         meglio = (chiave, i, j, p, q)
@@ -1945,7 +1989,8 @@ def _copre(linee, c, a0, a1, tol=3.0):
     return tot / (a1 - a0) if a1 > a0 else 0.0
 
 
-def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=()):
+def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None,
+                   ipotesi="giudice"):
     """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
     from .dieline import _cluster
 
@@ -1994,16 +2039,18 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=()):
     hs, vs = capi(H, hs), capi(V, vs)
 
     # Due ipotesi dello steso, e decide il solutore: il riquadro del giudice
-    # (`_riquadro_coerente`) e, se e' un altro, quello di prima
-    # (`_riquadro_chiuso`). Il giudice sceglie il riquadro senza sapere se le
-    # fasce ci tornano: su una variante del tubo piatto da 115 il riquadro
+    # (`_riquadro_coerente`) e quello di prima (`_riquadro_chiuso`), uno per
+    # giro di `analyze_auto`. Il giudice sceglie il riquadro senza sapere se
+    # le fasce ci tornano: su una variante del tubo piatto da 115 il riquadro
     # esterno era quello giusto, e il giudice ne prendeva uno da 99 x 85 in
-    # cui le fasce non si risolvono - perdendo la lettura che funzionava.
-    hs_g, vs_g, coerenza = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri)
-    ipotesi = [(hs_g, vs_g, coerenza)]
+    # cui le fasce non si risolvono.
+    hs_g, vs_g, coerenza = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri,
+                                              S_quote=S_quote)
+    if coerenza and coerenza.startswith("steso per coerenza"):
+        # i capi del riquadro scelto sono la linea piu' esterna del loro
+        # gruppo, non il centro: vedi `capi`
+        hs_g, vs_g = capi(H, hs_g), capi(V, vs_g)
     vecchio = _riquadro_chiuso(S, hs, vs, numeri=numeri)
-    if (hs_g, vs_g) != vecchio:
-        ipotesi.append((vecchio[0], vecchio[1], None))
 
     def _dentro(hs, vs, coerenza):
         y0, y1 = hs[0], hs[-1]
@@ -2107,12 +2154,11 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=()):
                                     (y0 + inizio / PT2MM,
                                      y0 + (inizio + giro) / PT2MM)))
 
-    for n, (hs, vs, coerenza) in enumerate(ipotesi):
-        try:
-            return _dentro(hs, vs, coerenza)
-        except _StesoNonRisolto:
-            if n + 1 == len(ipotesi):
-                raise
+    if ipotesi == "giudice":
+        return _dentro(hs_g, vs_g, coerenza)
+    if (hs_g, vs_g) == tuple(vecchio):
+        raise _StesoNonRisolto("il riquadro di prima e' quello del giudice")
+    return _dentro(vecchio[0], vecchio[1], None)
 
 
 def riporta_da_copia(fp, copia, dt, riga=None):
