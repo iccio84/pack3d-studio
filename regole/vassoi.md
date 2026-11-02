@@ -45,7 +45,13 @@ griglia; le colonne sono i laterali. Valgono le regole di tutte le famiglie:
   lascia vedere il prodotto e il dietro, se e' piu' alto, regge il cartello
   (`vassoio.testata_davanti`). Se la bassa e' la sud il vassoio si gira di
   mezzo giro, e lo si dice. Con le due testate alte uguali entro 2 mm - il
-  display T1x40, 40,5 e 40,6 - davanti resta la nord;
+  display T1x40, 40,5 e 40,6 - davanti resta la nord. E se la parete piu'
+  bassa e' un laterale, a est o a ovest, di piu' di un millimetro, il foglio
+  sulla tavola stava di lato: si legge girato di un quarto
+  (`vassoio.riconosci_sulla_tavola`), e lo si dice. Trovato col vassoio
+  sagomato del riempimento T1 cheesecake girato di 90 gradi
+  (`prove/parco.py varianti`, 1 novembre 2026): guardava di lato, e nel vano
+  entravano 18 pezzi invece di 36;
 - **le verifiche**: ogni parete sulla sua fascia del DT e il fronte sul
   fronte (`verifica.vassoio`), e le quote scritte (`quote.riscontro_vassoio`).
   Sul display T1x40 le pareti cadono sulle loro fasce entro 0,3 mm; le quote

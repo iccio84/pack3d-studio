@@ -55,8 +55,14 @@ mano. Si fa **prima** di guardare la coda.
    pubblica: apri (o aggiorna) la PR «Rilascio della settimana» in bozza con
    la diagnosi, e scrivilo nel riassunto. I casi restano `da-rilasciare`: chi
    li ha caricati ha gia' il modello approvato.
-5. **Pubblica**: PR da `coda-settimana` verso `main`, titolo «Rilascio della
-   settimana <data>», con le regole della settimana, i casi per codice (mai i
+5. **Pubblica**. Prima, le statistiche dello Space nel registro dei casi:
+   ripartendo col codice nuovo le perde (`pack3d.statistiche`).
+
+       curl -s https://iccio-maurizio.hf.space/api/statistiche > ../pack3d-casi/statistiche/<data>.json
+
+   commit e push nel registro; nel riassunto le fermate piu' frequenti, che
+   dicono dove il codice va reso piu' tollerante. Poi PR da `coda-settimana`
+   verso `main`, titolo «Rilascio della settimana <data>», con le regole della settimana, i casi per codice (mai i
    nomi dei file: il repository e' pubblico) e cosa cambia sul parco. Unisci
    con merge commit **allo SHA del punto 2** (l'expected head SHA: se il ramo
    e' andato avanti, l'unione si rifiuta, e riparti dal punto 2). Controlla

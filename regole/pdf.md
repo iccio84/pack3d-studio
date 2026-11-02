@@ -20,6 +20,19 @@ le metteva nello stesso PNG. Il primo cartellino dice quante pagine aveva il
 file (`famiglie.comune.avviso_pagine`), perche' chi l'ha caricato sappia quale e'
 diventata il modello.
 
+**La prima pagina col disegno, non la prima e basta.** Davanti al pack puo'
+esserci una pagina senza disegno - una copertina, una scheda, le note. Con la
+prima pagina sola tutti i 44 casi del parco con una copertina davanti si
+fermavano (`prove/parco.py varianti`, 1 novembre 2026): il flowpack con
+"nessun tracciato tecnico riconoscibile", l'astuccio con la sequenza delle
+fasce. Se la prima pagina non ha almeno otto tratti - dritti o curvi, lunghi
+almeno 20 pt - si prende quella che ne ha di piu' (`artwork._pagina_col_dt`,
+fino alla decima): non una soglia, perche' il lid del cono T1 ne ha sei in
+tutto, un disco e due assi. I file di sempre non cambiano strada: la prima
+pagina coi suoi tratti resta la prima, e le altre si contano solo quando la
+prima ne ha pochi. Una scheda piena di tabelle davanti la regola non la
+vede: li' il disegno va messo per primo.
+
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
 tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,
@@ -317,6 +330,11 @@ letto ... il verso va controllato sul modello". Leggere il verso dalle
 lettere disegnate - la linea di base allineata, le aste che sporgono - e' la
 strada per quei file; con le poche lettere di un marchio non e' affidabile,
 e un verso sbagliato con sicurezza e' peggio di uno dichiarato non letto.
+Misurato il 1 novembre 2026 col riconoscimento del verso di Tesseract (OSD,
+senza AI) sul fronte dei 18 flowpack e astucci del parco il cui verso e'
+noto dal testo vivo, girato nei quattro versi: risponde 27 volte su 72 e
+indovina 7, come a caso, e con fiducia almeno 3 nessuna. I marchi
+stilizzati non li legge: non si usa.
 
 Provato girando la pagina dei file del parco di 90, 180 e 270 gradi e
 costruendo ogni copia, cinque viste per modello contro quelle dell'originale:
