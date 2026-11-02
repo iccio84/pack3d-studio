@@ -20,7 +20,12 @@ costruisce solo il codice nuovo: `main` la trova in cassa, perche' la cassa
 ha la chiave sull'albero del codice e `main` ha lo stesso albero che il
 rilascio prima ha appena provato; e dentro la cassa ogni caso ha la sua
 impronta, cosi' il caso appena consegnato, nuovo nel parco, si costruisce
-da solo (`prove/parco.py costruisci --riusa`). Senza correzioni non si rilascia niente:
+da solo (`prove/parco.py costruisci --riusa`). La chiave tiene anche la
+macchina (l'impronta del processore): le macchine di GitHub non sono tutte
+uguali e lo stesso codice da' GLB diversi al byte da un processore all'altro,
+quindi una costruzione in cassa vale solo contro una della stessa macchina.
+Su un processore che la cassa non ha ancora visto, `main` si ricostruisce
+intera: il giro dura una ventina di minuti in piu'. Senza correzioni non si rilascia niente:
 il giro della routine che non trova casi non pubblica.
 
 Resta una **rete di sicurezza**: il giro programmato della routine (quello
@@ -52,7 +57,8 @@ approvati da chiudere (punto 1).
    in corso lo mette in fila): una ventina di minuti, il codice nuovo. Di
    `main` rifa' solo i casi nuovi o cambiati del parco - quello appena
    consegnato, mezzo minuto; se `main` manca in cassa (la cassa che nessuno
-   usa per sette giorni scade) la ricostruisce intera, altri 17 minuti. Il
+   usa per sette giorni scade, e ogni processore ha la sua) la ricostruisce
+   intera, altri 17 minuti. Il
    riassunto del giro dice quanti casi ha riusato e quanti ha costruito.
    `conclusion` e' `success` se nessun caso che con
    `main` si costruiva si e' rotto e nessuna misura approvata e' cambiata

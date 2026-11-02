@@ -645,7 +645,11 @@ chiave sull'albero del codice che il rilascio prima ha provato, e ogni caso
 con la sua impronta; 34 minuti il primo, il 2 novembre 2026, con la chiave
 sul commit che dopo ogni rilascio cambiava, e 31 il primo della routine lo
 stesso giorno, con la chiave anche sul parco, che il caso consegnato
-cambia): la sessione lancia il giro, lo
+cambia). Dal 2 novembre 2026 la chiave tiene anche la macchina: un giro
+segno' 24 casi cambiati che la PR non toccava, perche' `main` veniva dalla
+cassa di un altro processore di GitHub (la barretta incartata, codice
+uguale, `d4fb9fc2` su uno e `510b17a8` sull'altro); un confronto al byte
+vale solo fra due costruzioni della stessa macchina. La sessione lancia il giro, lo
 aspetta con qualche controllo, legge l'esito e i modelli cambiati, e prova
 il caso sullo Space con un comando solo. Il prezzo di prima - lo Space che
 per giorni costruiva col codice vecchio - non c'e' piu'.
