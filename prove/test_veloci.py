@@ -650,6 +650,16 @@ class CassaDelParco(unittest.TestCase):
         self.assertEqual(set(r), {"a"})
         self.assertFalse(os.path.exists(os.path.join(self.uscita, "vecchio.json")))
 
+    def test_costruisci_senza_riusa_come_lo_chiamano_prepara_e_varianti(self):
+        import argparse
+        import json
+        with open(os.path.join(self.dir, "casi", "parco", "parco.json"), "w") as fh:
+            json.dump({"casi": []}, fh)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.parco.costruisci(argparse.Namespace(
+                casi=os.path.join(self.dir, "casi"), uscita=self.uscita, codice=None, solo=None))
+        self.assertTrue(os.path.exists(os.path.join(self.uscita, "riassunto.json")))
+
     def test_un_pdf_o_un_opzione_cambiati_cambiano_l_impronta(self):
         prima = self._impronte()
         with open(os.path.join(self.dir, "casi", "parco", "pdf", "a.pdf"), "wb") as fh:

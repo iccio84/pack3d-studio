@@ -338,7 +338,7 @@ def costruisci(args):
     risorse = _impronta_risorse(args.casi)
     impronte = {c["nome"]: _impronta_caso(args.casi, c, risorse) for c in casi}
     riusati = (_da_riusare(args.uscita, casi, impronta, impronte, pulisci=not args.solo)
-               if args.riusa else {})
+               if getattr(args, "riusa", False) else {})
     riassunto = {n: dict(stato=e["stato"], md5=e["md5"], secondi=e["secondi"])
                  for n, e in riusati.items()}
     da_fare = [c for c in casi if c["nome"] not in riusati]
