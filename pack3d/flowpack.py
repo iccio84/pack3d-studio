@@ -1442,11 +1442,21 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # chiusura prima dell'altro verso, la brioche - che va letto ruotato -
     # trovava una lettura plausibile nel verso sbagliato, e il verso giusto
     # non veniva mai provato.
+    # i numeri delle quote, in punti: dicono quali linee lunghe sono quote e
+    # non capi dello steso (`_riquadro_chiuso`)
+    try:
+        from .quote import numeri as _numeri
+        numeri = [((x if asse == 0 else t) / PT2MM,
+                   (t if asse == 0 else x) / PT2MM, v)
+                  for v, x, t, asse in _numeri(pdf_path, page_no)]
+    except Exception:
+        numeri = []
     primo = None
     for modo in ("pinna", "pillow", "piatta"):
         for ruotato in (False, True):
             try:
-                return _risolvi_steso(S, raster, sc, ruotato, modo)
+                return _risolvi_steso(S, raster, sc, ruotato, modo,
+                                      numeri=numeri)
             except _StesoNonRisolto as e:
                 # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
                 # porta dietro il traceback, il traceback il frame di
@@ -1460,6 +1470,7 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
             S = [("V" if k == "H" else "H", c, a0, b0, st)
                  for k, c, a0, b0, st in S]
             raster = raster.transpose(1, 0, 2)
+            numeri = [(y, x, v) for x, y, v in numeri]
     raise _StesoNonRisolto(primo)
 
 
@@ -1588,6 +1599,73 @@ def _testate_speculari(vs, x0, x1, tol=0.5):
     return a is not None and b is not None and abs(a - b) <= tol
 
 
+def _riquadro_chiuso(S, hs, vs, minimo=0.9, numeri=()):
+    """Toglie dai capi dello steso le linee di quota che non lo chiudono.
+
+    I capi sono le linee piu' esterne dei gruppi lunghi, e una linea di quota
+    lunga quanto lo steso - la quota del giro accanto, quella del passo
+    sotto - e' lunga anche lei: sul T1 di un biscotto a fondo argento il
+    riquadro arrivava fino alla quota dei 184 mm e a quella dei 102, e lo
+    steso diventava 227 x 136. Un bordo vero chiude il riquadro: il suo lato
+    copre quasi tutto lo spazio fra gli altri due. Una quota no: la linea del
+    passo si ferma dove finisce lo steso, prima della quota del giro.
+    Ma la quota dei 184 si ferma proprio sui due capi del giro e il riquadro
+    lo chiude lo stesso: per questo una linea che porta scritto accanto il
+    numero della sua lunghezza (`numeri`, `(x, y, valore)` in punti e mm) e'
+    una quota, e non fa da capo.
+    Solo se un capo e' una quota si cerca, fra i gruppi, il riquadro chiuso
+    piu' grande senza quote; se non ce n'e' nessuno resta quello di prima.
+    """
+    def lati(k):
+        return [(c, a, b) for kk, c, a, b, st in S if kk == k]
+
+    lh, lv = lati("H"), lati("V")
+
+    def quota(linee, c, asse):
+        lunghe = [(a, b) for cc, a, b in linee if abs(cc - c) <= 3.0]
+        if not lunghe:
+            return False
+        # da un capo all'altro del gruppo: la linea di quota e' interrotta
+        # proprio dove c'e' il numero
+        a, b = min(t[0] for t in lunghe), max(t[1] for t in lunghe)
+        lungo = (b - a) * PT2MM
+        for x, y, v in numeri:
+            su, lungo_t = (y, x) if asse == "H" else (x, y)
+            if (abs(su - c) <= 8.0 / PT2MM and a <= lungo_t <= b
+                    and abs(v - lungo) <= 1.5):
+                return True
+        return False
+
+    def di_quota(y0, y1, x0, x1):
+        return any(quota(lh, y, "H") for y in (y0, y1)) or \
+            any(quota(lv, x, "V") for x in (x0, x1))
+
+    def chiuso(y0, y1, x0, x1):
+        if di_quota(y0, y1, x0, x1):
+            return False
+        return (_copre(lh, y0, x0, x1) >= minimo and _copre(lh, y1, x0, x1) >= minimo
+                and _copre(lv, x0, y0, y1) >= minimo and _copre(lv, x1, y0, y1) >= minimo)
+
+    # si cerca solo quando un capo e' una quota: un capo con un buco (il
+    # Pingui ha il taglio interrotto per 15 mm su 136) e' comunque un capo
+    if len(hs) < 4 or len(vs) < 2 or not di_quota(hs[0], hs[-1], vs[0], vs[-1]):
+        return hs, vs
+    meglio = None
+    for i in range(len(hs)):
+        for j in range(len(hs) - 1, i + 2, -1):
+            for p in range(len(vs)):
+                for q in range(len(vs) - 1, p, -1):
+                    area = (hs[j] - hs[i]) * (vs[q] - vs[p])
+                    if meglio and area <= meglio[0]:
+                        continue
+                    if chiuso(hs[i], hs[j], vs[p], vs[q]):
+                        meglio = (area, i, j, p, q)
+    if not meglio:
+        return hs, vs
+    _a, i, j, p, q = meglio
+    return hs[i:j + 1], vs[p:q + 1]
+
+
 def _copre(linee, c, a0, a1, tol=3.0):
     """Frazione di `[a0, a1]` coperta dalle `linee` `(c, a, b)` vicine a `c`.
 
@@ -1605,7 +1683,7 @@ def _copre(linee, c, a0, a1, tol=3.0):
     return tot / (a1 - a0) if a1 > a0 else 0.0
 
 
-def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
+def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=()):
     """Ricava il flowpack da segmenti e rasterizzazione gia' orientati."""
     from .dieline import _cluster
 
@@ -1652,6 +1730,7 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna"):
         return [lo] + centri[1:-1] + [hi]
 
     hs, vs = capi(H, hs), capi(V, vs)
+    hs, vs = _riquadro_chiuso(S, hs, vs, numeri=numeri)
     y0, y1 = hs[0], hs[-1]
     x0, x1 = vs[0], vs[-1]
     web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM

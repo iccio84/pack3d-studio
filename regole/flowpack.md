@@ -705,6 +705,30 @@ pieghe, 149 mm; la linea a un millimetro e' lunga 152 e sporge oltre il passo,
 quindi e' un'altra cosa. La brioche promo si sposta di un decimo di punto, e
 tutti gli altri restano al byte.
 
+### Una linea di quota non e' un capo dello steso
+
+Il caso: il T1 di un biscotto tondo (66 x 11 mm) su fondo argento, steso
+184 x 102 con la quota del giro (184) sotto e quella del passo (102) a
+destra, tutte e due lunghe quanto lo steso. I capi erano le linee piu'
+esterne dei gruppi lunghi, quindi le due quote: riquadro 227 x 136, pack
+alto 136 e spesso 48 invece di 102 e 12, con le quote e i crocini sulla
+texture.
+
+La regola (`_riquadro_chiuso` in `flowpack.py`): una linea che porta scritto
+accanto, entro 8 mm, il numero della sua lunghezza da un capo all'altro del
+gruppo (la linea di quota e' interrotta proprio dove c'e' il numero) e' una
+quota. Se uno dei quattro capi e' una quota si cerca, fra i gruppi, il
+riquadro piu' grande senza quote e chiuso - ogni lato copre almeno il 90%
+dello spazio fra gli altri due. Se il riquadro c'e' sono quelli i capi; se
+no restano i capi di prima. Il biscotto passa a giro 156 (fronte 67, fianchi
+11, pinna 14), corpo 82, pinne 10: 78 x 102 x 12,5.
+
+La ricerca parte **solo** quando un capo e' una quota. Provata anche su ogni
+riquadro non chiuso, tagliava il Pingui al mandarino e altri tre T1 (passo
+149 -> 133): il loro taglio ha un buco di 15 mm su 136, sotto il 90%, ed e'
+comunque il capo. Con il controllo sulle quote il parco resta uguale: 44
+letture su 44.
+
 ### La falda sta sopra il retro anche nelle testate
 
 Oltre il corpo la falda si posava a distanza zero sul retro schiacciato nella
