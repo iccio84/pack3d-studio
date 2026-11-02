@@ -853,8 +853,14 @@ c'e', ed e' una conoscenza di base: la pinna e' dello steso, e i tagli del
 passo la attraversano fino al bordo - gli angoli di quel lato si chiudono;
 alla cornice, dieci millimetri piu' in la', i lati dello steso non
 arrivano. Ora il lato vuoto costa solo se i suoi angoli restano aperti.
-Cornice 18 su 18, e lo stesso con la cornice piu' vicina sul T2 al
-cioccolato fondente.
+Cornice 18 su 18.
+
+Resta aperto un caso piu' stretto: sul T2 al cioccolato fondente i tagli
+del passo non attraversano la pinna (angoli aperti), e il bordo della pinna
+e' disegnato 3,5 mm piu' largo dello steso per parte. Con la cornice a 10 mm
+dal DT il giudice ci arriva; con una cornice a 6,5 mm, come quella della
+vecchia variante, prende il riquadro senza la pinna. Separarli vorrebbe una
+soglia fra 3,5 e 10 mm fatta su quel disegno, e non c'e'.
 
 Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
 decide, l'immagine integrale della stampa, per non rileggere il raster
