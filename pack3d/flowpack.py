@@ -2007,8 +2007,12 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
                              - 2 * tagliati(a0, a1, b0, b1)
                              # un lato vuoto e' ammesso (la pinna bianca) ma
                              # costa: a pari punti, tre lati veri e la
-                             # cornice battevano lo steso perche' piu' grandi
-                             - sum(v for v, q_, a in sui.values()))
+                             # cornice battevano lo steso perche' piu' grandi.
+                             # Non costa se i suoi angoli si chiudono: i tagli
+                             # del passo attraversano la pinna fino al bordo,
+                             # e non arrivano alla cornice dieci millimetri
+                             # piu' in la'
+                             - sum(v and not a for v, q_, a in sui.values()))
                     chiave = (punti, (a1 - a0) * (b1 - b0))
                     if meglio is None or chiave > meglio[0]:
                         meglio = (chiave, i, j, p, q)

@@ -1955,7 +1955,7 @@ def _correlazione(P, t):
     return float(c[k]), int(k[0]), int(k[1])
 
 
-def _pagina_variata(sorgente, destinazione, variante):
+def _pagina_variata(sorgente, destinazione, variante, kind=None):
     """Una copia del PDF variata come la manderebbe un altro cliente. Le
     varianti si sommano con `+` (`appiattito+giro90`), nell'ordine scritto:
 
@@ -1991,17 +1991,19 @@ def _pagina_variata(sorgente, destinazione, variante):
         else:
             fd, uscita = tempfile.mkstemp(suffix=".pdf", dir=os.path.dirname(destinazione))
             os.close(fd)
-        _un_passo(corrente, uscita, passo)
+        _un_passo(corrente, uscita, passo, kind)
         if corrente != sorgente:
             os.remove(corrente)
         corrente = uscita
 
 
-def _riquadro_tecnico(pdf, pagina):
+def _riquadro_tecnico(pdf, pagina, kind=None):
     """Il riquadro del disegno tecnico nella pagina e la sua penna:
     `((x0, y0, x1, y1), (spessore, (r, g, b)))` nel telaio di misura (punti,
     y dall'alto), o None. Il riquadro e' quello delle linee lunghe della
-    penna tecnica: per un flowpack, lo steso."""
+    penna tecnica: per un flowpack, lo steso; per le altre famiglie il DT
+    principale intero (`tools.dt_principale`), alette e falde comprese - le
+    linee lunghe di un astuccio sono il solo corpo."""
     from pack3d.dieline import _technical_pens
     from pack3d.tracciati import segmenti, _canali
     segs, W, H = segmenti(pdf, pagina)
@@ -2021,7 +2023,14 @@ def _riquadro_tecnico(pdf, pagina):
     if not hs or not vs:
         return None
     riquadro = (min(vs), min(hs), max(vs), max(hs))
-    if pagina == 0:
+    if kind not in (None, "flowpack"):
+        from pack3d import tools
+        from pack3d.dieline import PT2MM
+        dt = tools.dt_principale(pdf, pagina)
+        if dt:
+            mm = 1.0 / PT2MM
+            riquadro = (dt[0] * mm, dt[1] * mm, (dt[0] + dt[2]) * mm, (dt[1] + dt[3]) * mm)
+    elif pagina == 0:
         # un flowpack: lo steso come lo legge il codice di adesso, che sui
         # casi del parco e' quello giusto. Le linee lunghe da sole prendono
         # anche la seconda vista della tavola, quando ce n'e' una
@@ -2074,7 +2083,7 @@ def _ingombro_tecnico(pdf, pagina, riquadro):
     return x0, y0, x1, y1
 
 
-def _disegno_in_piu(pdf, pagina, variante, mx0, my1):
+def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
     """Il contenuto da aggiungere alla pagina per le varianti di stile del
     disegno tecnico, nella stessa penna del DT; None se il DT non si trova.
 
@@ -2085,7 +2094,7 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1):
     - `legenda`: un riquadro con le scritte della legenda attaccato sotto
       lo steso, largo meta'."""
     from pack3d.dieline import PT2MM
-    r = _riquadro_tecnico(pdf, pagina)
+    r = _riquadro_tecnico(pdf, pagina, kind)
     if r is None:
         return None
     (x0, y0, x1, y1), (w, rgb) = r
@@ -2146,7 +2155,7 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1):
     return ("\n".join(righe) + "\n").encode("ascii")
 
 
-def _un_passo(sorgente, destinazione, variante):
+def _un_passo(sorgente, destinazione, variante, kind=None):
     """Una variante sola di `_pagina_variata`."""
     from pypdf import PdfReader, PdfWriter, Transformation
     from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject,
@@ -2159,7 +2168,7 @@ def _un_passo(sorgente, destinazione, variante):
                                  NameObject("/BaseFont"): NameObject("/Helvetica")})
         for i, p in enumerate(w.pages):
             mb = p.mediabox
-            dati = _disegno_in_piu(sorgente, i, variante, float(mb.left), float(mb.top))
+            dati = _disegno_in_piu(sorgente, i, variante, float(mb.left), float(mb.top), kind)
             if not dati:
                 continue
             sopra = PageObject.create_blank_page(w, float(mb.width), float(mb.height))
@@ -2273,7 +2282,8 @@ def varianti(args):
                     file.append(f)
                     continue
                 file.append("%s__%s.pdf" % (os.path.splitext(f)[0], v))
-                _pagina_variata(sorgente, os.path.join(finto, "parco", "pdf", file[-1]), v)
+                _pagina_variata(sorgente, os.path.join(finto, "parco", "pdf", file[-1]), v,
+                                kind=(c.get("opzioni") or {}).get("kind"))
             nuovi.append(dict(nome="%s__%s" % (c["nome"], v), file=file,
                               opzioni=c.get("opzioni"), originale=c, variante=v))
     with open(os.path.join(finto, "parco", "parco.json"), "w", encoding="utf-8") as fh:
