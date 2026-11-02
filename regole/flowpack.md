@@ -766,17 +766,52 @@ riquadro dentro le testate della colazione vinceva per quattro centesimi.
 
 Il giudice sceglie senza sapere se le fasce tornano, e su una variante del
 tubo piatto da 115 il suo riquadro (99 x 85) non si risolveva, mentre
-quello esterno si'. Per questo le ipotesi sono due e decide il solutore:
-prima il riquadro del giudice, poi - se e' un altro - quello di prima.
+quello esterno si'. Per questo le ipotesi sono due e decide il solutore,
+in due giri di `analyze_auto`: prima il riquadro del giudice in tutte le
+chiusure e i versi, poi - se nessuno torna - quello di prima. Dentro lo
+stesso tentativo il riquadro di prima, sbagliato, si risolveva a pinna
+prima che quello giusto del giudice arrivasse al tubo piatto girato.
 
-Risultato: i 18 flowpack veri del parco escono uguali, il T1 a fondo
-argento lo risolve anche il giudice da solo, e le varianti giuste passano
-da 9 a 13 con le quote, da 6 a 12 con la cornice, da 12 a 14 con la
-legenda, nessuna peggiore. Restano 15 varianti che il giudice non risolve
-(il riquadro giusto perde o non c'e' fra i gruppi): sono la lista del
-lavoro dopo. Il costo: quando non decide, quattro strisce sul riquadro
-esterno; quando decide, l'immagine integrale della stampa, per non
-rileggere il raster migliaia di volte.
+Il secondo giro, sulle 15 varianti che restavano, ha aggiunto quattro
+conoscenze di base, ognuna da un errore preciso:
+
+- **i capi del riquadro scelto sono la linea piu' esterna del gruppo**, come
+  i capi di sempre (*I capi dello steso sono il taglio*): con la cornice il
+  giudice prendeva il centro, 135,5 invece di 136;
+- **lo steso non taglia la grafica**: meno due per ogni lato oltre il quale,
+  fra 6 e 12 mm, la stampa continua. Con la cornice la colazione e il
+  mandarino sceglievano il riquadro dentro le testate, che sono stampate;
+- **un lato vuoto costa un punto**: ammesso (la pinna bianca), ma a pari
+  punti tre lati veri e la cornice battevano lo steso perche' piu' grandi;
+- **un lato che copre meno del 60% conta per due**: il fondo di una legenda
+  attaccata ne copre la meta', e da solo non faceva intervenire il
+  giudice. Un taglio col buco, come il mandarino, copre l'89%;
+- e le quote si cercano fra **tutte** le linee del DT: una quota fuori dal
+  riquadro misurato lasciava il suo numero a pochi millimetri dal taglio
+  vero, che lo prendeva per se'.
+
+Provata e tolta: «una quota ha il bianco da tutte e due le parti». Dove
+l'abbondanza della grafica esce di molto dal taglio il bianco non c'e', e le
+quote vere non si riconoscevano piu'.
+
+Risultato: i 18 flowpack veri del parco escono uguali, e le varianti giuste
+passano - dal codice di prima al giudice di oggi - da 9 a 14 con le quote,
+da 6 a 13 con la cornice, da 12 a 17 con la legenda, nessuna peggiore.
+Restano 10 varianti:
+
+- la pinna bianca e il margine fra lo steso e una cornice si presentano
+  uguali - un lato vuoto, una linea chiusa piu' in dentro - e il giudice non
+  li distingue (due casi con la cornice);
+- un'abbondanza che esce di molto dal taglio sembra grafica che continua
+  (il T1 a fondo argento con la cornice);
+- tre sono difetti della variante, non del giudice: i numeri delle quote
+  scritti fuori posto su una pagina girata, le quote fuori dalla pagina, la
+  cornice che si prende anche l'altra vista della tavola;
+- tre DT con le linee spezzate o doppie, dove i lati veri non chiudono.
+
+Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
+decide, l'immagine integrale della stampa, per non rileggere il raster
+migliaia di volte.
 
 ### La falda sta sopra il retro anche nelle testate
 
