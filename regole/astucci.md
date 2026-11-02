@@ -52,7 +52,8 @@ file (T6 aperto):
   Misurato con le varianti di stile del parco (`prove/parco.py varianti
   --famiglia carton --varianti quote,cornice,legenda`): sui 16 astucci
   cornice e legenda 16 su 16, quote 15 su 16 - il T3 di biscotti - e con
-  questa regola il T3 con le quote legge la stessa fustella dell'originale.
+  questa regola anche le quote 16 su 16: il T3 con le quote costruito uguale
+  all'originale.
 - **la penna che non e' fustella.** `_technical_pens` tiene tutti i tratti
   sottili che contribuiscono linee lunghe, e fa bene — molti artwork separano
   taglio, cordonatura e mezzo taglio su colori diversi. Ma per la GRIGLIA un
