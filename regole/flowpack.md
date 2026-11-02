@@ -729,6 +729,55 @@ riquadro non chiuso, tagliava il Pingui al mandarino e altri tre T1 (passo
 comunque il capo. Con il controllo sulle quote il parco resta uguale: 44
 letture su 44.
 
+### Il giudice dello steso: lati che non sono tagli
+
+La regola sopra ripara un disegnatore: quello che scrive il numero accanto
+alla quota. Il difetto pero' e' piu' largo - i capi dello steso sono le
+linee piu' esterne dei gruppi lunghi, e qualunque linea lunga disegnata
+attorno allo steso con la penna del DT ci finisce dentro: una quota senza
+numero leggibile, la cornice della tavola, il fondo di una legenda
+attaccata. Misurato con le varianti di stile del parco (`prove/parco.py
+varianti --varianti quote,cornice,legenda`: lo stesso PDF con piu' disegno
+nella penna del DT), sui 18 flowpack il codice di prima ne leggeva giusti 9
+con le quote, 6 con la cornice e 12 con la legenda.
+
+Invece di una regola per disegnatore, un giudice (`_riquadro_coerente` in
+`flowpack.py`) con la conoscenza di base di uno steso. Un lato e' un taglio
+se:
+
+- le linee interne ci arrivano (le cordonature attraversano il passo, le
+  saldature il nastro) **oppure** la striscia appena dentro e' stampata. Le
+  due cose insieme: le linee da sole si fermano anche a 20 mm dal taglio
+  (le testate del wafer da colazione), la stampa da sola manca sulle
+  testate e sulle pinne bianche. Un lato senza l'una e senza l'altra e'
+  VUOTO;
+- non e' una quota: il numero della sua lunghezza va alla linea **piu'
+  vicina** fra quelle lunghe quanto lui (`_quote`), non a tutte quelle
+  entro 8 mm - il taglio vero accanto alla quota e' lungo uguale;
+- chiude il riquadro: copre almeno l'80% dello spazio fra gli altri due.
+
+Sui 18 flowpack veri uno steso ha al piu' un lato che non lo e' (una pinna
+bianca). Con due o piu' il giudice sceglie fra i riquadri dei gruppi -
+grandi almeno meta' di quello esterno, chiusi, senza quote, con al piu' un
+lato vuoto - il piu' **coerente**: un punto per lato che copre il 90%, uno
+per angolo che si chiude, due per ogni misura che una quota scrive. A pari
+punti il piu' grande. Contare, non sommare: con le coperture sommate il
+riquadro dentro le testate della colazione vinceva per quattro centesimi.
+
+Il giudice sceglie senza sapere se le fasce tornano, e su una variante del
+tubo piatto da 115 il suo riquadro (99 x 85) non si risolveva, mentre
+quello esterno si'. Per questo le ipotesi sono due e decide il solutore:
+prima il riquadro del giudice, poi - se e' un altro - quello di prima.
+
+Risultato: i 18 flowpack veri del parco escono uguali, il T1 a fondo
+argento lo risolve anche il giudice da solo, e le varianti giuste passano
+da 9 a 13 con le quote, da 6 a 12 con la cornice, da 12 a 14 con la
+legenda, nessuna peggiore. Restano 15 varianti che il giudice non risolve
+(il riquadro giusto perde o non c'e' fra i gruppi): sono la lista del
+lavoro dopo. Il costo: quando non decide, quattro strisce sul riquadro
+esterno; quando decide, l'immagine integrale della stampa, per non
+rileggere il raster migliaia di volte.
+
 ### La falda sta sopra il retro anche nelle testate
 
 Oltre il corpo la falda si posava a distanza zero sul retro schiacciato nella

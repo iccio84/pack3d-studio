@@ -1666,6 +1666,268 @@ def _riquadro_chiuso(S, hs, vs, minimo=0.9, numeri=()):
     return hs[i:j + 1], vs[p:q + 1]
 
 
+# Un lato e' VUOTO se nessuna linea interna ci arriva entro tanti mm e la
+# striscia appena dentro non e' stampata: e' il margine fra lo steso e una
+# quota, o fra lo steso e la cornice della tavola. Sui 18 flowpack del parco
+# uno steso vero ne ha al piu' uno (una pinna bianca); con le quote lunghe
+# quanto lo steso o una cornice ne ha due o piu'. Le linee interne si
+# fermano anche a 20 mm dal taglio (le testate del wafer da colazione):
+# per questo da sola la distanza non basta, serve anche la stampa.
+VUOTO_MM = 5.0
+VUOTO_STAMPATO = 0.15
+# Un lato del riquadro coerente deve coprire almeno questo dello spazio fra
+# gli altri due: meno del 90% di `_riquadro_chiuso`, perche' il taglio del
+# mandarino ha un buco di 15 mm su 136.
+CHIUSO_COERENTE = 0.8
+# Fin dove si cerca la linea di un numero di quota, in mm: poi vince la
+# linea piu' vicina (`_quote`).
+QUOTA_ACCANTO_MM = 10.0
+# Gli angoli: i due lati perpendicolari arrivano a questo lato entro tanti mm.
+ANGOLO_MM = 2.0
+
+
+def _integrale(raster):
+    """L'immagine integrale dei pixel stampati (non bianchi): con questa la
+    frazione stampata di un riquadro costa quattro letture, e il giudice ne
+    chiede migliaia."""
+    import numpy as np
+    m = (raster.min(2) < 230).astype(np.int32)
+    out = np.zeros((m.shape[0] + 1, m.shape[1] + 1), np.int64)
+    out[1:, 1:] = m.cumsum(0).cumsum(1)
+    return out
+
+
+def _stampato(integrale, sc, y0, y1, x0, x1):
+    """La frazione di pixel stampati (non bianchi) nel riquadro, in punti."""
+    H, W = integrale.shape[0] - 1, integrale.shape[1] - 1
+    r0, r1 = min(max(int(y0 * sc), 0), H), min(max(int(y1 * sc), 0), H)
+    c0, c1 = min(max(int(x0 * sc), 0), W), min(max(int(x1 * sc), 0), W)
+    n = (r1 - r0) * (c1 - c0)
+    if n <= 0:
+        return 0.0
+    tot = (integrale[r1, c1] - integrale[r0, c1] - integrale[r1, c0]
+           + integrale[r0, c0])
+    return float(tot) / n
+
+
+def _quote(S, numeri):
+    """Le linee che sono quote: `{(kind, c): valore scritto}`.
+
+    Una quota porta scritto accanto il numero della sua lunghezza, da un capo
+    all'altro del gruppo (la linea di quota e' interrotta proprio dove c'e'
+    il numero). Il numero va alla linea PIU' VICINA fra quelle lunghe quanto
+    lui: il taglio vero accanto alla quota e' lungo uguale, e a otto
+    millimetri il numero lo prendeva per quota anche lui.
+    """
+    gruppi = {}
+    for k, c, a, b, st in S:
+        chiave = (k, round(c / 3.0))
+        g = gruppi.get(chiave)
+        gruppi[chiave] = (k, c, a, b) if g is None else (k, g[1], min(g[2], a), max(g[3], b))
+    fuori = {}
+    for x, y, v in numeri:
+        meglio = None
+        for k, c, a, b in gruppi.values():
+            su, lungo_t = (y, x) if k == "H" else (x, y)
+            d = abs(su - c)
+            if (d <= QUOTA_ACCANTO_MM / PT2MM and a <= lungo_t <= b
+                    and abs(v - (b - a) * PT2MM) <= 1.5
+                    and (meglio is None or d < meglio[0])):
+                meglio = (d, k, c)
+        if meglio:
+            fuori[meglio[1:]] = v
+    return fuori
+
+
+def _quota_su(quote, kind, c):
+    return any(k == kind and abs(cc - c) <= 3.0 for k, cc in quote)
+
+
+def _lati(S, stampato, y0, y1, x0, x1, quote):
+    """Per ogni lato del riquadro: `(vuoto, quota)`. Vedi VUOTO_MM."""
+    mm = 1.0 / PT2MM
+    m = 2.0 * mm
+
+    def gruppi(kind, lo, hi, minimo):
+        g = {}
+        for k, c, a, b, st in S:
+            if k != kind or not (lo + m < c < hi - m) or b - a < minimo:
+                continue
+            chiave = round(c / 3.0)
+            a0, b0 = g.get(chiave, (a, b))
+            g[chiave] = (min(a0, a), max(b0, b))
+        return list(g.values())
+
+    oriz = gruppi("H", y0, y1, 0.2 * (x1 - x0))
+    vert = gruppi("V", x0, x1, 0.2 * (y1 - y0))
+    dy, dx = 0.1 * (y1 - y0), 0.1 * (x1 - x0)
+    distanze = {
+        "x0": min((a - x0 for a, b in oriz), default=None),
+        "x1": min((x1 - b for a, b in oriz), default=None),
+        "y0": min((a - y0 for a, b in vert), default=None),
+        "y1": min((y1 - b for a, b in vert), default=None),
+    }
+    strisce = {
+        "x0": (y0 + dy, y1 - dy, x0 + 2 * mm, x0 + 6 * mm),
+        "x1": (y0 + dy, y1 - dy, x1 - 6 * mm, x1 - 2 * mm),
+        "y0": (y0 + 2 * mm, y0 + 6 * mm, x0 + dx, x1 - dx),
+        "y1": (y1 - 6 * mm, y1 - 2 * mm, x0 + dx, x1 - dx),
+    }
+    def estremi(kind, c):
+        t = [(a, b) for k, cc, a, b, st in S if k == kind and abs(cc - c) <= 3.0]
+        return (min(a for a, _ in t), max(b for _, b in t)) if t else None
+
+    tol = ANGOLO_MM * mm
+    alto, basso, sx, dx_ = estremi("H", y0), estremi("H", y1), estremi("V", x0), estremi("V", x1)
+    angoli = {
+        "x0": all(e and e[0] <= x0 + tol for e in (alto, basso)),
+        "x1": all(e and e[1] >= x1 - tol for e in (alto, basso)),
+        "y0": all(e and e[0] <= y0 + tol for e in (sx, dx_)),
+        "y1": all(e and e[1] >= y1 - tol for e in (sx, dx_)),
+    }
+    fuori = {}
+    for lato in ("x0", "x1", "y0", "y1"):
+        d = distanze[lato]
+        vuoto = (d is not None and d * PT2MM >= VUOTO_MM
+                 and stampato(*strisce[lato]) < VUOTO_STAMPATO)
+        kind, c = ("V", x0 if lato == "x0" else x1) if lato[0] == "x" else \
+            ("H", y0 if lato == "y0" else y1)
+        fuori[lato] = (vuoto, _quota_su(quote, kind, c), angoli[lato])
+    return fuori
+
+
+def _riquadro_coerente(S, hs, vs, raster, sc, numeri=()):
+    """Lo steso che torna con quello che un flowpack e': `(hs, vs, avviso)`.
+
+    I capi si prendono come sempre - le linee piu' esterne dei gruppi lunghi -
+    ma prima di crederci si guarda se sono tagli. Un lato non e' un taglio se
+    e' VUOTO (nessuna linea interna ci arriva entro VUOTO_MM e la striscia
+    appena dentro non e' stampata), se e' una quota (`_quote`) o se non
+    chiude il riquadro (CHIUSO_COERENTE). Uno steso vero ne ha al piu' uno -
+    la pinna bianca, una testata non stampata - e due o piu' vogliono dire
+    quote lunghe quanto lo steso, la cornice della tavola, una legenda
+    attaccata.
+
+    Allora non si sceglie una regola, si sceglie un riquadro: fra quelli dei
+    gruppi, grandi almeno la meta' di quello esterno, chiusi, senza quote e
+    con al piu' un lato vuoto, vince il piu'
+    COERENTE - un punto per ogni lato che copre il 90%, uno per ogni angolo
+    che si chiude, due per ogni misura che una quota del disegno scrive - e
+    a pari coerenza il piu' grande. Se nessuno torna si resta sui capi di
+    prima, e lo si dice.
+
+    Una regola sola al posto di una per disegnatore: la quota del T1 a fondo
+    argento, la cornice di una tavola e la legenda attaccata sono lo stesso
+    errore - lati che non sono tagli - e lo stesso rimedio. Misurato con le
+    varianti di stile del parco (`prove/parco.py varianti --varianti
+    quote,cornice,legenda`): vedi regole/flowpack.md.
+    """
+    import bisect
+    y0, y1, x0, x1 = hs[0], hs[-1], vs[0], vs[-1]
+    quote = _quote(S, numeri)
+
+    def diretto(*r):
+        # sul riquadro esterno, quattro strisce: l'immagine integrale costa di
+        # piu', e serve solo se il giudice deve scegliere
+        r0, r1, c0, c1 = (max(int(v * sc), 0) for v in r)
+        pezzo = raster[r0:r1, c0:c1]
+        return float((pezzo.min(2) < 230).mean()) if pezzo.size else 0.0
+
+    lati = _lati(S, diretto, y0, y1, x0, x1, quote)
+    lh = [(c, a, b) for k, c, a, b, st in S if k == "H"]
+    lv = [(c, a, b) for k, c, a, b, st in S if k == "V"]
+    # un lato che non chiude il riquadro (CHIUSO_COERENTE) non e' un taglio:
+    # e' il fondo di una legenda attaccata, largo meta' dello steso
+    aperti = {"y0": _copre(lh, y0, x0, x1), "y1": _copre(lh, y1, x0, x1),
+              "x0": _copre(lv, x0, y0, y1), "x1": _copre(lv, x1, y0, y1)}
+    dubbi = [k for k, (v, q, a) in sorted(lati.items())
+             if v or q or aperti[k] < CHIUSO_COERENTE]
+    if len(dubbi) < 2 or len(hs) < 4 or len(vs) < 2:
+        hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
+        return hs2, vs2, None
+
+    integrale = _integrale(raster)
+
+    def veloce(*r):
+        return _stampato(integrale, sc, *r)
+
+    memoria = {}
+
+    def copre(linee, c, a0, a1):
+        k = (id(linee), c, a0, a1)
+        if k not in memoria:
+            memoria[k] = _copre(linee, c, a0, a1)
+        return memoria[k]
+
+    def coperture(a0, a1, b0, b1):
+        return (copre(lh, a0, b0, b1), copre(lh, a1, b0, b1),
+                copre(lv, b0, a0, a1), copre(lv, b1, a0, a1))
+
+    # solo i numeri che stanno su una linea di quota: un numero qualsiasi del
+    # foglio (la tabella nutrizionale ne ha decine) faceva vincere riquadri
+    # assurdi, 88 x 18, lunghi per caso quanto lui
+    valori = sorted(set(quote.values()))
+
+    def scritta(mm):
+        # c'e' una quota del disegno uguale a `mm`, entro un millimetro
+        k = bisect.bisect_left(valori, mm - 1.0)
+        return k < len(valori) and valori[k] <= mm + 1.0
+
+    def torna(sui):
+        # nessuna quota e al piu' un lato vuoto (la pinna bianca). Gli angoli
+        # non si pretendono: li conta il punteggio, e la pinna bianca del
+        # T2 al cioccolato fondente ha gli angoli aperti ed e' steso lo stesso
+        return (not any(q for v, q, a in sui.values())
+                and sum(v for v, q, a in sui.values()) <= 1)
+
+    # Fra i riquadri che tornano vince il piu' COERENTE, non il piu' grande:
+    # lati che si coprono (90%) e angoli che si chiudono, contati uno per uno -
+    # sommare le coperture faceva vincere per quattro centesimi il riquadro
+    # dentro le testate della colazione, coi lati appena piu' pieni. Sul T1 a fondo
+    # argento il 206,5 x 92 - una quota interna e una saldatura - era un
+    # pelo piu' grande dello steso vero, 184 x 102, che pero' si chiude su
+    # tutti e quattro i lati. A pari coerenza, il piu' grande.
+    meglio = None
+    for i in range(len(hs)):
+        for j in range(len(hs) - 1, i + 2, -1):
+            for p in range(len(vs)):
+                for q in range(len(vs) - 1, p, -1):
+                    if (i, j, p, q) == (0, len(hs) - 1, 0, len(vs) - 1):
+                        continue
+                    a0, a1, b0, b1 = hs[i], hs[j], vs[p], vs[q]
+                    # quote, cornici e legende stanno attorno allo steso: il
+                    # riquadro buono ne e' la gran parte, non un pezzo
+                    if a1 - a0 < 0.5 * (y1 - y0) or b1 - b0 < 0.5 * (x1 - x0):
+                        continue
+                    cop = coperture(a0, a1, b0, b1)
+                    if min(cop) < CHIUSO_COERENTE:
+                        continue
+                    sui = _lati(S, veloce, a0, a1, b0, b1, quote)
+                    if not torna(sui):
+                        continue
+                    punti = (sum(c >= 0.9 for c in cop)
+                             + sum(a for v, q_, a in sui.values())
+                             # le quote scritte: un lato lungo quanto un
+                             # numero del disegno e' la prova piu' forte
+                             + 2 * sum(scritta(d * PT2MM) for d in (a1 - a0, b1 - b0)))
+                    chiave = (punti, (a1 - a0) * (b1 - b0))
+                    if meglio is None or chiave > meglio[0]:
+                        meglio = (chiave, i, j, p, q)
+    if meglio:
+        _k, i, j, p, q = meglio
+        a0, a1, b0, b1 = hs[i], hs[j], vs[p], vs[q]
+        avviso = ("steso per coerenza: i capi esterni hanno %d lati che non sono "
+                  "tagli (%s) - quote o una cornice: nessuna linea ci arriva e "
+                  "non sono stampati, o portano il numero della loro lunghezza; "
+                  "preso il riquadro %.1f x %.1f mm"
+                  % (len(dubbi), ", ".join(dubbi), (a1 - a0) * PT2MM, (b1 - b0) * PT2MM))
+        return hs[i:j + 1], vs[p:q + 1], avviso
+    hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
+    return hs2, vs2, ("capi esterni dubbi: %d lati non sembrano tagli (%s), ma "
+                    "nessun riquadro piu' interno torna - da controllare sul DT"
+                    % (len(dubbi), ", ".join(dubbi)))
+
+
 def _copre(linee, c, a0, a1, tol=3.0):
     """Frazione di `[a0, a1]` coperta dalle `linee` `(c, a, b)` vicine a `c`.
 
@@ -1730,107 +1992,127 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=()):
         return [lo] + centri[1:-1] + [hi]
 
     hs, vs = capi(H, hs), capi(V, vs)
-    hs, vs = _riquadro_chiuso(S, hs, vs, numeri=numeri)
-    y0, y1 = hs[0], hs[-1]
-    x0, x1 = vs[0], vs[-1]
-    web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM
-    folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
-    # quanto passo attraversa ogni piega: separa le pieghe dalle guide
-    # dell'area di stampa, che si fermano alle saldature. Vedi `merito`.
-    lunghe = [(c, a, b) for k, c, a, b, st in S if k == "H" and b - a > seg_h]
-    copertura = {(c - y0) * PT2MM: _copre(lunghe, c, x0, x1) for c in hs}
-    avvisi = []
-    if modo == "pinna":
-        b = solve_bands(web, folds, copertura=copertura)
-        if b is None:
-            raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
-        lembo, inizio = 0.0, b["side_fin"]
-        giro = 2.0 * (b["front"] + b["thick"])
-        spessore, falda = b["thick"], b["side_fin"]
-    elif modo == "piatta":
-        sol = [q for q in (risolvi_pinna_piatta(web, f) for f in folds) if q]
-        b = min(sol, key=lambda q: q["simmetria"]) if sol else None
-        if b is None:
-            raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione ne' a "
-                                   "tubo piatto: nastro %.1f mm" % web)
-        # due linee speculari le trovano tutti e due i versi: e' la testata
-        # che dice quale e' quello giusto, vedi `_testate_speculari`
-        if not _testate_speculari(vs, x0, x1):
-            raise _StesoNonRisolto("tubo piatto a pinna: le testate del DT "
-                                   "non tornano ai due capi")
-        lembo, inizio, giro = 0.0, b["side_fin"], b["giro"]
-        spessore, falda = 0.0, b["side_fin"]
-        avvisi.append("tubo piatto a pinna: il DT non segna fianchi, solo le "
-                      "due fasce della pinna - pinna %.1f mm, giro %.1f, "
-                      "fronte mezzo giro %.1f" % (falda, giro, b["front"]))
-    else:
-        sol = [q for f in folds for q in risolvi_pillow(web, f, tutti=True)]
-        b = min(sol, key=lambda q: q["scarto"]) if sol else None
-        if b is None:
-            raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione: "
-                                   "nastro %.1f mm" % web)
-        # A pari scarto il DT non dice quale fascia e' il fronte, e l'ordine
-        # in cui le pieghe si incontrano non e' un criterio: dipende dal
-        # verso del foglio. Sul T1 al cioccolato fresco fronte da 42 a bordo
-        # nastro e fronte da 39 in mezzo tornano tutte e due a 1,48 mm dal
-        # mezzo giro, e vinceva la prima - la striscia tecnica e il
-        # tratteggio - con "T1 al cioccolato fresco" finito sul retro. Decide la stampa,
-        # come per il fronte di un astuccio a fasciatura orizzontale: il
-        # fronte e' la fascia con piu' grafica.
-        pari = {(q["back_a"], q["front"], q["sovrapposizione"]): q
-                for q in sol if q["scarto"] <= b["scarto"] + 0.05}
-        if len(pari) > 1:
-            def croma(q):
-                fy0 = y0 + (q["inizio"] + q["back_a"]) / PT2MM
-                fy1 = fy0 + q["front"] / PT2MM
-                banda = raster[int(fy0 * sc):int(fy1 * sc),
-                               int(x0 * sc):int(x1 * sc)]
-                if not banda.size:
-                    return 0.0
-                return float((banda.max(2) - banda.min(2)).mean())
-            b = max(pari.values(), key=croma)
-        lembo, inizio, giro = b["sovrapposizione"], b["inizio"], b["giro"]
-        spessore, falda = 0.0, 0.0
-        avvisi.append("chiusura a sovrapposizione: lembo coperto %.1f mm, "
-                      "giro %.1f, fronte %.1f su mezzo giro %.1f"
-                      % (lembo, giro, b["front"], giro / 2.0))
 
-    # Pinne di testa: PRIMA il disegno tecnico. Lo stampato si guarda solo se
-    # il DT sulle testate non dice niente - vedi testate_dal_dt per perche'.
-    end_fin, gola, righe = testate_dal_dt(vs, x0, x1)
-    avvisi.extend(righe)
-    if end_fin is None:
-        end_fin, gola = _testate_dallo_stampato(raster, sc, x0, x1, y0,
-                                                inizio, b, spessore), 0.0
-        avvisi.append("testate: il DT non segna la saldatura, pinna %.1f mm "
-                      "dal margine non stampato - e' una stima, la grafica "
-                      "puo' avere del bianco" % end_fin)
-        if end_fin < 1.0:
-            raise ValueError("pinne di testa non misurabili: il DT non segna "
-                             "le saldature e la fascia fronte non ha margine "
-                             "non stampato")
+    # Due ipotesi dello steso, e decide il solutore: il riquadro del giudice
+    # (`_riquadro_coerente`) e, se e' un altro, quello di prima
+    # (`_riquadro_chiuso`). Il giudice sceglie il riquadro senza sapere se le
+    # fasce ci tornano: su una variante del tubo piatto da 115 il riquadro
+    # esterno era quello giusto, e il giudice ne prendeva uno da 99 x 85 in
+    # cui le fasce non si risolvono - perdendo la lettura che funzionava.
+    hs_g, vs_g, coerenza = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri)
+    ipotesi = [(hs_g, vs_g, coerenza)]
+    vecchio = _riquadro_chiuso(S, hs, vs, numeri=numeri)
+    if (hs_g, vs_g) != vecchio:
+        ipotesi.append((vecchio[0], vecchio[1], None))
 
-    if ruotato:
-        avvisi.append("steso ruotato di 90 gradi: le pinne corrono in verticale")
-    # sheet e girth_span restano nel telaio in cui ha lavorato il solutore: chi
-    # ritaglia la texture lo rimette dritto guardando `ruotato`.
-    return Flowpack(W=b["front"], T=spessore, L=round(step - 2 * end_fin, 1),
-                    end_fin=end_fin, side_fin=falda, warnings=avvisi, gola=gola,
-                    linee_passo=tuple(round((c - x0) * PT2MM, 2)
-                                      for c in sorted(vs) if x0 < c < x1),
-                    back_a=b["back_a"], back_b=b["back_b"],
-                    sovrapposizione=lembo, piatto=(modo == "piatta"),
-                    web_mm=round(web, 1), step_mm=round(step, 1),
-                    sheet=(x0, y0, x1, y1), ruotato=ruotato,
-                    # a pinna il giro si ancora ai due bordi misurati del
-                    # nastro, non si accumula dalle fasce: accumulare sposta
-                    # il secondo capo di quel poco che il solutore tollera.
-                    # A sovrapposizione il lembo sta da un lato solo, quindi
-                    # il secondo capo lo da' il giro.
-                    girth_span=((y0 + falda / PT2MM, y1 - falda / PT2MM)
-                                if not lembo else
-                                (y0 + inizio / PT2MM,
-                                 y0 + (inizio + giro) / PT2MM)))
+    def _dentro(hs, vs, coerenza):
+        y0, y1 = hs[0], hs[-1]
+        x0, x1 = vs[0], vs[-1]
+        web, step = (y1 - y0) * PT2MM, (x1 - x0) * PT2MM
+        folds = _collapse_guides([(c - y0) * PT2MM for c in hs])
+        # quanto passo attraversa ogni piega: separa le pieghe dalle guide
+        # dell'area di stampa, che si fermano alle saldature. Vedi `merito`.
+        lunghe = [(c, a, b) for k, c, a, b, st in S if k == "H" and b - a > seg_h]
+        copertura = {(c - y0) * PT2MM: _copre(lunghe, c, x0, x1) for c in hs}
+        avvisi = [coerenza] if coerenza else []
+        if modo == "pinna":
+            b = solve_bands(web, folds, copertura=copertura)
+            if b is None:
+                raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
+            lembo, inizio = 0.0, b["side_fin"]
+            giro = 2.0 * (b["front"] + b["thick"])
+            spessore, falda = b["thick"], b["side_fin"]
+        elif modo == "piatta":
+            sol = [q for q in (risolvi_pinna_piatta(web, f) for f in folds) if q]
+            b = min(sol, key=lambda q: q["simmetria"]) if sol else None
+            if b is None:
+                raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione ne' a "
+                                       "tubo piatto: nastro %.1f mm" % web)
+            # due linee speculari le trovano tutti e due i versi: e' la testata
+            # che dice quale e' quello giusto, vedi `_testate_speculari`
+            if not _testate_speculari(vs, x0, x1):
+                raise _StesoNonRisolto("tubo piatto a pinna: le testate del DT "
+                                       "non tornano ai due capi")
+            lembo, inizio, giro = 0.0, b["side_fin"], b["giro"]
+            spessore, falda = 0.0, b["side_fin"]
+            avvisi.append("tubo piatto a pinna: il DT non segna fianchi, solo le "
+                          "due fasce della pinna - pinna %.1f mm, giro %.1f, "
+                          "fronte mezzo giro %.1f" % (falda, giro, b["front"]))
+        else:
+            sol = [q for f in folds for q in risolvi_pillow(web, f, tutti=True)]
+            b = min(sol, key=lambda q: q["scarto"]) if sol else None
+            if b is None:
+                raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione: "
+                                       "nastro %.1f mm" % web)
+            # A pari scarto il DT non dice quale fascia e' il fronte, e l'ordine
+            # in cui le pieghe si incontrano non e' un criterio: dipende dal
+            # verso del foglio. Sul T1 al cioccolato fresco fronte da 42 a bordo
+            # nastro e fronte da 39 in mezzo tornano tutte e due a 1,48 mm dal
+            # mezzo giro, e vinceva la prima - la striscia tecnica e il
+            # tratteggio - con "T1 al cioccolato fresco" finito sul retro. Decide la stampa,
+            # come per il fronte di un astuccio a fasciatura orizzontale: il
+            # fronte e' la fascia con piu' grafica.
+            pari = {(q["back_a"], q["front"], q["sovrapposizione"]): q
+                    for q in sol if q["scarto"] <= b["scarto"] + 0.05}
+            if len(pari) > 1:
+                def croma(q):
+                    fy0 = y0 + (q["inizio"] + q["back_a"]) / PT2MM
+                    fy1 = fy0 + q["front"] / PT2MM
+                    banda = raster[int(fy0 * sc):int(fy1 * sc),
+                                   int(x0 * sc):int(x1 * sc)]
+                    if not banda.size:
+                        return 0.0
+                    return float((banda.max(2) - banda.min(2)).mean())
+                b = max(pari.values(), key=croma)
+            lembo, inizio, giro = b["sovrapposizione"], b["inizio"], b["giro"]
+            spessore, falda = 0.0, 0.0
+            avvisi.append("chiusura a sovrapposizione: lembo coperto %.1f mm, "
+                          "giro %.1f, fronte %.1f su mezzo giro %.1f"
+                          % (lembo, giro, b["front"], giro / 2.0))
+
+        # Pinne di testa: PRIMA il disegno tecnico. Lo stampato si guarda solo se
+        # il DT sulle testate non dice niente - vedi testate_dal_dt per perche'.
+        end_fin, gola, righe = testate_dal_dt(vs, x0, x1)
+        avvisi.extend(righe)
+        if end_fin is None:
+            end_fin, gola = _testate_dallo_stampato(raster, sc, x0, x1, y0,
+                                                    inizio, b, spessore), 0.0
+            avvisi.append("testate: il DT non segna la saldatura, pinna %.1f mm "
+                          "dal margine non stampato - e' una stima, la grafica "
+                          "puo' avere del bianco" % end_fin)
+            if end_fin < 1.0:
+                raise ValueError("pinne di testa non misurabili: il DT non segna "
+                                 "le saldature e la fascia fronte non ha margine "
+                                 "non stampato")
+
+        if ruotato:
+            avvisi.append("steso ruotato di 90 gradi: le pinne corrono in verticale")
+        # sheet e girth_span restano nel telaio in cui ha lavorato il solutore: chi
+        # ritaglia la texture lo rimette dritto guardando `ruotato`.
+        return Flowpack(W=b["front"], T=spessore, L=round(step - 2 * end_fin, 1),
+                        end_fin=end_fin, side_fin=falda, warnings=avvisi, gola=gola,
+                        linee_passo=tuple(round((c - x0) * PT2MM, 2)
+                                          for c in sorted(vs) if x0 < c < x1),
+                        back_a=b["back_a"], back_b=b["back_b"],
+                        sovrapposizione=lembo, piatto=(modo == "piatta"),
+                        web_mm=round(web, 1), step_mm=round(step, 1),
+                        sheet=(x0, y0, x1, y1), ruotato=ruotato,
+                        # a pinna il giro si ancora ai due bordi misurati del
+                        # nastro, non si accumula dalle fasce: accumulare sposta
+                        # il secondo capo di quel poco che il solutore tollera.
+                        # A sovrapposizione il lembo sta da un lato solo, quindi
+                        # il secondo capo lo da' il giro.
+                        girth_span=((y0 + falda / PT2MM, y1 - falda / PT2MM)
+                                    if not lembo else
+                                    (y0 + inizio / PT2MM,
+                                     y0 + (inizio + giro) / PT2MM)))
+
+    for n, (hs, vs, coerenza) in enumerate(ipotesi):
+        try:
+            return _dentro(hs, vs, coerenza)
+        except _StesoNonRisolto:
+            if n + 1 == len(ipotesi):
+                raise
 
 
 def riporta_da_copia(fp, copia, dt, riga=None):
