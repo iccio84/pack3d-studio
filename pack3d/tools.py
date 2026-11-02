@@ -770,6 +770,39 @@ DT_LUNGA = 0.4
 DT_PARI = 0.85
 
 
+# Un gruppo che fa griglia e' comunque un DT fuso con altro se nessuna delle
+# sue penne, da sola, ne copre almeno questa frazione (`_fuso`).
+DT_UNA_PENNA = 0.5
+
+
+def _fuso(G, trovata):
+    """Il gruppo `G`, che fa la griglia `trovata`, e' piu' disegni uniti da
+    linee di un'altra penna: `True`.
+
+    Un DT e' disegnato per la maggior parte con una penna: anche dove le
+    penne sono due - il contorno nero e le pieghe blu del wafer T1, i tagli e
+    le cordonature di un astuccio - una delle due attraversa tutto il
+    disegno. Sui gruppi a piu' penne del parco la penna piu' estesa ne copre
+    almeno il 72%. Sul pane ripieno T2 con una cornice attorno alla vista
+    stampata, i richiami neri delle note univano vista, cornice, note e vista
+    interna in un gruppo di 572 x 375 mm che, con i lati lunghi della
+    cornice, faceva griglia: nessuna penna ne copriva piu' del 26%. Allora
+    si divide penna per penna, come un gruppo che griglia non fa.
+    """
+    penne = {sg[4] for sg in G}
+    if len(penne) < 2:
+        return False
+    x0, y0, x1, y1 = trovata[:4]
+    tutto = (x1 - x0) * (y1 - y0)
+    for penna in penne:
+        for h in dl._gruppi([sg for sg in G if sg[4] == penna]):
+            xs = [v for (k, c, a, b, st), _b in h for v in ((c,) if k == "V" else (a, b))]
+            ys = [v for (k, c, a, b, st), _b in h for v in ((a, b) if k == "V" else (c,))]
+            if (max(xs) - min(xs)) * (max(ys) - min(ys)) >= DT_UNA_PENNA * tutto:
+                return False
+    return True
+
+
 def _griglia(G):
     """`(x0, y0, x1, y1, righe, colonne)` se i segmenti `G` fanno una griglia,
     o None. Il riquadro e' quello dei segmenti veri, non dei loro riquadri
@@ -831,7 +864,7 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
     for g in gruppi:
         G = [sg for sg, _b in g]
         trovata = _griglia(G)
-        if trovata is not None:
+        if trovata is not None and not _fuso(G, trovata):
             griglie.append(trovata)
             continue
         # Un gruppo che non fa griglia puo' essere un DT fuso con le note. Sul

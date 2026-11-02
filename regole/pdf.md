@@ -54,6 +54,17 @@ quello con la grafica, e lo si sceglie dal DISEGNO, non dal colore
   separano. Non basta cercare le griglie per estensione invece che per
   contatto - le pieghe interne di un DT non cominciano e non finiscono tutte
   insieme (wafer T1, T1 al cioccolato fresco) - e il contatto resta il criterio;
+- e penna per penna si riguarda anche un gruppo che **fa** griglia, se
+  nessuna delle sue penne da sola ne copre almeno meta' (`tools._fuso`). Un
+  DT e' disegnato per la maggior parte con una penna: dove le penne sono due
+  - il contorno nero e le pieghe blu del wafer T1, i tagli e le cordonature
+  di un astuccio - una delle due attraversa tutto il disegno, e sui gruppi a
+  piu' penne del parco la piu' estesa ne copre almeno il 72%. Con una
+  cornice verde attorno alla vista stampata del pane ripieno, i lati lunghi
+  della cornice facevano griglia del gruppo di 572 x 375 mm - vista,
+  cornice, note e vista interna, uniti dai richiami neri - e nessuna penna
+  ne copriva piu' del 26%: penna per penna resta la vista con la sua
+  cornice, e il pack torna 226 x 190;
 - fra i DT si prendono quelli **a pari scala col piu' grosso** (almeno l'85%
   della sua area), e fra questi quello **con piu' grafica**, cioe' con piu'
   colori distinti dentro. L'ordine conta: sul T1 ai cereali il DT con la

@@ -839,18 +839,19 @@ varianti, e uno solo lo era:
   Rigenerate le varianti, il confronto e' rifatto sulle nuove.
 
 Risultato, sulle varianti rigenerate: i 18 originali uguali; con le quote
-18 su 18, con la legenda 18 su 18, con la cornice 16 su 18. Restano due
-cornici:
+18 su 18, con la legenda 18 su 18, con la cornice 16 su 18. Delle due
+cornici che restavano, una era della ricerca dei blocchi: su una tavola a
+due viste la cornice attorno alla vista stampata faceva griglia del gruppo
+unito dai richiami neri - vista, cornice, note e vista interna - e lo steso
+vero era meno di meta' del riquadro esterno. Ora quel gruppo si divide penna
+per penna (`tools._fuso`, regole/pdf.md *Un DT solo*), e la cornice e' 17 su
+18. Resta:
 
 - la pinna bianca e il margine fra lo steso e la cornice si presentano
   uguali - un lato vuoto, una linea chiusa piu' in dentro - e il giudice non
   li distingue. Sul T2 al cioccolato fondente lo stesso dubbio c'e' ancora,
   ma con la cornice a 10 mm dal DT il giudice ci arriva; con una cornice
-  piu' vicina no;
-- su una tavola a due viste la cornice attorno alla vista stampata
-  attraversa le linee dei richiami, e `find_blocks` unisce in un blocco solo
-  la vista, i richiami e l'altra vista: lo steso vero e' meno di meta' del
-  riquadro esterno, e il giudice non lo considera.
+  piu' vicina no.
 
 Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
 decide, l'immagine integrale della stampa, per non rileggere il raster
