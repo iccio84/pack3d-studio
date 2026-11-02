@@ -91,7 +91,10 @@ Parole: misure, non tornano, stirat, stiro, mm contro, pannello di, profondit, s
   fronte `pack3d/verifica.py` `stiri_flowpack`. Uno steso di flowpack piu'
   grande del vero - una quota, una cornice, una legenda presa per taglio -
   si corregge nel giudice (`pack3d/flowpack.py` `_riquadro_coerente`), con
-  un indizio in piu', non con una regola per quel disegnatore.
+  un indizio in piu', non con una regola per quel disegnatore. Se il
+  giudice non vede una quota che sul foglio c'e', guarda prima dove
+  `quote.numeri` mette il suo numero: la posizione viene dal testo un
+  carattere per indice (`quote.testo_per_indice`).
 - **Prima prova**: la lettura del PDF del caso (`<nome>_lettura.jpg` nella
   cartella di `prepara`): se le misure lette sono gia' sbagliate, il difetto
   e' nella lettura, non nella costruzione.

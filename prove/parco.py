@@ -2020,7 +2020,6 @@ def _riquadro_tecnico(pdf, pagina):
     vs = [c for k, c, a, b, st in tec if k == "V" and b - a >= 0.6 * lv]
     if not hs or not vs:
         return None
-    rgb = _canali(penna[1]) or [0, 0, 0]
     riquadro = (min(vs), min(hs), max(vs), max(hs))
     if pagina == 0:
         # un flowpack: lo steso come lo legge il codice di adesso, che sui
@@ -2034,7 +2033,45 @@ def _riquadro_tecnico(pdf, pagina):
                 riquadro = fpk.foglio_in_pagina(fp)
         except Exception:
             pass
+    # la penna e' quella delle linee dentro il riquadro. La piu' usata della
+    # pagina puo' essere un'altra: su una tavola le viste piccole in una penna
+    # piu' sottile, e le quote disegnate con quella non erano del DT dello
+    # steso, che le cerca nella penna sua
+    x0, y0, x1, y1 = riquadro
+    dentro = {}
+    for k, c, a, b, st in tec:
+        if k == "H":
+            ok = y0 - 3 <= c <= y1 + 3 and a >= x0 - 3 and b <= x1 + 3
+        else:
+            ok = x0 - 3 <= c <= x1 + 3 and a >= y0 - 3 and b <= y1 + 3
+        if ok:
+            dentro[st] = dentro.get(st, 0.0) + (b - a)
+    if dentro:
+        penna = max(dentro, key=dentro.get)
+    rgb = _canali(penna[1]) or [0, 0, 0]
     return riquadro, (max(penna[0], 0.1), rgb)
+
+
+def _ingombro_tecnico(pdf, pagina, riquadro):
+    """Il riquadro del disegno tecnico attorno allo steso: le linee lunghe
+    della penna tecnica che toccano il riquadro dello steso. Il DT puo'
+    andare oltre lo steso - il filo dell'abbondanza, una striscia sotto - e
+    una cornice di tavola gli sta attorno, non lo attraversa."""
+    from pack3d.dieline import _technical_pens
+    from pack3d.tracciati import segmenti
+    segs, W, H = segmenti(pdf, pagina)
+    penne = _technical_pens(segs, W, H)
+    tec = [sg for sg in segs if sg[4] in penne]
+    x0, y0, x1, y1 = riquadro
+    lh = max((b - a for k, c, a, b, st in tec if k == "H"), default=0.0)
+    lv = max((b - a for k, c, a, b, st in tec if k == "V"), default=0.0)
+    t = 6.0  # due millimetri
+    for k, c, a, b, st in tec:
+        if k == "H" and b - a >= 0.6 * lh and y0 - t <= c <= y1 + t and b >= x0 - t and a <= x1 + t:
+            x0, x1, y0, y1 = min(x0, a), max(x1, b), min(y0, c), max(y1, c)
+        elif k == "V" and b - a >= 0.6 * lv and x0 - t <= c <= x1 + t and b >= y0 - t and a <= y1 + t:
+            x0, x1, y0, y1 = min(x0, c), max(x1, c), min(y0, a), max(y1, b)
+    return x0, y0, x1, y1
 
 
 def _disegno_in_piu(pdf, pagina, variante, mx0, my1):
@@ -2089,9 +2126,12 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1):
         testo(xq + 1 * mm, ym + buco / 2 - 0.5 * mm, "%g" % round((y1 - y0) * PT2MM),
               girato=True)
     elif variante == "cornice":
+        # attorno a tutto il DT dello steso, non alla sola lettura: dove il
+        # DT va oltre (il filo dell'abbondanza) la cornice lo attraversava
         d = 10 * mm
-        for xa, ya, xb, yb in ((x0 - d, y0 - d, x1 + d, y0 - d), (x0 - d, y1 + d, x1 + d, y1 + d),
-                               (x0 - d, y0 - d, x0 - d, y1 + d), (x1 + d, y0 - d, x1 + d, y1 + d)):
+        c0, c1, c2, c3 = _ingombro_tecnico(pdf, pagina, (x0, y0, x1, y1))
+        for xa, ya, xb, yb in ((c0 - d, c1 - d, c2 + d, c1 - d), (c0 - d, c3 + d, c2 + d, c3 + d),
+                               (c0 - d, c1 - d, c0 - d, c3 + d), (c2 + d, c1 - d, c2 + d, c3 + d)):
             linea(xa, ya, xb, yb)
     elif variante == "legenda":
         xl, yl = x0 + (x1 - x0) / 2, y1 + 22 * mm

@@ -794,20 +794,63 @@ Provata e tolta: «una quota ha il bianco da tutte e due le parti». Dove
 l'abbondanza della grafica esce di molto dal taglio il bianco non c'e', e le
 quote vere non si riconoscevano piu'.
 
-Risultato: i 18 flowpack veri del parco escono uguali, e le varianti giuste
-passano - dal codice di prima al giudice di oggi - da 9 a 14 con le quote,
-da 6 a 13 con la cornice, da 12 a 17 con la legenda, nessuna peggiore.
-Restano 10 varianti:
+Risultato del secondo giro: i 18 flowpack veri del parco uguali, e le
+varianti giuste passate - dal codice di prima al giudice - da 9 a 14 con le
+quote, da 6 a 13 con la cornice, da 12 a 17 con la legenda.
 
-- la pinna bianca e il margine fra lo steso e una cornice si presentano
+Il terzo giro, sulle 10 che restavano. Tre le avevo date per difetti delle
+varianti, e uno solo lo era:
+
+- **il numero di una quota sta dove e' scritto.** `quote.numeri` prendeva il
+  testo con `get_text_range` e la posizione con `get_charbox` sullo stesso
+  indice, ma il primo perde i caratteri che non sa scrivere - un glifo che
+  il font mappa sul codice 3 - e da li' gli indici scivolano: sul wafer T1
+  il 144 delle quote finiva sulla miniatura in fondo alla tavola, e il
+  giudice non vedeva piu' le quote. Era un errore vero, non della variante:
+  nel parco 5 pagine su 53 hanno lo scarto. Adesso il testo si legge un
+  carattere per indice (`quote.testo_per_indice`), e lo usa anche la ricerca
+  di "kcal" (`techink`), che aveva lo stesso errore. Sulle altre 52 pagine il
+  testo e' identico a prima. Ha sistemato anche il T1 farcito con le quote,
+  che non avevo saputo spiegare;
+- **dentro il riquadro scelto si rifanno i gruppi** (`_ritaglia`). I gruppi
+  di linee venivano da tutto il riquadro esterno: sul tubo piatto da 115 la
+  legenda attaccata univa lo steso alle miniature sotto (`find_blocks`
+  unisce cio' che si tocca), e i gruppi delle miniature entravano nello
+  steso come pieghe - il giudice sceglieva il riquadro giusto, e le fasce non
+  si risolvevano. Le "linee spezzate o doppie" del giro prima erano questo,
+  e il taglio disegnato per l'89% del T1 al cioccolato fresco (sotto).
+  Dentro il riquadro ritagliato il riquadro non si ridecide: i numeri delle
+  quote, a otto millimetri dai capi, li facevano prendere per quote a
+  `_riquadro_chiuso`, che tagliava lo steso vero;
+- **una quota d'insieme dice dove stanno i capi** (`_smentito`). Una quota
+  lungo un lato, vicina allo steso, lunga almeno l'80% del lato e non piu' di
+  lui, comincia e finisce sui capi: un riquadro che va oltre, o comincia
+  altrove, e' smentito. Sul T1 al cioccolato fresco la stampa arriva al filo
+  dell'abbondanza, 12 mm oltre il taglio, il taglio e' disegnato solo per
+  l'89% e il riquadro chiuso piu' grande - 113 mm - si risolveva a pillow,
+  plausibile e sbagliato; la quota dei 101 lo smentisce. Una quota piu'
+  lunga del lato misura un'altra cosa e non smentisce niente;
+- e due difetti veri delle varianti: disegnavano nella penna piu' usata
+  della pagina, che su una tavola e' quella delle viste piccole, e non quella
+  dello steso; e la cornice stava a 10 mm dallo steso letto, non dal DT, che
+  puo' andare oltre (il filo dell'abbondanza, una striscia sotto) e veniva
+  attraversato. Ora la penna e' quella delle linee dentro lo steso e la
+  cornice sta a 10 mm da tutto il DT dello steso (`_ingombro_tecnico`).
+  Rigenerate le varianti, il confronto e' rifatto sulle nuove.
+
+Risultato, sulle varianti rigenerate: i 18 originali uguali; con le quote
+18 su 18, con la legenda 18 su 18, con la cornice 16 su 18. Restano due
+cornici:
+
+- la pinna bianca e il margine fra lo steso e la cornice si presentano
   uguali - un lato vuoto, una linea chiusa piu' in dentro - e il giudice non
-  li distingue (due casi con la cornice);
-- un'abbondanza che esce di molto dal taglio sembra grafica che continua
-  (il T1 a fondo argento con la cornice);
-- tre sono difetti della variante, non del giudice: i numeri delle quote
-  scritti fuori posto su una pagina girata, le quote fuori dalla pagina, la
-  cornice che si prende anche l'altra vista della tavola;
-- tre DT con le linee spezzate o doppie, dove i lati veri non chiudono.
+  li distingue. Sul T2 al cioccolato fondente lo stesso dubbio c'e' ancora,
+  ma con la cornice a 10 mm dal DT il giudice ci arriva; con una cornice
+  piu' vicina no;
+- su una tavola a due viste la cornice attorno alla vista stampata
+  attraversa le linee dei richiami, e `find_blocks` unisce in un blocco solo
+  la vista, i richiami e l'altra vista: lo steso vero e' meno di meta' del
+  riquadro esterno, e il giudice non lo considera.
 
 Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
 decide, l'immagine integrale della stampa, per non rileggere il raster
