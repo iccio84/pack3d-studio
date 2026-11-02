@@ -160,7 +160,7 @@ chi ha caricato il PDF e poi in Glam. Subito dopo, la stessa routine fa il
 Actions del repository privato (`parco/`), la unisce in `main` - quindi
 pubblica sullo Space - e prova il caso sullo Space vero (`prove/parco.py
 spazio`), aspettando che `/api/ping` dica l'impronta del codice appena unito.
-Una mezz'ora dopo la correzione, non a fine settimana; il giro programmato
+Tre quarti d'ora dopo la correzione, non a fine settimana; il giro programmato
 di ogni giorno rilascia solo quello che fosse rimasto indietro. Per questo nella rete dell'ambiente cloud e' consentito
 il dominio dello Space: Network access **Custom**, `iccio-maurizio.hf.space`
 fra gli Allowed domains, con la lista di base dei package manager.

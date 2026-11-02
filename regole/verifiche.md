@@ -635,11 +635,12 @@ rilascio, prima che arrivi sul sito: chi aveva quel caso ha gia' il suo
 modello.
 
 **Il rilascio, subito.** Dal 2 novembre 2026 non si aspetta piu' la
-settimana: una correzione unita va sullo Space mezz'ora dopo (RILASCIO.md).
+settimana: una correzione unita va sullo Space tre quarti d'ora dopo
+(RILASCIO.md).
 Il costo che aveva imposto la settimana veniva dal parco fatto nella
 sessione - due costruzioni intere, ognuna un giro in piu' che si porta dietro
-tutto - e oggi il parco gira nelle Actions di `pack3d-casi` (17-26 minuti,
-la costruzione di `main` gia' in cassa): la sessione lancia il giro, lo
+tutto - e oggi il parco gira nelle Actions di `pack3d-casi` (34 minuti il
+primo, con `main` da ricostruire): la sessione lancia il giro, lo
 aspetta con qualche controllo, legge l'esito e i modelli cambiati, e prova
 il caso sullo Space con un comando solo. Il prezzo di prima - lo Space che
 per giorni costruiva col codice vecchio - non c'e' piu'.
