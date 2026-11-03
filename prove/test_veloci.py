@@ -792,6 +792,26 @@ class QuoteFuoriDallaFustella(unittest.TestCase):
         self.assertIn(aletta, con)
         self.assertFalse(any(s in con for s in quota))
 
+    def test_una_quota_attaccata_al_corpo_non_e_una_piega(self):
+        """`dieline._quote_fuori`: la quota del passo sotto lo steso, coi
+        richiami a tre punti dagli angoli, sta nel gruppo della fustella; si
+        toglie lei, coi richiami. Una piega con la sua misura accanto resta."""
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        # sotto lo steso, a 23 punti: la linea spezzata dal numero
+        quota = [("H", 223.0, 0.0, 140.0, st), ("H", 223.0, 160.0, 300.0, st),
+                 ("V", 0.0, 203.0, 229.0, st), ("V", 300.0, 203.0, 229.0, st)]
+        lato = round(300 * dl.PT2MM, 1)
+        numeri = [(150.0, 226.0, lato),
+                  # la piega di mezzo con la sua misura scritta accanto
+                  (75.0, 104.0, lato)]
+        con = dl._largest_cluster(corpo + quota, numeri=numeri)
+        self.assertEqual(sorted(con), sorted(corpo))
+        # senza numeri resta tutto: la quota senza il suo numero non si sa
+        self.assertEqual(len(dl._largest_cluster(corpo + quota)), len(corpo + quota))
+
 
 class GrigliaRicucita(unittest.TestCase):
     """`tools._griglia_ricucita`: una piega disegnata a pezzi resta una

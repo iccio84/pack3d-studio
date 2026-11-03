@@ -2156,14 +2156,23 @@ def _fuori_dalla_stampa(pdf, pagina, ingombro, d):
     il taglio no. Si prendono le macchie d'inchiostro che toccano l'ingombro,
     su tutta la pagina: sul cono e sulla scatola a punta la grafica e' molto
     piu' grande del riquadro della fustella. Una cornice che cosi' esce dalla
-    pagina non si vede, e la variante e' l'originale."""
+    pagina non si vede, e la variante e' l'originale.
+
+    Le macchie sono quelle piene: i tratti sottili (meno di 5 pt, quasi due
+    millimetri) si tolgono prima. Attaccate per i fili dei richiami, la
+    stampa arrivava ai riquadri delle note e alle quote: sul pane ripieno T2
+    la cornice prendeva meta' dell'altra vista, su kp_cheesecake i
+    riquadri dei caratteri a destra, e il giudice dello steso leggeva il
+    riquadro della cornice. Sul T1 a fondo argento resta il fondo grigio, che
+    e' la stampa vera."""
     import numpy as np
-    from scipy.ndimage import label
+    from scipy.ndimage import binary_opening, label
     from pack3d.dieline import render_page
     x0, y0, x1, y1 = ingombro
     im = np.asarray(render_page(pdf, pagina, 1.0).convert("RGB"))
     H, W = im.shape[:2]
-    lab, n = label(im.min(axis=2) < 230)
+    piene = binary_opening(im.min(axis=2) < 230, structure=np.ones((5, 5), bool))
+    lab, n = label(piene)
     if n == 0:
         return ingombro
     dentro = np.unique(lab[min(max(int(y0), 0), H):min(max(int(y1) + 1, 0), H),
