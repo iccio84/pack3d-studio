@@ -57,6 +57,13 @@ MM2PT = 72.0 / 25.4
 
 # mm: due capi piu' vicini di cosi' sono lo stesso nodo
 NODO = 0.3
+# Le altre tolleranze dei nodi, in parti di NODO, nell'ordine in cui si
+# provano se con NODO il ballotin non torna (`riconosci`). Nel CAD un tratto
+# finisce sul bordo visibile di una curva fatta con la penna spessa: sul
+# ballotin del parco tre giunzioni stanno a 0,27-0,29 mm, e due capi che non
+# vanno uniti a 0,38-0,5. Le distanze fra i capi vanno da 0 a 1 mm senza un
+# buco, e una tolleranza sola stava in una finestra di 0,08 mm.
+NODO_PROVE = (1.2, 0.8, 1.4, 0.6)
 # mm: un capo libero cosi' vicino a un altro nodo e' un buco del disegno
 BUCO = 2.5
 # punti per ogni curva di Bezier
@@ -743,10 +750,18 @@ def riconosci(pdf, page_no=0):
     tr = tratteggi(tratti)
     segni = [tratti[i].mean(0) for i in tr]
     restano = [p for i, p in enumerate(tratti) if i not in tr]
-    nodi, archi = grafo(restano)
-    archi = pota(ripara(nodi, archi))
-    ff = componi(facce(nodi, archi), segni, principale(nodi, archi))
-    return _classifica(ff, archi, page_no)
+    # La tolleranza dei nodi si cerca: NODO, e se il ballotin non torna le
+    # vicine (NODO_PROVE). Il ballotin si riconosce solo se tornano il fondo
+    # quadrato, le quattro lenti, i coperchi: una tolleranza che lo da' e'
+    # gia' una prova. Sui ballotin che tornano al primo colpo non costa niente.
+    for k in (1.0,) + tuple(NODO_PROVE):
+        nodi, archi = grafo(restano, tol=NODO * k)
+        archi = pota(ripara(nodi, archi))
+        ff = componi(facce(nodi, archi), segni, principale(nodi, archi))
+        b = _classifica(ff, archi, page_no)
+        if b is not None:
+            return b
+    return None
 
 
 def _classifica(ff, archi, page_no=0):
