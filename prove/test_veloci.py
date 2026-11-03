@@ -903,6 +903,17 @@ class SoglieSpostate(unittest.TestCase):
         # un intero che al passo dopo resta uguale non si riprova
         self.assertIsNone(soglie._primo(4, +1, "pack3d.ballotin.LENTI", 1, 5))
 
+    def test_i_vicini_entro_il_rosso(self):
+        soglie = self._soglie()
+        esiti = {"m.A": {"valore": 0.2, "casi": ["x", "y"], "cambia": {
+                     "x": {"+1": {"passo": 0.05}},
+                     "y": {"-1": {"passo": 0.25}}}},
+                 # un valore che entra nella lettura: cambia nei due versi
+                 "m.B": {"valore": 8, "casi": ["x"], "cambia": {
+                     "x": {"+1": {"passo": 0.05}, "-1": {"passo": 0.05}}}}}
+        self.assertEqual(soglie.vicini_entro(esiti, 0.10),
+                         [{"caso": "x", "soglia": "m.A", "verso": "+1"}])
+
     def test_le_costanti_che_non_sono_soglie(self):
         soglie = self._soglie()
         g = {"TAGLIA": 0.2, "PT2MM": 0.35, "_BEZIER": 3, "ATTIVO": True, "NOME": "x",

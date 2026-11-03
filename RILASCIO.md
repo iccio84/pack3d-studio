@@ -158,6 +158,6 @@ approvati da chiudere (punto 1).
    L'aggiornamento diretto del riferimento del ramo e l'API "merges" di
    GitHub, da una sessione cloud, il proxy non li permette.
 
-Il parco della notte e le varianti della domenica e del mercoledi' (Actions
-di `pack3d-casi`) restano: sono la rete che vede quello che un rilascio non ha
-guardato.
+Il parco della notte, le varianti della domenica e del mercoledi' e le soglie
+del venerdi' (Actions di `pack3d-casi`) restano: sono la rete che vede quello
+che un rilascio non ha guardato.
