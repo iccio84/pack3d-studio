@@ -2024,12 +2024,23 @@ def _riquadro_tecnico(pdf, pagina, kind=None):
         return None
     riquadro = (min(vs), min(hs), max(vs), max(hs))
     if kind not in (None, "flowpack"):
+        # la fustella com'e' letta: alette e linguette comprese (sul T3 di
+        # biscotti escono di 11-16 mm dal riquadro del DT principale), e una
+        # quota o una cornice non attraversano mai la fustella. Il DT
+        # principale solo se la lettura non c'e': sul T4 di wafer e' la
+        # miniatura nel cartiglio
         from pack3d import tools
         from pack3d.dieline import PT2MM
-        dt = tools.dt_principale(pdf, pagina)
-        if dt:
-            mm = 1.0 / PT2MM
-            riquadro = (dt[0] * mm, dt[1] * mm, (dt[0] + dt[2]) * mm, (dt[1] + dt[3]) * mm)
+        try:
+            if pagina != 0:
+                raise ValueError
+            from pack3d import dieline
+            riquadro = tuple(dieline.analyze(pdf).bbox)
+        except Exception:
+            dt = tools.dt_principale(pdf, pagina)
+            if dt:
+                mm = 1.0 / PT2MM
+                riquadro = (dt[0] * mm, dt[1] * mm, (dt[0] + dt[2]) * mm, (dt[1] + dt[3]) * mm)
     elif pagina == 0:
         # un flowpack: lo steso come lo legge il codice di adesso, che sui
         # casi del parco e' quello giusto. Le linee lunghe da sole prendono
