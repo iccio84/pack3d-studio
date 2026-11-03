@@ -2149,14 +2149,15 @@ def _fuori_dalla_stampa(pdf, pagina, ingombro, d):
     cornice a `d` non attraversi la grafica.
 
     Una cornice di tavola sta attorno a tutto: al disegno e alla sua grafica.
-    Sul T1 a fondo argento la stampa esce 44 mm oltre il riquadro tecnico, e
-    la cornice a dieci millimetri le passava in mezzo: il giudice dello steso
-    prendeva il riquadro chiuso dalla cornice - dalla saldatura alla cornice,
-    largo uguale per caso - perche' oltre la cornice la stampa finiva e oltre
-    il taglio no. Si prendono le macchie d'inchiostro che toccano l'ingombro,
-    su tutta la pagina: sul cono e sulla scatola a punta la grafica e' molto
-    piu' grande del riquadro della fustella. Una cornice che cosi' esce dalla
-    pagina non si vede, e la variante e' l'originale.
+    Sul T1 a fondo argento il fondo grigio esce fino a 15 mm oltre il
+    riquadro tecnico, e la cornice a dieci millimetri gli passava in mezzo:
+    il giudice dello steso prendeva il riquadro chiuso dalla cornice - dalla
+    saldatura alla cornice, largo uguale per caso - perche' oltre la cornice
+    la stampa finiva e oltre il taglio no. Si prendono le macchie
+    d'inchiostro che toccano l'ingombro, su tutta la pagina: sul cono e sulla
+    scatola a punta la grafica e' molto piu' grande del riquadro della
+    fustella. Una cornice che cosi' esce dalla pagina non si vede, e la
+    variante e' l'originale.
 
     Le macchie sono quelle piene: i tratti sottili (meno di 5 pt, quasi due
     millimetri) si tolgono prima. Attaccate per i fili dei richiami, la

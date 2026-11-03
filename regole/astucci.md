@@ -54,6 +54,17 @@ file (T6 aperto):
   cornice e legenda 16 su 16, quote 15 su 16 - il T3 di biscotti - e con
   questa regola anche le quote 16 su 16: il T3 con le quote costruito uguale
   all'originale.
+- **la quota attaccata al corpo.** Con le varianti disegnate nella penna
+  vera del DT (regole/verifiche.md, *La penna vera*) una quota coi richiami
+  a un millimetro dagli angoli non e' un gruppo a se': e' nel gruppo della
+  fustella, e `_senza_quote` non la vedeva. Sulla scatola a punta T6 la
+  riga della quota del passo, 8 mm sotto lo steso, era l'ultima piega del
+  foglio: il retro non era piu' alto come il fronte, e la scatola non si
+  riconosceva. Ora del gruppo della fustella si tolgono le quote - col loro
+  numero accanto - che stanno fuori dal riquadro del resto del disegno, coi
+  richiami corti che ci arrivano (`dieline._quote_fuori`). Dentro il
+  disegno non si tocca niente: una piega con la sua misura accanto resta
+  piega. Le 45 letture del parco restano uguali.
 - **la penna che non e' fustella.** `_technical_pens` tiene tutti i tratti
   sottili che contribuiscono linee lunghe, e fa bene — molti artwork separano
   taglio, cordonatura e mezzo taglio su colori diversi. Ma per la GRIGLIA un

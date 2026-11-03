@@ -214,6 +214,38 @@ il PDF ripassato da Ghostscript, senza testo vivo ne' livelli - nel giro non
 c'e': Ghostscript butta anche gran parte del disegno tecnico (sul wafer T1
 le linee da 1187 a 212), e misura lui, non il codice.
 
+### La penna vera
+
+Le varianti di stile disegnavano in RGB col colore che pdfium da' alla penna
+del DT. Ma la lettura della fustella riconosce una penna dalla chiave di
+pdfplumber - spessore e colore com'e' scritto nel PDF - e il DT e' quasi
+sempre in un colore spot o in CMYK: su 49 pagine del parco su 53 la quota, la
+cornice e la legenda erano un disegno in **un'altra penna**, che la lettura
+scartava (`penne_di_fustella`). I risultati di prima - 18 su 18, 16 su 16 -
+dicevano che un disegno in un'altra penna non disturba, non che lo stesso
+disegno nella penna del DT si legge.
+
+Ora la variante scrive nella penna vera (`_colore_della_penna`): lo spazio di
+colore e i valori dei tratti di quello spessore, seguendo lo stato grafico -
+q e Q, lo spessore dato con `w` o da un `/ExtGState`, i Form XObject coi
+loro spazi di colore -, e fra i candidati quello che pdfium vede di quel
+colore e che pdfplumber chiama con la stessa chiave della penna della
+lettura (`_penna_letta`, sui segmenti dello steso). Lo spessore e' quello di
+pdfplumber: sul cono, disegnato in scala, pdfium da' 0,2 invece di 1.
+
+E tre regole della variante, perche' sia un disegno che un disegnatore fa:
+
+- **la cornice sta fuori dalla stampa.** Una cornice di tavola gira attorno
+  al disegno e alla sua grafica. Sul T1 a fondo argento il fondo grigio esce
+  fino a 15 mm oltre il riquadro tecnico, e la cornice a dieci millimetri lo
+  attraversava (`_fuori_dalla_stampa`). Le macchie d'inchiostro si prendono
+  senza i tratti sottili: coi fili dei richiami la stampa arrivava ai
+  riquadri delle note, e sul pane ripieno T2 la cornice si prendeva meta'
+  della vista di dentro;
+- **la legenda va sopra se sotto c'e' la quota** (`quote+legenda`): nessuno
+  disegna una legenda sopra una quota;
+- **ogni passo vede gli altri** (`insieme` di `_disegno_in_piu`).
+
 ## Quanto manca alle soglie
 
 Il parco dice che un caso esce giusto, non quanto e' vicino a uscire
