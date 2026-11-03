@@ -2041,7 +2041,7 @@ def _pagina_variata(sorgente, destinazione, variante, kind=None):
         else:
             fd, uscita = tempfile.mkstemp(suffix=".pdf", dir=os.path.dirname(destinazione))
             os.close(fd)
-        _un_passo(corrente, uscita, passo, kind)
+        _un_passo(corrente, uscita, passo, kind, insieme=set(passi) - {passo})
         if corrente != sorgente:
             os.remove(corrente)
         corrente = uscita
@@ -2144,6 +2144,38 @@ def _ingombro_tecnico(pdf, pagina, riquadro):
     return x0, y0, x1, y1
 
 
+def _fuori_dalla_stampa(pdf, pagina, ingombro, d):
+    """L'ingombro allargato alla stampa attaccata al disegno, perche' la
+    cornice a `d` non attraversi la grafica.
+
+    Una cornice di tavola sta attorno a tutto: al disegno e alla sua grafica.
+    Sul T1 a fondo argento la stampa esce 44 mm oltre il riquadro tecnico, e
+    la cornice a dieci millimetri le passava in mezzo: il giudice dello steso
+    prendeva il riquadro chiuso dalla cornice - dalla saldatura alla cornice,
+    largo uguale per caso - perche' oltre la cornice la stampa finiva e oltre
+    il taglio no. Si prendono le macchie d'inchiostro che toccano l'ingombro,
+    su tutta la pagina: sul cono e sulla scatola a punta la grafica e' molto
+    piu' grande del riquadro della fustella. Una cornice che cosi' esce dalla
+    pagina non si vede, e la variante e' l'originale."""
+    import numpy as np
+    from scipy.ndimage import label
+    from pack3d.dieline import render_page
+    x0, y0, x1, y1 = ingombro
+    im = np.asarray(render_page(pdf, pagina, 1.0).convert("RGB"))
+    H, W = im.shape[:2]
+    lab, n = label(im.min(axis=2) < 230)
+    if n == 0:
+        return ingombro
+    dentro = np.unique(lab[min(max(int(y0), 0), H):min(max(int(y1) + 1, 0), H),
+                           min(max(int(x0), 0), W):min(max(int(x1) + 1, 0), W)])
+    dentro = dentro[dentro > 0]
+    if not len(dentro):
+        return ingombro
+    ys, xs = np.nonzero(np.isin(lab, dentro))
+    return (min(x0, float(xs.min())), min(y0, float(ys.min())),
+            max(x1, float(xs.max() + 1)), max(y1, float(ys.max() + 1)))
+
+
 def _fuori_dai_tratti(pdf, pagina, ingombro, d):
     """L'ingombro allargato perche' la cornice a `d` non attraversi il DT.
 
@@ -2179,7 +2211,178 @@ def _fuori_dai_tratti(pdf, pagina, ingombro, d):
     return n0, n1, n2, n3
 
 
-def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
+def _penna_letta(pdf, pagina, riquadro, w, rgb):
+    """`(spessore, colore)` della penna della fustella come la legge
+    `dieline.segmenti` - la chiave con cui la lettura distingue le penne -,
+    o None. Si prendono le linee che pdfium da' alla penna (`w`, `rgb`)
+    dentro il riquadro, e si guarda con che chiave pdfplumber legge le
+    stesse linee: lo spessore di pdfium e' nel telaio del tratto (sul cono,
+    disegnato in scala, 0,2 invece di 1), e il colore e' convertito."""
+    from collections import Counter
+    from pack3d import dieline
+    from pack3d.tracciati import segmenti
+    x0, y0, x1, y1 = riquadro
+    colore = "(%d, %d, %d)" % tuple(int(v) for v in rgb[:3])
+
+    def dentro(k, c, a, b):
+        if k == "H":
+            return y0 - 3 <= c <= y1 + 3 and a >= x0 - 3 and b <= x1 + 3
+        return x0 - 3 <= c <= x1 + 3 and a >= y0 - 3 and b <= y1 + 3
+    segs, _W, _H = segmenti(pdf, pagina)
+    nostri = [(k, c, a, b) for k, c, a, b, st in segs
+              if st[1] == colore and abs(max(st[0], 0.1) - w) <= 0.02 and dentro(k, c, a, b)]
+    if not nostri:
+        return None
+    letti = [sg for sg in dieline.segmenti(pdf, pagina) if dentro(*sg[:4])]
+    conta = Counter()
+    for k, c, a, b in nostri:
+        for k2, c2, a2, b2, st in letti:
+            if k2 == k and abs(c2 - c) <= 0.6 and min(b, b2) - max(a, a2) >= 0.5 * (b - a):
+                conta[st] += b - a
+                break
+    if not conta:
+        return None
+    return max(conta, key=conta.get)
+
+
+def _colore_della_penna(pagina, spessore, rgb=None, chiave=None):
+    """Il colore con cui la pagina disegna i tratti di `spessore`, come lo
+    scrive il PDF: `(operatore, spazio, valori)` - "K", "RG", "G" per gli
+    spazi del dispositivo (spazio None), "CS" per uno spazio dalle risorse
+    (la tinta piatta della fustella, spazio = l'oggetto) - o None.
+
+    La lettura distingue le penne dal colore com'e' scritto: una tinta piatta,
+    un CMYK e lo stesso colore in RGB sono tre penne. Le varianti di stile
+    disegnavano in RGB, col colore che pdfium da' convertito: su 49 PDF del
+    parco su 53 - 39 in tinta piatta, 10 in CMYK - le quote, la cornice e la
+    legenda erano un'altra penna, e il filtro delle penne le scartava. Si
+    scorre il contenuto (anche dentro i gruppi di oggetti), e vince il colore
+    coi tratti piu' lunghi a quello spessore, contati in operatori di
+    percorso. Con `rgb` (il colore che ne da' pdfium) un colore del
+    dispositivo che, convertito alla buona, gli sta lontano non e' la
+    fustella: sul display KMS T10 la grafica ha piu' tratti neri da 0,5 della
+    fustella ciano. Una tinta piatta non si converte, e resta in gara.
+
+    Con `chiave` (il colore come lo legge pdfplumber, `_penna_letta`) vince
+    il colore che pdfplumber leggerebbe proprio cosi', se c'e': e' la stessa
+    penna per la lettura della fustella."""
+    from collections import defaultdict
+    from pypdf.generic import ContentStream
+    peso = defaultdict(int)
+    oggetti = {}
+
+    def numeri(ops):
+        out = []
+        for v in ops:
+            try:
+                out.append(float(v))
+            except (TypeError, ValueError):
+                pass
+        return out
+
+    def scorri(contenuto, risorse, prof=0, eredita=None):
+        if contenuto is None or prof > 4:
+            return
+        try:
+            ops = ContentStream(contenuto, None).operations
+        except Exception:  # noqa: BLE001 - un contenuto illeggibile non ha penne
+            return
+        risorse = risorse or {}
+        spazi = risorse.get("/ColorSpace") or {}
+        xobj = risorse.get("/XObject") or {}
+        # lo spessore puo' venire da uno stato grafico (`gs` con /LW): sul
+        # display KMS T10 la fustella non usa mai `w`
+        stati = risorse.get("/ExtGState") or {}
+        # un gruppo di oggetti eredita lo stato di chi lo richiama: sul
+        # display KMS T10 la fustella e' in un gruppo, col colore scelto fuori
+        st = dict(eredita) if eredita else {"op": "G", "cs": None, "v": (0.0,), "w": 1.0}
+        pila, tratti = [], 0
+        for operandi, op in ops:
+            if op == b"q":
+                pila.append(dict(st))
+            elif op == b"Q":
+                st = pila.pop() if pila else st
+            elif op == b"w" and operandi:
+                st["w"] = numeri(operandi[:1])[0] if numeri(operandi[:1]) else st["w"]
+            elif op == b"gs" and operandi and str(operandi[0]) in stati:
+                lw = stati[str(operandi[0])].get_object().get("/LW")
+                if lw is not None:
+                    st["w"] = float(lw)
+            elif op == b"CS" and operandi:
+                nome = str(operandi[0])
+                if nome in ("/DeviceGray", "/DeviceRGB", "/DeviceCMYK"):
+                    st["op"] = {"/DeviceGray": "G", "/DeviceRGB": "RG",
+                                "/DeviceCMYK": "K"}[nome]
+                    st["cs"] = None
+                elif nome in spazi:
+                    st["op"], st["cs"] = "CS", nome
+                    oggetti.setdefault(("CS", id(spazi), nome), spazi.raw_get(nome)
+                                       if hasattr(spazi, "raw_get") else spazi[nome])
+                    st["chiave"] = ("CS", id(spazi), nome)
+            elif op in (b"SC", b"SCN"):
+                st["v"] = tuple(numeri(operandi))
+            elif op in (b"G", b"RG", b"K"):
+                st["op"], st["cs"], st["v"] = op.decode(), None, tuple(numeri(operandi))
+            elif op in (b"m", b"l", b"c", b"v", b"y", b"re"):
+                tratti += 1
+            elif op in (b"S", b"s", b"B", b"B*", b"b", b"b*"):
+                if abs(st["w"] - spessore) <= max(0.05, 0.15 * spessore):
+                    chiave = st.get("chiave") if st["op"] == "CS" else None
+                    peso[(st["op"], chiave, st["v"])] += max(tratti, 1)
+                tratti = 0
+            elif op in (b"n", b"f", b"F", b"f*"):
+                tratti = 0
+            elif op == b"Do" and operandi and str(operandi[0]) in xobj:
+                x = xobj[str(operandi[0])].get_object()
+                if x.get("/Subtype") == "/Form":
+                    scorri(x, x.get("/Resources") or risorse, prof + 1, st)
+
+    scorri(pagina.get_contents(), pagina.get("/Resources"))
+
+    def vicino(op, v, chiave=None):
+        if rgb is None:
+            return True
+        if op == "CS":
+            # uno spazio ICC si confronta coi suoi canali; una tinta piatta
+            # (Separation, DeviceN) non si converte, e resta in gara. Sul
+            # display KMS T10 un blu in un ICC a tre canali passava per tinta
+            try:
+                spazio = oggetti.get(chiave).get_object()
+                if spazio[0] != "/ICCBased":
+                    return True
+                op = {1: "G", 3: "RG", 4: "K"}.get(int(spazio[1].get_object().get("/N")))
+            except Exception:  # noqa: BLE001 - uno spazio che non si legge resta in gara
+                return True
+            if op is None:
+                return True
+        try:
+            if op == "G":
+                c = (v[0] * 255,) * 3
+            elif op == "RG":
+                c = tuple(x * 255 for x in v[:3])
+            else:
+                c0, m0, y0, k0 = v[:4]
+                c = tuple(255 * (1 - x) * (1 - k0) for x in (c0, m0, y0))
+        except (IndexError, TypeError, ValueError):
+            return False
+        return sum((a - b) ** 2 for a, b in zip(c, rgb)) ** 0.5 <= 120
+    def come_pdfplumber(v):
+        return str(float(v[0])) if len(v) == 1 else str(tuple(float(x) for x in v))
+    if chiave is not None:
+        uguali = {k: n for k, n in peso.items() if come_pdfplumber(k[2]) == chiave}
+        if uguali:
+            peso = uguali
+    peso = {k: n for k, n in peso.items() if vicino(k[0], k[2], k[1])}
+    if not peso:
+        return None
+    (op, chiave, valori), _n = max(peso.items(), key=lambda kv: kv[1])
+    if op == "CS":
+        return "CS", oggetti.get(chiave), valori
+    return op, None, valori
+
+
+def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None, insieme=frozenset(),
+                    colore=None):
     """Il contenuto da aggiungere alla pagina per le varianti di stile del
     disegno tecnico, nella stessa penna del DT; None se il DT non si trova.
 
@@ -2188,14 +2391,32 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
     - `cornice`: un riquadro attorno al DT, a dieci millimetri, come la
       cornice di una tavola disegnata con la stessa penna;
     - `legenda`: un riquadro con le scritte della legenda attaccato sotto
-      lo steso, largo meta'."""
+      lo steso, largo meta'. Con le quote nella stessa variante (`insieme`,
+      `quote+legenda`) si attacca sopra: sotto c'e' la quota del passo, e
+      nessun disegnatore mette una legenda sopra una quota - disegnata li',
+      il riquadro della legenda e i richiami della quota si fondevano, e il
+      display del riempimento KMS T10 trovava sette colonne invece di cinque."""
     from pack3d.dieline import PT2MM
     r = _riquadro_tecnico(pdf, pagina, kind)
     if r is None:
         return None
     (x0, y0, x1, y1), (w, rgb) = r
     mm = 1.0 / PT2MM
-    colore = " ".join("%.3f" % (v / 255.0) for v in rgb)
+    # lo spessore come lo vede la lettura della fustella (pdfplumber), che e'
+    # quello della chiave della penna: pdfium lo da' nel telaio del tratto, e
+    # sul cono, disegnato in scala, 0,2 invece di 1
+    letta = _penna_letta(pdf, pagina, (x0, y0, x1, y1), w, rgb)
+    w_tratto = w
+    if letta is not None:
+        w = max(letta[0], 0.01)
+    # il colore della penna com'e' scritto nel PDF (`_colore_della_penna`,
+    # da chi chiama, che lo cerca coi tratti di quello spessore nel loro
+    # telaio e con la chiave della lettura), o l'RGB di pdfium se non si trova
+    if colore is not None:
+        operatori = colore(w_tratto, rgb, letta[1] if letta else None)
+    else:
+        c = " ".join("%.3f" % (v / 255.0) for v in rgb)
+        operatori = "%s RG %s rg" % (c, c)
 
     def X(x):
         return x + mx0
@@ -2203,7 +2424,7 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
     def Y(y):
         return my1 - y
 
-    righe = ["q %s RG %s rg %.2f w" % (colore, colore, w)]
+    righe = ["q %s %.2f w" % (operatori, w)]
 
     def linea(xa, ya, xb, yb):
         righe.append("%.2f %.2f m %.2f %.2f l S" % (X(xa), Y(ya), X(xb), Y(yb)))
@@ -2239,23 +2460,28 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
             # lo steso di un flowpack e' un rettangolo; una fustella ha
             # tratteggi e lati inclinati
             c0, c1, c2, c3 = _fuori_dai_tratti(pdf, pagina, (c0, c1, c2, c3), d)
+        c0, c1, c2, c3 = _fuori_dalla_stampa(pdf, pagina, (c0, c1, c2, c3), d)
         for xa, ya, xb, yb in ((c0 - d, c1 - d, c2 + d, c1 - d), (c0 - d, c3 + d, c2 + d, c3 + d),
                                (c0 - d, c1 - d, c0 - d, c3 + d), (c2 + d, c1 - d, c2 + d, c3 + d)):
             linea(xa, ya, xb, yb)
     elif variante == "legenda":
-        xl, yl = x0 + (x1 - x0) / 2, y1 + 22 * mm
-        linea(x0, y1, x0, yl)
-        linea(xl, y1, xl, yl)
+        xl = x0 + (x1 - x0) / 2
+        # sotto lo steso, o sopra se sotto c'e' la quota del passo
+        yb, verso = (y0, -1) if "quote" in insieme else (y1, +1)
+        yl = yb + verso * 22 * mm
+        linea(x0, yb, x0, yl)
+        linea(xl, yb, xl, yl)
         linea(x0, yl, xl, yl)
+        cima = min(yb, yl)
         for k, t in enumerate(("LEGENDA", "taglio", "cordonatura", "area non stampata")):
-            testo(x0 + 3 * mm, y1 + (5 + 4.5 * k) * mm, t)
+            testo(x0 + 3 * mm, cima + (5 + 4.5 * k) * mm, t)
     else:
         return None
     righe.append("Q")
     return ("\n".join(righe) + "\n").encode("ascii")
 
 
-def _un_passo(sorgente, destinazione, variante, kind=None):
+def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
     """Una variante sola di `_pagina_variata`."""
     from pypdf import PdfReader, PdfWriter, Transformation
     from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject,
@@ -2268,7 +2494,24 @@ def _un_passo(sorgente, destinazione, variante, kind=None):
                                  NameObject("/BaseFont"): NameObject("/Helvetica")})
         for i, p in enumerate(w.pages):
             mb = p.mediabox
-            dati = _disegno_in_piu(sorgente, i, variante, float(mb.left), float(mb.top), kind)
+            spazi = {}
+
+            def colore(lw, rgb, chiave=None, p=p, spazi=spazi):
+                # la penna della fustella com'e' scritta (`_colore_della_penna`):
+                # una tinta piatta, un CMYK e lo stesso colore in RGB sono tre
+                # penne per la lettura
+                trovato = _colore_della_penna(p, lw, rgb, chiave)
+                if trovato is None or (trovato[0] == "CS" and trovato[1] is None):
+                    c = " ".join("%.3f" % (v / 255.0) for v in rgb)
+                    return "%s RG %s rg" % (c, c)
+                op, spazio, valori = trovato
+                v = " ".join("%.4g" % x for x in valori) or "1"
+                if op == "CS":
+                    spazi["/CSfust"] = spazio
+                    return "/CSfust CS %s SCN /CSfust cs %s scn" % (v, v)
+                return "%s %s %s %s" % (v, op, v, op.lower())
+            dati = _disegno_in_piu(sorgente, i, variante, float(mb.left), float(mb.top), kind,
+                                   insieme, colore)
             if not dati:
                 continue
             sopra = PageObject.create_blank_page(w, float(mb.width), float(mb.height))
@@ -2277,8 +2520,12 @@ def _un_passo(sorgente, destinazione, variante, kind=None):
             flusso = DecodedStreamObject()
             flusso.set_data(dati)
             sopra[NameObject("/Contents")] = w._add_object(flusso)
-            sopra[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+            risorse = DictionaryObject({NameObject("/Font"): DictionaryObject(
                 {NameObject("/Fq"): w._add_object(font)})})
+            if spazi:
+                risorse[NameObject("/ColorSpace")] = DictionaryObject(
+                    {NameObject(k): v for k, v in spazi.items()})
+            sopra[NameObject("/Resources")] = risorse
             p.merge_page(sopra)
         with open(destinazione, "wb") as fh:
             w.write(fh)
