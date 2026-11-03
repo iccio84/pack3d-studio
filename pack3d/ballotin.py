@@ -81,6 +81,10 @@ STRISCIA = 24
 # lunghezza, combaciano; un bordo che non ne ha un altro cosi' vicino e'
 # libero, e prende la costa del taglio.
 COMBACIA = 0.1
+# mm: due tratti piu' lontani di cosi' stanno in gruppi diversi. E' il `gap`
+# di `dieline._gruppi`, 25 punti: una cornice attorno alla tavola, a un
+# centimetro dal disegno, ne resta fuori.
+STACCO = 25.0 * PT2MM
 
 
 # --------------------------------------------------------------------------- #
@@ -176,8 +180,61 @@ def tratti_fustella(pdf, page_no=0, linee=None):
     if not peso:
         return []
     w0, colore = max(peso, key=peso.get)
-    return [p for p, (w, c) in linee
-            if c == colore and 0.5 * w0 <= w <= 1.5 * w0]
+    return _senza_cornici([p for p, (w, c) in linee
+                           if c == colore and 0.5 * w0 <= w <= 1.5 * w0])
+
+
+def _senza_cornici(tratti, stacco=STACCO):
+    """I tratti senza le cornici disegnate con la penna della fustella.
+
+    Una cornice attorno alla tavola, nella stessa penna del disegno, non e'
+    fustella: e' un gruppo a se', staccato dal resto di piu' di `stacco`, che
+    racchiude tutto il gruppo piu' lungo. Sul display a scatola da 15, con la
+    cornice a un centimetro dal disegno, le sue quattro linee entravano fra
+    le righe del coperchio e del fondo e la scatola non si riconosceva piu'.
+    Un gruppo che non racchiude il disegno (una quota, una finestra) resta."""
+    if len(tratti) < 2:
+        return tratti
+    box = np.array([(p[:, 0].min(), p[:, 1].min(), p[:, 0].max(), p[:, 1].max())
+                    for p in tratti])
+    padre = list(range(len(tratti)))
+
+    def radice(i):
+        while padre[i] != i:
+            padre[i] = padre[padre[i]]
+            i = padre[i]
+        return i
+
+    ordine = np.argsort(box[:, 0], kind="stable")
+    for ii, i in enumerate(ordine):
+        for j in ordine[ii + 1:]:
+            if box[j, 0] > box[i, 2] + stacco:
+                break
+            if (box[j, 1] <= box[i, 3] + stacco and box[i, 1] <= box[j, 3] + stacco
+                    and box[j, 0] <= box[i, 2] + stacco
+                    and box[i, 0] <= box[j, 2] + stacco):
+                padre[radice(i)] = radice(j)
+    gruppi = defaultdict(list)
+    for i in range(len(tratti)):
+        gruppi[radice(i)].append(i)
+    if len(gruppi) < 2:
+        return tratti
+
+    def lungo(g):
+        return sum(float(np.sum(np.hypot(*np.diff(tratti[i], axis=0).T))) for i in g)
+    principale = max(gruppi.values(), key=lungo)
+    m0 = box[principale, :2].min(axis=0)
+    m1 = box[principale, 2:].max(axis=0)
+    via = set()
+    for g in gruppi.values():
+        if g is principale:
+            continue
+        g0, g1 = box[g, :2].min(axis=0), box[g, 2:].max(axis=0)
+        if np.all(g0 <= m0) and np.all(g1 >= m1):
+            via.update(g)
+    if not via:
+        return tratti
+    return [p for i, p in enumerate(tratti) if i not in via]
 
 
 def _freccia(p):

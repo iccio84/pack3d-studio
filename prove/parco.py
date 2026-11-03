@@ -2094,6 +2094,41 @@ def _ingombro_tecnico(pdf, pagina, riquadro):
     return x0, y0, x1, y1
 
 
+def _fuori_dai_tratti(pdf, pagina, ingombro, d):
+    """L'ingombro allargato perche' la cornice a `d` non attraversi il DT.
+
+    `_ingombro_tecnico` conta le sole righe orizzontali e verticali. Un
+    tratto obliquo della penna tecnica che parte dal disegno e va oltre la
+    cornice e' disegno, e la cornice gli passa fuori: sul display a scatola
+    da 15 il tratteggio sopra il coperchio, che sale 24 mm oltre l'ultima
+    riga; sul ballotin i lati inclinati dei fianchi. Le righe dritte no: oltre
+    il disegno sono le quote e le note, e la cornice di una tavola ci passa
+    anche sopra. I tratti che restano dentro la cornice, o che non toccano il
+    disegno, non la spostano."""
+    import numpy as np
+    from pack3d.ballotin import polilinee
+    from pack3d.dieline import PT2MM, _technical_pens
+    from pack3d.tracciati import segmenti
+    segs, W, H = segmenti(pdf, pagina)
+    penne = set(_technical_pens(segs, W, H))
+    x0, y0, x1, y1 = ingombro
+    t = 6.0  # due millimetri
+    n0, n1, n2, n3 = ingombro
+    for p, st in polilinee(pdf, pagina, lambda st: st in penne):
+        q = p / PT2MM
+        a0, b0 = (float(v) for v in q.min(axis=0))
+        a1, b1 = (float(v) for v in q.max(axis=0))
+        if not (a1 >= x0 - t and a0 <= x1 + t and b1 >= y0 - t and b0 <= y1 + t):
+            continue
+        dd = np.abs(np.diff(q, axis=0))
+        if not np.any((dd[:, 0] > 0.05 * dd[:, 1]) & (dd[:, 1] > 0.05 * dd[:, 0])):
+            continue
+        if a0 <= x0 - d or b0 <= y0 - d or a1 >= x1 + d or b1 >= y1 + d:
+            n0, n1 = min(n0, a0), min(n1, b0)
+            n2, n3 = max(n2, a1), max(n3, b1)
+    return n0, n1, n2, n3
+
+
 def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
     """Il contenuto da aggiungere alla pagina per le varianti di stile del
     disegno tecnico, nella stessa penna del DT; None se il DT non si trova.
@@ -2150,6 +2185,10 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None):
         # DT va oltre (il filo dell'abbondanza) la cornice lo attraversava
         d = 10 * mm
         c0, c1, c2, c3 = _ingombro_tecnico(pdf, pagina, (x0, y0, x1, y1))
+        if kind not in (None, "flowpack"):
+            # lo steso di un flowpack e' un rettangolo; una fustella ha
+            # tratteggi e lati inclinati
+            c0, c1, c2, c3 = _fuori_dai_tratti(pdf, pagina, (c0, c1, c2, c3), d)
         for xa, ya, xb, yb in ((c0 - d, c1 - d, c2 + d, c1 - d), (c0 - d, c3 + d, c2 + d, c3 + d),
                                (c0 - d, c1 - d, c0 - d, c3 + d), (c2 + d, c1 - d, c2 + d, c3 + d)):
             linea(xa, ya, xb, yb)

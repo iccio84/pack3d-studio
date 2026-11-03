@@ -92,6 +92,20 @@ resta cartoncino, e non serve piu' tapparlo a posteriori con `fill_holes`. E il
 tratto della fustella, che e' colorato, ferma la macchia da solo: dove la penna
 c'e', anche un cartoncino stampato chiaro fino al taglio si salva.
 
+**Una cornice attorno alla tavola non chiude il foglio.** Il bordo della
+pagina non e' l'unico posto da cui si parte: e' foglio anche il chiaro che si
+raggiunge da FUORI dal riquadro della fustella (`vassoio._foglio`, `fuori`).
+Una cornice chiusa attorno al disegno, a un centimetro, separava dal bordo
+della pagina la fascia chiara fra lei e la fustella: la fascia diventava
+cartoncino, e la sagoma il riquadro pieno - sul display T1x40 168 vertici
+invece di 27860, gli angoli del riquadro senza stampa presi per cartoncino.
+E il riquadro della fustella si toglie PRIMA di tappare i buchi
+(`sagoma_e_creste`): una quota che attraversa la cornice e arriva alla
+stampa la attacca alla sagoma, e la cornice chiuderebbe tutto quello che ha
+dentro. Trovato con le varianti di stile del parco (`prove/parco.py varianti
+--famiglia vassoio,riempimento --varianti cornice`); sui casi veri la
+sagoma resta la stessa al pixel.
+
 **Il controllo che lo dice**: la misura dell'impronta va confrontata con il
 riquadro della fustella, che viene dai vettori. Se ballano di piu' di 2 mm il
 build lo scrive, invece di consegnare un modello piu' grande del pack.
@@ -626,7 +640,8 @@ modulo nuovo dentro il display.
 
 ### La firma in fustella
 
-Si legge dai tratti della penna della fustella (`ballotin.tratti_fustella`),
+Si legge dai tratti della penna della fustella (`ballotin.tratti_fustella`,
+senza le cornici attorno alla tavola: vedi regole/ballotin.md, *Le penne*),
 righe orizzontali e verticali unite in corse (pezzi a meno di 4 mm: la
 cerniera tratteggiata e' una corsa sola di 25 pezzi). Nel telaio di lettura il
 fronte sta in alto; il foglio si prova nei quattro versi sulla tavola, e la

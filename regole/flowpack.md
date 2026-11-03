@@ -836,7 +836,13 @@ varianti, e uno solo lo era:
   puo' andare oltre (il filo dell'abbondanza, una striscia sotto) e veniva
   attraversato. Ora la penna e' quella delle linee dentro lo steso e la
   cornice sta a 10 mm da tutto il DT dello steso (`_ingombro_tecnico`).
-  Rigenerate le varianti, il confronto e' rifatto sulle nuove.
+  Rigenerate le varianti, il confronto e' rifatto sulle nuove. Fuori dai
+  flowpack la cornice passa fuori anche dai tratti obliqui della penna
+  tecnica che partono dal disegno (`_fuori_dai_tratti`): `_ingombro_tecnico`
+  conta le sole righe dritte, e sul display a scatola da 15 la cornice
+  tagliava a meta' il tratteggio sopra il coperchio, sul ballotin i lati
+  inclinati. Le righe dritte oltre il disegno - quote, note - non la
+  spostano, e lo steso di un flowpack non ha tratti obliqui di fustella.
 
 Risultato, sulle varianti rigenerate: i 18 originali uguali; con le quote
 18 su 18, con la legenda 18 su 18, con la cornice 16 su 18. Delle due

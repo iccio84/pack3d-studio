@@ -776,6 +776,64 @@ class GrigliaRicucita(unittest.TestCase):
         self.assertEqual(t[:4], (0.0, 0.0, 200.0, 260.0))
 
 
+class CorniceAttornoAllaTavola(unittest.TestCase):
+    """Una cornice attorno alla tavola, nella penna della fustella, non e'
+    fustella: ne' fra i tratti (`ballotin.tratti_fustella`, che leggono anche
+    il display a scatola, il prisma e la scatola a punta) ne' nell'impronta
+    di stampa del vassoio (`vassoio.sagoma_e_creste`)."""
+
+    @staticmethod
+    def _l(*punti):
+        return np.array(punti, dtype=float)
+
+    def test_i_tratti_della_cornice_vanno_via(self):
+        from pack3d import ballotin
+        l = self._l
+        corpo = [l((0, 0), (100, 0)), l((100, 0), (100, 80)), l((100, 80), (0, 80)),
+                 l((0, 80), (0, 0)), l((50, 0), (50, 80))]
+        # il tratteggio di una patella, oltre l'ultima riga ma attaccato
+        tratteggio = [l((20 + 5 * k, 80), (30 + 5 * k, 100)) for k in range(5)]
+        finestra = [l((60, 30), (80, 30), (80, 50), (60, 50), (60, 30))]
+        # una quota staccata dal disegno, da un lato solo
+        quota = [l((0, -20), (100, -20))]
+        cornice = [l((-10, -40), (110, -40)), l((110, -40), (110, 110)),
+                   l((110, 110), (-10, 110)), l((-10, 110), (-10, -40))]
+        tenuti = corpo + tratteggio + finestra + quota
+        resto = {id(p) for p in ballotin._senza_cornici(tenuti + cornice)}
+        self.assertTrue(all(id(p) in resto for p in tenuti))
+        self.assertFalse(any(id(p) in resto for p in cornice))
+        # senza cornice non cambia niente
+        self.assertEqual(ballotin._senza_cornici(tenuti), tenuti)
+
+    def test_la_cornice_non_chiude_il_foglio_del_vassoio(self):
+        from types import SimpleNamespace
+
+        from PIL import Image
+
+        from pack3d import vassoio
+        px_mm = 4.0
+        scala = px_mm * 25.4 / 72.0
+        a = np.full((400, 400, 3), 255, np.uint8)
+        # la stampa a croce: il riquadro della fustella ha quattro angoli di foglio
+        a[100:300, 170:230] = (200, 30, 30)
+        a[170:230, 100:300] = (200, 30, 30)
+        # la cornice a dieci millimetri, e una quota che la attacca alla stampa
+        a[60, 60:341] = a[340, 60:341] = 0
+        a[60:341, 60] = a[60:341, 340] = 0
+        a[200, 300:341] = 0
+        d = SimpleNamespace(bbox=tuple(v / scala for v in (100, 100, 300, 300)),
+                            xs=[v / scala for v in (100, 150, 190, 210, 250, 300)],
+                            ys=[v / scala for v in (100, 170, 230, 300)])
+        with mock.patch("pack3d.dieline.render_page", return_value=Image.fromarray(a)):
+            sagoma, _creste, _resa = vassoio.sagoma_e_creste("finto.pdf", d, px_mm)
+        croce = np.zeros((400, 400), bool)
+        croce[100:300, 170:230] = croce[170:230, 100:300] = True
+        self.assertTrue(np.all(sagoma[croce]))
+        # gli angoli del riquadro restano foglio: la sagoma non e' il riquadro
+        self.assertFalse(sagoma[110, 110] or sagoma[290, 290])
+        self.assertLessEqual(int(sagoma.sum()) - int(croce.sum()), 4)
+
+
 class NumeriDelleQuote(unittest.TestCase):
     """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
     che `get_text_range` perde (un glifo sul codice 3, come in certi font)."""
