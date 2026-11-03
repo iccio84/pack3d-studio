@@ -26,6 +26,15 @@ facce una per una.
   vicino sono fustella. Sul ballotin le finestre sono tagliate con penne da
   0,71 e 0,85 pt, cinque tratti in tutto, e nessuna soglia sul numero di
   segmenti le terrebbe.
+- **Una cornice attorno alla tavola non e' fustella** (`_senza_cornici`).
+  Nella stessa penna del disegno, e' un gruppo di tratti a se' - staccato
+  dal resto di piu' di 25 punti, lo stesso `gap` di `dieline._gruppi` - che
+  racchiude tutto il gruppo piu' lungo: va via. Un gruppo che non racchiude
+  il disegno (una quota da un lato, una finestra) resta. Sul display a
+  scatola da 15 (regole/vassoi.md, *Il display a scatola*), con la cornice a
+  un centimetro, le sue quattro linee entravano fra le righe del coperchio e
+  del fondo e la scatola non si riconosceva piu'. Vale per tutti quelli che
+  leggono questi tratti: il ballotin, il prisma, la scatola a punta.
 - **Il tratteggio** - famiglie di segmenti paralleli a pochi millimetri - si
   toglie prima di fare il grafo, e serve dopo: ogni faccia sa quanti segni ha
   dentro, e una faccia tratteggiata e' una zona coperta o di colla.

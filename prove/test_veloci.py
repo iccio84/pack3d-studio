@@ -616,16 +616,25 @@ class GiudiceDelloSteso(unittest.TestCase):
     """`flowpack._riquadro_coerente`: lati che non sono tagli, uno steso
     disegnato dalla prova (nessun file dei clienti)."""
 
-    def _steso(self, cornice=False, pinna_bianca=False, legenda=False):
+    def _steso(self, cornice=False, pinna_bianca=False, legenda=False, pinna_aperta=False):
         from pack3d import flowpack as fpk
         mm = 1.0 / fpk.PT2MM
         y0, y1, x0, x1 = 50.0, 50.0 + 100 * mm, 50.0, 50.0 + 150 * mm
         st = (0.5, "(0, 0, 0)")
-        inizio = y0 + (15 * mm if pinna_bianca else 0.0)
-        S = [("H", y, x0, x1, st) for y in (y0, y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1)]
-        S += [("V", x0, y0, y1, st), ("V", x1, y0, y1, st)]
+        inizio = y0 + (15 * mm if pinna_bianca else 8 * mm if pinna_aperta else 0.0)
+        S = [("H", y, x0, x1, st) for y in (y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1)]
+        if pinna_aperta:
+            # la pinna bianca come fascia a se', fino alla sua piega: i
+            # tagli del passo non la attraversano, il suo bordo esce di 3,5
+            # mm per parte (il T2 al cioccolato fondente)
+            S += [("H", y0, x0 - 3.5 * mm, x1 + 3.5 * mm, st), ("H", inizio, x0, x1, st),
+                  ("V", x0, inizio, y1, st), ("V", x1, inizio, y1, st)]
+        else:
+            S += [("H", y0, x0, x1, st), ("V", x0, y0, y1, st), ("V", x1, y0, y1, st)]
         S += [("V", x, inizio, y1, st) for x in (x0 + 10 * mm, x1 - 10 * mm)]
         hs = [y0, y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1]
+        if pinna_aperta:
+            hs = [y0, inizio] + hs[1:]
         vs = [x0, x0 + 10 * mm, x1 - 10 * mm, x1]
         if cornice:
             d = 10 * mm
@@ -660,6 +669,28 @@ class GiudiceDelloSteso(unittest.TestCase):
         # la pinna bianca e il margine della cornice sono tutti e due vuoti:
         # la pinna pero' la attraversano i tagli del passo, fino al bordo
         fpk, S, hs, vs, raster = self._steso(cornice=True, pinna_bianca=True)
+        h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
+        self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
+
+    def test_la_pinna_disegnata_come_fascia_resta_dello_steso(self):
+        fpk, S, hs, vs, raster = self._steso(cornice=True, pinna_aperta=True)
+        h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
+        self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
+
+    def test_la_linea_della_cornice_non_e_grafica(self):
+        # oltre il capo sinistro, fra 6 e 12 mm, la stampa e' poca (il 18%
+        # della striscia) e la linea della cornice, a 10 mm, la porterebbe
+        # oltre TAGLIA_GRAFICA: una linea del disegno non e' grafica, e il
+        # capo sinistro resta un taglio (il T1 B-ready del display da 15)
+        fpk, S, hs, vs, raster = self._steso(cornice=True)
+        mm = 1.0 / fpk.PT2MM
+        for k, c, a, b, st in S:
+            if k == "H":
+                raster[int(c), int(a):int(b) + 1] = 0
+            else:
+                raster[int(a):int(b) + 1, int(c)] = 0
+        x0 = vs[1]
+        raster[int(hs[1]):int(hs[-2]), int(x0 - 9 * mm):int(x0 - 8 * mm)] = 0
         h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
         self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
 
@@ -760,6 +791,64 @@ class GrigliaRicucita(unittest.TestCase):
         t = tools._griglia_ricucita(G)
         self.assertIsNotNone(t)
         self.assertEqual(t[:4], (0.0, 0.0, 200.0, 260.0))
+
+
+class CorniceAttornoAllaTavola(unittest.TestCase):
+    """Una cornice attorno alla tavola, nella penna della fustella, non e'
+    fustella: ne' fra i tratti (`ballotin.tratti_fustella`, che leggono anche
+    il display a scatola, il prisma e la scatola a punta) ne' nell'impronta
+    di stampa del vassoio (`vassoio.sagoma_e_creste`)."""
+
+    @staticmethod
+    def _l(*punti):
+        return np.array(punti, dtype=float)
+
+    def test_i_tratti_della_cornice_vanno_via(self):
+        from pack3d import ballotin
+        l = self._l
+        corpo = [l((0, 0), (100, 0)), l((100, 0), (100, 80)), l((100, 80), (0, 80)),
+                 l((0, 80), (0, 0)), l((50, 0), (50, 80))]
+        # il tratteggio di una patella, oltre l'ultima riga ma attaccato
+        tratteggio = [l((20 + 5 * k, 80), (30 + 5 * k, 100)) for k in range(5)]
+        finestra = [l((60, 30), (80, 30), (80, 50), (60, 50), (60, 30))]
+        # una quota staccata dal disegno, da un lato solo
+        quota = [l((0, -20), (100, -20))]
+        cornice = [l((-10, -40), (110, -40)), l((110, -40), (110, 110)),
+                   l((110, 110), (-10, 110)), l((-10, 110), (-10, -40))]
+        tenuti = corpo + tratteggio + finestra + quota
+        resto = {id(p) for p in ballotin._senza_cornici(tenuti + cornice)}
+        self.assertTrue(all(id(p) in resto for p in tenuti))
+        self.assertFalse(any(id(p) in resto for p in cornice))
+        # senza cornice non cambia niente
+        self.assertEqual(ballotin._senza_cornici(tenuti), tenuti)
+
+    def test_la_cornice_non_chiude_il_foglio_del_vassoio(self):
+        from types import SimpleNamespace
+
+        from PIL import Image
+
+        from pack3d import vassoio
+        px_mm = 4.0
+        scala = px_mm * 25.4 / 72.0
+        a = np.full((400, 400, 3), 255, np.uint8)
+        # la stampa a croce: il riquadro della fustella ha quattro angoli di foglio
+        a[100:300, 170:230] = (200, 30, 30)
+        a[170:230, 100:300] = (200, 30, 30)
+        # la cornice a dieci millimetri, e una quota che la attacca alla stampa
+        a[60, 60:341] = a[340, 60:341] = 0
+        a[60:341, 60] = a[60:341, 340] = 0
+        a[200, 300:341] = 0
+        d = SimpleNamespace(bbox=tuple(v / scala for v in (100, 100, 300, 300)),
+                            xs=[v / scala for v in (100, 150, 190, 210, 250, 300)],
+                            ys=[v / scala for v in (100, 170, 230, 300)])
+        with mock.patch("pack3d.dieline.render_page", return_value=Image.fromarray(a)):
+            sagoma, _creste, _resa = vassoio.sagoma_e_creste("finto.pdf", d, px_mm)
+        croce = np.zeros((400, 400), bool)
+        croce[100:300, 170:230] = croce[170:230, 100:300] = True
+        self.assertTrue(np.all(sagoma[croce]))
+        # gli angoli del riquadro restano foglio: la sagoma non e' il riquadro
+        self.assertFalse(sagoma[110, 110] or sagoma[290, 290])
+        self.assertLessEqual(int(sagoma.sum()) - int(croce.sum()), 4)
 
 
 class NumeriDelleQuote(unittest.TestCase):

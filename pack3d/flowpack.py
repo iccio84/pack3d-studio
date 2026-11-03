@@ -1704,6 +1704,10 @@ LATO_A_META = 0.6
 TAGLIA_GRAFICA = 0.2
 # Gli angoli: i due lati perpendicolari arrivano a questo lato entro tanti mm.
 ANGOLO_MM = 2.0
+# Fin dove, oltre gli angoli dello steso, puo' finire il bordo di una pinna
+# disegnata come fascia a se' (`_riquadro_coerente`, `chiusa`): l'abbondanza
+# e' di tre millimetri, una cornice sta a sei o piu'.
+FASCIA_FUORI_MM = 5.0
 
 
 def _integrale(raster):
@@ -1714,6 +1718,28 @@ def _integrale(raster):
     m = (raster.min(2) < 230).astype(np.int32)
     out = np.zeros((m.shape[0] + 1, m.shape[1] + 1), np.int64)
     out[1:, 1:] = m.cumsum(0).cumsum(1)
+    return out
+
+
+def _senza_linee(raster, S, sc):
+    """Il raster con le linee del disegno dipinte di bianco.
+
+    Oltre un lato, `tagliati` chiede se la GRAFICA continua: una linea del DT
+    non e' grafica. Sul T1 B-ready del riempimento col display, la cornice
+    della tavola a dieci millimetri dallo steso portava la striscia di
+    sinistra dal 15,6% al 21,2% di stampa, oltre TAGLIA_GRAFICA: il lato
+    vero sembrava tagliare la grafica, e vinceva il riquadro chiuso dalla
+    cornice, 160 mm invece di 150."""
+    out = raster.copy()
+    H, W = out.shape[:2]
+    for k, c, a, b, st in S:
+        m = 1 + int(st[0] * sc / 2.0 + 0.5)
+        r = int(c * sc)
+        lo, hi = int(a * sc), int(b * sc)
+        if k == "H":
+            out[max(r - m, 0):min(r + m + 1, H), max(lo - m, 0):min(hi + m + 1, W)] = 255
+        else:
+            out[max(lo - m, 0):min(hi + m + 1, H), max(r - m, 0):min(r + m + 1, W)] = 255
     return out
 
 
@@ -1927,7 +1953,7 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
         hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
         return hs2, vs2, None
 
-    integrale = _integrale(raster)
+    integrale = _integrale(_senza_linee(raster, S, sc))
 
     def veloce(*r):
         return _stampato(integrale, sc, *r)
@@ -1966,6 +1992,22 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
                    (a0 + dy, a1 - dy, b1 + 6 * mm, b1 + 12 * mm))
         return sum(veloce(*r) > TAGLIA_GRAFICA for r in strisce)
 
+    def chiusa(lato, a0, a1, b0, b1):
+        # La pinna disegnata come fascia a se': sul T2 al cioccolato
+        # fondente i tagli del passo non la attraversano, ma il suo bordo
+        # finisce 3,5 mm oltre gli angoli dello steso, entro l'abbondanza. La
+        # linea di una cornice li supera di sei millimetri e piu'. Vale
+        # quando la linea del lato finisce, da tutti e due i capi, entro
+        # FASCIA_FUORI_MM dagli angoli.
+        largo = FASCIA_FUORI_MM / PT2MM
+        if lato in ("y0", "y1"):
+            c, lo, hi, kind = (a0 if lato == "y0" else a1), b0, b1, "H"
+        else:
+            c, lo, hi, kind = (b0 if lato == "x0" else b1), a0, a1, "V"
+        t = [(a, b) for k, cc, a, b, st in S if k == kind and abs(cc - c) <= 3.0]
+        return bool(t) and (abs(min(a for a, _ in t) - lo) <= largo
+                            and abs(max(b for _, b in t) - hi) <= largo)
+
     def torna(sui):
         # nessuna quota e al piu' un lato vuoto (la pinna bianca). Gli angoli
         # non si pretendono: li conta il punteggio, e la pinna bianca del
@@ -1998,8 +2040,12 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
                     sui = _lati(S, veloce, a0, a1, b0, b1, quote)
                     if not torna(sui):
                         continue
+                    # gli angoli di un lato vuoto si chiudono anche coi lati
+                    # della pinna disegnata come fascia (`chiusa`)
+                    ang = {l: a or (v and chiusa(l, a0, a1, b0, b1))
+                           for l, (v, q_, a) in sui.items()}
                     punti = (sum(c >= 0.9 for c in cop)
-                             + sum(a for v, q_, a in sui.values())
+                             + sum(ang.values())
                              # le quote scritte: un lato lungo quanto un
                              # numero del disegno e' la prova piu' forte
                              + 2 * sum(scritta(d * PT2MM) for d in (a1 - a0, b1 - b0))
@@ -2012,7 +2058,7 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
                              # del passo attraversano la pinna fino al bordo,
                              # e non arrivano alla cornice dieci millimetri
                              # piu' in la'
-                             - sum(v and not a for v, q_, a in sui.values()))
+                             - sum(v and not ang[l] for l, (v, q_, a) in sui.items()))
                     chiave = (punti, (a1 - a0) * (b1 - b0))
                     if meglio is None or chiave > meglio[0]:
                         meglio = (chiave, i, j, p, q)

@@ -826,7 +826,7 @@ def mesh(v: Vassoio, sagoma, px_mm, creste, spessore=SPESSORE,
 FOGLIO_CHIARO = 150
 
 
-def _foglio(a):
+def _foglio(a, fuori=None):
     """Il foglio attorno alla cartotecnica, come maschera.
 
     Non e' "dove non c'e' inchiostro". Attorno al display T1x40 il
@@ -842,12 +842,21 @@ def _foglio(a):
     raggiunge e resta cartoncino, e non serve piu' tapparlo a posteriori. E il
     tratto della fustella, che e' colorato, ferma la macchia da solo: dove la
     penna c'e', anche un cartoncino stampato chiaro fino al taglio si salva.
+
+    Con `fuori` (la maschera di cio' che sta fuori dal riquadro della
+    fustella) e' foglio anche il chiaro che si raggiunge da li': una cornice
+    attorno alla tavola chiude il chiaro fra lei e la fustella, che dal bordo
+    della pagina non si raggiunge piu'. Sul display T1x40 con la cornice a un
+    centimetro quella fascia diventava cartoncino, e la sagoma il riquadro
+    pieno: 168 vertici invece di 27860.
     """
     import numpy as np
     from scipy.ndimage import label
 
     lab, _ = label(a.min(2) > FOGLIO_CHIARO)
     bordo = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    if fuori is not None:
+        bordo = np.union1d(bordo, np.unique(lab[fuori]))
     return np.isin(lab, bordo[bordo > 0])
 
 
@@ -873,21 +882,23 @@ def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None, v=None):
     scala = px_mm * 25.4 / 72.0
     resa = render_page(pdf, page_no, scala).convert("RGB")
     a = np.asarray(resa)
-    lab, quanti = label(~_foglio(a))
-    if quanti == 0:
-        return None, None, resa
-    dim = np.bincount(lab.ravel())
-    dim[0] = 0
-    sagoma = binary_fill_holes(lab == int(np.argmax(dim)))
     # Mai oltre il taglio: la forma la da' l'impronta, l'ingombro la fustella.
     # Prima le misure, poi il contenuto - e un'ombra o una sbavatura fuori
     # dalla fustella non e' cartoncino, per quanto sia attaccata alla stampa.
     marg = 0.5 * px_mm
     x0, y0, x1, y1 = (int(round(d.bbox[0] * scala - marg)), int(round(d.bbox[1] * scala - marg)),
                       int(round(d.bbox[2] * scala + marg)), int(round(d.bbox[3] * scala + marg)))
-    dentro = np.zeros_like(sagoma)
+    dentro = np.zeros(a.shape[:2], dtype=bool)
     dentro[max(y0, 0):max(y1, 0), max(x0, 0):max(x1, 0)] = True
-    sagoma &= dentro
+    lab, quanti = label(~_foglio(a, fuori=~dentro))
+    if quanti == 0:
+        return None, None, resa
+    dim = np.bincount(lab.ravel())
+    dim[0] = 0
+    # Il riquadro si toglie PRIMA di tappare i buchi: una cornice attaccata
+    # alla stampa da una quota che la attraversa chiuderebbe tutto quello che
+    # ha dentro.
+    sagoma = binary_fill_holes((lab == int(np.argmax(dim))) & dentro)
     if note is not None:
         ys, xs = np.nonzero(sagoma)
         mis = ((xs.max() - xs.min() + 1) / px_mm, (ys.max() - ys.min() + 1) / px_mm)
