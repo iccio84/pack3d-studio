@@ -681,7 +681,7 @@ class GiudiceDelloSteso(unittest.TestCase):
         # oltre il capo sinistro, fra 6 e 12 mm, la stampa e' poca (il 18%
         # della striscia) e la linea della cornice, a 10 mm, la porterebbe
         # oltre TAGLIA_GRAFICA: una linea del disegno non e' grafica, e il
-        # capo sinistro resta un taglio (il T1 B-ready del display da 15)
+        # capo sinistro resta un taglio (il pane ripieno T1 del display da 15)
         fpk, S, hs, vs, raster = self._steso(cornice=True)
         mm = 1.0 / fpk.PT2MM
         for k, c, a, b, st in S:
@@ -849,6 +849,63 @@ class CorniceAttornoAllaTavola(unittest.TestCase):
         # gli angoli del riquadro restano foglio: la sagoma non e' il riquadro
         self.assertFalse(sagoma[110, 110] or sagoma[290, 290])
         self.assertLessEqual(int(sagoma.sum()) - int(croce.sum()), 4)
+
+
+class SoglieSpostate(unittest.TestCase):
+    """`prove/soglie.py`: una soglia si sposta dappertutto dove il codice la
+    vede - nel modulo che la scrive, in quelli che la importano, nei valori
+    di serie degli argomenti - e torna com'era."""
+
+    @staticmethod
+    def _soglie():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "soglie_prova", os.path.join(QUI, "prove", "soglie.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_si_sposta_di_serie_e_importata_e_torna(self):
+        from pack3d import ballotin
+        from pack3d.famiglie import astuccio, comune
+        soglie = self._soglie()
+        stacco, ruvida = ballotin.STACCO, comune.RUVIDITA_CARTA
+        indietro = soglie.sposta("pack3d.ballotin.STACCO", 99.0)
+        try:
+            self.assertEqual(ballotin.STACCO, 99.0)
+            self.assertEqual(ballotin._senza_cornici.__defaults__, (99.0,))
+        finally:
+            indietro()
+        self.assertIs(ballotin.STACCO, stacco)
+        self.assertIs(ballotin._senza_cornici.__defaults__[0], stacco)
+        indietro = soglie.sposta("pack3d.famiglie.comune.RUVIDITA_CARTA", 0.5)
+        try:
+            self.assertEqual((comune.RUVIDITA_CARTA, astuccio.RUVIDITA_CARTA), (0.5, 0.5))
+        finally:
+            indietro()
+        self.assertIs(astuccio.RUVIDITA_CARTA, ruvida)
+
+    def test_il_passo(self):
+        soglie = self._soglie()
+        self.assertAlmostEqual(soglie._spinto(0.2, 0.25, +1), 0.25)
+        self.assertAlmostEqual(soglie._spinto(0.2, 0.25, -1), 0.15)
+        # un intero si sposta almeno di uno; lo zero non si sposta
+        self.assertEqual((soglie._spinto(4, 0.1, +1), soglie._spinto(4, 0.1, -1)), (5, 3))
+        self.assertIsNone(soglie._spinto(0, 0.25, +1))
+        # una frazione non va a 1 o oltre; una misura in mm si'
+        self.assertIsNone(soglie._spinto(0.9, 0.25, +1, "pack3d.plancia.COPRE"))
+        self.assertAlmostEqual(soglie._spinto(0.9, 0.25, +1, "pack3d.x.LARGO_MM"), 1.125)
+        i, v = soglie._primo(0.9, +1, "pack3d.plancia.COPRE")
+        self.assertEqual(i, 1)
+        self.assertAlmostEqual(v, 0.99)
+        # un intero che al passo dopo resta uguale non si riprova
+        self.assertIsNone(soglie._primo(4, +1, "pack3d.ballotin.LENTI", 1, 5))
+
+    def test_le_costanti_che_non_sono_soglie(self):
+        soglie = self._soglie()
+        g = {"TAGLIA": 0.2, "PT2MM": 0.35, "_BEZIER": 3, "ATTIVO": True, "NOME": "x",
+             "minuscola": 1.0}
+        self.assertEqual(soglie._numeriche(g), {"TAGLIA"})
 
 
 class NumeriDelleQuote(unittest.TestCase):

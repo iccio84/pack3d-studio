@@ -1974,7 +1974,7 @@ def _pagina_variata(sorgente, destinazione, variante, kind=None):
     - `appiattito`: ripassato da Ghostscript con le scritte in tracciati,
       come un PDF di stampa appiattito - senza testo vivo e senza livelli.
       Attenzione: Ghostscript butta anche gran parte del disegno tecnico
-      (sul Tronky T1 le linee da 1187 a 212, le curve da 552 a 6), e il
+      (sul wafer T1 le linee da 1187 a 212, le curve da 552 a 6), e il
       pack non lo risolverebbe nessuno: misura Ghostscript piu' che il
       codice, e nel giro della settimana non c'e'.
 
