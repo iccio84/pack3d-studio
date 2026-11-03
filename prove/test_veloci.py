@@ -851,6 +851,55 @@ class CorniceAttornoAllaTavola(unittest.TestCase):
         self.assertLessEqual(int(sagoma.sum()) - int(croce.sum()), 4)
 
 
+class SoglieSpostate(unittest.TestCase):
+    """`prove/soglie.py`: una soglia si sposta dappertutto dove il codice la
+    vede - nel modulo che la scrive, in quelli che la importano, nei valori
+    di serie degli argomenti - e torna com'era."""
+
+    @staticmethod
+    def _soglie():
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "soglie_prova", os.path.join(QUI, "prove", "soglie.py"))
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_si_sposta_di_serie_e_importata_e_torna(self):
+        from pack3d import ballotin
+        from pack3d.famiglie import astuccio, comune
+        soglie = self._soglie()
+        stacco, ruvida = ballotin.STACCO, comune.RUVIDITA_CARTA
+        indietro = soglie.sposta("pack3d.ballotin.STACCO", 99.0)
+        try:
+            self.assertEqual(ballotin.STACCO, 99.0)
+            self.assertEqual(ballotin._senza_cornici.__defaults__, (99.0,))
+        finally:
+            indietro()
+        self.assertIs(ballotin.STACCO, stacco)
+        self.assertIs(ballotin._senza_cornici.__defaults__[0], stacco)
+        indietro = soglie.sposta("pack3d.famiglie.comune.RUVIDITA_CARTA", 0.5)
+        try:
+            self.assertEqual((comune.RUVIDITA_CARTA, astuccio.RUVIDITA_CARTA), (0.5, 0.5))
+        finally:
+            indietro()
+        self.assertIs(astuccio.RUVIDITA_CARTA, ruvida)
+
+    def test_il_passo(self):
+        soglie = self._soglie()
+        self.assertAlmostEqual(soglie._spinto(0.2, 0.25, +1), 0.25)
+        self.assertAlmostEqual(soglie._spinto(0.2, 0.25, -1), 0.15)
+        # un intero si sposta almeno di uno; lo zero non si sposta
+        self.assertEqual((soglie._spinto(4, 0.1, +1), soglie._spinto(4, 0.1, -1)), (5, 3))
+        self.assertIsNone(soglie._spinto(0, 0.25, +1))
+
+    def test_le_costanti_che_non_sono_soglie(self):
+        soglie = self._soglie()
+        g = {"TAGLIA": 0.2, "PT2MM": 0.35, "_BEZIER": 3, "ATTIVO": True, "NOME": "x",
+             "minuscola": 1.0}
+        self.assertEqual(soglie._numeriche(g), {"TAGLIA"})
+
+
 class NumeriDelleQuote(unittest.TestCase):
     """`quote.numeri`: il numero sta dove e' scritto, anche dopo un carattere
     che `get_text_range` perde (un glifo sul codice 3, come in certi font)."""
