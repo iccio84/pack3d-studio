@@ -27,6 +27,12 @@ tutti - e cosi' alla chiusura basta una richiesta sola.
 
 `PACK3D_STATISTICHE=0` lo spegne (il parco non conta: sono prove, non
 utenti); `PACK3D_STATISTICHE_OGNI` cambia l'intervallo, in secondi.
+
+Una richiesta con `"prova": true` fra le opzioni (`X-Pack3d`) non conta
+(`in_prova`): e' la prova dello Space a ogni rilascio (`prove/parco.py
+spazio`). Il 3 novembre 2026 i 36 eventi salvati dal giorno prima erano
+quasi tutti quella: a ogni rilascio lo Space riparte e costruisce il T1 di
+riferimento, e i suoi "ok" sarebbero finiti nel conto dei PDF veri.
 """
 from __future__ import annotations
 
@@ -63,10 +69,21 @@ def motivo(e):
     return "%s: %s" % (type(e).__name__, t[:140]) if isinstance(e, BaseException) else t[:140]
 
 
+_richiesta = threading.local()
+
+
+def in_prova(si):
+    """Per la richiesta di questo thread: se e' una prova, che non conta. Il
+    server lo dice a ogni richiesta che legge o costruisce (`do_POST`), nel
+    thread che la fa - il suo o quello del lavoratore."""
+    _richiesta.prova = bool(si)
+
+
 def conta(evento, **campi):
     """Una riga: `evento` (lettura, costruzione, fermata, verdetto) e i suoi
-    campi. Mai un errore: le statistiche non fermano niente."""
-    if not FILE:
+    campi. Mai un errore: le statistiche non fermano niente. Le prove non
+    contano (`in_prova`)."""
+    if not FILE or getattr(_richiesta, "prova", False):
         return
     riga = dict(t=int(time.time()), e=evento)
     riga.update({k: v for k, v in campi.items() if v is not None})

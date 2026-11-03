@@ -107,14 +107,20 @@ approvati da chiudere (punto 1).
    delle PR dei casi (CODA.md, *Quando si unisce*), con `base=main` e
    `head=coda-settimana`. Controlla che il workflow "Sync to Hugging Face
    Spaces" sul commit di unione finisca con **success**.
-6. **Lo Space**: da un clone di `main` aggiornato, per ogni caso di questo
-   rilascio e ogni issue `da-rilasciare`,
+6. **Lo Space**: da un clone di `main` aggiornato,
 
-       python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi <nome> | tail -6
+       python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi [<nome>...]
 
-   che aspetta che lo Space riparta col codice nuovo e costruisce il caso
-   come un utente, col controllo dell'AI acceso. Tutti i casi in un comando
-   solo (un ciclo `for`): l'attesa dello Space la paga il primo.
+   che aspetta che lo Space riparta col codice nuovo e costruisce i casi
+   come un utente, col controllo dell'AI acceso. Senza nomi prova **un caso
+   per famiglia** - flowpack, astuccio, ballotin, coppa, incarto, pouch,
+   scatola a punta, riempimento, tubo, vassoio: per ognuna il caso del parco
+   col PDF piu' leggero (`_una_per_famiglia`), una decina di minuti in tutto.
+   Coi nomi prova quelli: i casi di questo rilascio e ogni issue
+   `da-rilasciare`, tutti in un comando solo (l'attesa dello Space la paga il
+   primo). Esce col codice peggiore. Sono prove: le richieste del parco
+   portano `"prova": true` e non contano nelle statistiche dello Space
+   (`pack3d.statistiche.in_prova`), che devono contare i PDF veri.
    - **"ok"** (uscita 0): se la issue e' `da-rilasciare` - chi l'ha
      caricato ha approvato - commenta col verdetto e il link al rilascio,
      togli `da-rilasciare` e chiudila come risolta. Se e' ancora

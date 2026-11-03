@@ -200,6 +200,9 @@ def _richiesta(url, percorso, cartella, caso):
     opts["nomi"] = [quote(os.path.basename(f)) for f in files]
     if len(blocchi) > 1:
         opts["parti"] = [len(b) for b in blocchi]
+    # un caso del parco e' una prova, non un lavoro: sullo Space non conta
+    # nelle statistiche (`pack3d.statistiche.in_prova`)
+    opts["prova"] = True
     return urllib.request.Request(
         url + percorso, data=b"".join(blocchi), method="POST",
         headers={"Content-Type": "application/pdf",
@@ -679,10 +682,37 @@ def _versione_in_linea(url):
 ESITI = {"ok": 0, "dubbio": 1, "sbagliato": 2}
 
 
+def _una_per_famiglia(cartella):
+    """Un caso per famiglia, la `kind` della lettura approvata: il piu'
+    leggero, perche' la prova dello Space a ogni rilascio resti di pochi
+    minuti. Cosi' un rilascio che rompe solo i vassoi, o solo gli incarti,
+    lo Space lo dice; col solo T1 di riferimento no."""
+    letture = _letture_approvate(cartella)
+    scelti = {}
+    for c in _casi(cartella):
+        r = letture.get(c["nome"])
+        if not isinstance(r, dict) or not r.get("kind"):
+            continue
+        file = [os.path.join(cartella, "parco", "pdf", f) for f in c["file"]]
+        if not all(os.path.exists(f) for f in file):
+            continue
+        peso = sum(os.path.getsize(f) for f in file)
+        if r["kind"] not in scelti or peso < scelti[r["kind"]][0]:
+            scelti[r["kind"]] = (peso, c)
+    return [(k, scelti[k][1]) for k in sorted(scelti)]
+
+
 def spazio(args):
-    """Un caso del parco sullo Space vero, appena ripartito col codice di qui."""
-    from pack3d import versione, vista
-    caso = _casi(args.casi, [args.nome])[0]
+    """I casi del parco sullo Space vero, appena ripartito col codice di qui:
+    quelli nominati, o uno per famiglia (`_una_per_famiglia`). Esce col
+    codice peggiore: 0 ok, 1 dubbio, 2 sbagliato, 3 non costruito o senza
+    controllo dell'AI. Sono prove: non contano nelle statistiche dello Space
+    (`_richiesta`)."""
+    from pack3d import versione
+    if args.nomi:
+        casi = [(None, c) for c in _casi(args.casi, args.nomi)]
+    else:
+        casi = _una_per_famiglia(args.casi)
     url = args.url.rstrip("/")
     attesa = versione.impronta(QUI)
     fine = time.time() + args.attendi * 60
@@ -697,33 +727,53 @@ def spazio(args):
         print("lo Space dice %s, aspetto %s" % (in_linea, attesa))
         sys.stdout.flush()
         time.sleep(30)
-    print("lo Space e' alla versione %s: costruisco %s" % (attesa, args.nome))
+    print("lo Space e' alla versione %s: costruisco %d %s" % (
+        attesa, len(casi), "caso" if len(casi) == 1 else "casi, uno per famiglia"
+        if not args.nomi else "casi"))
+    sys.stdout.flush()
+    esiti = []
+    for famiglia, caso in casi:
+        esiti.append((famiglia, caso["nome"], _uno_sullo_spazio(url, args, caso, attesa)))
+    if len(esiti) > 1:
+        nomi = {v: k for k, v in ESITI.items()}
+        print("\n%d casi: %s" % (len(esiti), ", ".join(
+            "%s %s" % (f or n, nomi.get(c, "non costruito")) for f, n, c in esiti)))
+    raise SystemExit(max(c for _f, _n, c in esiti))
+
+
+def _uno_sullo_spazio(url, args, caso, attesa):
+    """Un caso sullo Space: GLB, viste e verdetto in `args.uscita`; torna il
+    codice d'uscita del caso."""
+    from pack3d import vista
+    nome = caso["nome"]
+    print("\n%s" % nome)
     sys.stdout.flush()
     stato, glb, avvisi, sec, controllo = _costruisci_caso(url, args.casi, caso)
     os.makedirs(args.uscita, exist_ok=True)
-    esito = dict(nome=args.nome, url=url, versione=attesa, stato=stato,
+    esito = dict(nome=nome, url=url, versione=attesa, stato=stato,
                  secondi=round(sec, 1), avvisi=avvisi, controllo=controllo)
     if glb is not None:
-        f = os.path.join(args.uscita, args.nome + "_spazio.glb")
+        f = os.path.join(args.uscita, nome + "_spazio.glb")
         with open(f, "wb") as fh:
             fh.write(glb)
         esito["md5"] = hashlib.md5(glb).hexdigest()
         im, _ingombro = vista.viste(f, 512)
-        im.save(os.path.join(args.uscita, args.nome + "_spazio_viste.png"))
-    with open(os.path.join(args.uscita, args.nome + "_spazio.json"), "w",
+        im.save(os.path.join(args.uscita, nome + "_spazio_viste.png"))
+    with open(os.path.join(args.uscita, nome + "_spazio.json"), "w",
               encoding="utf-8") as fh:
         json.dump(esito, fh, indent=1, ensure_ascii=False)
     if stato != 200:
         print("costruzione fallita sullo Space (%d): %s" % (stato, avvisi[0][:300]))
-        raise SystemExit(3)
+        return 3
     if not controllo:
         print("costruito in %.0f s, ma il controllo dell'AI non c'e' stato" % sec)
-        raise SystemExit(3)
+        return 3
     print("costruito in %.0f s - controllo dell'AI: %s" % (sec, controllo.get("esito")))
     print("  %s" % controllo.get("motivo", ""))
     for d in controllo.get("difetti") or []:
         print("  - %s" % d)
-    raise SystemExit(ESITI.get(controllo.get("esito"), 3))
+    sys.stdout.flush()
+    return ESITI.get(controllo.get("esito"), 3)
 
 
 # come encodeURIComponent, che e' quello che Glam decodifica
@@ -2588,11 +2638,13 @@ def main():
     m.add_argument("--approva", action="store_true",
                    help="scrive le misure di questi modelli come approvate")
     m.set_defaults(fai=misure_del_parco)
-    s = sub.add_parser("spazio", help="prova un caso sullo Space vero, "
-                                      "appena ripartito col codice di qui")
+    s = sub.add_parser("spazio", help="prova dei casi sullo Space vero, appena "
+                                      "ripartito col codice di qui: uno per "
+                                      "famiglia, o quelli nominati")
     s.add_argument("url", help="per esempio https://iccio-maurizio.hf.space")
     s.add_argument("casi", help="clone del repository privato dei casi")
-    s.add_argument("nome", help="il caso del parco da provare")
+    s.add_argument("nomi", nargs="*", help="i casi del parco da provare (di serie: "
+                                           "uno per famiglia, il piu' leggero)")
     s.add_argument("--uscita", default="/tmp/parco_spazio",
                    help="dove salvare GLB, viste e verdetto")
     s.add_argument("--attendi", type=int, default=25,

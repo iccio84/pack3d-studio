@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import contextlib
 import io
+import json
 import os
 import shutil
 import sys
@@ -537,6 +538,22 @@ class Statistiche(unittest.TestCase):
         self.assertEqual(self.st.motivo(e),
                          "ValueError: astuccio: i fianchi non tornano con # mm")
 
+    def test_una_prova_non_conta(self):
+        import threading
+        self.st.in_prova(True)
+        self.addCleanup(self.st.in_prova, False)
+        self.st.conta("costruzione", dichiarato="flowpack", letto="flowpack")
+        # un'altra richiesta, nel suo thread, conta
+        t = threading.Thread(target=self.st.conta, args=("lettura",),
+                             kwargs=dict(dichiarato="carton", letto="carton"))
+        t.start()
+        t.join()
+        self.st.in_prova(False)
+        self.st.conta("verdetto", letto="flowpack", esito="ok")
+        r = self.st.riassunto()
+        self.assertEqual(r["eventi"], 2)
+        self.assertNotIn("costruzione", r["conti"])
+
     def test_le_righe_si_sommano(self):
         for _ in range(2):
             self.st.conta("fermata", fase="lettura", dichiarato="carton",
@@ -957,6 +974,44 @@ class BallotinTolleranzaCercata(unittest.TestCase):
         b, provate = self._prova(99)
         self.assertIsNone(b)
         self.assertEqual(provate, [0.3, 0.36, 0.24, 0.42, 0.18])
+
+
+class ProvaDelloSpazio(unittest.TestCase):
+    """`prove/parco.py spazio`: un caso per famiglia, il piu' leggero, e le
+    richieste del parco segnate come prove."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        self.parco = parco
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.dir, True))
+        os.makedirs(os.path.join(self.dir, "parco", "pdf"))
+        casi = []
+        letture = {}
+        for nome, kind, peso in (("a", "flowpack", 300), ("b", "flowpack", 100),
+                                 ("c", "vassoio", 200), ("d", None, 50)):
+            with open(os.path.join(self.dir, "parco", "pdf", nome + ".pdf"), "wb") as fh:
+                fh.write(b"%PDF" + b"x" * peso)
+            casi.append({"nome": nome, "file": [nome + ".pdf"], "opzioni": {"kind": "x"}})
+            # "d" non ha una lettura approvata: non si prova
+            if kind:
+                letture[nome] = {"kind": kind, "title": kind}
+        with open(os.path.join(self.dir, "parco", "parco.json"), "w") as fh:
+            json.dump({"casi": casi}, fh)
+        with open(os.path.join(self.dir, "parco", "letture.json"), "w") as fh:
+            json.dump(letture, fh)
+
+    def test_uno_per_famiglia_il_piu_leggero(self):
+        scelti = [(k, c["nome"]) for k, c in self.parco._una_per_famiglia(self.dir)]
+        self.assertEqual(scelti, [("flowpack", "b"), ("vassoio", "c")])
+
+    def test_la_richiesta_del_parco_e_una_prova(self):
+        caso = {"nome": "a", "file": ["a.pdf"], "opzioni": {"kind": "flowpack"}}
+        req = self.parco._richiesta("http://x", "/api/build", self.dir, caso)
+        opts = json.loads(req.get_header("X-pack3d"))
+        self.assertIs(opts["prova"], True)
+        self.assertEqual(opts["kind"], "flowpack")
 
 
 class NumeriDelleQuote(unittest.TestCase):

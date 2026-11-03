@@ -844,6 +844,9 @@ class Handler(BaseHTTPRequestHandler):
             if not data.startswith(b"%PDF"):
                 return self._send(400, "Il file caricato non e' un PDF")
             opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            # la prova dello Space a ogni rilascio non e' un lavoro vero: non
+            # conta nelle statistiche (`statistiche.in_prova`)
+            statistiche.in_prova(isinstance(opts, dict) and opts.get("prova") is True)
             # L'immagine del prodotto da incartare arriva in coda, dopo i PDF
             # (vedi `_separa_prodotto`): gli incarti la chiedono, perche' la
             # misura finale del 3D dipende anche dal prodotto.
