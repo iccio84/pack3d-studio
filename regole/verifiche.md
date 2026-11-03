@@ -204,12 +204,14 @@ copertina 44 su 44, miniatura 43, un quarto di giro 41. Le varianti diverse gia'
 registro (`varianti --approva`): una diversa che non c'e' e' un difetto
 nuovo.
 
-Due volte a settimana le Actions di `pack3d-casi` fanno girare le varianti
+Tre volte a settimana le Actions di `pack3d-casi` fanno girare le varianti
 col codice di `coda-settimana` (`varianti.yml`): la domenica le pagine
 variate - un quarto di giro, la copertina, la miniatura -, il mercoledi' il
 disegno variato nella penna del DT - le quote, la cornice, la legenda
-(`_disegno_in_piu`, regole/flowpack.md). Rosso se una variante nuova esce
-diversa. `appiattito` -
+(`_disegno_in_piu`, regole/flowpack.md) -, il lunedi' le varianti sommate,
+come arrivano davvero: la cornice su una tavola girata, le quote con la
+legenda, le quote con una miniatura accanto. Rosso se una variante nuova
+esce diversa. Un giro interrotto riprende con `--riusa`. `appiattito` -
 il PDF ripassato da Ghostscript, senza testo vivo ne' livelli - nel giro non
 c'e': Ghostscript butta anche gran parte del disegno tecnico (sul wafer T1
 le linee da 1187 a 212), e misura lui, non il codice.

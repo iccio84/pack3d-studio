@@ -812,6 +812,26 @@ class QuoteFuoriDallaFustella(unittest.TestCase):
         # senza numeri resta tutto: la quota senza il suo numero non si sa
         self.assertEqual(len(dl._largest_cluster(corpo + quota)), len(corpo + quota))
 
+    def test_la_cornice_non_e_l_altra_vista(self):
+        """Un gruppo lungo quanto la fustella che la racchiude e' la cornice
+        della tavola, non la vista di dentro: anche se sotto ha piu' grafica."""
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        # a 30 punti, piu' del distacco dei gruppi; lunga il 93% del corpo
+        cornice = [("H", -30.0, -30.0, 330.0, st), ("H", 230.0, -30.0, 330.0, st),
+                   ("V", -30.0, -30.0, 230.0, st), ("V", 330.0, -30.0, 230.0, st)]
+        tutto = lambda r: (r[2] - r[0]) * (r[3] - r[1])  # piu' grande, piu' grafica
+        con = dl._largest_cluster(corpo + cornice, dettaglio=tutto)
+        self.assertEqual(sorted(con), sorted(corpo))
+        # due viste affiancate restano due viste: vince quella con piu' grafica
+        dentro = [(k, c + (400.0 if k == "V" else 0.0), a + (400.0 if k == "H" else 0.0),
+                   b + (400.0 if k == "H" else 0.0), st) for k, c, a, b, st in corpo]
+        con = dl._largest_cluster(corpo + dentro,
+                                  dettaglio=lambda r: 1.0 if r[0] > 100 else 0.0)
+        self.assertEqual(sorted(con), sorted(dentro))
+
 
 class GrigliaRicucita(unittest.TestCase):
     """`tools._griglia_ricucita`: una piega disegnata a pezzi resta una

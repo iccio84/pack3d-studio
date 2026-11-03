@@ -593,7 +593,14 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     `ALTRA_VISTA` del piu' lungo, sono la vista di fuori e quella di dentro
     affiancate, e si tiene quella con piu' grafica sotto. La vista di dentro
     ha spesso PIU' tratti (i contorni delle zone segnaposto, nella stessa
-    penna) ed e' piu' lunga: per lunghezza vinceva lei."""
+    penna) ed e' piu' lunga: per lunghezza vinceva lei.
+
+    Due viste stanno una accanto all'altra, mai una dentro l'altra: un gruppo
+    che racchiude il piu' lungo e' la cornice della tavola, non l'altra
+    vista. Sul display a vassoio T1x40 con una cornice a dieci millimetri,
+    nella penna del taglio, la cornice era lunga l'80,04% della fustella:
+    passava per l'altra vista, aveva piu' grafica sotto - tutta - e la
+    griglia prendeva i suoi lati per pieghe."""
     if not segs:
         return segs
     groups = {id(g): g for g in _gruppi(segs, gap)}
@@ -604,9 +611,15 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     def riq(g):
         return (min(b[0] for _, b in g), min(b[1] for _, b in g),
                 max(b[2] for _, b in g), max(b[3] for _, b in g))
+
+    def racchiude(g, h, t=4.0):
+        r, q = riq(g), riq(h)
+        return (r[0] <= q[0] + t and r[1] <= q[1] + t
+                and r[2] >= q[2] - t and r[3] >= q[3] - t)
     main = max(groups.values(), key=lung)
     if dettaglio is not None:
-        viste = [g for g in groups.values() if lung(g) >= ALTRA_VISTA * lung(main)]
+        viste = [g for g in groups.values() if lung(g) >= ALTRA_VISTA * lung(main)
+                 and (g is main or not racchiude(g, main))]
         if len(viste) > 1:
             main = max(viste, key=lambda g: dettaglio(riq(g)))
     principale = main
