@@ -344,16 +344,24 @@ def _giro(casi_dir, uscita, nomi, soglia=None, valore=None, mappa=False):
 
 def _spinto(v, passo, segno, nome=""):
     """Il valore spostato di `passo` (frazione) verso `segno`; un intero di
-    almeno uno. None se non si sposta: lo zero, e una frazione (fra 0 e 1,
-    senza unita' nel nome) portata a 1 o oltre - una copertura del 106% non
-    si chiede, e chi cambia li' non dice niente."""
+    almeno uno; None se non si sposta (lo zero).
+
+    Una frazione oltre la meta' (fra 0,5 e 1, senza unita' nel nome) si
+    sposta nella parte che MANCA: `COPRE` = 0,9 vuol dire che puo' mancare
+    il 10% della linea, e spostarla del 10% vuol dire che ne puo' mancare il
+    9 o l'11 - non portarla a 0,99, che ne lascia mancare un decimo. Col
+    valore spostato i display con plancia, che coprono il 98%, sembravano a
+    un passo dal cadere, e ci stavano a 17 mm di linea. Sotto la meta' (una
+    stampa del 20%) si sposta il valore."""
     if v == 0:
         return None
     if type(v) is int:
         d = max(1, int(round(abs(v) * passo)))
         return v + segno * d
-    w = v * (1.0 + segno * passo)
     frazione = 0 < v < 1 and not re.search(r"_(MM|PT|PX|GRADI)$", nome)
+    if frazione and v > 0.5:
+        return 1.0 - (1.0 - v) * (1.0 - segno * passo)
+    w = v * (1.0 + segno * passo)
     if frazione and w >= 1.0:
         return None
     return w

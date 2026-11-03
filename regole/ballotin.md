@@ -42,6 +42,17 @@ facce una per una.
   un capo a 0,29 mm da due nodi li unisce tutti e due. Sul ballotin
   l'angolo del fondo si spezzava in due nodi, e una lente si fondeva col
   fronte.
+- **La tolleranza dei nodi si cerca** (`NODO_PROVE`). Si prova `NODO`, 0,3
+  mm, e se il ballotin non torna le vicine - 0,36, 0,24, 0,42, 0,18 - e vale
+  la prima che lo da'. Nel CAD un tratto finisce sul bordo visibile di una
+  curva fatta con la penna spessa (0,72-0,85 punti, cioe' 0,25-0,30 mm): sul
+  ballotin del parco tre giunzioni stanno a 0,27-0,29 mm, e due capi che non
+  vanno uniti a 0,38-0,5. Le distanze fra i capi vanno da 0 a 1 mm senza un
+  buco, e una tolleranza sola stava in una finestra di 0,08 mm: lo ha detto
+  `prove/soglie.py` (regole/verifiche.md, *Quanto manca alle soglie*). Il
+  ballotin si riconosce solo se tornano il fondo quadrato, le quattro lenti
+  e i coperchi, e una tolleranza che lo da' e' gia' una prova; sui ballotin
+  che tornano al primo colpo non costa niente.
 - **Un tratto ripassato e' un tratto solo.** Due archi uguali fra gli stessi
   nodi hanno lo stesso angolo d'uscita, e l'ordine fra i due e' a caso: la
   cordonatura fra L1 e T1, con un pezzo disegnato due volte, non divideva

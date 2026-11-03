@@ -892,12 +892,14 @@ class SoglieSpostate(unittest.TestCase):
         # un intero si sposta almeno di uno; lo zero non si sposta
         self.assertEqual((soglie._spinto(4, 0.1, +1), soglie._spinto(4, 0.1, -1)), (5, 3))
         self.assertIsNone(soglie._spinto(0, 0.25, +1))
-        # una frazione non va a 1 o oltre; una misura in mm si'
-        self.assertIsNone(soglie._spinto(0.9, 0.25, +1, "pack3d.plancia.COPRE"))
+        # una frazione oltre la meta' si sposta nella parte che manca; una
+        # misura in mm si sposta nel valore
+        self.assertAlmostEqual(soglie._spinto(0.9, 0.25, +1, "pack3d.plancia.COPRE"), 0.925)
+        self.assertAlmostEqual(soglie._spinto(0.9, 0.25, -1, "pack3d.plancia.COPRE"), 0.875)
         self.assertAlmostEqual(soglie._spinto(0.9, 0.25, +1, "pack3d.x.LARGO_MM"), 1.125)
         i, v = soglie._primo(0.9, +1, "pack3d.plancia.COPRE")
-        self.assertEqual(i, 1)
-        self.assertAlmostEqual(v, 0.99)
+        self.assertEqual(i, 0)
+        self.assertAlmostEqual(v, 0.925)
         # un intero che al passo dopo resta uguale non si riprova
         self.assertIsNone(soglie._primo(4, +1, "pack3d.ballotin.LENTI", 1, 5))
 
@@ -906,6 +908,44 @@ class SoglieSpostate(unittest.TestCase):
         g = {"TAGLIA": 0.2, "PT2MM": 0.35, "_BEZIER": 3, "ATTIVO": True, "NOME": "x",
              "minuscola": 1.0}
         self.assertEqual(soglie._numeriche(g), {"TAGLIA"})
+
+
+class BallotinTolleranzaCercata(unittest.TestCase):
+    """`ballotin.riconosci`: se con NODO il ballotin non torna, si riprova
+    con le tolleranze vicine (NODO_PROVE), e vale la prima che lo da'."""
+
+    def _prova(self, torna_alla):
+        from pack3d import ballotin as B
+        provate = []
+
+        def grafo(restano, tol=B.NODO):
+            provate.append(round(tol, 3))
+            return np.zeros((0, 2)), []
+
+        def classifica(ff, archi, page_no=0):
+            return "ballotin" if len(provate) == torna_alla else None
+        with mock.patch.object(B, "tratti_fustella", return_value=[np.zeros((2, 2))]), \
+                mock.patch.object(B, "ha_lenti", return_value=True), \
+                mock.patch.object(B, "tratteggi", return_value=set()), \
+                mock.patch.object(B, "grafo", side_effect=grafo), \
+                mock.patch.object(B, "ripara", side_effect=lambda n, a: a), \
+                mock.patch.object(B, "pota", side_effect=lambda a: a), \
+                mock.patch.object(B, "facce", return_value=[]), \
+                mock.patch.object(B, "principale", return_value=None), \
+                mock.patch.object(B, "componi", return_value=[]), \
+                mock.patch.object(B, "_classifica", side_effect=classifica):
+            return B.riconosci("finto.pdf"), provate
+
+    def test_al_primo_colpo_non_si_riprova(self):
+        self.assertEqual(self._prova(1), ("ballotin", [0.3]))
+
+    def test_si_riprova_con_le_vicine(self):
+        self.assertEqual(self._prova(3), ("ballotin", [0.3, 0.36, 0.24]))
+
+    def test_se_nessuna_torna_non_e_un_ballotin(self):
+        b, provate = self._prova(99)
+        self.assertIsNone(b)
+        self.assertEqual(provate, [0.3, 0.36, 0.24, 0.42, 0.18])
 
 
 class NumeriDelleQuote(unittest.TestCase):
