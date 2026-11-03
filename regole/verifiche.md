@@ -211,8 +211,71 @@ disegno variato nella penna del DT - le quote, la cornice, la legenda
 (`_disegno_in_piu`, regole/flowpack.md). Rosso se una variante nuova esce
 diversa. `appiattito` -
 il PDF ripassato da Ghostscript, senza testo vivo ne' livelli - nel giro non
-c'e': Ghostscript butta anche gran parte del disegno tecnico (sul Tronky T1
+c'e': Ghostscript butta anche gran parte del disegno tecnico (sul wafer T1
 le linee da 1187 a 212), e misura lui, non il codice.
+
+## Quanto manca alle soglie
+
+Il parco dice che un caso esce giusto, non quanto e' vicino a uscire
+sbagliato. Il pane ripieno T1 del riempimento col display da 15 aveva il 15,6% di
+stampa oltre il lato sinistro, con la soglia di `tagliati` al 20%: e' bastata
+la linea di una cornice per farlo cadere (regole/flowpack.md). Il parco lo
+dava giusto, e nessuno sapeva che stava a quattro punti dal bivio.
+
+`prove/soglie.py` lo misura. Spostare una soglia del 10% equivale a spostare
+del 10% il valore misurato sul caso: se la lettura cambia, il caso stava a
+meno del 10% dalla soglia.
+
+- **La mappa.** Ogni caso si legge una volta, come `/api/analyze` della
+  pagina ma chiamato nel processo (`server.esegui_lavoro`), tracciando le
+  funzioni che passano: delle costanti numeriche dei moduli di pack3d
+  (`NOME = numero`) si tengono quelle che nominano, anche come valore di serie
+  di un argomento. Ogni soglia si riprova solo sui casi che passano da lei.
+  La lettura di questo giro e' il riferimento, e deve essere uguale a quella
+  approvata (`parco/letture.json`): lo strumento lo dice.
+- **La spinta.** Ogni soglia, in un processo nuovo, si sposta del 25% in su e
+  in giu' dappertutto dove il codice la vede - il modulo che la scrive, quelli
+  che la importano, i valori di serie degli argomenti - e si rileggono i suoi
+  casi; dove una lettura cambia si riprova al 10% e al 5%. Un intero si sposta
+  almeno di uno; una frazione non si porta a 1 o oltre (una copertura del 106%
+  non si chiede).
+- **L'esito.** I casi vicini a una soglia - la lettura cambia in un verso
+  solo: una decisione che cambia strada - dal passo piu' piccolo, con cosa
+  cambia; poi i valori che entrano nella lettura - cambiano in tutti e due i
+  versi, come una misura quando cambia un numero che la compone: non sono
+  bivi.
+
+Restano fuori le unita' di misura e le risoluzioni (`PT2MM`, `CAMPIONI`,
+`SCALA_ANALISI`) e le costanti col trattino basso davanti, che sono codici e
+tetti di memoria. Le casse su disco, i lavoratori, il controllo dell'AI e le
+statistiche sono spenti. Sul parco intero sono due ore e piu'; i giri restano
+nella cartella di uscita e, con lo stesso codice, un giro interrotto riprende.
+
+    python3 prove/soglie.py CASI USCITA [--solo a,b] [--soglie pack3d.flowpack.TAGLIA_GRAFICA]
+
+Il primo giro, il 3 novembre 2026: 45 casi, 131 soglie, 302 giri. 113
+soglie reggono il 25% in tutti e due i versi; 8 sono valori che entrano
+nella lettura (l'angolo d'apertura proposto, la pattina e l'orlo del tubo, le
+alette dell'incarto). Vicini a una soglia, entro il 10%:
+
+- **i display con plancia** (`plancia.COPRE`, 90%): sul display dei biscotti,
+  sul suo riempimento e sul display del wafer T1 il bordo di una parete copre
+  il lato del fondo fra il 90 e il 99%. Una linea un po' piu' interrotta e il
+  display non si riconosce piu'. Il display dei biscotti sta anche entro il
+  25% da `COPRE_FIANCO` e `FRONTE_BASSO`: e' la famiglia piu' fragile;
+- **il ballotin** (`ballotin.NODO`, 0,3 mm): due capi del disegno stanno fra
+  0,27 e 0,3 mm; con la soglia a 0,27 non e' piu' un ballotin;
+- **un astuccio con due disegni sul foglio** (`dieline.ALTRA_VISTA`, 0,8): il
+  secondo e' lungo fra l'80 e l'88% del primo; con la soglia a 0,88 l'astuccio
+  esce lungo 94 mm invece di 143;
+- gli avvisi della grafica in RGB (`techink.RGB_MINIMO_PX`, 500 000 pixel):
+  un'immagine da 992 x 527 sta al 4,5% dalla soglia. E' un avviso: il
+  modello non cambia.
+
+Entro il 25%: il riempimento di un vassoio espositore
+(`vassoio.CORDONATURA_LARGA`), il display a scatola da 15
+(`scatola_plancia.BUCO`, 4 mm: a 3 non si riconosce) e il ballotin con
+`LENTI` - ne ha quattro e ne servono quattro: e' il conto, non un margine.
 
 ## La lettura del PDF accanto al modello
 
