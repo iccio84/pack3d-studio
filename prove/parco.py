@@ -2652,9 +2652,13 @@ def varianti(args):
     from contextlib import redirect_stdout
     import io
     with redirect_stdout(io.StringIO()):
+        # con --riusa un giro interrotto riprende: i PDF variati escono uguali
+        # al byte, e i casi gia' costruiti col codice di adesso restano
+        riusa = getattr(args, "riusa", False)
         costruisci(argparse.Namespace(casi=args.casi, uscita=originali, codice=None,
-                                      solo=[c["nome"] for c in tutte]))
-        costruisci(argparse.Namespace(casi=finto, uscita=variate, codice=None, solo=None))
+                                      solo=[c["nome"] for c in tutte], riusa=riusa))
+        costruisci(argparse.Namespace(casi=finto, uscita=variate, codice=None, solo=None,
+                                      riusa=riusa))
     risultati, conto = {}, {}
     for x in nuovi:
         c, v = x["originale"], x["variante"]
@@ -2870,6 +2874,9 @@ def main():
                     help="solo questi casi, separati da virgole")
     va.add_argument("--tieni", action="store_true",
                     help="non cancellare i PDF variati alla fine")
+    va.add_argument("--riusa", action="store_true",
+                    help="non ricostruire i casi gia' costruiti in USCITA con "
+                         "questo codice e gli stessi file (un giro interrotto)")
     va.add_argument("--approva", action="store_true",
                     help="scrive le varianti diverse di adesso come note "
                          "(limiti dichiarati), in parco/varianti.json")
