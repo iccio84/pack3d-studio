@@ -1725,7 +1725,7 @@ def _senza_linee(raster, S, sc):
     """Il raster con le linee del disegno dipinte di bianco.
 
     Oltre un lato, `tagliati` chiede se la GRAFICA continua: una linea del DT
-    non e' grafica. Sul T1 B-ready del riempimento col display, la cornice
+    non e' grafica. Sul pane ripieno T1 del riempimento col display, la cornice
     della tavola a dieci millimetri dallo steso portava la striscia di
     sinistra dal 15,6% al 21,2% di stampa, oltre TAGLIA_GRAFICA: il lato
     vero sembrava tagliare la grafica, e vinceva il riquadro chiuso dalla

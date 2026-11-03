@@ -2,7 +2,7 @@
 Quanto manca alle soglie: per ogni caso del parco, a quale costante del
 codice la sua lettura e' vicina, e di quanto.
 
-Il T1 B-ready del riempimento col display da 15 aveva il 15,6% di stampa
+Il pane ripieno T1 del riempimento col display da 15 aveva il 15,6% di stampa
 oltre il lato, con la soglia di `tagliati` al 20%: e' bastata la linea di una
 cornice per farlo cadere. Il parco lo diceva giusto, e nessuno sapeva che
 stava a quattro punti dal cadere. Questo strumento lo dice prima.
@@ -342,18 +342,38 @@ def _giro(casi_dir, uscita, nomi, soglia=None, valore=None, mappa=False):
         return json.load(fh), time.time() - t
 
 
-def _spinto(v, passo, segno):
+def _spinto(v, passo, segno, nome=""):
     """Il valore spostato di `passo` (frazione) verso `segno`; un intero di
-    almeno uno. None se non si sposta (lo zero)."""
+    almeno uno. None se non si sposta: lo zero, e una frazione (fra 0 e 1,
+    senza unita' nel nome) portata a 1 o oltre - una copertura del 106% non
+    si chiede, e chi cambia li' non dice niente."""
     if v == 0:
         return None
     if type(v) is int:
         d = max(1, int(round(abs(v) * passo)))
         return v + segno * d
-    return v * (1.0 + segno * passo)
+    w = v * (1.0 + segno * passo)
+    frazione = 0 < v < 1 and not re.search(r"_(MM|PT|PX|GRADI)$", nome)
+    if frazione and w >= 1.0:
+        return None
+    return w
+
+
+def _primo(v, segno, nome, da=0, prima=None):
+    """(indice, valore) del primo passo di `PASSI`, da `da` in giu', che sposta
+    davvero la soglia (diverso da `prima`), o None."""
+    for i in range(da, len(PASSI)):
+        w = _spinto(v, PASSI[i], segno, nome)
+        if w is not None and w != prima:
+            return i, w
+    return None
 
 
 def _cosa_cambia(a, b):
+    if isinstance(b, str) and not isinstance(a, str):
+        return ["la lettura diventa un errore: %s" % b[:160]]
+    if isinstance(a, str) and not isinstance(b, str):
+        return ["l'errore diventa una lettura (%s)" % b.get("title", "?")]
     sys.path.insert(0, os.path.join(QUI, "prove"))
     import parco
     righe = parco._differenze(a, b)
@@ -436,9 +456,9 @@ def guida(args):
     lavori = []
     for s in soglie:
         for segno in (+1, -1):
-            v = _spinto(valori[s], PASSI[0], segno)
-            if v is not None and esiti[s]["casi"]:
-                lavori.append((s, segno, 0, v, esiti[s]["casi"]))
+            p = _primo(valori[s], segno, s)
+            if p is not None and esiti[s]["casi"]:
+                lavori.append((s, segno, p[0], p[1], esiti[s]["casi"]))
     fatti = 0
     while lavori:
         with ThreadPoolExecutor(paralleli) as pool:
@@ -454,10 +474,9 @@ def guida(args):
                 esiti[s]["cambia"].setdefault(n, {})["%+d" % segno] = {
                     "passo": PASSI[i], "valore": v,
                     "cosa": _cosa_cambia(mappa[n]["lettura"], out.get(n))}
-            if cambiati and i + 1 < len(PASSI):
-                v2 = _spinto(valori[s], PASSI[i + 1], segno)
-                if v2 is not None and v2 != v:
-                    nuovi.append((s, segno, i + 1, v2, cambiati))
+            p = _primo(valori[s], segno, s, i + 1, v) if cambiati else None
+            if p is not None:
+                nuovi.append((s, segno, p[0], p[1], cambiati))
         print("  %d giri fatti, %d da fare (%.0f s)" % (fatti, len(nuovi), time.time() - t0),
               flush=True)
         lavori = nuovi
@@ -475,11 +494,17 @@ def guida(args):
 
 
 def rapporto(esiti, n_casi, secondi):
-    """Il riassunto in markdown: i casi piu' vicini a una soglia, poi le
-    soglie che fanno cambiare qualcuno."""
-    vicini = []
+    """Il riassunto in markdown. Prima i casi vicini a una soglia - la
+    lettura cambia spostandola in un verso solo: una decisione che cambia
+    strada -, dal passo piu' piccolo. Poi i valori che entrano nella
+    lettura: cambia in tutti e due i versi, come cambia una misura quando
+    cambia un numero che la compone, e non e' una strada vicina al bivio."""
+    vicini, valori = [], {}
     for s, e in esiti.items():
         for n, versi in e["cambia"].items():
+            if len(versi) == 2:
+                valori.setdefault(s, []).append(n)
+                continue
             for verso, d in versi.items():
                 vicini.append((d["passo"], n, s, verso, e["valore"], d["valore"], d["cosa"]))
     vicini.sort(key=lambda x: (x[0], x[1], x[2]))
@@ -489,19 +514,36 @@ def rapporto(esiti, n_casi, secondi):
              % (n_casi, len(esiti), ", ".join("%d%%" % round(p * 100) for p in PASSI),
                 secondi / 60.0),
              ""]
-    if not vicini:
-        righe += ["Nessun caso cambia: tutti stanno a piu' del %d%% da ogni soglia."
+    if vicini:
+        righe += ["### Vicini a una soglia",
+                  "",
+                  "La lettura cambia spostando la soglia in un verso solo: il valore "
+                  "misurato sul caso sta entro quel passo da lei.",
+                  "",
+                  "| entro | caso | soglia | verso | valore -> spostato | cosa cambia |",
+                  "|---|---|---|---|---|---|"]
+        for passo, n, s, verso, v, v2, cosa in vicini:
+            righe.append("| %d%% | %s | `%s` | %s | %s -> %s | %s |" % (
+                round(passo * 100), n, s, "su" if verso == "+1" else "giu'",
+                _num(v), _num(v2), "<br>".join(c.strip().replace("|", "/")[:140]
+                                               for c in cosa)))
+        righe.append("")
+    else:
+        righe += ["Nessun caso e' vicino a una soglia: tutti stanno a piu' del %d%%."
                   % round(PASSI[0] * 100), ""]
-        return "\n".join(righe) + "\n"
-    righe += ["| entro | caso | soglia | verso | valore -> spostato | cosa cambia |",
-              "|---|---|---|---|---|---|"]
-    for passo, n, s, verso, v, v2, cosa in vicini:
-        righe.append("| %d%% | %s | `%s` | %s | %s -> %s | %s |" % (
-            round(passo * 100), n, s, "su" if verso == "+1" else "giu'",
-            _num(v), _num(v2), "<br>".join(c.strip().replace("|", "/")[:120] for c in cosa)))
+    if valori:
+        righe += ["### Valori che entrano nella lettura",
+                  "",
+                  "Cambiano la lettura in tutti e due i versi: sono numeri che la "
+                  "compongono (un angolo proposto, una misura d'uso), non bivi.",
+                  ""]
+        for s in sorted(valori):
+            righe.append("- `%s` (%s): %s" % (s, _num(esiti[s]["valore"]),
+                                             ", ".join(sorted(valori[s]))))
+        righe.append("")
     regge = sorted(s for s, e in esiti.items() if not e["cambia"])
-    righe += ["", "Reggono al %d%% in tutti e due i versi: %d soglie."
-              % (round(PASSI[0] * 100), len(regge)), ""]
+    righe += ["Reggono in tutti e due i versi: %d soglie su %d." % (len(regge), len(esiti)),
+              ""]
     return "\n".join(righe) + "\n"
 
 

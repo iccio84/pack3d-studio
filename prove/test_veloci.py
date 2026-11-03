@@ -681,7 +681,7 @@ class GiudiceDelloSteso(unittest.TestCase):
         # oltre il capo sinistro, fra 6 e 12 mm, la stampa e' poca (il 18%
         # della striscia) e la linea della cornice, a 10 mm, la porterebbe
         # oltre TAGLIA_GRAFICA: una linea del disegno non e' grafica, e il
-        # capo sinistro resta un taglio (il T1 B-ready del display da 15)
+        # capo sinistro resta un taglio (il pane ripieno T1 del display da 15)
         fpk, S, hs, vs, raster = self._steso(cornice=True)
         mm = 1.0 / fpk.PT2MM
         for k, c, a, b, st in S:
@@ -892,6 +892,14 @@ class SoglieSpostate(unittest.TestCase):
         # un intero si sposta almeno di uno; lo zero non si sposta
         self.assertEqual((soglie._spinto(4, 0.1, +1), soglie._spinto(4, 0.1, -1)), (5, 3))
         self.assertIsNone(soglie._spinto(0, 0.25, +1))
+        # una frazione non va a 1 o oltre; una misura in mm si'
+        self.assertIsNone(soglie._spinto(0.9, 0.25, +1, "pack3d.plancia.COPRE"))
+        self.assertAlmostEqual(soglie._spinto(0.9, 0.25, +1, "pack3d.x.LARGO_MM"), 1.125)
+        i, v = soglie._primo(0.9, +1, "pack3d.plancia.COPRE")
+        self.assertEqual(i, 1)
+        self.assertAlmostEqual(v, 0.99)
+        # un intero che al passo dopo resta uguale non si riprova
+        self.assertIsNone(soglie._primo(4, +1, "pack3d.ballotin.LENTI", 1, 5))
 
     def test_le_costanti_che_non_sono_soglie(self):
         soglie = self._soglie()
