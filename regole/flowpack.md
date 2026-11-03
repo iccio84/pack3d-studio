@@ -836,7 +836,13 @@ varianti, e uno solo lo era:
   puo' andare oltre (il filo dell'abbondanza, una striscia sotto) e veniva
   attraversato. Ora la penna e' quella delle linee dentro lo steso e la
   cornice sta a 10 mm da tutto il DT dello steso (`_ingombro_tecnico`).
-  Rigenerate le varianti, il confronto e' rifatto sulle nuove.
+  Rigenerate le varianti, il confronto e' rifatto sulle nuove. Fuori dai
+  flowpack la cornice passa fuori anche dai tratti obliqui della penna
+  tecnica che partono dal disegno (`_fuori_dai_tratti`): `_ingombro_tecnico`
+  conta le sole righe dritte, e sul display a scatola da 15 la cornice
+  tagliava a meta' il tratteggio sopra il coperchio, sul ballotin i lati
+  inclinati. Le righe dritte oltre il disegno - quote, note - non la
+  spostano, e lo steso di un flowpack non ha tratti obliqui di fustella.
 
 Risultato, sulle varianti rigenerate: i 18 originali uguali; con le quote
 18 su 18, con la legenda 18 su 18, con la cornice 16 su 18. Delle due
@@ -855,12 +861,25 @@ alla cornice, dieci millimetri piu' in la', i lati dello steso non
 arrivano. Ora il lato vuoto costa solo se i suoi angoli restano aperti.
 Cornice 18 su 18.
 
-Resta aperto un caso piu' stretto: sul T2 al cioccolato fondente i tagli
-del passo non attraversano la pinna (angoli aperti), e il bordo della pinna
-e' disegnato 3,5 mm piu' largo dello steso per parte. Con la cornice a 10 mm
-dal DT il giudice ci arriva; con una cornice a 6,5 mm, come quella della
-vecchia variante, prende il riquadro senza la pinna. Separarli vorrebbe una
-soglia fra 3,5 e 10 mm fatta su quel disegno, e non c'e'.
+Poi un caso piu' stretto: sul T2 al cioccolato fondente i tagli del passo
+non attraversano la pinna (angoli aperti), ma il DT la disegna come fascia a
+se' - il suo bordo finisce 3,5 mm oltre gli angoli dello steso, entro
+l'abbondanza. Con una cornice a 6,5 mm dal DT il giudice prendeva il
+riquadro senza la pinna (141 invece di 155). La linea di una cornice supera
+gli angoli di sei millimetri e piu': ora gli angoli di un lato vuoto si
+dicono chiusi anche quando la sua linea finisce, da tutti e due i capi,
+entro `FASCIA_FUORI_MM` (5 mm) dagli angoli. Le 54 varianti e i 18 originali
+restano uguali; la cornice vicina del T2 torna 155 x 171.
+
+E una linea del disegno non e' grafica (`_senza_linee`). Sul T1 B-ready del
+riempimento col display da 15, oltre il capo sinistro, fra 6 e 12 mm, la
+stampa e' il 15,6% della striscia; la linea della cornice, a dieci
+millimetri, la portava al 21,2%, oltre `TAGLIA_GRAFICA`, e il lato vero
+sembrava tagliare la grafica: vinceva il riquadro chiuso dal lato sinistro
+della cornice, 160 mm invece di 150. Ora le strisce di `tagliati` si
+misurano col raster dove le linee del DT sono dipinte di bianco. Le 54
+varianti flowpack e i 18 originali si leggono come prima; il T1 B-ready con
+la cornice torna 112 x 150.
 
 Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
 decide, l'immagine integrale della stampa, per non rileggere il raster
