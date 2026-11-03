@@ -237,8 +237,11 @@ meno del 10% dalla soglia.
   in giu' dappertutto dove il codice la vede - il modulo che la scrive, quelli
   che la importano, i valori di serie degli argomenti - e si rileggono i suoi
   casi; dove una lettura cambia si riprova al 10% e al 5%. Un intero si sposta
-  almeno di uno; una frazione non si porta a 1 o oltre (una copertura del 106%
-  non si chiede).
+  almeno di uno. Una frazione oltre la meta' si sposta nella parte che MANCA:
+  `COPRE` = 0,9 vuol dire che puo' mancare il 10% della linea, e spostarla
+  del 10% vuol dire che ne puo' mancare il 9 o l'11 - non portarla a 0,99,
+  che ne lascia mancare un decimo. Sotto la meta' (una stampa del 20%) si
+  sposta il valore.
 - **L'esito.** I casi vicini a una soglia - la lettura cambia in un verso
   solo: una decisione che cambia strada - dal passo piu' piccolo, con cosa
   cambia; poi i valori che entrano nella lettura - cambiano in tutti e due i
@@ -253,29 +256,34 @@ nella cartella di uscita e, con lo stesso codice, un giro interrotto riprende.
 
     python3 prove/soglie.py CASI USCITA [--solo a,b] [--soglie pack3d.flowpack.TAGLIA_GRAFICA]
 
-Il primo giro, il 3 novembre 2026: 45 casi, 131 soglie, 302 giri. 113
-soglie reggono il 25% in tutti e due i versi; 8 sono valori che entrano
-nella lettura (l'angolo d'apertura proposto, la pattina e l'orlo del tubo, le
-alette dell'incarto). Vicini a una soglia, entro il 10%:
+Il primo giro, il 3 novembre 2026: 45 casi, 131 soglie, circa trecento
+giri. 118 soglie reggono il 25% in tutti e due i versi; 7 sono valori che
+entrano nella lettura (l'angolo d'apertura proposto, la pattina, l'orlo e la
+saldatura del tubo, le alette dell'incarto). Vicini a una soglia, entro il
+10%:
 
-- **i display con plancia** (`plancia.COPRE`, 90%): sul display dei biscotti,
-  sul suo riempimento e sul display del wafer T1 il bordo di una parete copre
-  il lato del fondo fra il 90 e il 99%. Una linea un po' piu' interrotta e il
-  display non si riconosce piu'. Il display dei biscotti sta anche entro il
-  25% da `COPRE_FIANCO` e `FRONTE_BASSO`: e' la famiglia piu' fragile;
-- **il ballotin** (`ballotin.NODO`, 0,3 mm): due capi del disegno stanno fra
-  0,27 e 0,3 mm; con la soglia a 0,27 non e' piu' un ballotin;
-- **un astuccio con due disegni sul foglio** (`dieline.ALTRA_VISTA`, 0,8): il
-  secondo e' lungo fra l'80 e l'88% del primo; con la soglia a 0,88 l'astuccio
-  esce lungo 94 mm invece di 143;
+- **il ballotin** (`ballotin.NODO`, 0,3 mm): tre giunzioni del disegno stanno
+  a 0,27-0,29 mm - nel CAD il tratto finisce sul bordo visibile di una curva
+  fatta con la penna spessa - e due capi che non vanno uniti a 0,38-0,5. Le
+  distanze fra i capi vanno da 0 a 1 mm senza un buco: una tolleranza sola
+  stava in una finestra di 0,08 mm, e non c'era un valore migliore. Ora la
+  tolleranza si cerca (`NODO_PROVE`, regole/ballotin.md): il ballotin si
+  legge uguale con `NODO` da 0,24 a 0,5;
 - gli avvisi della grafica in RGB (`techink.RGB_MINIMO_PX`, 500 000 pixel):
   un'immagine da 992 x 527 sta al 4,5% dalla soglia. E' un avviso: il
   modello non cambia.
 
 Entro il 25%: il riempimento di un vassoio espositore
-(`vassoio.CORDONATURA_LARGA`), il display a scatola da 15
-(`scatola_plancia.BUCO`, 4 mm: a 3 non si riconosce) e il ballotin con
-`LENTI` - ne ha quattro e ne servono quattro: e' il conto, non un margine.
+(`vassoio.CORDONATURA_LARGA`, 10 mm: a 7,5 non si legge), il display a
+scatola da 15 (`scatola_plancia.BUCO`, 4 mm: a 3 non si riconosce) e il
+ballotin con `LENTI` - ne ha quattro e ne servono quattro: e' il conto, non
+un margine.
+
+Il primo giro spostava anche le frazioni nel valore, e dava per fragili i
+display con plancia: il bordo di una parete copre il 98% del lato del fondo,
+con la soglia al 90%. Portata a 0,99 la soglia non tollera piu' niente, ma il
+bordo puo' perdere ancora 17 mm di linea prima di cadere: non erano fragili.
+Da li' la regola della parte che manca.
 
 ## La lettura del PDF accanto al modello
 
