@@ -616,16 +616,25 @@ class GiudiceDelloSteso(unittest.TestCase):
     """`flowpack._riquadro_coerente`: lati che non sono tagli, uno steso
     disegnato dalla prova (nessun file dei clienti)."""
 
-    def _steso(self, cornice=False, pinna_bianca=False, legenda=False):
+    def _steso(self, cornice=False, pinna_bianca=False, legenda=False, pinna_aperta=False):
         from pack3d import flowpack as fpk
         mm = 1.0 / fpk.PT2MM
         y0, y1, x0, x1 = 50.0, 50.0 + 100 * mm, 50.0, 50.0 + 150 * mm
         st = (0.5, "(0, 0, 0)")
-        inizio = y0 + (15 * mm if pinna_bianca else 0.0)
-        S = [("H", y, x0, x1, st) for y in (y0, y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1)]
-        S += [("V", x0, y0, y1, st), ("V", x1, y0, y1, st)]
+        inizio = y0 + (15 * mm if pinna_bianca else 8 * mm if pinna_aperta else 0.0)
+        S = [("H", y, x0, x1, st) for y in (y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1)]
+        if pinna_aperta:
+            # la pinna bianca come fascia a se', fino alla sua piega: i
+            # tagli del passo non la attraversano, il suo bordo esce di 3,5
+            # mm per parte (il T2 al cioccolato fondente)
+            S += [("H", y0, x0 - 3.5 * mm, x1 + 3.5 * mm, st), ("H", inizio, x0, x1, st),
+                  ("V", x0, inizio, y1, st), ("V", x1, inizio, y1, st)]
+        else:
+            S += [("H", y0, x0, x1, st), ("V", x0, y0, y1, st), ("V", x1, y0, y1, st)]
         S += [("V", x, inizio, y1, st) for x in (x0 + 10 * mm, x1 - 10 * mm)]
         hs = [y0, y0 + 20 * mm, y0 + 50 * mm, y0 + 80 * mm, y1]
+        if pinna_aperta:
+            hs = [y0, inizio] + hs[1:]
         vs = [x0, x0 + 10 * mm, x1 - 10 * mm, x1]
         if cornice:
             d = 10 * mm
@@ -660,6 +669,11 @@ class GiudiceDelloSteso(unittest.TestCase):
         # la pinna bianca e il margine della cornice sono tutti e due vuoti:
         # la pinna pero' la attraversano i tagli del passo, fino al bordo
         fpk, S, hs, vs, raster = self._steso(cornice=True, pinna_bianca=True)
+        h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
+        self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
+
+    def test_la_pinna_disegnata_come_fascia_resta_dello_steso(self):
+        fpk, S, hs, vs, raster = self._steso(cornice=True, pinna_aperta=True)
         h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
         self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
 
