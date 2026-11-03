@@ -101,6 +101,11 @@ cartoncino, e' un cartotecnico e si costruisce.
     aprirlo e non copiarlo mai** altrove: serve solo allo Space.
   - `parco/`: i PDF di prova, il manifesto `parco/parco.json` (opzioni e
     `come_deve_venire` di ogni caso) e le viste di riferimento.
+  - `conoscenze/`: quello che i casi veri hanno insegnato - finiture,
+    strutture, chiusure - raccolto ogni due settimane dal giro di studio e
+    approvato dall'utente. Se c'e', leggi `conoscenze/INDICE.md` e solo il
+    file dell'argomento del caso, non tutti. Vale meno del DT e di chi ha
+    caricato il PDF: se li contraddice, vincono loro.
   - Il **parco della notte** (`.github/workflows/parco.yml`): ogni notte, se
     `coda-settimana` e' andata avanti, il parco intero contro `main`, nelle
     Actions di questo repository, dove stanno i PDF. E' rosso se un caso che

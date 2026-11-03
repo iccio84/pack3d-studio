@@ -803,6 +803,20 @@ def _fuso(G, trovata):
     return True
 
 
+def _griglia_ricucita(G):
+    """`_griglia`, e se il gruppo non la fa, di nuovo coi tratti allineati
+    ricuciti (`flowpack._ricuci`): una piega disegnata a pezzi resta una
+    linea sola. Sul T4 di wafer i lati del corpo si spezzano a ogni piega
+    orizzontale, in tratti da 95 mm contro i 107 che servono per dirsi
+    lunghi: nessuna colonna lunga, nessuna griglia, e il DT principale
+    diventava la miniatura nel cartiglio. Ricuciti arrivano a 121 mm. Chi la
+    griglia la fa gia' non cambia."""
+    trovata = _griglia(G)
+    if trovata is None and G:
+        trovata = _griglia(fpk._ricuci(G))
+    return trovata
+
+
 def _griglia(G):
     """`(x0, y0, x1, y1, righe, colonne)` se i segmenti `G` fanno una griglia,
     o None. Il riquadro e' quello dei segmenti veri, non dei loro riquadri
@@ -863,7 +877,7 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
     griglie = []
     for g in gruppi:
         G = [sg for sg, _b in g]
-        trovata = _griglia(G)
+        trovata = _griglia_ricucita(G)
         if trovata is not None and not _fuso(G, trovata):
             griglie.append(trovata)
             continue
@@ -876,7 +890,7 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
         # il richiamo nero, il DT verde - e penna per penna si separano.
         for penna in {sg[4] for sg in G}:
             for h in dl._gruppi([sg for sg in G if sg[4] == penna]):
-                trovata = _griglia([sg for sg, _b in h])
+                trovata = _griglia_ricucita([sg for sg, _b in h])
                 if trovata is not None:
                     griglie.append(trovata)
     out = []

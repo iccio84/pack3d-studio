@@ -39,6 +39,21 @@ file (T6 aperto):
   di 261**, e `solve_carton` moriva su `KeyError: 'left'`. Ora serve contenuto
   in un asse **e** attaccato al corpo nell'altro: un'aletta lo e' per
   definizione, un cartiglio no.
+- **la quota che si porta via le alette.** Fuori dal corpo, prima di quel
+  test, si tolgono le linee di quota coi loro richiami
+  (`dieline._senza_quote`): una quota porta scritto accanto il numero della
+  sua lunghezza. Sul T3 di biscotti con le quote nella penna del DT, lunghe
+  quanto la fustella e coi richiami a un millimetro dagli angoli, le alette
+  a fianchi obliqui finivano in un gruppo solo con le quote, piu' largo del
+  corpo su tutti e due gli assi: il test le scartava, la fustella si
+  restringeva al corpo e il fronte curvo - che si riconosce dalle alette -
+  spariva (profondita' 15,8 invece di 25,2). Le linee del corpo non si
+  toccano: una piega con la sua misura scritta accanto resta piega.
+  Misurato con le varianti di stile del parco (`prove/parco.py varianti
+  --famiglia carton --varianti quote,cornice,legenda`): sui 16 astucci
+  cornice e legenda 16 su 16, quote 15 su 16 - il T3 di biscotti - e con
+  questa regola anche le quote 16 su 16: il T3 con le quote costruito uguale
+  all'originale.
 - **la penna che non e' fustella.** `_technical_pens` tiene tutti i tratti
   sottili che contribuiscono linee lunghe, e fa bene — molti artwork separano
   taglio, cordonatura e mezzo taglio su colori diversi. Ma per la GRIGLIA un

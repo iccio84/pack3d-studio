@@ -54,6 +54,14 @@ quello con la grafica, e lo si sceglie dal DISEGNO, non dal colore
   separano. Non basta cercare le griglie per estensione invece che per
   contatto - le pieghe interne di un DT non cominciano e non finiscono tutte
   insieme (wafer T1, T1 al cioccolato fresco) - e il contatto resta il criterio;
+- un gruppo che non fa griglia si riguarda anche coi **tratti ricuciti**
+  (`tools._griglia_ricucita`): una piega disegnata a pezzi resta una linea
+  sola. Sul T4 di wafer i lati del corpo si spezzano a ogni piega
+  orizzontale, in tratti da 95 mm contro i 107 che servono per dirsi lunghi:
+  nessuna colonna lunga, e il DT principale era la miniatura nel cartiglio.
+  Ricuciti arrivano a 121, e il DT principale e' la vista esterna. Nel parco
+  ha trovato il DT intero anche dove prima ce n'era un pezzo (un
+  cartotecnico, la barretta incartata) o niente (la punta, tre display);
 - e penna per penna si riguarda anche un gruppo che **fa** griglia, se
   nessuna delle sue penne da sola ne copre almeno meta' (`tools._fuso`). Un
   DT e' disegnato per la maggior parte con una penna: dove le penne sono due
