@@ -871,6 +871,16 @@ dicono chiusi anche quando la sua linea finisce, da tutti e due i capi,
 entro `FASCIA_FUORI_MM` (5 mm) dagli angoli. Le 54 varianti e i 18 originali
 restano uguali; la cornice vicina del T2 torna 155 x 171.
 
+E una linea del disegno non e' grafica (`_senza_linee`). Sul T1 B-ready del
+riempimento col display da 15, oltre il capo sinistro, fra 6 e 12 mm, la
+stampa e' il 15,6% della striscia; la linea della cornice, a dieci
+millimetri, la portava al 21,2%, oltre `TAGLIA_GRAFICA`, e il lato vero
+sembrava tagliare la grafica: vinceva il riquadro chiuso dal lato sinistro
+della cornice, 160 mm invece di 150. Ora le strisce di `tagliati` si
+misurano col raster dove le linee del DT sono dipinte di bianco. Le 54
+varianti flowpack e i 18 originali si leggono come prima; il T1 B-ready con
+la cornice torna 112 x 150.
+
 Il costo: quando non decide, quattro strisce sul riquadro esterno; quando
 decide, l'immagine integrale della stampa, per non rileggere il raster
 migliaia di volte.

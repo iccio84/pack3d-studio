@@ -104,7 +104,10 @@ E il riquadro della fustella si toglie PRIMA di tappare i buchi
 stampa la attacca alla sagoma, e la cornice chiuderebbe tutto quello che ha
 dentro. Trovato con le varianti di stile del parco (`prove/parco.py varianti
 --famiglia vassoio,riempimento --varianti cornice`); sui casi veri la
-sagoma resta la stessa al pixel.
+sagoma resta la stessa al pixel. Con questa regola, lo scarto della cornice
+fra i tratti del display a scatola (regole/ballotin.md, *Le penne*) e il
+giudice che non conta le linee come grafica (regole/flowpack.md), sugli 8
+vassoi e riempimenti del parco quote, cornice e legenda sono 8 su 8.
 
 **Il controllo che lo dice**: la misura dell'impronta va confrontata con il
 riquadro della fustella, che viene dai vettori. Se ballano di piu' di 2 mm il

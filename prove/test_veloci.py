@@ -677,6 +677,23 @@ class GiudiceDelloSteso(unittest.TestCase):
         h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
         self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
 
+    def test_la_linea_della_cornice_non_e_grafica(self):
+        # oltre il capo sinistro, fra 6 e 12 mm, la stampa e' poca (il 18%
+        # della striscia) e la linea della cornice, a 10 mm, la porterebbe
+        # oltre TAGLIA_GRAFICA: una linea del disegno non e' grafica, e il
+        # capo sinistro resta un taglio (il T1 B-ready del display da 15)
+        fpk, S, hs, vs, raster = self._steso(cornice=True)
+        mm = 1.0 / fpk.PT2MM
+        for k, c, a, b, st in S:
+            if k == "H":
+                raster[int(c), int(a):int(b) + 1] = 0
+            else:
+                raster[int(a):int(b) + 1, int(c)] = 0
+        x0 = vs[1]
+        raster[int(hs[1]):int(hs[-2]), int(x0 - 9 * mm):int(x0 - 8 * mm)] = 0
+        h, v, avviso = fpk._riquadro_coerente(S, hs, vs, raster, 1.0)
+        self.assertEqual((h, v), (hs[1:-1], vs[1:-1]))
+
     def test_una_quota_d_insieme_dice_dove_stanno_i_capi(self):
         # la quota dei 101 sotto lo steso, dal capo sinistro al taglio: il
         # riquadro che arriva al filo dell'abbondanza (113) e' smentito, come

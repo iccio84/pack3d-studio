@@ -1721,6 +1721,28 @@ def _integrale(raster):
     return out
 
 
+def _senza_linee(raster, S, sc):
+    """Il raster con le linee del disegno dipinte di bianco.
+
+    Oltre un lato, `tagliati` chiede se la GRAFICA continua: una linea del DT
+    non e' grafica. Sul T1 B-ready del riempimento col display, la cornice
+    della tavola a dieci millimetri dallo steso portava la striscia di
+    sinistra dal 15,6% al 21,2% di stampa, oltre TAGLIA_GRAFICA: il lato
+    vero sembrava tagliare la grafica, e vinceva il riquadro chiuso dalla
+    cornice, 160 mm invece di 150."""
+    out = raster.copy()
+    H, W = out.shape[:2]
+    for k, c, a, b, st in S:
+        m = 1 + int(st[0] * sc / 2.0 + 0.5)
+        r = int(c * sc)
+        lo, hi = int(a * sc), int(b * sc)
+        if k == "H":
+            out[max(r - m, 0):min(r + m + 1, H), max(lo - m, 0):min(hi + m + 1, W)] = 255
+        else:
+            out[max(lo - m, 0):min(hi + m + 1, H), max(r - m, 0):min(r + m + 1, W)] = 255
+    return out
+
+
 def _stampato(integrale, sc, y0, y1, x0, x1):
     """La frazione di pixel stampati (non bianchi) nel riquadro, in punti."""
     H, W = integrale.shape[0] - 1, integrale.shape[1] - 1
@@ -1931,7 +1953,7 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
         hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
         return hs2, vs2, None
 
-    integrale = _integrale(raster)
+    integrale = _integrale(_senza_linee(raster, S, sc))
 
     def veloce(*r):
         return _stampato(integrale, sc, *r)
