@@ -255,6 +255,14 @@ statistiche sono spenti. Sul parco intero sono due ore e piu'; i giri restano
 nella cartella di uscita e, con lo stesso codice, un giro interrotto riprende.
 
     python3 prove/soglie.py CASI USCITA [--solo a,b] [--soglie pack3d.flowpack.TAGLIA_GRAFICA]
+                                        [--note CASI/parco/soglie.json [--approva]]
+
+Una volta a settimana, il venerdi', le Actions di `pack3d-casi` lo fanno
+girare col codice di `coda-settimana` (`soglie.yml`, circa tre ore): rosso se
+un caso cambia strada spostando una soglia di non piu' del 10% e non e' fra i
+vicini gia' noti del registro (`parco/soglie.json`, scritti con `--approva`).
+Cosi' una modifica che porta un caso a ridosso di un bivio si vede in
+settimana, prima che un PDF un po' diverso lo faccia cadere.
 
 Il primo giro, il 3 novembre 2026: 45 casi, 131 soglie, circa trecento
 giri. 118 soglie reggono il 25% in tutti e due i versi; 7 sono valori che

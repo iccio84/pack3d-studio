@@ -26,6 +26,10 @@ il caso stava a meno del 10% dalla soglia.
    piccolo che lo fa cambiare e cosa cambia; per ogni soglia i casi.
 
     python3 prove/soglie.py CASI USCITA [--solo a,b] [--soglie pack3d.flowpack.TAGLIA_GRAFICA]
+                                        [--note CASI/parco/soglie.json [--approva]]
+
+Con `--note` esce con 1 se un caso e' vicino a una soglia entro ROSSO e non e'
+fra i noti: nelle Actions di pack3d-casi, una volta a settimana (`soglie.yml`).
 
 Sul parco intero sono due ore e piu'. I giri restano in USCITA/giri: rilanciato
 con lo stesso codice, riprende da dove era.
@@ -53,6 +57,9 @@ QUI = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # i passi, in frazione del valore: il primo su tutti i casi della soglia, gli
 # altri solo su quelli che al passo prima sono cambiati
 PASSI = (0.25, 0.10, 0.05)
+# Rosso, nelle Actions, un caso nuovo vicino a una soglia entro questo passo:
+# quelli gia' noti stanno nel file delle note (`--note`, `--approva`).
+ROSSO = 0.10
 # Le costanti che non sono soglie di una decisione: unita' di misura e
 # risoluzioni (quanti punti per una curva, la scala del raster). Spostarle
 # cambia la precisione di una misura, non la strada presa. Quelle col
@@ -495,10 +502,67 @@ def guida(args):
     testo = rapporto(esiti, len(nomi), time.time() - t0)
     with open(os.path.join(args.uscita, "soglie.md"), "w", encoding="utf-8") as fh:
         fh.write(testo)
+    vicini = vicini_entro(esiti, ROSSO)
+    note = _note(args.note) if args.note else []
+    nuovi = [v for v in vicini if v not in note]
+    passati = [v for v in note if v not in vicini]
+    testo += _sulle_note(nuovi, passati, args.note, args.approva)
     print(testo)
     if args.riassunto:
         with open(args.riassunto, "a", encoding="utf-8") as fh:
             fh.write(testo)
+    if args.approva and args.note:
+        with open(args.note, "w", encoding="utf-8") as fh:
+            json.dump(vicini, fh, ensure_ascii=False, indent=1)
+            fh.write("\n")
+        print("%d vicini a una soglia scritti come noti in %s: commit e push nel "
+              "registro" % (len(vicini), args.note))
+    elif args.note and nuovi:
+        raise SystemExit(1)
+
+
+def vicini_entro(esiti, passo):
+    """[{caso, soglia, verso}] dei casi che cambiano strada spostando la
+    soglia di non piu' di `passo`, in un verso solo (i valori che entrano
+    nella lettura cambiano nei due versi, e non sono bivi)."""
+    out = []
+    for s, e in sorted(esiti.items()):
+        for n, versi in sorted(e["cambia"].items()):
+            if len(versi) == 2:
+                continue
+            for verso, d in versi.items():
+                if d["passo"] <= passo + 1e-9:
+                    out.append({"caso": n, "soglia": s, "verso": verso})
+    return out
+
+
+def _note(f):
+    if not os.path.exists(f):
+        return []
+    with open(f, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
+def _sulle_note(nuovi, passati, f, approva):
+    """Le righe del riassunto sui vicini nuovi e su quelli noti che non lo
+    sono piu'."""
+    if not f:
+        return ""
+    righe = []
+    if nuovi and not approva:
+        righe += ["### Nuovi vicini a una soglia (entro il %d%%)" % round(ROSSO * 100), "",
+                  "Non sono fra i noti di `%s`: una modifica li ha avvicinati al bivio, "
+                  "o sono casi nuovi. Se va bene cosi', `--approva`." % os.path.basename(f), ""]
+        righe += ["- %s: `%s` (%s)" % (v["caso"], v["soglia"],
+                                       "su" if v["verso"] == "+1" else "giu'") for v in nuovi]
+        righe.append("")
+    if passati:
+        righe += ["Non sono piu' vicini a una soglia (si possono togliere dai noti con "
+                  "`--approva`): " + ", ".join("%s `%s`" % (v["caso"], v["soglia"])
+                                               for v in passati), ""]
+    if not nuovi and not passati:
+        righe += ["Nessun vicino nuovo a una soglia: sono quelli gia' noti.", ""]
+    return "\n".join(righe) + "\n"
 
 
 def rapporto(esiti, n_casi, secondi):
@@ -583,6 +647,10 @@ def main(argv=None):
     g.add_argument("--paralleli", type=int, help="quanti processi alla volta")
     g.add_argument("--riassunto", help="il file dove aggiungere il riassunto in "
                                        "markdown (nelle Actions: $GITHUB_STEP_SUMMARY)")
+    g.add_argument("--note", help="i vicini a una soglia gia' noti (nel registro: "
+                                  "parco/soglie.json): esce con 1 se ce n'e' uno nuovo")
+    g.add_argument("--approva", action="store_true",
+                   help="scrive i vicini di adesso come noti, nel file di --note")
     return guida(g.parse_args(argv))
 
 
