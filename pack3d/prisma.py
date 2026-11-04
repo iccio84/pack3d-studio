@@ -288,23 +288,39 @@ def _ruota(t):
     return np.array([[c, -s], [s, c]])
 
 
-def assetti(fondo, coperchio=None):
+def _giu(giro):
+    """Il basso della tavola sul foglio (y in giu'), se il suo testo e' girato
+    di `giro` gradi orari: il basso di una lettera girata in senso orario di
+    un quarto guarda a sinistra."""
+    t = math.radians(giro)
+    return np.array([-math.sin(t), math.cos(t)])
+
+
+def assetti(fondo, coperchio=None, giro_coperchio=0, giro_fondo=0):
     """Le matrici 2x2 dal foglio (x, y) al piano (X, Z) del modello, per il
     fondo e per il coperchio. Il coperchio si guarda dall'alto col fronte in
     basso sul foglio: (X, Z) = (x, y). Il fondo da sotto, quindi specchiato,
     e girato perche' i suoi lati stiano sotto quelli del coperchio e il suo
-    fronte sia la parete piu' in basso sul foglio."""
-    M_cop = np.eye(2)
+    fronte sia la parete piu' in basso sul foglio.
+
+    Il basso e' quello del testo: `giro_coperchio` e `giro_fondo` sono i
+    gradi orari di cui e' girato sul foglio il testo vivo di ciascun pezzo -
+    del suo DT, della sua tavola o dell'altro pezzo
+    (`famiglie.coppa._giro_del_pezzo`). Il prisma col coperchio largo
+    145 x 125,6, girato sulla tavola di un quarto, prendeva per fronte un
+    lato corto: la scatola usciva 125,6 x 145."""
+    M_cop = _ruota(-math.radians(giro_coperchio)) if giro_coperchio else np.eye(2)
     S = np.diag([1.0, -1.0])
     nf = fondo.normali @ S.T
-    giu = int(np.argmax(fondo.normali[:, 1]))       # la parete piu' in basso
+    giu = int(np.argmax(fondo.normali @ _giu(giro_fondo) if giro_fondo
+                        else fondo.normali[:, 1]))  # la parete piu' in basso
     # gira la parete in basso verso +Z
     t0 = _angolo((0.0, 1.0)) - _angolo(nf[giu])
     if coperchio is None:
         return _ruota(t0) @ S, None
     # fra le rotazioni che portano i lati del fondo su quelli del coperchio,
-    # la piu' vicina a t0
-    nc = coperchio.normali
+    # la piu' vicina a t0: i lati del coperchio come stanno nel modello
+    nc = coperchio.normali @ M_cop.T if giro_coperchio else coperchio.normali
     candidati = []
     for i in range(len(nf)):
         t = _angolo(nc[0]) - _angolo(nf[i])

@@ -978,6 +978,54 @@ class SoglieSpostate(unittest.TestCase):
         self.assertEqual(soglie._numeriche(g), {"TAGLIA"})
 
 
+class VersoSenzaTestoSulleFacce(unittest.TestCase):
+    """Il verso di un pack le cui facce non hanno testo vivo: dalla tavola
+    (`artwork._dalla_tavola`) o dall'altro pezzo (`prisma.assetti`)."""
+
+    def test_l_astuccio_chiede_la_tavola(self):
+        from types import SimpleNamespace
+        from pack3d import artwork, dieline
+        letto = SimpleNamespace(bbox=(0, 0, 10, 10), panels={"front": 1})
+        tavola = {"in.pdf": 90, "in.pdf@270": 0}
+        with mock.patch.object(artwork, "verso_della_tavola",
+                               side_effect=lambda p, *_a: tavola.get(p)), \
+                mock.patch.object(artwork, "pagina_girata",
+                                  side_effect=lambda p, g: "%s@%d" % (p, g)), \
+                mock.patch.object(dieline, "analyze", return_value=letto):
+            pdf, d, giro, avviso = artwork._dalla_tavola("in.pdf", letto)
+            self.assertEqual((pdf, giro), ("in.pdf@270", 270))
+            self.assertIn("tavola", avviso)
+            # dritta o muta: il foglio resta com'e'
+            tavola["in.pdf"] = 0
+            self.assertIsNone(artwork._dalla_tavola("in.pdf", letto))
+            tavola["in.pdf"] = None
+            self.assertIsNone(artwork._dalla_tavola("in.pdf", letto))
+            # girata, ma sul foglio girato non si legge dritta: non vale
+            tavola.update({"in.pdf": 90, "in.pdf@270": 180})
+            self.assertIsNone(artwork._dalla_tavola("in.pdf", letto))
+
+    def test_il_prisma_girato_resta_lo_stesso(self):
+        """Girato il foglio di `g` gradi orari, col testo girato di `g` gli
+        assetti portano i lati dove li portavano sul foglio dritto."""
+        import math
+        from types import SimpleNamespace
+        from pack3d import prisma
+        ang = [math.radians(a) for a in (30, 90, 150, 210, 270, 330)]  # un lato in basso
+        N = np.array([[math.cos(a), math.sin(a)] for a in ang])
+        fondo, cop = SimpleNamespace(normali=N), SimpleNamespace(normali=N.copy())
+        Mf0, Mc0 = prisma.assetti(fondo, cop)
+        for g in (90, 180, 270):
+            t = math.radians(g)
+            R = np.array([[math.cos(t), -math.sin(t)], [math.sin(t), math.cos(t)]])
+            fg, cg = SimpleNamespace(normali=N @ R.T), SimpleNamespace(normali=N @ R.T)
+            Mf, Mc = prisma.assetti(fg, cg, giro_coperchio=g, giro_fondo=g)
+            np.testing.assert_allclose(Mc @ R, Mc0, atol=1e-9)
+            np.testing.assert_allclose(Mf @ R, Mf0, atol=1e-9)
+        # a zero gradi gli assetti di prima, al bit
+        Mf, Mc = prisma.assetti(fondo, cop, giro_coperchio=0, giro_fondo=0)
+        self.assertTrue((Mc == np.eye(2)).all() and (Mf == Mf0).all())
+
+
 class BallotinTolleranzaCercata(unittest.TestCase):
     """`ballotin.riconosci`: se con NODO il ballotin non torna, si riprova
     con le tolleranze vicine (NODO_PROVE), e vale la prima che lo da'."""
