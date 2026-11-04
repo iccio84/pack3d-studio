@@ -84,12 +84,17 @@ lo spessore della carta e le pareti in giu'.
   rotazione, non un altro specchio: la stampa delle pareti resta leggibile,
   dritta e non specchiata.
 
-Il fronte quindi lo decide come sta il coperchio sulla tavola, e la
-grafica non lo conferma: sulla scatola esagonale del parco il coperchio non
-ha testo vivo, e girato di un quarto la scatola esce voltata di lato
-(`prove/parco.py varianti`, 1 novembre 2026). La tavola non lo puo' dire -
-sugli astucci la contraddice due volte (`regole/pdf.md`) - e allora lo si
-dice: senza testo vivo sul coperchio, o col testo girato, la costruzione
+Il basso del foglio pero' e' quello del **testo vivo** (`prisma.assetti`,
+`famiglie.coppa._giro_del_pezzo`): di ogni pezzo conta il testo del suo DT,
+se il DT tace quello della sua tavola, e se tace anche lei quello dell'altro
+pezzo - due pezzi della stessa scatola li impagina lo stesso studio. Sulla
+scatola esagonale del parco il coperchio e' muto anche sulla tavola, e il
+fondo ha il testo dritto; girati tutti e due di un quarto, il coperchio
+prendeva per fronte un lato corto e la scatola usciva 125,6 x 145 invece di
+145 x 125,6 (`prove/parco.py varianti`, 1 novembre 2026). Ora il coperchio
+prende il verso del fondo, e girata di 90, 180 o 270 gradi la scatola esce
+uguale all'originale. Sul foglio dritto non cambia niente: il testo dritto
+e' il basso del foglio. Senza testo vivo da nessuna parte la costruzione
 avvisa che il verso va controllato sul modello.
 
 La texture di ogni pezzo e' il suo DT intero, come per il ballotin, con sotto

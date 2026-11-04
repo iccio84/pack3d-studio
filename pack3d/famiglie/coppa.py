@@ -301,6 +301,23 @@ def build_coppa(pdfs, out_glb, quality="hd", lastre_extra=(),
                               % (len(V), len(T), nodi)]
 
 
+def _giro_del_pezzo(pdf, pr):
+    """`(gradi, chi)`: di quanti gradi orari e' girato sul foglio il testo
+    vivo del pezzo `pr` - del suo DT (`chi` = "dt") o, se il DT tace, della
+    tavola fuori dal DT ("tavola") -; `(None, None)` se tacciono tutti e due.
+    Vedi `prisma.assetti`."""
+    try:
+        v = tracciati.verso_grafica(pdf, {
+            "dt": pr.regione,
+            "tavola": (-math.inf, -math.inf, math.inf, math.inf)})
+    except Exception:
+        return None, None
+    for chi in ("dt", "tavola"):
+        if chi in v:
+            return v[chi], chi
+    return None, None
+
+
 def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
                  dichiarato="carton", carta=None):
     """La scatola a prisma, il fondo poligonale con le pareti e il coperchio
@@ -312,7 +329,6 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
     coperchio, e i due stesi in un'immagine sola (`pack3d.atlante`)."""
     dpi, tmax = risoluzione(quality)
     fondo, coperchio = pezzi
-    M_fondo, M_cop = prisma.assetti(fondo, coperchio)
     sp = folding.SPESSORE_CRT if carta is None else carta
     per_pdf = {}
     for pdf in pdfs:
@@ -323,6 +339,21 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
                     and q.regione == p.regione and id(q) not in per_pdf:
                 per_pdf[id(q)] = (pagina, n_pagine)
                 break
+    # Il verso di ogni pezzo: il testo del suo DT, se no la sua tavola, se
+    # no l'altro pezzo - due pezzi della stessa scatola li impagina lo stesso
+    # studio. Sul prisma del parco il coperchio e' muto anche sulla tavola, e
+    # il fondo ha il testo dritto: girati tutti e due di un quarto, il
+    # coperchio prendeva per fronte un lato corto.
+    giri = {id(q): _giro_del_pezzo(per_pdf[id(q)][0], q)
+            for q in (fondo, coperchio) if q is not None and id(q) in per_pdf}
+    g_cop, chi_cop = giri.get(id(coperchio), (None, None))
+    g_fondo, chi_fondo = giri.get(id(fondo), (None, None))
+    if g_cop is None and g_fondo is not None:
+        g_cop, chi_cop = g_fondo, "fondo"
+    if g_fondo is None and g_cop is not None:
+        g_fondo = g_cop
+    M_fondo, M_cop = prisma.assetti(fondo, coperchio, giro_coperchio=g_cop or 0,
+                                    giro_fondo=g_fondo or 0)
     # la riga di ogni pezzo: il fondo dice anche se manca il coperchio
     righe = prisma.dichiara(fondo, coperchio)
     scrivi_lettura(out_glb, lambda: lettura_pdf.accosta(*[
@@ -360,16 +391,22 @@ def build_prisma(pdfs, pezzi, out_glb, quality="hd", lastre_extra=(),
             # Il fronte e' il lato del coperchio in basso sul foglio
             # (`pack3d.prisma`): lo decide come sta lo steso sulla tavola.
             # Detto, non taciuto, quando la grafica non lo conferma.
-            g = tracciati.verso_grafica(pdf, {"dt": pr.regione}).get("dt")
-            if g is None:
+            if chi_cop is None:
                 avvisi.append("verso della grafica non letto: sul coperchio "
                               "non c'e' testo vivo, e il fronte e' il lato in "
                               "basso sul foglio - il verso va controllato sul "
                               "modello")
-            elif g:
+            elif g_cop and chi_cop == "dt":
                 avvisi.append("il testo del coperchio e' girato di %d gradi sul "
-                              "foglio, e il fronte e' il lato in basso sul "
-                              "foglio - il verso va controllato sul modello" % g)
+                              "foglio: il fronte e' il lato in basso nel verso "
+                              "del testo" % g_cop)
+            elif chi_cop != "dt":
+                avvisi.append("sul coperchio non c'e' testo vivo: il fronte "
+                              "l'ha dato il testo %s, %s" % (
+                                  "della tavola (cartiglio, quote, note)"
+                                  if chi_cop == "tavola" else "del fondo",
+                                  "girato di %d gradi sul foglio" % g_cop
+                                  if g_cop else "dritto sul foglio"))
         m = 1.0 / PT2MM
         x0, y0, x1, y1 = pr.regione
         x0, y0, x1, y1 = x0 - m, y0 - m, x1 + m, y1 + m

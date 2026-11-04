@@ -812,6 +812,29 @@ class QuoteFuoriDallaFustella(unittest.TestCase):
         # senza numeri resta tutto: la quota senza il suo numero non si sa
         self.assertEqual(len(dl._largest_cluster(corpo + quota)), len(corpo + quota))
 
+    def test_i_segni_di_stampa_non_sono_fustella(self):
+        """`dieline._segni_fuori`: crocini di taglio e di registro, corti, coi
+        capi liberi e fuori dal disegno, vanno via; un trattino di cordonatura
+        dentro e il lato di una linguetta attaccato da un capo restano."""
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        mm = 1.0 / dl.PT2MM
+        o, L = 3 * mm, 6 * mm
+        crocini = [("H", 0.0, -o - L, -o, st), ("V", 0.0, -o - L, -o, st),
+                   # in basso, fuori dalla linguetta che sporge fino a 220
+                   ("H", 220.0, 300.0 + o, 300.0 + o + L, st),
+                   ("V", 300.0, 220.0 + o, 220.0 + o + L, st)]
+        registro = [("H", 100.0, -12 * mm, -5 * mm, st), ("V", -8.5 * mm, 90.0, 110.0, st)]
+        trattino = ("H", 50.0, 70.0, 80.0, st)               # una cordonatura tratteggiata
+        linguetta = [("V", 40.0, 200.0, 220.0, st), ("V", 60.0, 200.0, 220.0, st),
+                     ("H", 220.0, 40.0, 60.0, st)]           # attaccata al lato in basso
+        tenuti = corpo + [trattino] + linguetta
+        con = dl._largest_cluster(tenuti + crocini + registro)
+        self.assertEqual(sorted(con), sorted(tenuti))
+        self.assertEqual(sorted(dl._largest_cluster(tenuti)), sorted(tenuti))
+
     def test_la_cornice_non_e_l_altra_vista(self):
         """Un gruppo lungo quanto la fustella che la racchiude e' la cornice
         della tavola, non la vista di dentro: anche se sotto ha piu' grafica."""
@@ -976,6 +999,54 @@ class SoglieSpostate(unittest.TestCase):
         g = {"TAGLIA": 0.2, "PT2MM": 0.35, "_BEZIER": 3, "ATTIVO": True, "NOME": "x",
              "minuscola": 1.0}
         self.assertEqual(soglie._numeriche(g), {"TAGLIA"})
+
+
+class VersoSenzaTestoSulleFacce(unittest.TestCase):
+    """Il verso di un pack le cui facce non hanno testo vivo: dalla tavola
+    (`artwork._dalla_tavola`) o dall'altro pezzo (`prisma.assetti`)."""
+
+    def test_l_astuccio_chiede_la_tavola(self):
+        from types import SimpleNamespace
+        from pack3d import artwork, dieline
+        letto = SimpleNamespace(bbox=(0, 0, 10, 10), panels={"front": 1})
+        tavola = {"in.pdf": 90, "in.pdf@270": 0}
+        with mock.patch.object(artwork, "verso_della_tavola",
+                               side_effect=lambda p, *_a: tavola.get(p)), \
+                mock.patch.object(artwork, "pagina_girata",
+                                  side_effect=lambda p, g: "%s@%d" % (p, g)), \
+                mock.patch.object(dieline, "analyze", return_value=letto):
+            pdf, d, giro, avviso = artwork._dalla_tavola("in.pdf", letto)
+            self.assertEqual((pdf, giro), ("in.pdf@270", 270))
+            self.assertIn("tavola", avviso)
+            # dritta o muta: il foglio resta com'e'
+            tavola["in.pdf"] = 0
+            self.assertIsNone(artwork._dalla_tavola("in.pdf", letto))
+            tavola["in.pdf"] = None
+            self.assertIsNone(artwork._dalla_tavola("in.pdf", letto))
+            # girata, ma sul foglio girato non si legge dritta: non vale
+            tavola.update({"in.pdf": 90, "in.pdf@270": 180})
+            self.assertIsNone(artwork._dalla_tavola("in.pdf", letto))
+
+    def test_il_prisma_girato_resta_lo_stesso(self):
+        """Girato il foglio di `g` gradi orari, col testo girato di `g` gli
+        assetti portano i lati dove li portavano sul foglio dritto."""
+        import math
+        from types import SimpleNamespace
+        from pack3d import prisma
+        ang = [math.radians(a) for a in (30, 90, 150, 210, 270, 330)]  # un lato in basso
+        N = np.array([[math.cos(a), math.sin(a)] for a in ang])
+        fondo, cop = SimpleNamespace(normali=N), SimpleNamespace(normali=N.copy())
+        Mf0, Mc0 = prisma.assetti(fondo, cop)
+        for g in (90, 180, 270):
+            t = math.radians(g)
+            R = np.array([[math.cos(t), -math.sin(t)], [math.sin(t), math.cos(t)]])
+            fg, cg = SimpleNamespace(normali=N @ R.T), SimpleNamespace(normali=N @ R.T)
+            Mf, Mc = prisma.assetti(fg, cg, giro_coperchio=g, giro_fondo=g)
+            np.testing.assert_allclose(Mc @ R, Mc0, atol=1e-9)
+            np.testing.assert_allclose(Mf @ R, Mf0, atol=1e-9)
+        # a zero gradi gli assetti di prima, al bit
+        Mf, Mc = prisma.assetti(fondo, cop, giro_coperchio=0, giro_fondo=0)
+        self.assertTrue((Mc == np.eye(2)).all() and (Mf == Mf0).all())
 
 
 class BallotinTolleranzaCercata(unittest.TestCase):

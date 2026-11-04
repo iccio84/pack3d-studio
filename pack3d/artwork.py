@@ -1017,6 +1017,57 @@ def scegli_fianchi(tex, panels, d, altri):
                "retro" if prima == "back" else "fronte", b, a))
 
 
+def verso_della_tavola(pdf, dt, page_no=0):
+    """I gradi orari del testo vivo della tavola FUORI dal riquadro `dt` - il
+    cartiglio, le quote, le note -, o None se fuori dal DT non ce n'e'
+    abbastanza. Il testo dentro il DT non vota: e' grafica, o note sulle
+    alette (`tracciati.verso_grafica`)."""
+    import math
+    from . import tracciati
+    tutto = (-math.inf, -math.inf, math.inf, math.inf)
+    return tracciati.verso_grafica(pdf, {"dt": dt, "tavola": tutto},
+                                   page_no).get("tavola")
+
+
+def _dalla_tavola(pdf, d0, page_no=0):
+    """`(pdf girato, dieline, giro, avviso)` se le facce dell'astuccio non
+    hanno testo vivo e la tavola lo dice girata; None altrimenti, e il
+    foglio resta com'e'.
+
+    Sugli astucci la tavola non si chiede finche' le facce parlano: chi
+    impagina un astuccio lo gira spesso sulla tavola dritta, e dove si
+    contraddicono vincono le facce (regole/pdf.md). Ma quando le facce
+    tacciono il foglio com'e' e' gia' una scommessa sulla tavola dritta: la
+    tavola girata la smentisce. Sui cartotecnici del parco con le facce mute
+    la tavola si legge dritta, e cosi' resta tutto com'era; l'astuccio da
+    sette pagine, girato di un quarto, usciva a fasciatura orizzontale con la
+    grafica stirata del 17% e le alette di chiusura piu' profonde della
+    scatola. Il giro vale se sul foglio girato l'astuccio si risolve e la
+    tavola si legge dritta."""
+    from . import dieline as dl
+    try:
+        g = verso_della_tavola(pdf, d0.bbox, page_no)
+    except Exception:
+        return None
+    if not g:
+        return None
+    giro = (360 - g) % 360
+    girato = pagina_girata(pdf, giro)
+    if girato == pdf:
+        return None
+    try:
+        d = dl.analyze(girato)
+        dritta = verso_della_tavola(girato, d.bbox, page_no) == 0
+    except Exception:
+        return None
+    if not d.panels or not dritta:
+        return None
+    return girato, d, giro, (
+        "foglio girato di %d gradi prima di risolvere: sulle facce non c'e' "
+        "testo vivo, e il verso l'ha dato il testo della tavola (cartiglio, "
+        "quote, note), girato anche lui" % giro)
+
+
 # Le letture gia' decise: impronta del file -> (giro, avviso). L'analisi e la
 # costruzione dello stesso file la chiedono tutte e due, e le prove costano
 # un'analisi l'una.
@@ -1084,6 +1135,12 @@ def astuccio_sulla_grafica(pdf, page_no=0):
             return pdf, d0, 0, None
         v0 = voti_della_grafica(pdf, d0, page_no)
         if not v0:
+            # Le facce tacciono: il verso lo chiede alla tavola fuori dal DT
+            # (`_dalla_tavola`). Dritta o muta, il foglio resta com'e'.
+            dalla = _dalla_tavola(pdf, d0, page_no)
+            if dalla is not None:
+                ricorda(dalla[2], dalla[3])
+                return dalla
             # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
             # dipendere da come il DT sta sulla tavola.
             avviso = ("verso della grafica non letto: nessuna faccia ha testo "
