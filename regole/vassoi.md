@@ -109,6 +109,25 @@ fra i tratti del display a scatola (regole/ballotin.md, *Le penne*) e il
 giudice che non conta le linee come grafica (regole/flowpack.md), sugli 8
 vassoi e riempimenti del parco quote, cornice e legenda sono 8 su 8.
 
+Quegli 8 su 8 erano nella penna sbagliata: le varianti disegnavano in RGB,
+la fustella e' in un colore spot o in CMYK, e la lettura le scartava come
+un'altra penna (regole/verifiche.md, *La penna vera*). Nella penna vera:
+
+- **la cornice non e' l'altra vista.** Sul display T1x40 la cornice, un
+  gruppo a se', era lunga l'80,04% della fustella: per `_largest_cluster`
+  era la vista di dentro affiancata, con piu' grafica sotto - tutta -, e la
+  griglia prendeva i suoi lati per pieghe: cinque fasce invece di tre. Due
+  viste stanno una accanto all'altra, mai una dentro l'altra: un gruppo che
+  racchiude il piu' lungo e' la cornice (`racchiude`). Le 45 letture del
+  parco restano uguali;
+- **la legenda attaccata al vassoio e' un limite dichiarato.** Un riquadro
+  chiuso contro il disegno, nella penna del taglio, a guardare le linee e'
+  un'aletta: il suo lato aggiunge una fascia, e la griglia dell'espositore -
+  cinque colonne e tre fasce esatte - non torna. Leggerlo come legenda
+  vorrebbe dire leggere le scritte. La costruzione si ferma e lo dice: non
+  esce un modello sbagliato. Sul display T1x40 e sui due riempimenti KMS, in
+  `parco/varianti.json`.
+
 **Il controllo che lo dice**: la misura dell'impronta va confrontata con il
 riquadro della fustella, che viene dai vettori. Se ballano di piu' di 2 mm il
 build lo scrive, invece di consegnare un modello piu' grande del pack.

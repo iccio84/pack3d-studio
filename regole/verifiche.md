@@ -204,15 +204,74 @@ copertina 44 su 44, miniatura 43, un quarto di giro 41. Le varianti diverse gia'
 registro (`varianti --approva`): una diversa che non c'e' e' un difetto
 nuovo.
 
-Due volte a settimana le Actions di `pack3d-casi` fanno girare le varianti
+Tre volte a settimana le Actions di `pack3d-casi` fanno girare le varianti
 col codice di `coda-settimana` (`varianti.yml`): la domenica le pagine
 variate - un quarto di giro, la copertina, la miniatura -, il mercoledi' il
 disegno variato nella penna del DT - le quote, la cornice, la legenda
-(`_disegno_in_piu`, regole/flowpack.md). Rosso se una variante nuova esce
-diversa. `appiattito` -
+(`_disegno_in_piu`, regole/flowpack.md) -, il lunedi' le varianti sommate,
+come arrivano davvero: la cornice su una tavola girata, le quote con la
+legenda, le quote con una miniatura accanto. Rosso se una variante nuova
+esce diversa. Un giro interrotto riprende con `--riusa`. `appiattito` -
 il PDF ripassato da Ghostscript, senza testo vivo ne' livelli - nel giro non
 c'e': Ghostscript butta anche gran parte del disegno tecnico (sul wafer T1
 le linee da 1187 a 212), e misura lui, non il codice.
+
+### La penna vera
+
+Le varianti di stile disegnavano in RGB col colore che pdfium da' alla penna
+del DT. Ma la lettura della fustella riconosce una penna dalla chiave di
+pdfplumber - spessore e colore com'e' scritto nel PDF - e il DT e' quasi
+sempre in un colore spot o in CMYK: su 49 pagine del parco su 53 la quota, la
+cornice e la legenda erano un disegno in **un'altra penna**, che la lettura
+scartava (`penne_di_fustella`). I risultati di prima - 18 su 18, 16 su 16 -
+dicevano che un disegno in un'altra penna non disturba, non che lo stesso
+disegno nella penna del DT si legge.
+
+Ora la variante scrive nella penna vera (`_colore_della_penna`): lo spazio di
+colore e i valori dei tratti di quello spessore, seguendo lo stato grafico -
+q e Q, lo spessore dato con `w` o da un `/ExtGState`, i Form XObject coi
+loro spazi di colore -, e fra i candidati quello che pdfium vede di quel
+colore e che pdfplumber chiama con la stessa chiave della penna della
+lettura (`_penna_letta`, sui segmenti dello steso). Lo spessore e' quello di
+pdfplumber: sul cono, disegnato in scala, pdfium da' 0,2 invece di 1.
+
+E tre regole della variante, perche' sia un disegno che un disegnatore fa:
+
+- **la cornice sta fuori dalla stampa.** Una cornice di tavola gira attorno
+  al disegno e alla sua grafica. Sul T1 a fondo argento il fondo grigio esce
+  fino a 15 mm oltre il riquadro tecnico, e la cornice a dieci millimetri lo
+  attraversava (`_fuori_dalla_stampa`). Le macchie d'inchiostro si prendono
+  senza i tratti sottili: coi fili dei richiami la stampa arrivava ai
+  riquadri delle note, e sul pane ripieno T2 la cornice si prendeva meta'
+  della vista di dentro;
+- **la legenda va sopra se sotto c'e' la quota** (`quote+legenda`): nessuno
+  disegna una legenda sopra una quota;
+- **ogni passo vede gli altri** (`insieme` di `_disegno_in_piu`).
+
+Il 3 e 4 novembre 2026, sui 45 casi del parco, nella penna vera, da sole e
+sommate:
+
+| variante | come l'originale |
+|---|---|
+| quote | 45 su 45 |
+| cornice | 45 su 45 |
+| legenda | 42 su 45 |
+| cornice+giro90 | 42 su 45 |
+| quote+legenda | 41 su 45 |
+| quote+miniatura | 44 su 45 |
+
+Prima delle correzioni la penna vera aveva trovato quattro difetti della
+lettura, ognuno corretto con una regola generale e le 45 letture del parco
+uguali: la quota attaccata al corpo dell'astuccio (`_quote_fuori`,
+regole/astucci.md), la cornice presa per la vista di dentro (`racchiude`,
+regole/vassoi.md), e due della variante, la cornice che seguiva i richiami
+fino alle note e quella che attraversava la stampa. Le diverse che restano
+sono limiti dichiarati in `parco/varianti.json`: quattro ripetono, sommate,
+quelli gia' noti - gli astucci e il riempimento girati senza testo vivo, la
+coppa con la miniatura -, e due sono nuovi, la legenda chiusa contro un
+vassoio espositore (regole/vassoi.md) e contro la cima della scatola a punta
+(regole/punta.md): nella penna del taglio e' un'aletta, e la costruzione si
+ferma e lo dice.
 
 ## Quanto manca alle soglie
 

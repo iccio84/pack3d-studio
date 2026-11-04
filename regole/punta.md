@@ -151,3 +151,20 @@ Il pezzo centrale del soffietto e' piano, e le ali sono a strisce: il
 cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
 ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
 colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
+
+### Le varianti di stile nella penna del taglio
+
+Con la quota del passo sotto lo steso, disegnata nella penna del taglio e coi
+richiami vicini agli angoli, la riga della quota era l'ultima piega del
+foglio: il retro non era piu' alto come il fronte, e la scatola non si
+riconosceva. Ora le quote fuori dal disegno si tolgono col loro numero
+(regole/astucci.md, *la quota attaccata al corpo*), e la scatola con le quote
+si legge come l'originale.
+
+Resta un limite dichiarato (`parco/varianti.json`): con le quote sotto, la
+variante attacca la legenda sopra la cima, e il suo lato alto copre meta'
+della colonna del corpo - quanto basta al bordo libero di una falda
+(`rows_in_col`). Sopra la cima ci sono allora tre fasce invece di cresta e
+aletta, e la scatola a punta non si riconosce. Un riquadro chiuso contro la
+cima nella penna del taglio, a guardare le linee, e' un'aletta in piu': la
+costruzione si ferma e lo dice.
