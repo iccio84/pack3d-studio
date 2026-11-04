@@ -812,6 +812,29 @@ class QuoteFuoriDallaFustella(unittest.TestCase):
         # senza numeri resta tutto: la quota senza il suo numero non si sa
         self.assertEqual(len(dl._largest_cluster(corpo + quota)), len(corpo + quota))
 
+    def test_i_segni_di_stampa_non_sono_fustella(self):
+        """`dieline._segni_fuori`: crocini di taglio e di registro, corti, coi
+        capi liberi e fuori dal disegno, vanno via; un trattino di cordonatura
+        dentro e il lato di una linguetta attaccato da un capo restano."""
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        mm = 1.0 / dl.PT2MM
+        o, L = 3 * mm, 6 * mm
+        crocini = [("H", 0.0, -o - L, -o, st), ("V", 0.0, -o - L, -o, st),
+                   # in basso, fuori dalla linguetta che sporge fino a 220
+                   ("H", 220.0, 300.0 + o, 300.0 + o + L, st),
+                   ("V", 300.0, 220.0 + o, 220.0 + o + L, st)]
+        registro = [("H", 100.0, -12 * mm, -5 * mm, st), ("V", -8.5 * mm, 90.0, 110.0, st)]
+        trattino = ("H", 50.0, 70.0, 80.0, st)               # una cordonatura tratteggiata
+        linguetta = [("V", 40.0, 200.0, 220.0, st), ("V", 60.0, 200.0, 220.0, st),
+                     ("H", 220.0, 40.0, 60.0, st)]           # attaccata al lato in basso
+        tenuti = corpo + [trattino] + linguetta
+        con = dl._largest_cluster(tenuti + crocini + registro)
+        self.assertEqual(sorted(con), sorted(tenuti))
+        self.assertEqual(sorted(dl._largest_cluster(tenuti)), sorted(tenuti))
+
     def test_la_cornice_non_e_l_altra_vista(self):
         """Un gruppo lungo quanto la fustella che la racchiude e' la cornice
         della tavola, non la vista di dentro: anche se sotto ha piu' grafica."""
