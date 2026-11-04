@@ -1117,7 +1117,12 @@ def solve_carton(d: Dieline) -> Dieline:
             r2 = leggi(senza)
             if r2 is not None and all(k in r2 for k in
                                       ("back", "front", "top", "bottom")):
-                ruoli, rows = r2, senza
+                # cielo e fondo devono essere facce tutte e due: girata di
+                # 180 gradi la punta T6 dava un "fondo" da 3,4 mm, un'aletta
+                ht = senza[r2["top"]][2]
+                hb = senza[r2["bottom"]][2]
+                if min(ht, hb) >= 0.6 * max(ht, hb):
+                    ruoli, rows = r2, senza
 
     def fasce():
         """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""

@@ -235,7 +235,9 @@ Le cause erano due, e le regole sono due.
    vale solo se ne esce una scatola intera (retro, fronte, cielo e fondo).
    La scatola a punta T6 della stessa linea ha lo stesso riquadro: tolto,
    le sue fasce diventavano un astuccio 131,5 x 169,3 x 28,3 senza fondo, e
-   la punta spariva. Senza fondo non e' un astuccio, e la T6 resta punta.
+   la punta spariva; girata di 180 gradi il suo "fondo" era un'aletta da
+   3,4 mm. Cielo e fondo devono essere facce tutte e due, il piu' basso
+   almeno sei decimi dell'altro (qui 46,3 e 56,5): cosi' la T6 resta punta.
 2. **I fianchi possono stare sul fronte** (`_chiuso`). Qui li portano tutte e
    due le fasce alte: quelli del fronte sono le pareti da 45 mm, quelli del
    retro le alette di colla da 20,7. Con la lettura di serie (RETRO - CIELO -
