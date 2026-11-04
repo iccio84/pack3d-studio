@@ -333,14 +333,21 @@ non vota. Prima di questa regola, con la pagina girata di 90 gradi, gli 8
 flowpack senza testo vivo uscivano coricati col marchio in verticale, e
 capovolti a 180.
 
-**Sugli astucci la tavola non si chiede.** Misurato lo stesso giorno sui
-cartotecnici del parco: dove il verso della grafica si legge dalle facce, la
-tavola lo contraddice due volte - la vernice ha la grafica a 270 gradi su
-una tavola dritta, il T6_base il disegno tecnico dritto e la grafica
-capovolta. Chi impagina un astuccio lo gira spesso sulla tavola, uno
-steso di flowpack quasi mai. L'astuccio da sette pagine, che non ha testo
-vivo sulle facce, girato di un quarto esce ancora coricato: e' il limite
-qui sotto, e resta dichiarato.
+**Sugli astucci la tavola si chiede solo quando le facce tacciono.**
+Misurato lo stesso giorno sui cartotecnici del parco: dove il verso della
+grafica si legge dalle facce, la tavola lo contraddice due volte - la vernice
+ha la grafica a 270 gradi su una tavola dritta, il T6_base il disegno
+tecnico dritto e la grafica capovolta. Chi impagina un astuccio lo gira
+spesso sulla tavola, uno steso di flowpack quasi mai: quando le facce
+parlano, vincono loro. Ma in tutti e due i disaccordi la tavola era
+**dritta**, e con le facce mute il foglio com'e' e' gia' una scommessa sulla
+tavola dritta: una tavola girata la smentisce (`artwork._dalla_tavola`, 4
+novembre 2026). L'astuccio da sette pagine non ha testo vivo sulle facce e
+ha la tavola dritta; girato di un quarto usciva a fasciatura orizzontale,
+con le alette di chiusura piu' profonde della scatola e la grafica stirata
+del 17%. Ora, girato di 90, 180 o 270 gradi, esce uguale all'originale. Sui
+cartotecnici del parco con le facce mute la tavola e' dritta - il cono, che
+ce l'ha capovolta, ha una lettura sua -, e le 45 letture restano uguali.
 
 **Il limite che resta: senza testo vivo ne' sul fronte ne' sulla tavola il
 verso non si legge**, e il foglio resta com'e' sulla tavola - il modello
@@ -354,6 +361,13 @@ senza AI) sul fronte dei 18 flowpack e astucci del parco il cui verso e'
 noto dal testo vivo, girato nei quattro versi: risponde 27 volte su 72 e
 indovina 7, come a caso, e con fiducia almeno 3 nessuna. I marchi
 stilizzati non li legge: non si usa.
+
+Sul parco, dal 4 novembre 2026, il limite resta su un caso solo: il
+riempimento del display da 15. Lo steso del pane ripieno ha 8 caratteri
+vivi, fuori dal fronte - dove non votano -, e il display nemmeno uno: girati
+di un quarto, i pezzi stanno in piedi nel vassoio invece che sdraiati.
+Chiedere il verso all'altro PDF del caso, come fa il prisma col suo fondo
+(`regole/prisma.md`), qui non servirebbe: e' muto anche lui.
 
 Provato girando la pagina dei file del parco di 90, 180 e 270 gradi e
 costruendo ogni copia, cinque viste per modello contro quelle dell'originale:

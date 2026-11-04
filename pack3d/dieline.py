@@ -585,6 +585,55 @@ def _quote_fuori(segs, numeri, tol=3.0):
     return via
 
 
+# Quanto e' lungo al piu' un segno di stampa, in mm: i crocini di taglio e i
+# bracci dei crocini di registro sono di pochi millimetri. Una linea della
+# fustella con tutti e due i capi liberi e fuori dal resto del disegno - il
+# lato in cima di un'aletta coi fianchi obliqui, che i tratti dritti non
+# vedono attaccata - e' piu' lunga.
+SEGNO_MAX_MM = 12.0
+
+
+def _segni_fuori(segs, tol=3.0):
+    """Gli indici, in `segs`, dei segni di stampa attaccati alla fustella.
+
+    I crocini di taglio e di registro, nella penna del taglio come li mette il
+    CAD della fustella, stanno a tre millimetri dalla stampa: finiscono nel
+    gruppo della fustella, e il suo riquadro si allargava fino a loro. I suoi
+    lati diventavano pieghe: sul display a vassoio T1x40 la griglia aveva
+    cinque fasce invece di tre. Un segno e' corto (`SEGNO_MAX_MM`), ha tutti
+    e due i capi liberi - non tocca nessun altro tratto - e sta tutto fuori
+    dal riquadro del resto del disegno. Una linea della fustella e' attaccata
+    al disegno almeno da un capo, o ci sta dentro."""
+    import numpy as np
+    n = len(segs)
+    if n < 2:
+        return set()
+    A = np.array([(a, c, b, c) if k == "H" else (c, a, c, b)
+                  for k, c, a, b, _st in segs], float)
+    xa, xb = np.minimum(A[:, 0], A[:, 2]), np.maximum(A[:, 0], A[:, 2])
+    ya, yb = np.minimum(A[:, 1], A[:, 3]), np.maximum(A[:, 1], A[:, 3])
+    corti = np.hypot(A[:, 2] - A[:, 0], A[:, 3] - A[:, 1]) <= SEGNO_MAX_MM / PT2MM
+    if not corti.any():
+        return set()
+
+    def attaccato(i, px, py):
+        d = np.hypot(px - np.clip(px, xa, xb), py - np.clip(py, ya, yb))
+        d[i] = np.inf
+        return bool((d <= tol).any())
+    liberi = [i for i in np.flatnonzero(corti)
+              if not attaccato(i, A[i, 0], A[i, 1]) and not attaccato(i, A[i, 2], A[i, 3])]
+    if not liberi:
+        return set()
+    resto = np.ones(n, bool)
+    resto[liberi] = False
+    if not resto.any():
+        return set()
+    x0, x1 = xa[resto].min() - tol, xb[resto].max() + tol
+    y0, y1 = ya[resto].min() - tol, yb[resto].max() + tol
+    return {int(i) for i in liberi
+            if xb[i] < x0 or xa[i] > x1 or yb[i] < y0 or ya[i] > y1}
+
+
 def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
     cartigli, legende e disegni di riepilogo posti a lato della fustella.
@@ -628,6 +677,10 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
         via = _quote_fuori([sg for sg, _ in main], numeri)
         if via:
             main = [x for i, x in enumerate(main) if i not in via]
+    # i segni di stampa attaccati alla fustella (`_segni_fuori`)
+    via = _segni_fuori([sg for sg, _ in main])
+    if via:
+        main = [x for i, x in enumerate(main) if i not in via]
     mx0 = min(b[0] for _, b in main); my0 = min(b[1] for _, b in main)
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)
 
@@ -673,6 +726,11 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     for g in altri:
         if inside(g):
             out.extend(sg for sg, _ in g)
+    # i segni di stampa che `inside` rimette dentro: un crocino accanto a un
+    # lato e' contenuto in un asse e attaccato nell'altro, come un'aletta
+    via = _segni_fuori(out)
+    if via:
+        out = [sg for i, sg in enumerate(out) if i not in via]
     return out
 
 

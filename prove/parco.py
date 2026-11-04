@@ -2405,7 +2405,10 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None, insieme=frozense
       `quote+legenda`) si attacca sopra: sotto c'e' la quota del passo, e
       nessun disegnatore mette una legenda sopra una quota - disegnata li',
       il riquadro della legenda e i richiami della quota si fondevano, e il
-      display del riempimento KMS T10 trovava sette colonne invece di cinque."""
+      display del riempimento KMS T10 trovava sette colonne invece di cinque;
+    - `segni`: i segni di stampa di una tavola pronta per la tipografia -
+      crocini di taglio agli angoli, crocini di registro a meta' dei lati,
+      la barra dei colori sotto -, fuori dal DT e dalla sua stampa."""
     from pack3d.dieline import PT2MM
     r = _riquadro_tecnico(pdf, pagina, kind)
     if r is None:
@@ -2474,6 +2477,49 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None, insieme=frozense
         for xa, ya, xb, yb in ((c0 - d, c1 - d, c2 + d, c1 - d), (c0 - d, c3 + d, c2 + d, c3 + d),
                                (c0 - d, c1 - d, c0 - d, c3 + d), (c2 + d, c1 - d, c2 + d, c3 + d)):
             linea(xa, ya, xb, yb)
+    elif variante == "segni":
+        # i segni di stampa di una tavola pronta per la tipografia, attorno
+        # al DT e alla sua stampa come la cornice: i crocini di taglio sui
+        # prolungamenti dei lati, fuori dall'abbondanza; i crocini di
+        # registro a meta' di ogni lato; la barra dei colori sotto. Crocini
+        # nella penna del DT, come li mette il CAD della fustella; la barra
+        # piena, in quadricromia.
+        c0, c1, c2, c3 = _ingombro_tecnico(pdf, pagina, (x0, y0, x1, y1))
+        if kind not in (None, "flowpack"):
+            c0, c1, c2, c3 = _fuori_dai_tratti(pdf, pagina, (c0, c1, c2, c3), 3 * mm)
+        c0, c1, c2, c3 = _fuori_dalla_stampa(pdf, pagina, (c0, c1, c2, c3), 3 * mm)
+        o, L = 3 * mm, 6 * mm
+        for x, sx in ((c0, -1), (c2, +1)):
+            for y, sy in ((c1, -1), (c3, +1)):
+                linea(x + sx * o, y, x + sx * (o + L), y)
+                linea(x, y + sy * o, x, y + sy * (o + L))
+        r = 2.5 * mm
+
+        def registro(xc, yc):
+            k = 0.5523 * r
+            righe.append("%.2f %.2f m %.2f %.2f %.2f %.2f %.2f %.2f c "
+                         "%.2f %.2f %.2f %.2f %.2f %.2f c "
+                         "%.2f %.2f %.2f %.2f %.2f %.2f c "
+                         "%.2f %.2f %.2f %.2f %.2f %.2f c S" % (
+                             X(xc + r), Y(yc),
+                             X(xc + r), Y(yc + k), X(xc + k), Y(yc + r), X(xc), Y(yc + r),
+                             X(xc - k), Y(yc + r), X(xc - r), Y(yc + k), X(xc - r), Y(yc),
+                             X(xc - r), Y(yc - k), X(xc - k), Y(yc - r), X(xc), Y(yc - r),
+                             X(xc + k), Y(yc - r), X(xc + r), Y(yc - k), X(xc + r), Y(yc)))
+            linea(xc - 1.4 * r, yc, xc + 1.4 * r, yc)
+            linea(xc, yc - 1.4 * r, xc, yc + 1.4 * r)
+        d = o + L / 2 + r
+        xm, ym = (c0 + c2) / 2, (c1 + c3) / 2
+        for xc, yc in ((xm, c1 - d), (xm, c3 + d), (c0 - d, ym), (c2 + d, ym)):
+            registro(xc, yc)
+        lato = 5 * mm
+        yb = c3 + o + L + 2 * mm
+        for k, cmyk in enumerate(((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1),
+                                  (.5, 0, 0, 0), (0, .5, 0, 0), (0, 0, .5, 0), (0, 0, 0, .5),
+                                  (1, 1, 0, 0), (0, 1, 1, 0), (1, 0, 1, 0))):
+            xa = c0 + 10 * mm + k * lato
+            righe.append("q %g %g %g %g k %.2f %.2f %.2f %.2f re f Q"
+                         % (cmyk + (X(xa), Y(yb + lato), lato, lato)))
     elif variante == "legenda":
         xl = x0 + (x1 - x0) / 2
         # sotto lo steso, o sopra se sotto c'e' la quota del passo
@@ -2496,7 +2542,7 @@ def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
     from pypdf import PdfReader, PdfWriter, Transformation
     from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject,
                                RectangleObject)
-    if variante in ("quote", "cornice", "legenda"):
+    if variante in ("quote", "cornice", "legenda", "segni"):
         from pypdf import PageObject
         w = PdfWriter(clone_from=sorgente)
         font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
@@ -2867,7 +2913,7 @@ def main():
     va.add_argument("--varianti", default=["giro90", "giro180", "giro270", "scala1.03"],
                     type=lambda s: [x for x in s.split(",") if x],
                     help="giroN (N = 90, 180, 270), rotate, scalaS, spostato, "
-                         "miniatura, copertina, appiattito, quote, cornice, "
+                         "miniatura, copertina, appiattito, quote, cornice, segni, "
                          "legenda, separate da virgole; "
                          "si sommano con + (appiattito+giro90)")
     va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
