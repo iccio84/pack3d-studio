@@ -211,6 +211,45 @@ fianco tutto marrone e per fondo un'aletta; adesso il cielo col
 marchio si legge dal davanti, i fianchi arancio continuano l'onda marrone del
 fronte e il fondo e' marrone.
 
+#### La scatola a linguetta: i fianchi sul fronte, la linguetta nel retro
+
+Il caso: un astuccio da dieci barrette, 190,5 x 138,8 x 46,3 mm, a
+fasciatura verticale LINGUETTA (16 + 16) - CIELO (46,3) - FRONTE (139,2) -
+FONDO (56,5) - RETRO (138,5) - alette (6 + 18). La linguetta scavalca il
+cielo e chiude sul retro, infilata in una fessura dentro un riquadro a
+strappo. Il solutore si fermava: "la sequenza delle fasce non e' ne' quella
+di un astuccio chiuso ne' quella di uno aperto".
+
+Le cause erano due, e le regole sono due.
+
+1. **Un riquadro dentro una faccia non e' una piega** (`_senza_riquadri` in
+   `dieline.py`). Le due righe del riquadro a strappo si fermano 3 mm prima
+   dei bordi del corpo, ma ne coprono il 97% e passavano la soglia dell'80%
+   di `rows_in_col`: il retro da 138,5 si spezzava in 111,3 + 24,2 + 3 e non
+   c'erano piu' due fasce alte uguali. Due righe interne che si fermano
+   tutte e due prima di ENTRAMBI i bordi (piu' di 1,5 mm), agli stessi capi,
+   con due verticali che le chiudono, sono un riquadro: si tolgono dalle
+   fasce. Una cordonatura vera arriva ai bordi; il bordo libero della
+   linguetta, che rientra, e' il bordo del disegno e non si tocca. E' un
+   **ripiego**: si prova solo se la lettura di serie non trova la scatola, e
+   vale solo se ne esce una scatola intera (retro, fronte, cielo e fondo).
+   La scatola a punta T6 della stessa linea ha lo stesso riquadro: tolto,
+   le sue fasce diventavano un astuccio 131,5 x 169,3 x 28,3 senza fondo, e
+   la punta spariva; girata di 180 gradi il suo "fondo" era un'aletta da
+   3,4 mm. Cielo e fondo devono essere facce tutte e due, il piu' basso
+   almeno sei decimi dell'altro (qui 46,3 e 56,5): cosi' la T6 resta punta.
+2. **I fianchi possono stare sul fronte** (`_chiuso`). Qui li portano tutte e
+   due le fasce alte: quelli del fronte sono le pareti da 45 mm, quelli del
+   retro le alette di colla da 20,7. Con la lettura di serie (RETRO - CIELO -
+   FRONTE - FONDO, il retro in alto) il "fondo" diventava l'aletta da 6 mm
+   e il "cielo" il fondo vero: una scatola profonda 56,5 col fondo stirato
+   dell'842%. Un fondo e' una faccia: se la fascia dopo la bassa e' meno di
+   tre decimi di quella in mezzo, e sopra l'alta c'e' una fascia profonda
+   come quella in mezzo (25%), la lettura e' CIELO - FRONTE - FONDO - RETRO
+   col fronte in alto e i fianchi agganciati a lui. La profondita' e' il
+   cielo, 46,3, che torna coi fianchi da 45; il fondo da 56,5 si riscala
+   (l'avviso lo dice).
+
 #### Le falde del retro sono fasce, non facce
 
 Sul solido le due falde non sono facce intere: sono **fasce del retro**, e in
