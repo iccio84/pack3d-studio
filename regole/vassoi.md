@@ -126,7 +126,19 @@ un'altra penna (regole/verifiche.md, *La penna vera*). Nella penna vera:
   cinque colonne e tre fasce esatte - non torna. Leggerlo come legenda
   vorrebbe dire leggere le scritte. La costruzione si ferma e lo dice: non
   esce un modello sbagliato. Sul display T1x40 e sui due riempimenti KMS, in
-  `parco/varianti.json`.
+  `parco/varianti.json`;
+- **i segni di stampa non sono fustella** (`dieline._segni_fuori`). I
+  crocini di taglio e di registro di una tavola pronta per la tipografia,
+  nella penna del taglio come li mette il CAD della fustella, stanno a tre
+  millimetri dalla stampa e allargavano il riquadro della fustella: i suoi
+  lati diventavano pieghe, e sul display T1x40 la griglia aveva cinque fasce
+  invece di tre. Un segno e' corto (`SEGNO_MAX_MM`, 12 mm), ha tutti e due i
+  capi liberi e sta tutto fuori dal resto del disegno: una linea della
+  fustella e' attaccata almeno da un capo, o ci sta dentro. Si toglie anche
+  da quello che la regola delle alette rimette dentro, perche' un crocino
+  accanto a un lato e' contenuto in un asse e attaccato nell'altro, come
+  un'aletta. Le 45 letture del parco restano uguali, e la variante coi segni
+  (`prove/parco.py varianti --varianti segni`) e' 45 su 45.
 
 **Il controllo che lo dice**: la misura dell'impronta va confrontata con il
 riquadro della fustella, che viene dai vettori. Se ballano di piu' di 2 mm il

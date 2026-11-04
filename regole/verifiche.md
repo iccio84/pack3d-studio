@@ -207,8 +207,9 @@ nuovo.
 Tre volte a settimana le Actions di `pack3d-casi` fanno girare le varianti
 col codice di `coda-settimana` (`varianti.yml`): la domenica le pagine
 variate - un quarto di giro, la copertina, la miniatura -, il mercoledi' il
-disegno variato nella penna del DT - le quote, la cornice, la legenda
-(`_disegno_in_piu`, regole/flowpack.md) -, il lunedi' le varianti sommate,
+disegno variato nella penna del DT - le quote, la cornice, la legenda, i
+segni di stampa (`_disegno_in_piu`, regole/flowpack.md) -, il lunedi' le
+varianti sommate,
 come arrivano davvero: la cornice su una tavola girata, le quote con la
 legenda, le quote con una miniatura accanto. Rosso se una variante nuova
 esce diversa. Un giro interrotto riprende con `--riusa`. `appiattito` -
@@ -259,6 +260,7 @@ sommate:
 | cornice+giro90 | 42 su 45, 44 dal 4 novembre |
 | quote+legenda | 41 su 45 |
 | quote+miniatura | 44 su 45 |
+| segni (4 novembre) | 45 su 45 |
 
 Prima delle correzioni la penna vera aveva trovato quattro difetti della
 lettura, ognuno corretto con una regola generale e le 45 letture del parco
@@ -278,6 +280,14 @@ pagine e il prisma col coperchio, girati di 90 o 270 gradi, da soli o con la
 cornice, escono uguali all'originale. Il verso che le facce non dicono lo
 dice la tavola, o l'altro pezzo della scatola (regole/pdf.md, regole/prisma.md).
 Resta il riempimento del display da 15, muto in tutti e due i PDF.
+
+Lo stesso giorno la variante coi **segni di stampa** - crocini di taglio agli
+angoli, crocini di registro a meta' dei lati, la barra dei colori sotto,
+fuori dal DT e dalla sua stampa - ha trovato un difetto vero della lettura:
+nella penna del taglio i crocini allargavano il riquadro della fustella, e
+il display a vassoio T1x40, coi due riempimenti che lo contengono, non si
+costruiva piu'. Corretto con una regola generale (`_segni_fuori`,
+regole/vassoi.md): 45 su 45, e le 45 letture uguali.
 
 ## Quanto manca alle soglie
 
