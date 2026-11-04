@@ -256,7 +256,7 @@ sommate:
 | quote | 45 su 45 |
 | cornice | 45 su 45 |
 | legenda | 42 su 45 |
-| cornice+giro90 | 42 su 45 |
+| cornice+giro90 | 42 su 45, 44 dal 4 novembre |
 | quote+legenda | 41 su 45 |
 | quote+miniatura | 44 su 45 |
 
@@ -272,6 +272,12 @@ coppa con la miniatura -, e due sono nuovi, la legenda chiusa contro un
 vassoio espositore (regole/vassoi.md) e contro la cima della scatola a punta
 (regole/punta.md): nella penna del taglio e' un'aletta, e la costruzione si
 ferma e lo dice.
+
+Il 4 novembre due dei limiti gia' noti sono guariti: l'astuccio da sette
+pagine e il prisma col coperchio, girati di 90 o 270 gradi, da soli o con la
+cornice, escono uguali all'originale. Il verso che le facce non dicono lo
+dice la tavola, o l'altro pezzo della scatola (regole/pdf.md, regole/prisma.md).
+Resta il riempimento del display da 15, muto in tutti e due i PDF.
 
 ## Quanto manca alle soglie
 
