@@ -248,6 +248,31 @@ E tre regole della variante, perche' sia un disegno che un disegnatore fa:
   disegna una legenda sopra una quota;
 - **ogni passo vede gli altri** (`insieme` di `_disegno_in_piu`).
 
+Il 3 e 4 novembre 2026, sui 45 casi del parco, nella penna vera, da sole e
+sommate:
+
+| variante | come l'originale |
+|---|---|
+| quote | 45 su 45 |
+| cornice | 45 su 45 |
+| legenda | 42 su 45 |
+| cornice+giro90 | 42 su 45 |
+| quote+legenda | 41 su 45 |
+| quote+miniatura | 44 su 45 |
+
+Prima delle correzioni la penna vera aveva trovato quattro difetti della
+lettura, ognuno corretto con una regola generale e le 45 letture del parco
+uguali: la quota attaccata al corpo dell'astuccio (`_quote_fuori`,
+regole/astucci.md), la cornice presa per la vista di dentro (`racchiude`,
+regole/vassoi.md), e due della variante, la cornice che seguiva i richiami
+fino alle note e quella che attraversava la stampa. Le diverse che restano
+sono limiti dichiarati in `parco/varianti.json`: quattro ripetono, sommate,
+quelli gia' noti - gli astucci e il riempimento girati senza testo vivo, la
+coppa con la miniatura -, e due sono nuovi, la legenda chiusa contro un
+vassoio espositore (regole/vassoi.md) e contro la cima della scatola a punta
+(regole/punta.md): nella penna del taglio e' un'aletta, e la costruzione si
+ferma e lo dice.
+
 ## Quanto manca alle soglie
 
 Il parco dice che un caso esce giusto, non quanto e' vicino a uscire
