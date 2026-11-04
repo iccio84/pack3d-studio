@@ -528,6 +528,63 @@ def _senza_quote(segs, numeri):
     return [s for s in segs if not di_quota(s)]
 
 
+# Quanto puo' essere lungo un richiamo di una quota fuori dal disegno, oltre
+# la distanza fra il disegno e la quota, in mm: un richiamo parte vicino al
+# disegno e passa la quota di poco. Una linea del disegno che arriva fin li'
+# e' molto piu' lunga.
+RICHIAMO_OLTRE_MM = 6.0
+
+
+def _quote_fuori(segs, numeri, tol=3.0):
+    """Gli indici, in `segs`, delle linee di quota che stanno fuori dal
+    disegno e dei loro richiami.
+
+    Una quota disegnata nella penna della fustella, coi richiami a un
+    millimetro dagli angoli, finisce nel gruppo della fustella stessa: e
+    `_senza_quote` pulisce solo gli altri gruppi. Le sue righe diventavano
+    pieghe del foglio: sulla scatola a punta T6 con le quote del passo e del
+    giro la riga della quota sotto lo steso era l'ultima fascia, il retro
+    non era piu' alto come il fronte e la scatola non si riconosceva. Una
+    quota si toglie se, tolte lei e le altre quote, sta fuori dal riquadro
+    del resto del disegno: dentro, una piega con la sua misura scritta
+    accanto resta piega. Dei richiami si tolgono quelli corti, che dal
+    disegno arrivano alla quota (`RICHIAMO_OLTRE_MM`)."""
+    from .flowpack import _quote_estese
+    quote = _quote_estese(segs, numeri)
+    if not quote:
+        return set()
+
+    def linea(s, kq, cq, qa, qb):
+        k, c, a, b, _st = s
+        return k == kq and abs(c - cq) <= tol and a >= qa - tol and b <= qb + tol
+
+    def richiamo(s, kq, cq, qa, qb):
+        k, c, a, b, _st = s
+        return (k != kq and min(abs(c - qa), abs(c - qb)) <= tol
+                and a - tol <= cq <= b + tol)
+    di_quote = {i for i, s in enumerate(segs)
+                if any(linea(s, kq, cq, qa, qb) or richiamo(s, kq, cq, qa, qb)
+                       for (kq, cq), (_v, qa, qb) in quote.items())}
+    resto = [s for i, s in enumerate(segs) if i not in di_quote]
+    if not resto:
+        return set()
+    xs = [v for k, c, a, b, _st in resto for v in ((c,) if k == "V" else (a, b))]
+    ys = [v for k, c, a, b, _st in resto for v in ((c,) if k == "H" else (a, b))]
+    via = set()
+    for (kq, cq), (_v, qa, qb) in quote.items():
+        lo, hi = (min(ys), max(ys)) if kq == "H" else (min(xs), max(xs))
+        if lo - tol <= cq <= hi + tol:
+            continue
+        lontano = lo - cq if cq < lo else cq - hi
+        for i, s in enumerate(segs):
+            if linea(s, kq, cq, qa, qb):
+                via.add(i)
+            elif (richiamo(s, kq, cq, qa, qb)
+                  and s[3] - s[2] <= lontano + RICHIAMO_OLTRE_MM / PT2MM):
+                via.add(i)
+    return via
+
+
 def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
     cartigli, legende e disegni di riepilogo posti a lato della fustella.
@@ -536,7 +593,14 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     `ALTRA_VISTA` del piu' lungo, sono la vista di fuori e quella di dentro
     affiancate, e si tiene quella con piu' grafica sotto. La vista di dentro
     ha spesso PIU' tratti (i contorni delle zone segnaposto, nella stessa
-    penna) ed e' piu' lunga: per lunghezza vinceva lei."""
+    penna) ed e' piu' lunga: per lunghezza vinceva lei.
+
+    Due viste stanno una accanto all'altra, mai una dentro l'altra: un gruppo
+    che racchiude il piu' lungo e' la cornice della tavola, non l'altra
+    vista. Sul display a vassoio T1x40 con una cornice a dieci millimetri,
+    nella penna del taglio, la cornice era lunga l'80,04% della fustella:
+    passava per l'altra vista, aveva piu' grafica sotto - tutta - e la
+    griglia prendeva i suoi lati per pieghe."""
     if not segs:
         return segs
     groups = {id(g): g for g in _gruppi(segs, gap)}
@@ -547,11 +611,23 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     def riq(g):
         return (min(b[0] for _, b in g), min(b[1] for _, b in g),
                 max(b[2] for _, b in g), max(b[3] for _, b in g))
+
+    def racchiude(g, h, t=4.0):
+        r, q = riq(g), riq(h)
+        return (r[0] <= q[0] + t and r[1] <= q[1] + t
+                and r[2] >= q[2] - t and r[3] >= q[3] - t)
     main = max(groups.values(), key=lung)
     if dettaglio is not None:
-        viste = [g for g in groups.values() if lung(g) >= ALTRA_VISTA * lung(main)]
+        viste = [g for g in groups.values() if lung(g) >= ALTRA_VISTA * lung(main)
+                 and (g is main or not racchiude(g, main))]
         if len(viste) > 1:
             main = max(viste, key=lambda g: dettaglio(riq(g)))
+    principale = main
+    if numeri:
+        # le quote attaccate alla fustella, fuori dal disegno (`_quote_fuori`)
+        via = _quote_fuori([sg for sg, _ in main], numeri)
+        if via:
+            main = [x for i, x in enumerate(main) if i not in via]
     mx0 = min(b[0] for _, b in main); my0 = min(b[1] for _, b in main)
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)
 
@@ -589,7 +665,7 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     # con le quote il fronte curvo, che si riconosce dalle alette, spariva.
     # Le linee del corpo non si toccano: una piega con la sua misura scritta
     # accanto resta piega.
-    altri = [g for g in groups.values() if g is not main]
+    altri = [g for g in groups.values() if g is not principale]
     if numeri and altri:
         resto = _senza_quote([sg for g in altri for sg, _ in g], numeri)
         altri = _gruppi(resto, gap)
