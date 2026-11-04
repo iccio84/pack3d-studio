@@ -914,7 +914,7 @@ def classify(d: Dieline) -> str:
     return "unknown"
 
 
-def _fasce_del_corpo(d):
+def _fasce_del_corpo(d, riquadri=True):
     """Le fasce della fasciatura, lette sulla colonna del corpo.
 
     Le `ys` del foglio sono l'unione di TUTTE le cordonature, e ci finisce
@@ -929,7 +929,8 @@ def _fasce_del_corpo(d):
     ys = d.rows_in_col(xs[ci], xs[ci + 1])
     if len(ys) < 3:
         ys = d.ys
-    ys = _senza_riquadri(d, ys, xs[ci], xs[ci + 1])
+    if not riquadri:
+        ys = _senza_riquadri(d, ys, xs[ci], xs[ci + 1])
     return [(ys[i], ys[i + 1], ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
 
 
@@ -1099,9 +1100,24 @@ def solve_carton(d: Dieline) -> Dieline:
     stessa altezza, oppure aperto, con una faccia grande sola. Vedi `_chiuso` e
     `_aperto`.
     """
+    def leggi(rows):
+        return (_chiuso(rows, fianchi=lambda i: _ha_fianchi(d, rows[i]))
+                or _aperto(rows))
+
     rows = _fasce_del_corpo(d)
-    ruoli = (_chiuso(rows, fianchi=lambda i: _ha_fianchi(d, rows[i]))
-             or _aperto(rows))
+    ruoli = leggi(rows)
+    if ruoli is None:
+        # Solo se la lettura coi riquadri non trova la scatola, e solo se
+        # senza ne esce una scatola intera - retro, fronte, cielo e fondo:
+        # sulla scatola a punta lo stesso riquadro a strappo, tolto, ne
+        # faceva un astuccio senza fondo (regole/astucci.md, la scatola a
+        # linguetta).
+        senza = _fasce_del_corpo(d, riquadri=False)
+        if senza != rows:
+            r2 = leggi(senza)
+            if r2 is not None and all(k in r2 for k in
+                                      ("back", "front", "top", "bottom")):
+                ruoli, rows = r2, senza
 
     def fasce():
         """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""

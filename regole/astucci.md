@@ -230,7 +230,12 @@ Le cause erano due, e le regole sono due.
    tutte e due prima di ENTRAMBI i bordi (piu' di 1,5 mm), agli stessi capi,
    con due verticali che le chiudono, sono un riquadro: si tolgono dalle
    fasce. Una cordonatura vera arriva ai bordi; il bordo libero della
-   linguetta, che rientra, e' il bordo del disegno e non si tocca.
+   linguetta, che rientra, e' il bordo del disegno e non si tocca. E' un
+   **ripiego**: si prova solo se la lettura di serie non trova la scatola, e
+   vale solo se ne esce una scatola intera (retro, fronte, cielo e fondo).
+   La scatola a punta T6 della stessa linea ha lo stesso riquadro: tolto,
+   le sue fasce diventavano un astuccio 131,5 x 169,3 x 28,3 senza fondo, e
+   la punta spariva. Senza fondo non e' un astuccio, e la T6 resta punta.
 2. **I fianchi possono stare sul fronte** (`_chiuso`). Qui li portano tutte e
    due le fasce alte: quelli del fronte sono le pareti da 45 mm, quelli del
    retro le alette di colla da 20,7. Con la lettura di serie (RETRO - CIELO -
