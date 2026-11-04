@@ -929,7 +929,51 @@ def _fasce_del_corpo(d):
     ys = d.rows_in_col(xs[ci], xs[ci + 1])
     if len(ys) < 3:
         ys = d.ys
+    ys = _senza_riquadri(d, ys, xs[ci], xs[ci + 1])
     return [(ys[i], ys[i + 1], ys[i + 1] - ys[i]) for i in range(len(ys) - 1)]
+
+
+def _senza_riquadri(d, ys, x0, x1, rientro_mm=1.5, tol=2.5):
+    """Le cordonature che chiudono un riquadro DENTRO una faccia non la piegano.
+
+    Sul retro di un astuccio a linguetta c'e' una striscia a strappo: due
+    tratti orizzontali che si fermano 3 mm prima dei bordi del corpo e due
+    verticali che li chiudono ai capi, con la fessura della linguetta in
+    mezzo. Coprono il 97% della colonna e passavano per cordonature: il retro
+    da 138,5 mm si spezzava in 111,3 + 24,2 + 3, e il solutore non trovava
+    piu' due fasce alte uguali. Una riga che si ferma prima dei due bordi,
+    insieme a un'altra cosi', con due verticali che le uniscono agli stessi
+    capi, e' un riquadro della faccia, non il confine di una fascia.
+    """
+    r = rientro_mm / PT2MM
+
+    def capi(y):
+        segs = [(a, b) for cy, a, b in d.hsegs
+                if abs(cy - y) < tol and b > x0 and a < x1]
+        if not segs:
+            return None
+        a, b = min(s[0] for s in segs), max(s[1] for s in segs)
+        if a - x0 < r or x1 - b < r:
+            return None
+        return a, b
+
+    def chiusa(x, ya, yb):
+        span = sum(max(0.0, min(b, yb) - max(a, ya))
+                   for cx, a, b in d.vsegs if abs(cx - x) < tol)
+        return span >= 0.9 * (yb - ya)
+
+    via = set()
+    interni = ys[1:-1]
+    for i, ya in enumerate(interni):
+        ca = capi(ya)
+        if ca is None:
+            continue
+        for yb in interni[i + 1:]:
+            cb = capi(yb)
+            if (cb and abs(ca[0] - cb[0]) < tol and abs(ca[1] - cb[1]) < tol
+                    and chiusa(ca[0], ya, yb) and chiusa(ca[1], ya, yb)):
+                via.update((ya, yb))
+    return [y for y in ys if y not in via] if via else ys
 
 
 def _ha_fianchi(d, riga, minimo_mm=3.0):
@@ -984,6 +1028,23 @@ def _chiuso(rows, tol=3.0, fianchi=None):
             if cielo > 0 and abs(cielo - fondo) <= max(tol, 0.25 * fondo):
                 r["top"] = alta - 1
         return r
+    if (fianchi is not None and fianchi(alta) and alta >= 1
+            and bassa - alta > 1 and bassa + 1 < len(rows)):
+        # CIELO - FRONTE - FONDO - RETRO - alette, coi fianchi sul FRONTE:
+        # la scatola a linguetta che chiude sul retro. Letta come RETRO -
+        # CIELO - FRONTE - FONDO, il "fondo" sarebbe l'aletta da 6 mm dopo la
+        # fascia bassa e il "cielo" il fondo vero: sul T10 a linguetta ne
+        # usciva una scatola profonda 56,5 col fondo stirato dell'842%. Un
+        # fondo e' una faccia, profondo quasi come il cielo; se la fascia
+        # dopo la bassa e' un'aletta e sopra l'alta c'e' una fascia profonda
+        # come quella in mezzo, il fronte e' l'alta, fra il cielo e il fondo.
+        mezzo = max(range(alta + 1, bassa), key=lambda i: rows[i][2])
+        hm = rows[mezzo][2] * PT2MM
+        dopo = rows[bassa + 1][2] * PT2MM
+        cielo = rows[alta - 1][2] * PT2MM
+        if dopo < 0.3 * hm and abs(cielo - hm) <= max(tol, 0.25 * hm):
+            return {"back": bassa, "front": alta, "fianchi": alta,
+                    "bottom": mezzo, "top": alta - 1}
     back_i, front_i = alta, bassa
     r = {"back": back_i, "front": front_i, "fianchi": back_i}
     if front_i - back_i > 1:
