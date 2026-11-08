@@ -207,19 +207,21 @@ class Vano:
         return self.x1 - self.x0, self.tetto - self.fondo, self.z1 - self.z0
 
 
-def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO):
+def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     # del display conta la scatola: la plancia sta dietro, in alto, e non
     # contiene niente
     V = vertici(J, B, senza=("plancia",))
     lo, hi = V.min(0), V.max(0)
     z0 = lo[2] + spessore
     # la plancia col piede sul fondo (`scatola_plancia.maglia`, "fondo")
-    # scende dentro la scatola, contro il retro: il vano comincia davanti a lei
-    dentro = set(map(tuple, np.round(V, 4)))
-    tutti = vertici(J, B)
-    pl = np.array([q for q in tutti if tuple(np.round(q, 4)) not in dentro])
-    if len(pl) and pl[:, 1].min() < hi[1] - spessore and pl[:, 2].max() < (lo[2] + hi[2]) / 2:
-        z0 = max(z0, pl[:, 2].max() + GIOCO)
+    # scende dentro la scatola, contro il retro: il vano comincia davanti a
+    # lei. Solo allora: le plance di serie scendono davanti, dentro la
+    # finestra o il fronte, e il vano resta la scatola intera (il T15)
+    if plancia_sul_fondo:
+        dentro = set(map(tuple, np.round(V, 4)))
+        pl = np.array([q for q in vertici(J, B) if tuple(np.round(q, 4)) not in dentro])
+        if len(pl) and pl[:, 2].max() < (lo[2] + hi[2]) / 2:
+            z0 = max(z0, pl[:, 2].max() + GIOCO)
     vano = Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
                 lo[1] + spessore, hi[1])
     # fra i fianchi: i vertici piu' alti sul fondo (una striscia piegata
@@ -760,7 +762,7 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
 # Il GLB composto
 
 def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
-            dall_alto=False, gradi=0.0):
+            dall_alto=False, gradi=0.0, plancia_sul_fondo=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -776,7 +778,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     if any(k in n for n in Jp.get("nodes", [])
            for k in ("matrix", "rotation", "translation", "scale")):
         raise ValueError("riempimento: il GLB del pack ha nodi trasformati")
-    vano = misura_vassoio(Jv, Bv)
+    vano = misura_vassoio(Jv, Bv, plancia_sul_fondo=plancia_sul_fondo)
     vano.dall_alto = dall_alto
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
