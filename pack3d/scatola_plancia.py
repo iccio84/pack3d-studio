@@ -558,12 +558,17 @@ def dichiara(p):
         if p.fondo_u else [])
 
 
-def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
+def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
     """(V, UV, T, inizio_plancia) del display aperto, in mm, con la texture
     del DT intero e sotto le strisce del rovescio (`ballotin.con_interno`).
     Il fronte guarda +Z, la cima +Y, il fondo sta a Y = 0. I triangoli della
     plancia vengono per ultimi, da `inizio_plancia`: nel GLB sono un nodo a
-    parte, e il riempimento misura il vano senza di lei."""
+    parte, e il riempimento misura il vano senza di lei.
+
+    `dove_plancia`, scelta del pack: "fondo" mette il piede della plancia
+    negli incastri sul fondo, dentro il retro, invece che sul bordo del
+    retro sopra il coperchio (regole/riempimenti.md, *La plancia sul
+    fondo*)."""
     from .ballotin import STRISCIA
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     W, D, H = p.W, p.D, p.H
@@ -701,8 +706,19 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         _fondo_sul_fianco(p, quad, X, Zc, H, sp)
 
     inizio = len(T)
+    # il piede della plancia: sul coperchio, o sul fondo dentro il retro,
+    # sopra le strisce piegate sul fondo e staccata dalla parete
+    piede, zh = H, Zc(vh)
+    if dove_plancia == "fondo":
+        # poggia sul fondo l'estremo piu' basso: la cerniera, o la cima
+        # della parte ripiegata davanti, col pezzo di fronte che viene via
+        # con lei, se e' piu' lunga della parte in piedi
+        vmin = min([p.vT] + [v for _, v in p.taglio]
+                   + ([_righe_plancia(p)[0][0], p.vF] if p.profilo else []))
+        scende = max(0.0, (p.vM - vmin) - (vh - p.vM))
+        piede, zh = 3.0 * sp + scende, max(zh, -D / 2 + 1.5 * sp)
     if p.profilo:
-        _plancia_su(p, quad, X, Zc, H, sp)
+        _plancia_su(p, quad, X, zh, piede, sp)
         return np.array(V, float), np.array(UV, float), np.array(T, int), inizio
     # la plancia. Alzata sulla cerniera, che sta verso il retro, la parte
     # verso la cerniera sta in piedi e mostra la stampa a chi sta DIETRO, col
@@ -712,7 +728,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     # scritta, capovolta sul foglio, si legge dritta. Il piede scende nella
     # finestra. Vedi REGOLE.md, *Il display a scatola*.
     a0, a1 = p.pl_u
-    zh = Zc(vh)
+    H = piede
     alto = vh - p.vM
     quad([(X(a0), H, zh), (X(a1), H, zh), (X(a1), H + alto, zh),
           (X(a0), H + alto, zh)],
@@ -807,14 +823,13 @@ def _fondo_sul_fianco(p, quad, X, Zc, H, sp):
              coste=(2,))
 
 
-def _plancia_su(p, quad, X, Zc, H, sp):
+def _plancia_su(p, quad, X, zh, H, sp):
     """La plancia sagomata alzata: dalla cerniera alla riga di mezzo in
     piedi, con la stampa verso il retro; dalla riga di mezzo alla cima
     ripiegata davanti, con la stampa verso chi guarda; la cima che entra
     nel fronte segue i suoi tagli (`_taglio`). Come la plancia diritta, a
     strisce lungo v."""
     righe = _righe_plancia(p)
-    zh = Zc(p.vH)
     alto = p.vH - p.vM
     zd = zh + 2 * sp
     su = [r for r in righe if r[0] >= p.vM]

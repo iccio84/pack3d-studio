@@ -64,6 +64,20 @@ l'errore di sopra. Il display del caso pero' ancora non si costruisce: e' un
 display a scatola col fondo attaccato al fianco, non al retro, e coi fianchi
 diversi, che `scatola_plancia` non legge (issue del caso).
 
+**La foto si pulisce dalla penna.** I tratti rifatti vettoriali la
+costruzione li toglie come ogni DT, ma la penna resta nei pixel della foto:
+sul display T1x10 le linee ciano stavano sui bordi della texture, e la
+tabella nutrizionale ciano sul fondo era la GDA, che si toglie sempre
+(regole/pulizia.md, *La GDA si toglie da tutte le grafiche*) e che senza
+testo vivo `techink.zone_gda` non vede. Allora `foto.pulisci`, prima di
+scrivere la foto nel PDF nuovo: le campiture della penna (larghe almeno 2,5
+mm) si raccolgono in gruppi col loro fondo tenue della stessa tinta (il
+riquadro chiaro attorno ai valori) e ogni gruppo si copre, rettangolo con
+3 mm di bordo e le scritte dentro, col colore che ha attorno; i tratti
+sottili si riempiono col pixel buono piu' vicino. La foto pulita torna nello
+spazio colore di prima: in quadricromia se lo era (se no compare l'avviso
+della grafica in RGB, che nel file non c'era).
+
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
 tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,

@@ -862,3 +862,27 @@ lo legge come prima.
 **Cosa manca.** Le alette di fronte e retro (24) e del fondo (21) non ci
 sono: stanno dentro, contro le pareti. La patta della striscia sta stesa
 con lei.
+
+### La plancia sul fondo, una scelta del pack
+
+Lo stesso caso, al primo «Non approvo»: «la plancia va piu' in basso, dove
+ci sono gli incastri». Chi l'ha caricato ha scelto: come prima, la meta'
+verso il fronte ripiegata in avanti, ma piu' in basso, col piede negli
+incastri sul fondo. Gli altri display a scatola la plancia la tengono sul
+bordo del retro, sopra il coperchio, e sono approvati cosi': e' l'opzione
+del caso `plancia: "fondo"` (`registro.plancia_scelta`), di serie niente.
+
+**Poggia l'estremo piu' basso.** Sul T1x10 la parte in piedi e' 95,6 mm e
+quella ripiegata, col pezzo di fronte che viene via con lei (la cima con la
+presa), e' piu' lunga: col piede della parte in piedi sul fondo la cima
+usciva 20 mm sotto la scatola. Allora `scatola_plancia.maglia` abbassa la
+plancia finche' il suo punto piu' basso - la cerniera o la cima - sta sul
+fondo, sopra le strisce piegate (3 spessori), e la tiene dentro il retro,
+staccata dalla parete di uno spessore e mezzo. Sul caso il modello passa da
+141,2 a 124,5 mm di altezza, e da davanti si vedono il marchio e il prodotto
+sopra il bordo, come nella foto.
+
+**Il vano comincia davanti alla plancia.** Scesa dentro la scatola, la
+plancia prende il retro: `riempimento.misura_vassoio` sposta l'inizio del
+vano davanti a lei (piu' il gioco), e i pezzi non la attraversano (189,1 ->
+188,0 mm sul caso). Con la plancia sopra il coperchio non cambia niente.
