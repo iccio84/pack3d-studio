@@ -516,7 +516,8 @@ def _costruisci_coppa(r, info):
 
 def _costruisci_vassoio(r, info):
     def costruisci(lastre, uscita):
-        return build_vassoio(r.pdf, uscita, r.q, lastre, r.col_riq)
+        return build_vassoio(r.pdf, uscita, r.q, lastre, r.col_riq,
+                             dove_plancia=plancia_scelta(r.opts))
     return costruisci
 
 
@@ -560,6 +561,24 @@ def _costruisci_astuccio(r, info):
     return costruisci
 
 
+def plancia_scelta(opts):
+    """Dove sta la plancia del display a scatola, scelta del pack: "fondo"
+    col piede negli incastri sul fondo, dentro il retro; di serie sul bordo
+    del retro, sopra il coperchio (`scatola_plancia.maglia`)."""
+    return "fondo" if str(opts.get("plancia", "")).strip().lower() == "fondo" else None
+
+
+def inclina_scelta(opts):
+    """Di quanti gradi si inclinano in avanti i pezzi sdraiati, scelta del
+    pack (0: in piano, di serie): il riempimento ne mette meno se gli strati
+    non ci stanno (`riempimento.inclina`)."""
+    try:
+        g = float(opts.get("inclina", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(max(g, 0.0), 60.0)
+
+
 def _costruisci_riempimento(r, info):
     if info.get("cu") == "carton":
         # un vassoio coi suoi astucci, chiusi
@@ -582,7 +601,8 @@ def _costruisci_riempimento(r, info):
              sezione_da_agente(opts.get("params")),
              scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
              saldatura_scelta(opts), nello_spessore_scelto(opts)), r.q,
-            per_fila=r.per_fila)
+            per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
+            gradi=inclina_scelta(opts))
     return costruisci
 
 

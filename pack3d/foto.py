@@ -46,6 +46,12 @@ CORTO = 4
 SCARTO = 0.8
 # tratti della stessa fustella: non piu' lontani di cosi' (px)
 VICINI = 40
+# pulizia della foto: una campitura della penna (una tabella) e' larga
+# almeno tanti mm, e si copre con un bordo di tanti mm attorno
+CAMPITURA_MM = 2.5
+BORDO_MM = 3.0
+# il fondo tenue di una tabella della penna: saturazione minima
+TENUE = 0.06
 
 
 def _hsv(rgb):
@@ -273,9 +279,58 @@ def tratti_della_foto(rgb):
     return _fustella(linee), tinta
 
 
+def pulisci(rgb, tinta, mm_px):
+    """La foto senza i segni della penna (regole/pulizia.md, *Il PDF-foto*).
+    Le campiture della penna - una tabella, i valori - si coprono col colore
+    che hanno attorno, rettangolo per rettangolo, con le scritte dentro; i
+    tratti sottili (la fustella) si riempiono coi pixel vicini."""
+    h, s, v = _hsv(rgb)
+    vicino = np.minimum((h - tinta) % 360, (tinta - h) % 360) <= 22
+    pieno = (s >= SATURA) & (v >= LUCE) & vicino
+    out = rgb.copy()
+    lato = max(3, int(round(CAMPITURA_MM / mm_px)))
+    camp = ndi.binary_opening(pieno, np.ones((lato, lato), bool))
+    bordo = max(2, int(round(BORDO_MM / mm_px)))
+    H, W = pieno.shape
+    # le celle vicine sono una tabella sola, col suo fondo della stessa
+    # tinta ma tenue (il riquadro chiaro attorno ai valori)
+    tenue = vicino & (s >= TENUE) & (v >= LUCE)
+    gruppi, n = ndi.label(ndi.binary_dilation(camp, iterations=bordo) | tenue)
+    tocca = np.unique(gruppi[camp])
+    gruppi = np.where(np.isin(gruppi, tocca[tocca > 0]), gruppi, 0)
+    for sl in ndi.find_objects(gruppi):
+        if sl is None:
+            continue
+        y0, y1 = max(0, sl[0].start - bordo), min(H, sl[0].stop + bordo)
+        x0, x1 = max(0, sl[1].start - bordo), min(W, sl[1].stop + bordo)
+        anello = np.zeros((H, W), bool)
+        anello[max(0, y0 - bordo):min(H, y1 + bordo), max(0, x0 - bordo):min(W, x1 + bordo)] = True
+        anello[y0:y1, x0:x1] = False
+        anello &= ~pieno
+        colore = np.median(rgb[anello], axis=0) if anello.any() else (255, 255, 255)
+        out[y0:y1, x0:x1] = np.asarray(colore, dtype=rgb.dtype)
+        pieno[y0:y1, x0:x1] = False
+    # i tratti: col pixel buono piu' vicino
+    tratti = ndi.binary_dilation(pieno, iterations=2)
+    if tratti.any():
+        _, (iy, ix) = ndi.distance_transform_edt(tratti, return_indices=True)
+        out[tratti] = out[iy[tratti], ix[tratti]]
+    return out
+
+
 def _rgb_tinta(t):
     import colorsys
     return colorsys.hsv_to_rgb((t % 360) / 360.0, 1.0, 1.0)
+
+
+def _in_quadricromia(pdf_in, page_no):
+    """Se le immagini della pagina sono in quadricromia."""
+    from pypdf import PdfReader
+    try:
+        modi = {im.image.mode for im in PdfReader(pdf_in).pages[page_no].images}
+    except Exception:
+        return False
+    return bool(modi) and modi <= {"CMYK"}
 
 
 def vettoriale(pdf_in, pdf_out, larghezza_mm, page_no=0):
@@ -283,8 +338,8 @@ def vettoriale(pdf_in, pdf_out, larghezza_mm, page_no=0):
     perche' la fustella sia larga `larghezza_mm`, e sopra i suoi tratti.
     Torna i millimetri per pixel."""
     import pypdfium2 as pdfium
-    from pypdf import PdfReader, PdfWriter, Transformation
-    from pypdf.generic import ContentStream, DecodedStreamObject, NameObject, RectangleObject
+    from pypdf import PdfReader, PdfWriter
+    from pypdf.generic import DecodedStreamObject, NameObject
 
     larghezza_mm = float(larghezza_mm)
     if not 20 <= larghezza_mm <= 3000:
@@ -314,15 +369,16 @@ def vettoriale(pdf_in, pdf_out, larghezza_mm, page_no=0):
     # i pixel della resa -> punti del PDF nuovo
     f = mm_px * MM2PT
     Hpx = rgb.shape[0]
-    # la pagina: la foto scalata di quanto serve
-    lettore = PdfReader(pdf_in)
-    pag = lettore.pages[page_no]
-    k = f * rgb.shape[1] / float(pw)
-    pag.add_transformation(Transformation().scale(k, k))
-    pag.mediabox = RectangleObject([0, 0, float(pw) * k, float(ph) * k])
-    for box in ("/CropBox", "/TrimBox", "/BleedBox", "/ArtBox"):
-        if box in pag:
-            del pag[box]
+    # la pagina: la foto senza i segni della penna, scalata di quanto serve
+    from PIL import Image
+    pulita = io.BytesIO()
+    im = Image.fromarray(pulisci(rgb, tinta, mm_px))
+    if _in_quadricromia(pdf_in, page_no):
+        # come la foto di prima: in quadricromia, se no la pulizia fa
+        # comparire l'avviso della grafica in RGB, che nel file non c'era
+        im = im.convert("CMYK")
+    im.save(pulita, "PDF", resolution=72.0 / f, quality=92)
+    pag = PdfReader(io.BytesIO(pulita.getvalue())).pages[0]
     r, g, b = _rgb_tinta(tinta)
     righe = ["q", "%.3f %.3f %.3f RG" % (r, g, b), "0.5 w", "1 J", "1 j"]
     for p in linee:

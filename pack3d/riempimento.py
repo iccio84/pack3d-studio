@@ -207,7 +207,15 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO):
     # contiene niente
     V = vertici(J, B, senza=("plancia",))
     lo, hi = V.min(0), V.max(0)
-    return Vano(lo[0] + spessore, hi[0] - spessore, lo[2] + spessore, hi[2] - spessore,
+    z0 = lo[2] + spessore
+    # la plancia col piede sul fondo (`scatola_plancia.maglia`, "fondo")
+    # scende dentro la scatola, contro il retro: il vano comincia davanti a lei
+    dentro = set(map(tuple, np.round(V, 4)))
+    tutti = vertici(J, B)
+    pl = np.array([q for q in tutti if tuple(np.round(q, 4)) not in dentro])
+    if len(pl) and pl[:, 1].min() < hi[1] - spessore and pl[:, 2].max() < (lo[2] + hi[2]) / 2:
+        z0 = max(z0, pl[:, 2].max() + GIOCO)
+    return Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
                 lo[1] + spessore, hi[1])
 
 
@@ -591,6 +599,38 @@ def pose(vano, p, d, quanti, V_prodotto):
     return out
 
 
+def inclina(vano, p, poste, V_prodotto, gradi):
+    """Le pose sdraiate inclinate in avanti, la faccia stampata verso chi
+    guarda: ruotate attorno al largo del vano (X) di quanto chiesto, o meno,
+    il piu' che serve perche' gli strati stiano nel vano. Gli strati
+    inclinati si appoggiano faccia su faccia: lo strato sopra sale dello
+    spessore diviso il coseno. Torna (pose, gradi messi); 0 gradi se neanche
+    inclinati di poco ci stanno (regole/riempimenti.md, *Inclinati in avanti,
+    se ci stanno*)."""
+    if not poste or gradi <= 0:
+        return poste, 0.0
+    ys = sorted(set(round(float(t[1]), 6) for _, t in poste))
+    strato = {y: k for k, y in enumerate(ys)}
+    alto = vano.tetto
+    a = float(gradi)
+    while a > 0:
+        c, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
+        Rx = np.array([[1.0, 0.0, 0.0], [0.0, c, -s_], [0.0, s_, c]])
+        R0 = poste[0][0]
+        W = (V_prodotto - p.centro) @ (Rx @ R0).T
+        base = -W[:, 1].min()
+        sale = p.spesso / c
+        nuove = [(Rx @ R, np.array([t[0], vano.fondo + base
+                                    + strato[round(float(t[1]), 6)] * sale, t[2]]))
+                 for R, t in poste]
+        cima = max(((V_prodotto - p.centro) @ R.T + t)[:, 1].max() for R, t in nuove)
+        if (cima <= alto + FUORI_VANO
+                and fuori_dal_vano(vano, p, nuove, V_prodotto) <= FUORI_VANO):
+            return nuove, a
+        a = round(a - 0.5, 3)
+    return poste, 0.0
+
+
 # --------------------------------------------------------------------------- #
 # Il prodotto adattato al vano
 
@@ -703,12 +743,13 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
 # Il GLB composto
 
 def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
-            dall_alto=False):
+            dall_alto=False, gradi=0.0):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
     neanche uno. `rigido`: il pack e' un astuccio, che non ha pinne da
-    adattare e non si schiaccia."""
+    adattare e non si schiaccia. `gradi`: sdraiati, inclinati in avanti di
+    tanto, o meno se non ci stanno (`inclina`)."""
     Jv, Bv = leggi(glb_vassoio)
     Jp, Bp = leggi(glb_prodotto)
     cosa = "l'astuccio" if rigido else "il flowpack"
@@ -761,6 +802,15 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     if not rigido:
         Vp, _, _ = adatta(Vp, None, p, d)
     poste = pose(vano, p, d, quanti, Vp)
+    messi = 0.0
+    if gradi and d.posa == "sdraiati":
+        poste, messi = inclina(vano, p, poste, Vp, float(gradi))
+        accorciato.append(
+            "inclinati in avanti di %.1f gradi (chiesti %.0f): %s"
+            % (messi, float(gradi), "di piu' gli strati escono dal vano" if messi < float(gradi)
+               else "ci stanno") if messi > 0 else
+            "chiesti inclinati di %.0f gradi, ma neanche di poco ci stanno nel vano: in "
+            "piano" % float(gradi))
     R = d.R
 
     J = json.loads(json.dumps(Jv))

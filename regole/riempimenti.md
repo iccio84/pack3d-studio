@@ -298,6 +298,25 @@ vano, e i pezzi passavano nel coperchio e nella cornice della finestra. Chi
 l'ha caricato ha risposto di non inclinare: inclinato, il flowpack si
 interseca con il display. Se un pezzo ruotato non sta nel vano, non si ruota.
 
+### Inclinati in avanti, se ci stanno: una scelta del pack
+
+Il display T1x10 (caso 54a998aa3b), al primo «Non approvo»: i T1 «di 30 gradi
+in avanti, per far vedere il logo frontalmente». Col rigonfiamento 9 nello
+spessore (21,3 mm, come il T15 dello stesso prodotto) due strati da 30 gradi
+non stanno nei 44,6 mm del vano; chi l'ha caricato ha scelto «gonfi a 9,
+inclinati meno, quanto serve per stare dentro». E' l'opzione del caso
+`inclina` (gradi, `registro.inclina_scelta`; di serie 0, in piano, e gli
+altri casi non cambiano).
+
+`riempimento.inclina` ruota i pezzi sdraiati attorno al largo del vano, la
+faccia stampata verso il davanti, e scende di mezzo grado alla volta dai
+gradi chiesti finche' gli strati stanno nel vano: la cima sotto il tetto e
+nessun pezzo oltre le pareti (`fuori_dal_vano`), entro `FUORI_VANO`. Gli
+strati inclinati si appoggiano faccia su faccia: quello sopra sale dello
+spessore diviso il coseno. Sul caso: 15 gradi su 30 chiesti, e l'avviso lo
+dice. La regola di sopra resta: se neanche inclinati di poco ci stanno, i
+pezzi stanno in piano, e l'avviso lo dice.
+
 ### Nel display il flowpack resta quello del DT, con le pinne aperte
 
 «I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
