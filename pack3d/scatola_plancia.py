@@ -40,6 +40,9 @@ TRATTI_CERNIERA = 5
 # i ponticelli di un taglio a strappo: interruzioni non piu' larghe di tanto
 # (mm), dove il taglio si salta e si legge la riga dietro
 PONTICELLO = 2.0
+# mm: un foro nella plancia (la presa, l'occhiello) ha i tagli piu' corti di
+# cosi' e piu' vicini di cosi': `_profilo` non lo prende per il bordo
+FORO = 15.0
 
 
 @dataclass
@@ -260,29 +263,44 @@ def _profilo(tratti, uL, uR, v0, v1, passo=1.0, centro=8.0, corto=3.0):
     centro e' il bordo della plancia, il piu' lontano quello della
     finestra (un taglio a strappo e' una fessura, due righe vicine). I tagli
     a meno di `centro` mm dal mezzo (la presa per il dito) e i tratti corti
-    (le crocette dei ponticelli, le scritte) non contano. Un v dove manca un
-    lato non e' plancia. Vedi regole/vassoi.md, *Il display a scatola col
+    (le crocette dei ponticelli, le scritte) non contano. Un foro nella
+    plancia (la presa, l'occhiello) taglia lo stesso v due volte dalla
+    stessa parte con due tratti corti: non e' il suo bordo, si salta
+    (`FORO`). Un v dove manca un lato non e' plancia. Vedi regole/vassoi.md, *Il display a scatola col
     fondo sul fianco*."""
     uc = (uL + uR) / 2
     seg = []
     for t in tratti:
         t = np.asarray(t, float)
-        if len(t) < 2 or float(np.hypot(*np.diff(t, axis=0).T).sum()) < corto:
+        lun = float(np.hypot(*np.diff(t, axis=0).T).sum()) if len(t) >= 2 else 0.0
+        if lun < corto:
             continue
         for a, b in zip(t[:-1], t[1:]):
             if abs(b[1] - a[1]) < 1e-6:
                 continue
             if min(a[0], b[0]) < uL + 1 or max(a[0], b[0]) > uR - 1:
                 continue
-            seg.append((a, b))
+            seg.append((a, b, lun))
+
+    def senza_fori(xs):
+        # dal centro verso fuori: un taglio corto piu' dentro, e il suo
+        # compagno se e' corto e vicino, e' un foro se fuori ne restano altri
+        # due (il bordo della plancia e quello della finestra)
+        xs = sorted(xs, key=lambda q: abs(q[0] - uc))
+        while len(xs) > 2 and xs[0][1] < FORO:
+            due = (len(xs) > 3 and xs[1][1] < FORO
+                   and abs(xs[1][0] - xs[0][0]) < FORO)
+            xs = xs[2:] if due else xs[1:]
+        return [q[0] for q in xs]
+
     out = []
     for v in np.arange(v0 + passo / 2, v1, passo):
         xs = []
-        for a, b in seg:
+        for a, b, lun in seg:
             if min(a[1], b[1]) <= v <= max(a[1], b[1]):
-                xs.append(a[0] + (b[0] - a[0]) * (v - a[1]) / (b[1] - a[1]))
-        sx = [x for x in xs if x < uc - centro]
-        dx = [x for x in xs if x > uc + centro]
+                xs.append((a[0] + (b[0] - a[0]) * (v - a[1]) / (b[1] - a[1]), lun))
+        sx = senza_fori([q for q in xs if q[0] < uc - centro])
+        dx = senza_fori([q for q in xs if q[0] > uc + centro])
         if sx and dx:
             out.append((float(v), max(sx), min(dx), min(sx), max(dx)))
     return out
@@ -558,12 +576,17 @@ def dichiara(p):
         if p.fondo_u else [])
 
 
-def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
+def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
     """(V, UV, T, inizio_plancia) del display aperto, in mm, con la texture
     del DT intero e sotto le strisce del rovescio (`ballotin.con_interno`).
     Il fronte guarda +Z, la cima +Y, il fondo sta a Y = 0. I triangoli della
     plancia vengono per ultimi, da `inizio_plancia`: nel GLB sono un nodo a
-    parte, e il riempimento misura il vano senza di lei."""
+    parte, e il riempimento misura il vano senza di lei.
+
+    `dove_plancia`, scelta del pack: "fondo" mette il piede della plancia
+    negli incastri sul fondo, dentro il retro, invece che sul bordo del
+    retro sopra il coperchio (regole/riempimenti.md, *La plancia sul
+    fondo*)."""
     from .ballotin import STRISCIA
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     W, D, H = p.W, p.D, p.H
@@ -701,8 +724,19 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
         _fondo_sul_fianco(p, quad, X, Zc, H, sp)
 
     inizio = len(T)
+    # il piede della plancia: sul coperchio, o sul fondo dentro il retro,
+    # sopra le strisce piegate sul fondo e staccata dalla parete
+    piede, zh = H, Zc(vh)
+    if dove_plancia == "fondo":
+        # poggia sul fondo l'estremo piu' basso: la cerniera, o la cima
+        # della parte ripiegata davanti, col pezzo di fronte che viene via
+        # con lei, se e' piu' lunga della parte in piedi
+        vmin = min([p.vT] + [v for _, v in p.taglio]
+                   + ([_righe_plancia(p)[0][0], p.vF] if p.profilo else []))
+        scende = max(0.0, (p.vM - vmin) - (vh - p.vM))
+        piede, zh = 3.0 * sp + scende, max(zh, -D / 2 + 1.5 * sp)
     if p.profilo:
-        _plancia_su(p, quad, X, Zc, H, sp)
+        _plancia_su(p, quad, X, zh, piede, sp)
         return np.array(V, float), np.array(UV, float), np.array(T, int), inizio
     # la plancia. Alzata sulla cerniera, che sta verso il retro, la parte
     # verso la cerniera sta in piedi e mostra la stampa a chi sta DIETRO, col
@@ -712,7 +746,7 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     # scritta, capovolta sul foglio, si legge dritta. Il piede scende nella
     # finestra. Vedi REGOLE.md, *Il display a scatola*.
     a0, a1 = p.pl_u
-    zh = Zc(vh)
+    H = piede
     alto = vh - p.vM
     quad([(X(a0), H, zh), (X(a1), H, zh), (X(a1), H + alto, zh),
           (X(a0), H + alto, zh)],
@@ -807,14 +841,13 @@ def _fondo_sul_fianco(p, quad, X, Zc, H, sp):
              coste=(2,))
 
 
-def _plancia_su(p, quad, X, Zc, H, sp):
+def _plancia_su(p, quad, X, zh, H, sp):
     """La plancia sagomata alzata: dalla cerniera alla riga di mezzo in
     piedi, con la stampa verso il retro; dalla riga di mezzo alla cima
     ripiegata davanti, con la stampa verso chi guarda; la cima che entra
     nel fronte segue i suoi tagli (`_taglio`). Come la plancia diritta, a
     strisce lungo v."""
     righe = _righe_plancia(p)
-    zh = Zc(p.vH)
     alto = p.vH - p.vM
     zd = zh + 2 * sp
     su = [r for r in righe if r[0] >= p.vM]

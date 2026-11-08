@@ -224,7 +224,7 @@ VERSIONE = versione.impronta(HERE)
 OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
                 "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura",
-                "gonfio")
+                "gonfio", "plancia", "inclina")
 
 
 # l'immagine del prodotto da incartare: la pagina la rimpicciolisce a 1600 px

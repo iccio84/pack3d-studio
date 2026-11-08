@@ -850,6 +850,18 @@ riga intera da un bordo all'altro. La cima nel fronte la legge `_taglio`,
 come per il fronte. Sul caso: profilo da 84 a 270 mm, plancia 133,4, alta
 95,6 sul coperchio e 91,5 ripiegata davanti, finestra 79 sul fronte.
 
+**Un foro nella plancia non e' il suo bordo** (`FORO`). Al secondo «Non
+approvo» del caso 54a998aa3b: «la plancia ha dei pezzi grigi che vanno
+eliminati, guarda bene la fustella». Nella meta' ripiegata davanti la
+fustella ha una presa, un rettangolo arrotondato largo 7,4 mm a 38 mm dal
+mezzo: i suoi due lati (8,3 e 7,5 mm) tagliavano gli stessi v della diagonale
+della plancia, e il piu' vicino al centro diventava il bordo. Per 8 mm la
+plancia si stringeva da 59 a 38 mm dal mezzo, e il modello aveva un gradino
+grigio sotto la stampa. Regola: da ogni parte, dal centro verso fuori, un
+taglio piu' corto di `FORO` (15 mm), col compagno se e' corto e vicino, si
+salta quando fuori ne restano altri due (il bordo della plancia e quello
+della finestra). Le letture del parco non cambiano.
+
 **Il modello** (`_sagomata`, `_fondo_sul_fianco`, `_plancia_su`): il
 coperchio a strisce dal bordo alla finestra; il fianco col fondo alto
 quanto la scatola, il fondo dalla sua piega all'altro fianco con la stampa
@@ -862,3 +874,31 @@ lo legge come prima.
 **Cosa manca.** Le alette di fronte e retro (24) e del fondo (21) non ci
 sono: stanno dentro, contro le pareti. La patta della striscia sta stesa
 con lei.
+
+### La plancia sul fondo, una scelta del pack
+
+Lo stesso caso, al primo «Non approvo»: «la plancia va piu' in basso, dove
+ci sono gli incastri». Chi l'ha caricato ha scelto: come prima, la meta'
+verso il fronte ripiegata in avanti, ma piu' in basso, col piede negli
+incastri sul fondo. Gli altri display a scatola la plancia la tengono sul
+bordo del retro, sopra il coperchio, e sono approvati cosi': e' l'opzione
+del caso `plancia: "fondo"` (`registro.plancia_scelta`), di serie niente.
+
+**Poggia l'estremo piu' basso.** Sul T1x10 la parte in piedi e' 95,6 mm e
+quella ripiegata, col pezzo di fronte che viene via con lei (la cima con la
+presa), e' piu' lunga: col piede della parte in piedi sul fondo la cima
+usciva 20 mm sotto la scatola. Allora `scatola_plancia.maglia` abbassa la
+plancia finche' il suo punto piu' basso - la cerniera o la cima - sta sul
+fondo, sopra le strisce piegate (3 spessori), e la tiene dentro il retro,
+staccata dalla parete di uno spessore e mezzo. Sul caso il modello passa da
+141,2 a 124,5 mm di altezza, e da davanti si vedono il marchio e il prodotto
+sopra il bordo, come nella foto.
+
+**Il vano comincia davanti alla plancia.** Scesa dentro la scatola, la
+plancia prende il retro: `riempimento.misura_vassoio` sposta l'inizio del
+vano davanti a lei (piu' il gioco), e i pezzi non la attraversano (189,1 ->
+188,0 mm sul caso). Solo con l'opzione (`componi(plancia_sul_fondo=...)`): la
+prima volta il vano si spostava per ogni plancia che scende sotto il bordo,
+e le plance di serie scendono davanti, dentro la finestra o il fronte. Sul
+display T15 il vano era passato da 137,5 a 116,8 mm e il flowpack si
+accorciava da 136,3 a 115,6: il parco del rilascio l'ha fermato.

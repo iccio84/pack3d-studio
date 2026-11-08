@@ -28,7 +28,7 @@ from .comune import (TINTE_BALLOTIN,
 
 
 def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
-                  colata_riquadro=None):
+                  colata_riquadro=None, dove_plancia=None):
     """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
 
     Un blocco unico, senza feritoie: le alette angolari stanno dentro lo
@@ -63,7 +63,7 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
         if sp is not None:
             return build_scatola_plancia(sorgente, sp, out_glb, quality,
                                          lastre_extra, colata_riquadro,
-                                         n_pagine)
+                                         n_pagine, dove_plancia=dove_plancia)
         # per ultimo il vassoio sagomato, le pareti con gli obliqui e gli
         # incavi: vedi `vassoio.riconosci_sagomato`
         pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(sorgente,
@@ -235,7 +235,8 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
 
 
 def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
-                          colata_riquadro=None, n_pagine=1, carta=None):
+                          colata_riquadro=None, n_pagine=1, carta=None,
+                          dove_plancia=None):
     """Il display a scatola: la scatola chiusa con la plancia alzata dal
     coperchio e la finestra da cui si vede il prodotto. Vedi
     `pack3d.scatola_plancia`.
@@ -278,7 +279,8 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
     tela = ballotin.con_interno(tex)
     V, UV, T, inizio = scatola_plancia.maglia(p, origine, scala / PT2MM,
-                                               tela.size, spessore=carta)
+                                               tela.size, spessore=carta,
+                                               dove_plancia=dove_plancia)
     tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
                                              TINTE_BALLOTIN)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,

@@ -115,7 +115,8 @@ def per_fila_scelti(valore):
 
 
 def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
-                      carta=None, incisioni=True, per_fila=None):
+                      carta=None, incisioni=True, per_fila=None, dove_plancia=None,
+                      gradi=0.0):
     """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
     famiglia, poi `quanti` pezzi messi nel vano (None: pieno). Il flowpack
     con `flowpack`, gli argomenti di `build_flowpack` dopo il PDF e il file
@@ -126,7 +127,7 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
         gv = os.path.join(td, "vassoio.glb")
         gf = os.path.join(td, "pack.glb")
-        av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality)
+        av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality, dove_plancia=dove_plancia)
         if astuccio:
             av_f = build_carton(pdfs[info["flowpack"]], gf, quality, carta=carta,
                                 incisioni=incisioni)
@@ -154,7 +155,9 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     # del coperchio (`riempimento._griglia`)
     dall_alto = bool(av_v) and av_v[0] == scatola_plancia.TITOLO
     glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio,
-                                     per_fila=per_fila, dall_alto=dall_alto)
+                                     per_fila=per_fila, dall_alto=dall_alto,
+                                     gradi=gradi,
+                                     plancia_sul_fondo=dove_plancia == "fondo")
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)

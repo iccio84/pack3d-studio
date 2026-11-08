@@ -110,12 +110,12 @@ sono in GADGET.md.
 | vassoio espositore | `vassoio.py` |
 | vassoio sagomato (pareti oblique o con incavi, il fondo fra quattro cordonature; si prova per ultimo) | `vassoio.riconosci_sagomato` |
 | display con plancia | `plancia.py` |
-| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py`, montato in `famiglie.vassoio.build_scatola_plancia` |
+| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py` (la plancia sul fondo: opzione `plancia`), montato in `famiglie.vassoio.build_scatola_plancia` |
 | display con la plancia dentro il coperchio | `sportello.py`; costruito da `build_plancia` con `forma=sportello` |
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |
 | pouch | `pouch.py` |
-| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il CU schiacciato a UV ferme, il pezzo uguale al suo modello e dentro il vano, GLB composto); in `pack3d/famiglie/riempimento.py` `analisi_riempimento` e `build_riempimento` |
+| riempimento (vassoio + flowpack) | `riempimento.py` (vano, pose, il CU schiacciato a UV ferme, il pezzo uguale al suo modello e dentro il vano, GLB composto, i sdraiati inclinati in avanti se ci stanno: opzione `inclina`); in `pack3d/famiglie/riempimento.py` `analisi_riempimento` e `build_riempimento` |
 
 ## La grafica e le misure
 
