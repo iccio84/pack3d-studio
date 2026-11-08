@@ -33,6 +33,18 @@ pagina coi suoi tratti resta la prima, e le altre si contano solo quando la
 prima ne ha pochi. Una scheda piena di tabelle davanti la regola non la
 vede: li' il disegno va messo per primo.
 
+**Un PDF che e' una foto si dice, non si cerca la forma.** Il display a
+scatola da 10 del caso 54a998aa3b era un PDF con dentro una JPEG sola, 2953 x
+2362 px a 72 ppi: fustella, grafica e DT appiattiti in una foto, nessun
+tracciato vettoriale e quote illeggibili. Ogni famiglia legge forma e misure
+dai tratti, e il riempimento si fermava con «dei due PDF nessuno si legge come
+vassoio espositore», che faceva cercare l'errore nel riconoscimento del
+display. Se la pagina del disegno non ha nessun tracciato, a nessuna
+profondita', e ha almeno un'immagine (`artwork.solo_immagine`), `analyze_pdf`
+si ferma subito con `artwork.PdfImmagine`, che chiede il PDF vettoriale; il
+riempimento la lascia passare col numero del PDF. Nel parco, il 8 novembre
+2026, l'unico PDF cosi' e' quello del caso: gli altri non cambiano strada.
+
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
 tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,

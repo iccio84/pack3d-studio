@@ -37,10 +37,16 @@ def analisi_riempimento(pdfs, cu="flowpack"):
     from .registro import analyze_pdf
     if len(pdfs) != 2:
         raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
+    from .. import artwork
     letti = []
-    for p in pdfs:
+    for k, p in enumerate(pdfs):
         try:
             letti.append(analyze_pdf(p, "vassoio"))
+        except artwork.PdfImmagine:
+            # una foto non e' ne' il vassoio ne' il pack: lo si dice, invece
+            # di «nessuno si legge come vassoio» (`artwork.solo_immagine`)
+            raise ValueError("riempimento: %s (il PDF %d)"
+                             % (artwork.MSG_IMMAGINE, k + 1))
         except Exception:
             letti.append(None)
     vassoi = [k for k, l in enumerate(letti) if l is not None]
