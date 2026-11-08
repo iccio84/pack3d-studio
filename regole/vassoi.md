@@ -885,4 +885,8 @@ sopra il bordo, come nella foto.
 **Il vano comincia davanti alla plancia.** Scesa dentro la scatola, la
 plancia prende il retro: `riempimento.misura_vassoio` sposta l'inizio del
 vano davanti a lei (piu' il gioco), e i pezzi non la attraversano (189,1 ->
-188,0 mm sul caso). Con la plancia sopra il coperchio non cambia niente.
+188,0 mm sul caso). Solo con l'opzione (`componi(plancia_sul_fondo=...)`): la
+prima volta il vano si spostava per ogni plancia che scende sotto il bordo,
+e le plance di serie scendono davanti, dentro la finestra o il fronte. Sul
+display T15 il vano era passato da 137,5 a 116,8 mm e il flowpack si
+accorciava da 136,3 a 115,6: il parco del rilascio l'ha fermato.
