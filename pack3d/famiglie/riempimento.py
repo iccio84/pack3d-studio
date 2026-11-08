@@ -9,6 +9,7 @@ import tempfile
 from .. import atlante
 from .. import lettura as lettura_pdf
 from .. import stato
+from .. import scatola_plancia
 from .astuccio import build_carton
 from .comune import normalizza_kind, scrivi_lettura
 from .flowpack import build_flowpack
@@ -149,8 +150,11 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             glb_v = fh.read()
         with open(gf, "rb") as fh:
             glb_f = fh.read()
+    # nel display a scatola il prodotto si guarda dall'alto, dalla finestra
+    # del coperchio (`riempimento._griglia`)
+    dall_alto = bool(av_v) and av_v[0] == scatola_plancia.TITOLO
     glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio,
-                                     per_fila=per_fila)
+                                     per_fila=per_fila, dall_alto=dall_alto)
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)
