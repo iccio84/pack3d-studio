@@ -871,6 +871,21 @@ class Handler(BaseHTTPRequestHandler):
                                              else "in%d.pdf" % k))
                     with open(pdfs[-1], "wb") as fh:
                         fh.write(blocco)
+                # Un PDF che e' solo una foto della tavola si rifa' vettoriale,
+                # se chi conosce il pack ha dato la larghezza della fustella
+                # aperta (la quota piu' esterna del DT): senza, la foto non ha
+                # una scala e l'analisi lo dice (`pack3d.foto`).
+                larga = opts.get("larghezza_fustella")
+                if larga:
+                    from pack3d import artwork, foto
+                    try:
+                        for k, p in enumerate(pdfs):
+                            if artwork.solo_immagine(p):
+                                nuovo = os.path.join(td, "vett%d.pdf" % k)
+                                foto.vettoriale(p, nuovo, float(larga))
+                                pdfs[k] = nuovo
+                    except ValueError as e:
+                        return self._send(400, "PDF-foto: %s" % e)
                 pdf = pdfs[0]
                 # i nomi dei file servono al controllo e alla coda dei casi
                 # nuovi; arrivano percent-encoded, perche' un header HTTP e'
