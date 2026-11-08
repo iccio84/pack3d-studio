@@ -317,6 +317,19 @@ spessore diviso il coseno. Sul caso: 15 gradi su 30 chiesti, e l'avviso lo
 dice. La regola di sopra resta: se neanche inclinati di poco ci stanno, i
 pezzi stanno in piano, e l'avviso lo dice.
 
+**Inclinati toccano il vassoio, non ci entrano.** Al secondo «Non approvo»:
+«i pack non devono interessare il vassoio: rigonfiamento a 8, e ruotali un
+po' che arrivino a filo con il vassoio senza intersecare». Con la tolleranza
+`FUORI_VANO` i pezzi da 15 gradi arrivavano a 45,7 mm, dentro il coperchio
+della scatola chiusa (il suo sotto a 44,4), e partivano da 0,3, dentro la
+striscia del fianco piegata sul fondo (1,6). `misura_vassoio` misura anche
+il **piano** (il vertice piu' alto sul fondo fra i fianchi: la striscia ha i
+vertici solo contro fronte e retro, quindi fra fronte e retro non si
+filtra) e il **coperchio** (il piu' basso in cima, fra le quattro pareti);
+`inclina` posa gli strati sul piano e li vuole sotto il coperchio e dentro
+le pareti senza tolleranza. Gli altri riempimenti non li usano. Sul caso,
+col rigonfiamento 8 (19,2 mm): 16 gradi, i pezzi da 1,6 a 44,3 mm.
+
 ### Nel display il flowpack resta quello del DT, con le pinne aperte
 
 «I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
