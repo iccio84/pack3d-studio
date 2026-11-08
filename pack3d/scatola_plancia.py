@@ -60,6 +60,20 @@ class ScatolaPlancia:
     vM: float           # la riga di mezzo
     vH: float           # la cerniera
     taglio: tuple = ()  # il bordo alto del fronte dentro la finestra: (u, v)
+    # La variante col fondo attaccato a un fianco (`_leggi_fianco`); vuoti
+    # nella scatola col fondo dopo il retro.
+    # profilo: la plancia sagomata, a passi lungo v: (v, plancia da, a,
+    # finestra da, a); vuoto se la plancia e' un rettangolo fra le fessure
+    profilo: tuple = ()
+    # i fianchi: (u della piega lontana a sinistra, a destra) sul foglio
+    fianchi: tuple = ()
+    # il fondo attaccato al fianco: (u della piega col fianco, u del bordo
+    # lontano); il fianco da quella parte e' piu' alto della scatola e il
+    # di piu' va sotto, sul fondo
+    fondo_u: tuple = ()
+    # la striscia del fianco senza fondo che si piega dentro, sul fondo:
+    # (u da, u a)
+    striscia: tuple = ()
 
     @property
     def W(self):
@@ -231,6 +245,187 @@ def _scatola(H, V, vF, vB, uL, uR, Hs):
     return (fronte, fondo, pl_u, buco_u, vT, vM, vH)
 
 
+def _vicina(V, u, lun, tol=3.0):
+    """La riga verticale lunga almeno `lun` piu' vicina a u, entro tol."""
+    c = [r for r in V if abs(r[0] - u) < tol and r[2] - r[1] >= lun]
+    return min(c, key=lambda r: abs(r[0] - u))[0] if c else None
+
+
+def _profilo(tratti, uL, uR, v0, v1, passo=1.0, centro=8.0, corto=3.0):
+    """La plancia sagomata e la sua finestra, a passi lungo v fra v0 e v1:
+    [(v, plancia da, a, finestra da, a)].
+
+    A ogni v si cercano i tagli che la attraversano dentro la colonna del
+    coperchio (non i suoi bordi): da ogni parte del centro il piu' vicino al
+    centro e' il bordo della plancia, il piu' lontano quello della
+    finestra (un taglio a strappo e' una fessura, due righe vicine). I tagli
+    a meno di `centro` mm dal mezzo (la presa per il dito) e i tratti corti
+    (le crocette dei ponticelli, le scritte) non contano. Un v dove manca un
+    lato non e' plancia. Vedi regole/vassoi.md, *Il display a scatola col
+    fondo sul fianco*."""
+    uc = (uL + uR) / 2
+    seg = []
+    for t in tratti:
+        t = np.asarray(t, float)
+        if len(t) < 2 or float(np.hypot(*np.diff(t, axis=0).T).sum()) < corto:
+            continue
+        for a, b in zip(t[:-1], t[1:]):
+            if abs(b[1] - a[1]) < 1e-6:
+                continue
+            if min(a[0], b[0]) < uL + 1 or max(a[0], b[0]) > uR - 1:
+                continue
+            seg.append((a, b))
+    out = []
+    for v in np.arange(v0 + passo / 2, v1, passo):
+        xs = []
+        for a, b in seg:
+            if min(a[1], b[1]) <= v <= max(a[1], b[1]):
+                xs.append(a[0] + (b[0] - a[0]) * (v - a[1]) / (b[1] - a[1]))
+        sx = [x for x in xs if x < uc - centro]
+        dx = [x for x in xs if x > uc + centro]
+        if sx and dx:
+            out.append((float(v), max(sx), min(dx), min(sx), max(dx)))
+    return out
+
+
+def _leggi_fianco(H, V, tratti):
+    """La variante col fondo attaccato a un fianco, nel telaio di lettura
+    (fronte in alto), o None.
+
+    Fronte e retro alti uguali, attaccati al coperchio; da una parte il
+    fianco porta il fondo (largo quanto il coperchio), dall'altra il fianco
+    finisce con una striscia che va sul fondo. La scatola e' alta quanto il
+    fronte: il fianco col fondo puo' essere piu' lungo, e il di piu' va
+    sotto. La plancia e' sagomata (`_profilo`): la cerniera e' la riga
+    tratteggiata, se c'e', o il bordo dietro del coperchio, dove i tagli
+    arrivano. Vedi regole/vassoi.md, *Il display a scatola col fondo sul
+    fianco*."""
+    for rT in H:
+        a, b = rT[1], rT[2]
+        if b - a < 60:
+            continue
+        for rR in H:
+            if not (rR[0] > rT[0] + 100 and abs(rR[1] - a) < 3
+                    and abs(rR[2] - b) < 3):
+                continue
+            uL = _vicina(V, (a + rR[1]) / 2, 0.4 * (rR[0] - rT[0]))
+            uR = _vicina(V, (b + rR[2]) / 2, 0.4 * (rR[0] - rT[0]))
+            if uL is None or uR is None or uR - uL < 60:
+                continue
+            W = uR - uL
+            dentro = sorted(r[0] for r in H if rT[0] + 10 < r[0] < rR[0] - 10
+                            and r[1] <= uL + 2 and r[2] >= uR - 2)
+            if len(dentro) < 2:
+                continue
+            vF, vB = dentro[0], dentro[-1]
+            Hs, Hr = vF - rT[0], rR[0] - vB
+            D = vB - vF
+            if abs(Hs - Hr) > 2.0 or Hs < 15 or D < 40 or D > 2.5 * W:
+                continue
+            f = _fianchi(V, uL, uR, vF, vB, Hs)
+            if f is None:
+                continue
+            fianchi, fondo_u, striscia = f
+            sp = _plancia_sagomata(H, tratti, uL, uR, vF, vB, Hs)
+            if sp is None:
+                continue
+            return dict(uL=uL, uR=uR, vF=vF, vB=vB, H=Hs, fronte=Hs,
+                        fianchi=fianchi, fondo_u=fondo_u, striscia=striscia,
+                        **sp)
+    return None
+
+
+def _fianchi(V, uL, uR, vF, vB, Hs, tol=2.5):
+    """I fianchi e il fondo attaccato a uno di loro, o None."""
+    W = uR - uL
+
+    def piega(r):
+        return abs(r[1] - vF) < tol and abs(r[2] - vB) < tol
+
+    def copre(r):
+        return r[1] <= vF + tol and r[2] >= vB - tol
+
+    pieghe = sorted(r[0] for r in V if piega(r))
+    for lato in (-1, 1):
+        bordo = uL if lato < 0 else uR
+        for f in pieghe:
+            larga = (bordo - f) * -lato
+            if larga < Hs - 2 or larga > 2 * Hs:
+                continue
+            lontano = [r[0] for r in V if copre(r)
+                       and 0.95 * W <= (r[0] - f) * lato <= 1.05 * W]
+            if not lontano:
+                continue
+            far = min(lontano, key=lambda u: abs(abs(u - f) - W))
+            # dall'altra parte, il fianco: la prima piega a un'altezza
+            # di scatola, e la striscia fino alla piega dopo
+            altro = uR if lato < 0 else uL
+            dist = sorted((u - altro) * -lato for u in pieghe
+                          if (u - altro) * -lato > 0)
+            parete = [d for d in dist if 0.85 * Hs <= d <= 1.15 * Hs]
+            fp = parete[0] if parete else Hs
+            dopo = [d for d in dist if fp + 8 <= d <= fp + Hs]
+            striscia = ()
+            if dopo:
+                striscia = tuple(sorted((altro - lato * fp,
+                                         altro - lato * dopo[0])))
+            pa = altro - lato * fp
+            fianchi = (f, pa) if lato < 0 else (pa, f)
+            return fianchi, (f, far), striscia
+    return None
+
+
+def _plancia_sagomata(H, tratti, uL, uR, vF, vB, Hs):
+    """La plancia sagomata nel coperchio: profilo, cerniera, riga di mezzo,
+    cima; o None."""
+    # dentro il coperchio; la cima che entra nel fronte la legge `_taglio`
+    prof = _profilo(tratti, uL, uR, vF, vB)
+    nel = prof
+    D = vB - vF
+    if len(nel) < 0.8 * D:
+        return None
+    larga = max(q[2] - q[1] for q in nel)
+    if larga < 0.3 * (uR - uL):
+        return None
+    # la cerniera: tratteggiata, o il bordo dietro dove i tagli arrivano
+    cern = [r for r in H if r[3] >= TRATTI_CERNIERA and vF + 0.3 * D < r[0] < vB
+            and r[2] - r[1] >= 0.3 * larga]
+    if cern:
+        vH = max(r[0] for r in cern)
+    elif nel[-1][0] >= vB - 2:
+        vH = vB
+    else:
+        return None
+    # il profilo e' continuo dalla cerniera verso il fronte: la cima e'
+    # dove si interrompe
+    tenuti = []
+    for q in reversed(prof):
+        if q[0] > vH:
+            continue
+        if tenuti and tenuti[-1][0] - q[0] > 2.0:
+            break
+        tenuti.append(q)
+    tenuti.reverse()
+    if not tenuti:
+        return None
+    vT = tenuti[0][0] - 0.5
+    mezzo = []
+    for r in H:
+        if not (r[3] <= 3 and vT + 10 < r[0] < vH - 10):
+            continue
+        q = min(tenuti, key=lambda q: abs(q[0] - r[0]))
+        if r[1] <= q[1] + 2 and r[2] >= q[2] - 2 and r[2] - r[1] <= q[4] - q[3] + 2:
+            mezzo.append(r[0])
+    if not mezzo:
+        return None
+    vM = min(mezzo, key=lambda v: abs(v - (vT + vH) / 2))
+    a = min(q[1] for q in tenuti)
+    b = max(q[2] for q in tenuti)
+    fr = min((q for q in tenuti if q[0] >= vF), key=lambda q: q[0])
+    return dict(profilo=tuple(tenuti), pl_u=(a, b), buco_u=(fr[3], fr[4]),
+                vT=vT, vM=vM, vH=vH)
+
+
 def _taglio(tratti, p):
     """Il bordo alto del fronte dove la plancia ci entra: [(u, v)] da una
     fessura esterna all'altra, o () se la plancia comincia sul bordo del
@@ -325,20 +520,42 @@ def riconosci(pdf, page_no=0):
                             pl_u=pl_u, buco_u=buco_u, vT=vT, vM=vM, vH=vH)
         sp.taglio = _taglio(girati, sp)
         return sp
+    # la variante col fondo attaccato a un fianco e la plancia sagomata
+    for k in range(4):
+        girati = [_ruota(p, k, c) for p in tratti]
+        H, V = _righe(girati)
+        f = _leggi_fianco(H, V, girati)
+        if f is None:
+            continue
+        regione = (lo[0] / PT2MM, lo[1] / PT2MM, hi[0] / PT2MM, hi[1] / PT2MM)
+        f0, f1 = f["vB"], f["vB"] + f["H"]
+        sp = ScatolaPlancia(regione=regione, giro=k, centro=c, fondo=(f0, f1),
+                            **f)
+        sp.taglio = _taglio(girati, sp)
+        return sp
     return None
+
+
+# la prima riga di `dichiara`: il riempimento la riconosce
+TITOLO = "display a scatola: scatola chiusa con la plancia ricavata dal coperchio"
 
 
 def dichiara(p):
     basso = p.vH - p.vM
-    return ["display a scatola: scatola chiusa con la plancia ricavata dal "
-            "coperchio",
+    return [TITOLO,
             "scatola %.1f x %.1f x %.1f mm (larga x profonda x alta)"
             % (p.W, p.D, p.H),
             "plancia %.1f mm, alta %.1f mm sul coperchio, la parte verso il "
             "fronte (%.1f mm) ripiegata davanti; finestra nel coperchio "
             "%.1f x %.1f mm"
             % (p.pl_u[1] - p.pl_u[0], basso, p.vM - p.vT,
-               p.buco_u[1] - p.buco_u[0], p.vH - max(p.vT, p.vF))]
+               p.buco_u[1] - p.buco_u[0], p.vH - max(p.vT, p.vF))] + (
+        ["il fondo attaccato al fianco (%.1f mm: %.1f di parete, il resto "
+         "sotto il fondo); dall'altra parte la striscia sul fondo; plancia "
+         "sagomata, cerniera %s"
+         % (abs(p.fondo_u[0] - (p.uL if p.fondo_u[0] < p.uL else p.uR)), p.H,
+            "sul bordo del retro" if p.vH >= p.vB - 0.5 else "tratteggiata")]
+        if p.fondo_u else [])
 
 
 def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
@@ -409,7 +626,9 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     # finestra, larga quanto le fessure esterne
     b0, b1 = p.buco_u
     vh = p.vH
-    pezzi_cop = [((p.uL, p.vF), (b0, p.vB), (2,)),       # a sinistra
+    if p.profilo:
+        _sagomata(p, quad, X, Zc, H, D, sp)
+    pezzi_cop = [] if p.profilo else [((p.uL, p.vF), (b0, p.vB), (2,)),       # a sinistra
                  ((b1, p.vF), (p.uR, p.vB), (0,)),       # a destra
                  ((b0, vh), (b1, p.vB), ())]             # dietro la cerniera
     for (u0, v0), (u1, v1), coste in pezzi_cop:
@@ -451,8 +670,14 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
               (X(p.uL), H, D / 2)],
              [(p.uL, v0), (p.uR, v0), (p.uR, p.vF), (p.uL, p.vF)], (0, 0, 1))
 
-    # i fianchi, giu' dai lati del coperchio
-    for fuori_u, piega_u in ((p.uL - H, p.uL), (p.uR + H, p.uR)):
+    # i fianchi, giu' dai lati del coperchio; nella variante col fondo sul
+    # fianco la piega lontana del fianco senza fondo e' la sua
+    lati = ((p.uL - H, p.uL), (p.uR + H, p.uR))
+    if p.fondo_u:
+        # dalla parte del fondo la parete e' alta quanto la scatola
+        lati = tuple((fu if p.fianchi[i] == p.fondo_u[0] else p.fianchi[i], piega)
+                     for i, (fu, piega) in enumerate(lati))
+    for fuori_u, piega_u in lati:
         xx = X(piega_u)
         verso = np.sign(xx)
         quad([(xx, 0, Zc(p.vF)), (xx, 0, Zc(p.vB)), (xx, H, Zc(p.vB)),
@@ -468,11 +693,17 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
 
     # il fondo, dal retro al fronte
     f0, f1 = p.fondo
-    quad([(X(p.uL), 0, -D / 2), (X(p.uR), 0, -D / 2), (X(p.uR), 0, D / 2),
-          (X(p.uL), 0, D / 2)],
-         [(p.uL, f0), (p.uR, f0), (p.uR, f1), (p.uL, f1)], (0, -1, 0))
+    if not p.fondo_u:
+        quad([(X(p.uL), 0, -D / 2), (X(p.uR), 0, -D / 2), (X(p.uR), 0, D / 2),
+              (X(p.uL), 0, D / 2)],
+             [(p.uL, f0), (p.uR, f0), (p.uR, f1), (p.uL, f1)], (0, -1, 0))
+    else:
+        _fondo_sul_fianco(p, quad, X, Zc, H, sp)
 
     inizio = len(T)
+    if p.profilo:
+        _plancia_su(p, quad, X, Zc, H, sp)
+        return np.array(V, float), np.array(UV, float), np.array(T, int), inizio
     # la plancia. Alzata sulla cerniera, che sta verso il retro, la parte
     # verso la cerniera sta in piedi e mostra la stampa a chi sta DIETRO, col
     # fronte del foglio in alto: la sua scritta, dritta sul foglio, si legge
@@ -494,3 +725,125 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
          [(a0, p.vM), (a1, p.vM), (a1, p.vT), (a0, p.vT)], (0, 0, 1),
          coste=(1, 2, 3))
     return np.array(V, float), np.array(UV, float), np.array(T, int), inizio
+
+
+def _righe_plancia(p):
+    """Le righe della plancia sagomata, (v, da, a), dalla cima alla
+    cerniera: il profilo, allungato fino al bordo del coperchio e fino alla
+    cerniera."""
+    righe = [(q[0], q[1], q[2]) for q in p.profilo if q[0] <= p.vH]
+    if righe[-1][0] < p.vH:
+        righe.append((p.vH,) + righe[-1][1:])
+    if p.taglio and righe[0][0] > p.vF:
+        righe.insert(0, (p.vF,) + righe[0][1:])
+    return righe
+
+
+def _a(righe, v):
+    """La riga interpolata a v."""
+    for r0, r1 in zip(righe[:-1], righe[1:]):
+        if r0[0] <= v <= r1[0]:
+            t = (v - r0[0]) / ((r1[0] - r0[0]) or 1.0)
+            return (v, r0[1] + (r1[1] - r0[1]) * t, r0[2] + (r1[2] - r0[2]) * t)
+    return min(righe, key=lambda r: abs(r[0] - v))
+
+
+def _sagomata(p, quad, X, Zc, H, D, sp):
+    """Il coperchio attorno alla finestra sagomata: a strisce lungo v, dal
+    bordo del coperchio al bordo della finestra, da tutte e due le parti;
+    dietro la cerniera, se non e' sul bordo, il coperchio intero."""
+    righe = [(q[0], q[3], q[4]) for q in p.profilo if q[0] <= p.vH]
+    righe = [(p.vF,) + righe[0][1:]] + righe
+    if righe[-1][0] < p.vH:
+        righe.append((p.vH,) + righe[-1][1:])
+    for r0, r1 in zip(righe[:-1], righe[1:]):
+        v0, v1 = r0[0], r1[0]
+        quad([(X(p.uL), H, Zc(v1)), (X(p.uL), H, Zc(v0)), (X(r0[1]), H, Zc(v0)),
+              (X(r1[1]), H, Zc(v1))],
+             [(p.uL, v1), (p.uL, v0), (r0[1], v0), (r1[1], v1)], (0, 1, 0),
+             coste=(2,))
+        quad([(X(r1[2]), H, Zc(v1)), (X(r0[2]), H, Zc(v0)), (X(p.uR), H, Zc(v0)),
+              (X(p.uR), H, Zc(v1))],
+             [(r1[2], v1), (r0[2], v0), (p.uR, v0), (p.uR, v1)], (0, 1, 0),
+             coste=(0,))
+    if p.vH < p.vB - 0.5:
+        quad([(X(p.uL), H, Zc(p.vB)), (X(p.uL), H, Zc(p.vH)),
+              (X(p.uR), H, Zc(p.vH)), (X(p.uR), H, Zc(p.vB))],
+             [(p.uL, p.vB), (p.uL, p.vH), (p.uR, p.vH), (p.uR, p.vB)],
+             (0, 1, 0))
+
+
+def _fondo_sul_fianco(p, quad, X, Zc, H, sp):
+    """Il fondo attaccato al fianco: dalla piega in fondo al fianco fino
+    all'altro fianco, con la stampa sotto. Il fianco e' piu' lungo della
+    scatola: il di piu' sta sotto, sul fondo, una striscia doppia. La
+    striscia del fianco di fronte si piega dentro, sul fondo."""
+    fu, far = p.fondo_u
+    da_sx = fu < p.uL
+    piega = p.uL if da_sx else p.uR
+    altra = p.uR if da_sx else p.uL
+    verso = 1 if da_sx else -1          # dalla piega verso l'interno, in u
+    zF, zB = Zc(p.vF), Zc(p.vB)
+    quad([(X(piega), 0, zB), (X(piega), 0, zF), (X(altra), 0, zF),
+          (X(altra), 0, zB)],
+         [(fu, p.vB), (fu, p.vF), (far, p.vF), (far, p.vB)], (0, -1, 0))
+    # il di piu' del fianco, sotto il fondo
+    giu = piega - verso * H
+    resto = abs(giu - fu)
+    if resto > 1.0:
+        xs, xe = X(piega), X(piega + verso * resto)
+        y = -1.5 * sp
+        quad([(xs, y, zB), (xs, y, zF), (xe, y, zF), (xe, y, zB)],
+             [(giu, p.vB), (giu, p.vF), (fu, p.vF), (fu, p.vB)], (0, -1, 0),
+             coste=(2,))
+    if p.striscia:
+        # dalla parete di fronte verso l'interno: il bordo vicino alla
+        # parete sul foglio e' quello vicino alla sua piega
+        vic, lon = sorted(p.striscia, key=lambda u: abs(u - altra))
+        xs, xe = X(altra), X(altra - verso * abs(lon - vic))
+        y = 2.5 * sp
+        quad([(xs, y, zB), (xs, y, zF), (xe, y, zF), (xe, y, zB)],
+             [(vic, p.vB), (vic, p.vF), (lon, p.vF), (lon, p.vB)], (0, -1, 0),
+             coste=(2,))
+
+
+def _plancia_su(p, quad, X, Zc, H, sp):
+    """La plancia sagomata alzata: dalla cerniera alla riga di mezzo in
+    piedi, con la stampa verso il retro; dalla riga di mezzo alla cima
+    ripiegata davanti, con la stampa verso chi guarda; la cima che entra
+    nel fronte segue i suoi tagli (`_taglio`). Come la plancia diritta, a
+    strisce lungo v."""
+    righe = _righe_plancia(p)
+    zh = Zc(p.vH)
+    alto = p.vH - p.vM
+    zd = zh + 2 * sp
+    su = [r for r in righe if r[0] >= p.vM]
+    giu = [r for r in righe if r[0] <= p.vM]
+    m = _a(righe, p.vM)
+    if not su or su[0][0] > p.vM:
+        su.insert(0, m)
+    if not giu or giu[-1][0] < p.vM:
+        giu.append(m)
+
+    def in_piedi(u, v):
+        return (X(u), H + (p.vH - v), zh)
+
+    def davanti(u, v):
+        return (X(u), H + alto - (p.vM - v), zd)
+
+    for parte, f, fuori in ((su, in_piedi, (0, 0, -1)), (giu, davanti, (0, 0, 1))):
+        for r0, r1 in zip(parte[:-1], parte[1:]):
+            if r1[0] - r0[0] < 1e-6:
+                continue
+            quad([f(r0[1], r0[0]), f(r0[2], r0[0]), f(r1[2], r1[0]),
+                  f(r1[1], r1[0])],
+                 [(r0[1], r0[0]), (r0[2], r0[0]), (r1[2], r1[0]),
+                  (r1[1], r1[0])], fuori, coste=(1, 3))
+    # la cima nel fronte: fra il bordo del coperchio e il taglio
+    a, b = righe[0][1], righe[0][2]
+    t = [(u, v) for u, v in p.taglio if v < p.vF - 0.05 and a <= u <= b]
+    for (ua, va), (ub, vb) in zip(t[:-1], t[1:]):
+        quad([davanti(ua, p.vF), davanti(ub, p.vF), davanti(ub, vb),
+              davanti(ua, va)],
+             [(ua, p.vF), (ub, p.vF), (ub, vb), (ua, va)], (0, 0, 1),
+             coste=(2,))

@@ -188,6 +188,9 @@ class Vano:
     z1: float
     fondo: float            # la quota del piano su cui poggia il prodotto
     tetto: float            # fin dove si impila: la parete piu' alta
+    # la scatola chiusa del display a scatola: il prodotto si guarda
+    # dall'alto, dalla finestra del coperchio (`_griglia`)
+    dall_alto: bool = False
 
     @property
     def lati(self):
@@ -377,7 +380,7 @@ def scegli(vano, p, quanti, per_fila=None):
     if cand[0].posa == "frontali":
         if per_fila and per_fila < cand[0].n[0]:
             return _per_fila(vano, cand[0], per_fila)
-        g = None if quanti is None else _griglia(cand, quanti)
+        g = None if quanti is None else _griglia(cand, quanti, vano.dall_alto)
         return g or cand[0]
     if quanti is None:
         return max(cand, key=lambda d: d.capienza)
@@ -404,15 +407,22 @@ def _per_fila(vano, d, per_fila):
                         d.piega)
 
 
-def _griglia(cand, quanti):
+def _griglia(cand, quanti, dall_alto=False):
     """Il display e' fatto per il suo numero: `quanti` pezzi stanno in una
     griglia piena, a per strato e s strati. Se frontali vengono a strati
     diversi (15: 8 e 7) e una posa sdraiata li mette in strati tutti uguali
     e pieni (15: 5 x 3), si prende quella, con meno strati. La disposizione
     torna con i pezzi di uno strato allargati su tutto il vano. None se
-    frontali vanno gia' bene, o se nessuna posa fa la griglia."""
+    frontali vanno gia' bene, o se nessuna posa fa la griglia.
+
+    `dall_alto`: nella scatola chiusa del display a scatola il prodotto si
+    guarda dalla finestra del coperchio, dall'alto, e la griglia sdraiata
+    vince anche su frontali a strati uguali (10 in piedi in una fila contro
+    5 x 2 con la faccia in su). Vedi regole/riempimenti.md, *Il display e'
+    fatto per il suo numero*."""
     fr = cand[0]
-    if len(set(_strati(fr, quanti))) <= 1 and quanti <= fr.capienza:
+    if (not dall_alto and len(set(_strati(fr, quanti))) <= 1
+            and quanti <= fr.capienza):
         return None
     migliore = None
     for d in cand[1:]:
@@ -692,7 +702,8 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
-def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None):
+def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
+            dall_alto=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -708,6 +719,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None)
            for k in ("matrix", "rotation", "translation", "scale")):
         raise ValueError("riempimento: il GLB del pack ha nodi trasformati")
     vano = misura_vassoio(Jv, Bv)
+    vano.dall_alto = dall_alto
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
     d = scegli(vano, p, quanti, per_fila)
@@ -903,8 +915,11 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None)
                   % (d.per_strato, d.n[2], d.n[0], strati, d.capienza),
                   "sdraiati perche' in piedi, con la faccia verso il davanti, nel vano non "
                   "ci stanno" if not d.dove.endswith(" x %d" % len(conti)) else
-                  "sdraiati perche' frontali %d non fanno strati uguali, e cosi' fanno una "
-                  "griglia piena" % quanti]
+                  ("sdraiati perche' nella scatola chiusa si guardano dall'alto, dalla "
+                   "finestra del coperchio, e cosi' fanno una griglia piena"
+                   if vano.dall_alto else
+                   "sdraiati perche' frontali %d non fanno strati uguali, e cosi' fanno una "
+                   "griglia piena" % quanti)]
     righe.append("vano %.1f x %.1f mm, alto fino a %.1f; pezzo %.1f x %.1f x %.1f (corpo %.1f)"
                  % (vano.lati[0], vano.lati[1], vano.lati[2], p.lungo, p.largo, p.spesso,
                     p.corpo))
