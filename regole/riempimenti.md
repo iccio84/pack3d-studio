@@ -270,6 +270,18 @@ spessore non basta, di lato*). Ma cosi' i pezzi stavano troppo bassi, e alla
 fine il pack ha il rigonfiamento nello spessore, al livello 9 (*Nello
 spessore, se lo si sceglie per il pack*): 3 strati da 21,3 mm, 64 dei 70,5.
 
+**Nella scatola chiusa si guarda dall'alto** (`Vano.dall_alto`). Il display
+a scatola T1x10 (caso 54a998aa3b): «Display che contiene 10 [flowpack] T1
+(5X2)», e la foto li mostra sdraiati con la faccia in su, 5 dal davanti al
+fondo. Frontali ne stavano 14 in una fila, e i 10 chiesti venivano uno
+strato solo: strati uguali, e la griglia non si cercava; restavano 10 in
+piedi in fila. Ma nella scatola chiusa il prodotto si guarda dalla finestra
+del coperchio, dall'alto. **Regola**: nel display a scatola (la prima riga
+della sua lettura, `scatola_plancia.TITOLO`) la griglia piena sdraiata si
+cerca anche se frontali fanno strati uguali. Sul caso: per il largo, 5 x 2,
+passo 37,8. Il T15 non cambia: frontali non facevano strati uguali e la
+griglia era gia' la sua (5 x 3, misure uguali).
+
 ### Sdraiati, stanno in piano
 
 Il T15 al primo «Non approvo» chiedeva i pezzi «leggermente inclinati

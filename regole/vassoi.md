@@ -803,3 +803,62 @@ cambiano strada.
   diverso e passa dallo sportello: la firma di qui non lo vede, e va bene.
   Le due firme leggono la stessa forma da due disegni: se ne arriva un
   terzo, vale la pena di farne una sola.
+
+## Il display a scatola col fondo sul fianco
+
+Il caso 54a998aa3b, display a scatola T1x10 (139,5 x 191 x 45 mm, 10
+flowpack T1): la stessa scatola chiusa con la plancia nel coperchio, ma
+montata diversa, e la firma di sopra non la leggeva (fianchi uguali, fondo
+dopo il retro, cerniera tratteggiata). Il PDF era una foto, rifatta
+vettoriale con `larghezza_fustella` (regole/pdf.md).
+
+**Com'e' fatta.** Fronte e retro alti 45, attaccati al coperchio. Il fianco
+da una parte e' alto 46 e finisce con una striscia da 16 (con la linguetta
+che entra nella fessura del fondo) che si piega dentro, sul fondo.
+Dall'altra il fianco e' 56,5 e porta il fondo, 138,7 x 191. La plancia non
+e' un rettangolo: un esagono (largo 75 alla cerniera, 133 in mezzo, 75 sul
+fronte), tagliato a strappo, e la cerniera e' il bordo stesso fra coperchio
+e retro, senza tratteggio. La cima entra nel fronte con la presa a
+semicerchio.
+
+**L'altezza l'ha detta chi l'ha caricato.** Da un PDF solo, 45 dei pannelli
+corti o 56,5 del fianco col fondo? Chiesto: «Alta 45: quel fianco si
+ripiega e una parte va sotto, sul fondo». **Regola**: la scatola e' alta
+quanto il fronte (e il retro, che devono essere uguali); il fianco col fondo
+puo' essere piu' lungo, e il di piu' sta sotto il fondo, una striscia
+doppia.
+
+**La firma** (`scatola_plancia._leggi_fianco`, provata solo dopo la prima,
+nei quattro versi). Il fronte e il retro: due righe orizzontali della
+stessa colonna, larghe almeno 60 mm, lontane piu' di 100; i bordi del
+coperchio le righe verticali vicine. Dentro, le righe che coprono tutta la
+colonna: la prima e l'ultima sono il bordo davanti e dietro del coperchio,
+e fronte e retro devono venire alti uguali (entro 2 mm). Il fondo: da una
+parte, dopo la piega lontana del fianco (largo fra l'altezza e il doppio),
+un pannello largo quanto il coperchio (95-105%). Dall'altra il fianco e'
+la prima piega a un'altezza di scatola (85-115%), la striscia fino alla
+piega dopo.
+
+**La plancia sagomata** (`_profilo`): a ogni millimetro lungo il coperchio,
+i tagli che lo attraversano (non i bordi del coperchio, non i tratti piu'
+corti di 3 mm: le crocette dei ponticelli e i pezzetti della foto), da ogni
+parte del centro; il piu' vicino al centro e' il bordo della plancia, il
+piu' lontano quello della finestra. La cerniera e' la riga tratteggiata se
+c'e', se no il bordo dietro, dove i tagli arrivano. La plancia e' la corsa
+continua del profilo dalla cerniera verso il fronte; la riga di mezzo la
+riga intera da un bordo all'altro. La cima nel fronte la legge `_taglio`,
+come per il fronte. Sul caso: profilo da 84 a 270 mm, plancia 133,4, alta
+95,6 sul coperchio e 91,5 ripiegata davanti, finestra 79 sul fronte.
+
+**Il modello** (`_sagomata`, `_fondo_sul_fianco`, `_plancia_su`): il
+coperchio a strisce dal bordo alla finestra; il fianco col fondo alto
+quanto la scatola, il fondo dalla sua piega all'altro fianco con la stampa
+sotto, il di piu' del fianco una striscia sotto il fondo; la striscia
+dell'altro fianco dentro, sul fondo; la plancia a strisce lungo il
+profilo, in piedi fino alla riga di mezzo e poi ripiegata davanti, e la
+cima nel fronte fra il bordo e i tagli. Il T15 non cambia: la prima firma
+lo legge come prima.
+
+**Cosa manca.** Le alette di fronte e retro (24) e del fondo (21) non ci
+sono: stanno dentro, contro le pareti. La patta della striscia sta stesa
+con lei.
