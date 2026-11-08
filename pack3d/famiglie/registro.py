@@ -48,6 +48,8 @@ def analyze_pdf(pdf, kind=None, domande=False):
     Tutte le famiglie si misurano sulla prima pagina sola: se ce ne sono
     altre, il primo cartellino lo dice. Vedi `avviso_pagine`."""
     pdf, n_pagine = artwork.pagina_unica(pdf)
+    if artwork.solo_immagine(pdf):
+        raise artwork.PdfImmagine(artwork.MSG_IMMAGINE)
     info = _analyze_pdf(pdf, kind, domande)
     pagine = avviso_pagine(n_pagine)
     if pagine and isinstance(info.get("meta"), list):
