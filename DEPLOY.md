@@ -359,25 +359,27 @@ routine, senza chiedere conferma. Restano vietati, sempre e in ogni modalita',
 il force push (anche `+ramo` e `-f`), `git commit --amend`, `pkill` e le
 cancellazioni via API (`gh api ... -X DELETE`, `gh repo delete`).
 
-Le regole stanno in due posti, perche' nessuno dei due basta da solo:
+Le regole stanno nelle **impostazioni dell'utente**, scritte dallo **script di
+configurazione dell'ambiente cloud "Default"**, quello delle sessioni e delle
+routine (su Claude: menu dell'ambiente nella barra del titolo -> Modifica ->
+Script di configurazione), prima che la sessione parta. Nello script e' la
+sezione «i permessi della routine», dopo l'installazione delle librerie e di
+Ghostscript.
 
-- **`.claude/settings.json` nei due repository** (questo e `pack3d-casi`, lo
-  stesso file). Lo legge solo una sessione con un repository solo. Dentro c'e'
-  `Bash` (tutto approvato), poi le regole strette per i comandi di ogni giorno
-  (git, `gh api` sui repository di iccio84, `python3 prove/...`) e i divieti.
-  Le regole strette servono per la modalita' auto: entrando in auto, Claude
+- `Bash` approva tutto nelle modalita' che chiedono conferma.
+- Le regole strette (git, `gh api` sui repository di iccio84,
+  `python3 prove/...`) servono per la modalita' auto: entrando in auto, Claude
   Code mette da parte `Bash` (da' accesso a qualunque comando) e tiene solo
   quelle strette, che passano senza il controllo automatico.
-- **Le impostazioni dell'utente**, scritte dallo **script di configurazione
-  dell'ambiente cloud "Default"**, quello delle routine (su Claude: menu
-  dell'ambiente nella barra del titolo -> Modifica -> Setup script), prima che
-  la sessione parta. Nello script e' la sezione «i permessi della routine»,
-  dopo l'installazione delle librerie e di Ghostscript. Servono alla
-  routine, che ha due repository e quindi non legge `.claude/settings.json`, e
-  portano anche il contesto per il controllo della modalita' auto (`autoMode`),
-  che Claude Code legge solo dalle impostazioni dell'utente, mai dal
-  repository. Claude non le puo' scrivere da se': il controllo lo blocca come
-  auto-modifica, e va bene cosi'. Le scrive lo script:
+- `autoMode` da' il contesto al controllo automatico. Claude Code lo legge solo
+  dalle impostazioni dell'utente, mai dal repository.
+
+Non stanno in `.claude/settings.json` dei repository. Quel file lo legge solo
+una sessione con un repository solo, e le sessioni di pack3d ne hanno due
+(questo e `pack3d-casi`). Lì restano solo le due regole storiche del `gh api`.
+Claude non puo' cambiare da se' ne' quel file ne' le impostazioni dell'utente:
+il controllo lo blocca come auto-modifica, e va bene cosi'. Le scrive lo
+script:
 
 ```sh
 mkdir -p ~/.claude
@@ -445,14 +447,14 @@ Lo script sovrascrive il file a ogni sessione, cosi' una regola nuova vale
 dalla sessione dopo. Le regole del `gh api` aprono le PR, le uniscono (anche
 il rilascio verso `main`, che aggiorna lo Space) e lanciano il parco intero
 nelle Actions di `pack3d-casi` (RILASCIO.md, punto 3). Chi vuole approvare i
-rilasci a mano toglie la regola `-X PUT .../pulls/*` dai due posti e aggiunge
+rilasci a mano toglie la regola `-X PUT .../pulls/*` dallo script e aggiunge
 `"ask": ["Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)"]`.
 
 Anche cosi', in modalita' auto il controllo automatico giudica i comandi che
 nessuna regola stretta copre. Se ne blocca 3 di fila (o 20 in tutto), la
 sessione torna a chiedere conferma. In una routine nessuno risponde: il
 comando non parte e il lavoro va avanti senza. Quando succede, il comando
-bloccato si aggiunge alle regole strette, nei due posti.
+bloccato si aggiunge alle regole strette dello script.
 
 ## Aggiornare dopo una nuova regola
 
