@@ -191,6 +191,11 @@ class Vano:
     # la scatola chiusa del display a scatola: il prodotto si guarda
     # dall'alto, dalla finestra del coperchio (`_griglia`)
     dall_alto: bool = False
+    # dove il prodotto tocca davvero: il piano piu' alto sul fondo (le
+    # strisce piegate dentro) e il sotto del coperchio della scatola chiusa.
+    # None: il fondo e il tetto. Li usa `inclina`, che non entra nel vassoio
+    piano: float = None
+    coperchio: float = None
 
     @property
     def lati(self):
@@ -217,8 +222,18 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
         pl = np.array([q for q in vertici(J, B) if tuple(np.round(q, 4)) not in dentro])
         if len(pl) and pl[:, 2].max() < (lo[2] + hi[2]) / 2:
             z0 = max(z0, pl[:, 2].max() + GIOCO)
-    return Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
+    vano = Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
                 lo[1] + spessore, hi[1])
+    # fra i fianchi: i vertici piu' alti sul fondo (una striscia piegata
+    # dentro ha i vertici solo agli angoli, contro il fronte e il retro) e,
+    # anche fra fronte e retro, i piu' bassi in cima
+    m = (V[:, 0] > vano.x0 + 2) & (V[:, 0] < vano.x1 - 2)
+    mz = (V[:, 2] > vano.z0 + 2) & (V[:, 2] < vano.z1 - 2)
+    h = hi[1] - lo[1]
+    giu, su = V[m & (V[:, 1] < lo[1] + 0.25 * h)], V[m & mz & (V[:, 1] > lo[1] + 0.75 * h)]
+    vano.piano = max(vano.fondo, float(giu[:, 1].max())) if len(giu) else vano.fondo
+    vano.coperchio = min(vano.tetto, float(su[:, 1].min())) if len(su) else vano.tetto
+    return vano
 
 
 @dataclass
@@ -613,7 +628,10 @@ def inclina(vano, p, poste, V_prodotto, gradi):
         return poste, 0.0
     ys = sorted(set(round(float(t[1]), 6) for _, t in poste))
     strato = {y: k for k, y in enumerate(ys)}
-    alto = vano.tetto
+    # inclinati toccano il vassoio, non ci entrano: sul piano vero (le
+    # strisce piegate sul fondo) e sotto il coperchio, senza tolleranza
+    alto = vano.coperchio if vano.coperchio is not None else vano.tetto
+    piano = vano.piano if vano.piano is not None else vano.fondo
     a = float(gradi)
     while a > 0:
         c, s_ = math.cos(math.radians(a)), math.sin(math.radians(a))
@@ -622,12 +640,11 @@ def inclina(vano, p, poste, V_prodotto, gradi):
         W = (V_prodotto - p.centro) @ (Rx @ R0).T
         base = -W[:, 1].min()
         sale = p.spesso / c
-        nuove = [(Rx @ R, np.array([t[0], vano.fondo + base
+        nuove = [(Rx @ R, np.array([t[0], piano + base
                                     + strato[round(float(t[1]), 6)] * sale, t[2]]))
                  for R, t in poste]
         cima = max(((V_prodotto - p.centro) @ R.T + t)[:, 1].max() for R, t in nuove)
-        if (cima <= alto + FUORI_VANO
-                and fuori_dal_vano(vano, p, nuove, V_prodotto) <= FUORI_VANO):
+        if cima <= alto and fuori_dal_vano(vano, p, nuove, V_prodotto) <= 0.0:
             return nuove, a
         a = round(a - 0.5, 3)
     return poste, 0.0

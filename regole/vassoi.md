@@ -850,6 +850,18 @@ riga intera da un bordo all'altro. La cima nel fronte la legge `_taglio`,
 come per il fronte. Sul caso: profilo da 84 a 270 mm, plancia 133,4, alta
 95,6 sul coperchio e 91,5 ripiegata davanti, finestra 79 sul fronte.
 
+**Un foro nella plancia non e' il suo bordo** (`FORO`). Al secondo «Non
+approvo» del caso 54a998aa3b: «la plancia ha dei pezzi grigi che vanno
+eliminati, guarda bene la fustella». Nella meta' ripiegata davanti la
+fustella ha una presa, un rettangolo arrotondato largo 7,4 mm a 38 mm dal
+mezzo: i suoi due lati (8,3 e 7,5 mm) tagliavano gli stessi v della diagonale
+della plancia, e il piu' vicino al centro diventava il bordo. Per 8 mm la
+plancia si stringeva da 59 a 38 mm dal mezzo, e il modello aveva un gradino
+grigio sotto la stampa. Regola: da ogni parte, dal centro verso fuori, un
+taglio piu' corto di `FORO` (15 mm), col compagno se e' corto e vicino, si
+salta quando fuori ne restano altri due (il bordo della plancia e quello
+della finestra). Le letture del parco non cambiano.
+
 **Il modello** (`_sagomata`, `_fondo_sul_fianco`, `_plancia_su`): il
 coperchio a strisce dal bordo alla finestra; il fianco col fondo alto
 quanto la scatola, il fondo dalla sua piega all'altro fianco con la stampa
