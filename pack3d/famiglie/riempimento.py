@@ -156,7 +156,8 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     dall_alto = bool(av_v) and av_v[0] == scatola_plancia.TITOLO
     glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio,
                                      per_fila=per_fila, dall_alto=dall_alto,
-                                     gradi=gradi)
+                                     gradi=gradi,
+                                     plancia_sul_fondo=dove_plancia == "fondo")
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)
