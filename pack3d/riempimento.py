@@ -196,6 +196,12 @@ class Vano:
     # None: il fondo e il tetto. Li usa `inclina`, che non entra nel vassoio
     piano: float = None
     coperchio: float = None
+    # il fianco a soffietto del display a scatola (`scatola_plancia._soffietto`):
+    # (verso, quote, x) - da che parte sta (+1 a X positiva, -1 a negativa) e,
+    # alle quote Y, dove comincia la parete dalla parte di dentro. None se non
+    # c'e'. Il vano resta la scatola intera: le punte dei pezzi si premono
+    # contro di lui (`contro_il_soffietto`)
+    soffietto: tuple = None
 
     @property
     def lati(self):
@@ -226,14 +232,10 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     vano = Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
                 lo[1] + spessore, hi[1])
     # il fianco piegato a soffietto (`scatola_plancia._soffietto`) rientra:
-    # da quella parte il vano arriva alla sua piega di mezzo, dalla parte di
-    # dentro, e i pezzi non lo attraversano
-    S = vertici(J, B, solo="soffietto")
-    if len(S):
-        if S[:, 0].mean() > (lo[0] + hi[0]) / 2:
-            vano.x1 = min(vano.x1, float(S[:, 0].min()))
-        else:
-            vano.x0 = max(vano.x0, float(S[:, 0].max()))
+    # il vano resta la scatola intera, perche' i pezzi stiano al centro con le
+    # pinne di sempre, e del soffietto si tiene il profilo, dove le punte dei
+    # pezzi si premono (`contro_il_soffietto`)
+    vano.soffietto = profilo_del_soffietto(J, B, (lo[0] + hi[0]) / 2)
     # fra i fianchi: i vertici piu' alti sul fondo (una striscia piegata
     # dentro ha i vertici solo agli angoli, contro il fronte e il retro) e,
     # anche fra fronte e retro, i piu' bassi in cima
@@ -244,6 +246,80 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     vano.piano = max(vano.fondo, float(giu[:, 1].max())) if len(giu) else vano.fondo
     vano.coperchio = min(vano.tetto, float(su[:, 1].min())) if len(su) else vano.tetto
     return vano
+
+
+def triangoli(J, B, solo):
+    """I triangoli del nodo che si chiama `solo`, in mm, nel riferimento
+    della scena: un array (n, 3, 3), vuoto se il nodo non c'e'."""
+    out = []
+
+    def visita(i, M):
+        nodo = J["nodes"][i]
+        M = M @ _matrice(nodo)
+        if "mesh" in nodo and nodo.get("name") == solo:
+            for prim in J["meshes"][nodo["mesh"]]["primitives"]:
+                P = _dati(J, B, prim["attributes"]["POSITION"]).astype(float)
+                P = (np.c_[P, np.ones(len(P))] @ M.T)[:, :3]
+                T = (_dati(J, B, prim["indices"]).astype(np.int64).reshape(-1, 3)
+                     if "indices" in prim else np.arange(len(P)).reshape(-1, 3))
+                out.append(P[T])
+        for c in nodo.get("children", []):
+            visita(c, M)
+
+    for r in J["scenes"][J.get("scene", 0)]["nodes"]:
+        visita(r, np.eye(4))
+    return np.vstack(out) * 1000.0 if out else np.zeros((0, 3, 3))
+
+
+# mm: le quote a cui si legge il profilo del soffietto
+PASSO_SOFFIETTO = 0.25
+
+
+def profilo_del_soffietto(J, B, centro_x):
+    """(verso, quote, x) del nodo `soffietto`, o None: a ogni quota Y, la
+    sezione dei suoi triangoli col piano orizzontale, e di lei il punto piu'
+    vicino al centro della scatola - dove la parete comincia, dalla parte di
+    dentro."""
+    Tr = triangoli(J, B, "soffietto")
+    if not len(Tr):
+        return None
+    verso = 1.0 if Tr[:, :, 0].mean() > centro_x else -1.0
+    y0, y1 = float(Tr[:, :, 1].min()), float(Tr[:, :, 1].max())
+    quote = np.arange(y0, y1 + PASSO_SOFFIETTO / 2, PASSO_SOFFIETTO)
+    xs = []
+    for y in quote:
+        dentro = []
+        for a, b in ((0, 1), (1, 2), (2, 0)):
+            A, Bb = Tr[:, a], Tr[:, b]
+            dy = Bb[:, 1] - A[:, 1]
+            ok = np.abs(dy) > 1e-9
+            t = np.where(ok, (y - A[:, 1]) / np.where(ok, dy, 1.0), -1.0)
+            m = ok & (t >= 0.0) & (t <= 1.0)
+            dentro.extend((A[m, 0] + t[m] * (Bb[m, 0] - A[m, 0])).tolist())
+        xs.append(verso * min(verso * x for x in dentro) if dentro else np.nan)
+    xs = np.array(xs)
+    buone = ~np.isnan(xs)
+    return verso, quote[buone], xs[buone]
+
+
+def contro_il_soffietto(vano, p, R, t, P, gioco=GIOCO):
+    """Le posizioni `P` del pezzo (mm, nel suo riferimento) con le punte che
+    entrerebbero nel soffietto premute contro di lui, per la posa (R, t):
+    il pezzo nella scena, e dove passa la parete (`Vano.soffietto`) torna
+    indietro fino a lei, meno il gioco, solo lungo X. Il soffietto e' uguale
+    lungo tutta la scatola, e conta solo l'altezza. Torna (P, di quanto e'
+    entrata la punta piu' dentro)."""
+    verso, quote, xs = vano.soffietto
+    W = (P - p.centro) @ R.T + t
+    dentro = (W[:, 1] >= quote[0]) & (W[:, 1] <= quote[-1])
+    limite = np.interp(W[:, 1], quote, xs) - verso * gioco
+    oltre = dentro & (verso * (W[:, 0] - limite) > 0)
+    if not oltre.any():
+        return P, 0.0
+    quanto = float((verso * (W[oltre, 0] - limite[oltre])).max())
+    W = W.copy()
+    W[oltre, 0] = limite[oltre]
+    return (W - t) @ R + p.centro, quanto
 
 
 @dataclass
@@ -887,57 +963,79 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
         J.setdefault("materials", []).append(rinumera(m))
     piegate = 0
     scarto = 0.0
-    for me in Jp.get("meshes", []):
-        me = json.loads(json.dumps(me))
-        for prim in me["primitives"]:
-            a = prim["attributes"]
-            if rigido:
-                # niente da adattare: la maglia dell'astuccio com'e'
+    # col soffietto, una maglia per ogni gruppo di pose che lui tocca allo
+    # stesso modo - le pose uguali salvo la Z, perche' il soffietto e' uguale
+    # lungo tutta la scatola: uno strato, una maglia. Senza, una maglia sola
+    gruppi, di_chi = [None], [0] * len(poste)
+    if vano.soffietto is not None and not rigido:
+        chiavi, gruppi, di_chi = {}, [], []
+        for Rk, t in poste:
+            k = (round(float(t[0]), 3), round(float(t[1]), 3), np.round(Rk, 6).tobytes())
+            if k not in chiavi:
+                chiavi[k] = len(gruppi)
+                gruppi.append((Rk, t))
+            di_chi.append(chiavi[k])
+    premute = [0.0] * len(gruppi)
+    n_maglie = len(Jp.get("meshes", []))
+    adattate = {}
+    for g, posa in enumerate(gruppi):
+        for i_me, me in enumerate(Jp.get("meshes", [])):
+            me = json.loads(json.dumps(me))
+            for i_pr, prim in enumerate(me["primitives"]):
+                a = prim["attributes"]
+                if rigido:
+                    # niente da adattare: la maglia dell'astuccio com'e'
+                    for k, v in list(a.items()):
+                        a[k] = v + sposta["accessors"]
+                    if "indices" in prim:
+                        prim["indices"] += sposta["accessors"]
+                    if "material" in prim:
+                        prim["material"] += sposta["materials"]
+                    continue
+                if (i_me, i_pr) not in adattate:
+                    P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
+                    Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
+                    P2, N2, piegate = adatta(P, Nn, p, d)
+                    scarto = max(scarto, fuori_dal_modello(P, P2, p))
+                    adattate[(i_me, i_pr)] = (P2, N2)
+                P2, N2 = adattate[(i_me, i_pr)]
+                if posa is not None:
+                    P2, q = contro_il_soffietto(vano, p, posa[0], posa[1], P2)
+                    premute[g] = max(premute[g], q)
+                for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2)):
+                    if arr is None:
+                        continue
+                    if nome == "NORMAL":
+                        arr = arr / np.maximum(np.linalg.norm(arr, axis=1, keepdims=True), 1e-9)
+                    arr = np.ascontiguousarray(arr, dtype="<f4")
+                    allinea()
+                    J["bufferViews"].append({"buffer": 0, "byteOffset": len(B),
+                                             "byteLength": arr.nbytes, "target": 34962})
+                    B.extend(arr.tobytes())
+                    acc = {"bufferView": len(J["bufferViews"]) - 1, "componentType": 5126,
+                           "count": len(arr), "type": "VEC3"}
+                    if nome == "POSITION":
+                        acc["min"] = arr.min(0).tolist()
+                        acc["max"] = arr.max(0).tolist()
+                    J["accessors"].append(acc)
+                    a[nome] = len(J["accessors"]) - 1
                 for k, v in list(a.items()):
-                    a[k] = v + sposta["accessors"]
+                    if k not in ("POSITION", "NORMAL"):
+                        a[k] = v + sposta["accessors"]
                 if "indices" in prim:
                     prim["indices"] += sposta["accessors"]
                 if "material" in prim:
                     prim["material"] += sposta["materials"]
-                continue
-            P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
-            Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
-            P2, N2, piegate = adatta(P, Nn, p, d)
-            scarto = max(scarto, fuori_dal_modello(P, P2, p))
-            for nome, arr in (("POSITION", P2 / 1000.0), ("NORMAL", N2)):
-                if arr is None:
-                    continue
-                if nome == "NORMAL":
-                    arr = arr / np.maximum(np.linalg.norm(arr, axis=1, keepdims=True), 1e-9)
-                arr = np.ascontiguousarray(arr, dtype="<f4")
-                allinea()
-                J["bufferViews"].append({"buffer": 0, "byteOffset": len(B),
-                                         "byteLength": arr.nbytes, "target": 34962})
-                B.extend(arr.tobytes())
-                acc = {"bufferView": len(J["bufferViews"]) - 1, "componentType": 5126,
-                       "count": len(arr), "type": "VEC3"}
-                if nome == "POSITION":
-                    acc["min"] = arr.min(0).tolist()
-                    acc["max"] = arr.max(0).tolist()
-                J["accessors"].append(acc)
-                a[nome] = len(J["accessors"]) - 1
-            for k, v in list(a.items()):
-                if k not in ("POSITION", "NORMAL"):
-                    a[k] = v + sposta["accessors"]
-            if "indices" in prim:
-                prim["indices"] += sposta["accessors"]
-            if "material" in prim:
-                prim["material"] += sposta["materials"]
-        J["meshes"].append(me)
+            J["meshes"].append(me)
 
     # un nodo per pezzo, con sotto una copia dei nodi del prodotto
     radici = Jp["scenes"][Jp.get("scene", 0)]["nodes"]
 
-    def copia(i):
+    def copia(i, g):
         n = json.loads(json.dumps(Jp["nodes"][i]))
         if "mesh" in n:
-            n["mesh"] += sposta["meshes"]
-        figli = [copia(c) for c in n.get("children", [])]
+            n["mesh"] += sposta["meshes"] + g * n_maglie
+        figli = [copia(c, g) for c in n.get("children", [])]
         if figli:
             n["children"] = figli
         J["nodes"].append(n)
@@ -945,7 +1043,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
 
     scena = J["scenes"][J.get("scene", 0)]["nodes"]
     for k, (Rk, t) in enumerate(poste):
-        figli = [copia(r) for r in radici]
+        figli = [copia(r, di_chi[k]) for r in radici]
         q = _quaternione(Rk)
         # t e' dove va il centro del prodotto: il nodo sposta prima il centro
         # nell'origine
@@ -972,6 +1070,12 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
         righe.append(DIFETTO + "il pezzo nel vassoio non e' il suo modello: il corpo si "
                      "scosta di %.2f mm da quello costruito da solo, oltre lo "
                      "schiacciamento consentito" % scarto)
+    if max(premute) > 0.0:
+        righe.append("contro il fianco a soffietto le punte dei pezzi si premono sulla "
+                     "parete: entravano fino a %s mm (%s), e il pezzo resta al centro "
+                     "con le pinne di sempre"
+                     % (" e ".join("%.1f" % q for q in premute),
+                        "una maglia per strato" if len(premute) > 1 else "una maglia"))
     conti = _strati(d, quanti)
     pezzi = "pezzo" if quanti == 1 else "pezzi"
     strati = "%d %s" % (len(conti), "strato" if len(conti) == 1 else "strati")

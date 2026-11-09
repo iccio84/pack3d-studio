@@ -932,11 +932,9 @@ soffietto finisce contro il fronte e il retro, che lo coprono. Il fondo
 resta attaccato al bordo basso, e sotto il fondo non c'e' piu' niente.
 
 **Nel GLB e' un nodo a parte**, `soffietto`, come la plancia: il
-riempimento ci misura dove il vano si stringe (regole/riempimenti.md, *Il
-vano*). Sul T1x10 il vano passa da 137,5 a 121,1 mm di largo, e le pinne
-dei T1 si accartocciano di piu': il pezzo passa da 136,3 a 119,9 mm, col
-corpo da 115 intero. Nessun pezzo entra nel soffietto (4 mm di margine
-alla piega).
+riempimento ne legge il profilo e ci preme contro le punte dei pezzi
+(regole/riempimenti.md, *Il vano*, *Contro il fianco a soffietto le punte
+si premono*).
 
 ### La plancia senza denti
 
