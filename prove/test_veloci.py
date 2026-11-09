@@ -1453,8 +1453,9 @@ class PlanciaSenzaDenti(unittest.TestCase):
 
 class FiancoASoffietto(unittest.TestCase):
     """Il fianco col fondo con la piega di mezzo si piega a soffietto
-    (`scatola_plancia._piega_di_mezzo`, `_rientro`); il riempimento stringe
-    il vano fino alla piega (`riempimento.misura_vassoio`)."""
+    (`scatola_plancia._piega_di_mezzo`, `_rientro`); il riempimento lascia il
+    vano intero e preme le punte dei pezzi contro di lui
+    (`riempimento.profilo_del_soffietto`, `contro_il_soffietto`)."""
 
     def setUp(self):
         from pack3d import scatola_plancia
@@ -1481,10 +1482,11 @@ class FiancoASoffietto(unittest.TestCase):
         self.assertAlmostEqual(p.H - h, 22.4, delta=0.1)
         self.assertIn("a soffietto: 28.2 + 28.1", self.sp._fianco_col_fondo(p))
 
-    def test_il_vano_arriva_alla_piega(self):
+    def test_il_vano_resta_intero_e_le_punte_si_premono(self):
         from pack3d import exporters, riempimento
         from PIL import Image
-        # una scatola 100 x 40 x 60 (fondo e due pareti) e il soffietto a +X
+        # una scatola 100 x 40 x 60 (fondo e una parete) e il soffietto a +X:
+        # dal bordo a 50 la piega rientra a 35, a meta' altezza
         V = [(-50, 0, -30), (50, 0, -30), (50, 0, 30), (-50, 0, 30),
              (-50, 40, -30), (-50, 40, 30), (50, 40, -30), (50, 40, 30),
              (35, 20, -30), (35, 20, 30)]
@@ -1498,10 +1500,25 @@ class FiancoASoffietto(unittest.TestCase):
             with open(out, "rb") as fh:
                 J, B = riempimento.leggi(fh.read())
         vano = riempimento.misura_vassoio(J, B)
+        # il vano e' la scatola intera: i pezzi stanno al centro
         self.assertAlmostEqual(vano.x0, -49.0, places=3)
-        self.assertAlmostEqual(vano.x1, 35.0, places=3)
+        self.assertAlmostEqual(vano.x1, 49.0, places=3)
+        verso, quote, xs = vano.soffietto
+        self.assertEqual(verso, 1.0)
+        self.assertAlmostEqual(float(np.interp(20.0, quote, xs)), 35.0, places=2)
+        self.assertAlmostEqual(float(np.interp(10.0, quote, xs)), 42.5, places=2)
+        # un pezzo dritto, al centro: le punte a 45 entrano nel soffietto a
+        # meta' altezza (35) e non in basso (46,25 a 5 mm)
+        p = riempimento.Prodotto(assi=(0, 2, 1), centro=np.zeros(3), lungo=90.0,
+                                 corpo=60.0, largo=10.0, spesso=10.0, largo_pinne=10.0,
+                                 fronte=1)
+        P = np.array([[45.0, 0.0, 0.0], [45.0, -15.0, 0.0], [-45.0, 0.0, 0.0]])
+        P2, q = riempimento.contro_il_soffietto(vano, p, np.eye(3), np.array([0.0, 20.0, 0.0]), P)
+        self.assertAlmostEqual(q, 45.0 - 35.0 + riempimento.GIOCO, places=2)
+        self.assertAlmostEqual(P2[0, 0], 35.0 - riempimento.GIOCO, places=2)
+        self.assertEqual(P2[1, 0], 45.0)          # a 5 mm la parete e' a 46,25
+        self.assertEqual(P2[2, 0], -45.0)         # dall'altra parte niente
         self.assertEqual(len(riempimento.vertici(J, B, solo="soffietto")), 6)
-
 
 class PinneCromate(unittest.TestCase):
     """Le pinne di testa cromate, scelta del pack: metallo lucido sulle due
