@@ -46,6 +46,15 @@ FRONTE_CURVO = ("fronte curvo: le alette di cielo e fondo sono piu' lunghe "
                 "fondo sono a D")
 
 
+# La riga del fondo a tetto (`dieline._tetto`), anche per il controllo
+# dell'AI: il fondo che sale dentro la scatola e' la scatola, non un difetto.
+FONDO_A_TETTO = ("fondo a tetto: le due falde del fondo (%.1f e %.1f mm) sono "
+                 "piu' lunghe della profondita' (%.1f mm) e si chiudono a "
+                 "triangolo dentro la scatola, come un soffietto: la cresta "
+                 "sale di %.1f mm, a %.1f mm dal fronte, e sotto la scatola "
+                 "resta il vuoto a triangolo")
+
+
 def incidi_apertura(pdf, d, faces, girate, spessore, sagomate=()):
     """I tagli dell'apertura a strappo incisi nelle facce. La riga per chi
     guarda il modello, o None se l'astuccio non ha un'apertura.
@@ -95,7 +104,7 @@ APERTA = "astuccio aperto"
 GRADI_PROPOSTI = 60
 NOMI_FACCE = {"front": "fronte", "back": "retro", "top": "cielo",
               "bottom": "fondo", "left": "fianco sinistro",
-              "right": "fianco destro"}
+              "right": "fianco destro", "tetto": "seconda falda del fondo"}
 
 
 def apertura_gradi(valore):
@@ -242,7 +251,8 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                                 panels=d.panels, chiuso=d.chiuso,
                                 spessore=(folding.SPESSORE_CRT if carta is None
                                           else carta),
-                                fianchi_sul_fronte=d.fianchi_su == "front")
+                                fianchi_sul_fronte=d.fianchi_su == "front",
+                                tetto=d.tetto)
     # ogni faccia coi lati del suo pannello del DT, nessuna specchiata, il
     # fronte davanti: vedi `verifica.facce_astuccio`
     _ok, verifiche = verifica.facce_astuccio(faces, d.panels, d.curva_mm)
@@ -355,6 +365,10 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
         meta.append(riga_rilievo)
     if d.curva_mm:
         meta.append(FRONTE_CURVO % d.curva_mm)
+    if d.tetto:
+        meta.append(FONDO_A_TETTO % (d.panels["bottom"].h_mm,
+                                     d.panels["tetto"].h_mm, d.dims_mm[2],
+                                     d.tetto[1], d.tetto[0]))
     if riga_aperta:
         meta.append(riga_aperta)
     if incisa:

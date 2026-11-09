@@ -250,6 +250,42 @@ Le cause erano due, e le regole sono due.
    cielo, 46,3, che torna coi fianchi da 45; il fondo da 56,5 si riscala
    (l'avviso lo dice).
 
+#### Il fondo a tetto: due falde che non ci stanno piatte
+
+Il caso: la scatola da quindici barrette della stessa linea, 189,9 x 138,9 x
+72,7 mm, LINGUETTA (16 + 16) - CIELO (72,7) - FRONTE (139,8, coi fianchi) -
+FALDA (49) - FALDA (49) - RETRO (109 + 29). Il solutore si fermava, e la
+routine ha chiesto com'e' fatto il fondo: "i due pannelli scuri fanno un
+fondo rialzato a tetto, dentro la scatola", e in una nota "la base che
+ripiega a triangolo dentro la scatola, tipo soffietto".
+
+La firma sta nel disegno (`_tetto` in `dieline.py`): fra il fronte e il retro
+**due fasce uguali** (8%), **ognuna piu' corta della profondita'** e
+**insieme piu' lunghe** (almeno del 5%). Piatte non ci stanno: si chiudono a
+triangolo dentro la scatola, con la cresta lungo la larghezza. La profondita'
+e' il cielo sopra il fronte, e i fianchi stanno sul fronte, come nella
+scatola a linguetta. La cresta la da' il triangolo delle due falde con la
+profondita' (`cresta`): qui a 36,4 mm dal fronte, e sale di 32,9.
+
+Il retro e' **quello che viene dopo le falde, alto come il fronte**: qui una
+riga lo spezza in 109 + 29 (la fascia in cima, coi biscotti e la fessura
+della linguetta), e le fasce che insieme tornano col fronte (138 contro
+139,8, a meno del 3%) sono il retro intero. E' un ripiego, come il riquadro
+interno: si prova solo se le letture di serie non trovano la scatola, coi
+riquadri e senza (qui il riquadro bianco da 174 x 16 spezza la prima falda in
+10 + 16 + 23).
+
+Sul modello (`folding._a_tetto`) la prima falda va dallo spigolo basso del
+fronte alla cresta e la seconda dalla cresta a quello del retro, ognuna
+lunga quanto il suo pannello e con la sua grafica; sotto resta il vuoto a
+triangolo, chiuso ai lati dai fianchi. Il controllo "aletta piu' corta della
+profondita': texture riscalata" li' non vale, e l'avviso del modello dice il
+fondo a tetto, anche al controllo dell'AI.
+
+Due falde che piatte si sovrappongono - un fondo doppio incollato - hanno la
+stessa firma. Qui l'ha detto chi aveva la scatola in mano; se un caso
+diverso lo smentisse, diventa una scelta del pack.
+
 #### Le falde del retro sono fasce, non facce
 
 Sul solido le due falde non sono facce intere: sono **fasce del retro**, e in

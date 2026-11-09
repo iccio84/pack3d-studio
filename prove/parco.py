@@ -1291,6 +1291,8 @@ def caso(args):
     if (_registra_stato(args.casi, cartella, args.codice, corpo, altri)
             and args.stato in ("domanda", "da-approvare")):
         _avvisa(args.spazio, args.codice)
+    if args.stato in ("domanda", "non-risolto"):
+        _in_attesa(args.repo, args.codice)
     # l'anteprima la mostra la pagina: Glam riceve i campi che conosce (GLAM.md)
     corpo.pop("immagine", None)
     try:
@@ -1320,6 +1322,27 @@ def caso(args):
     print("in Glam: caso %s \"%s\" -> %s%s" % (
         args.codice, corpo["nome"], corpo["stato"],
         " (utenti: %s)" % risposta["utenti"] if "utenti" in risposta else ""))
+
+
+def _in_attesa(repo, cod):
+    """Il caso aspetta chi l'ha caricato: `da-guardare` al posto del lucchetto
+    `in-lavorazione` (CODA.md). Lo faceva la sessione a mano, e il T15 a
+    soffietto l'ha dimenticato: alla risposta la routine ha trovato il
+    lucchetto di poche ore prima, l'ha preso per il lavoro di un'altra
+    sessione e si e' fermata, e il caso e' rimasto li'. Un guasto qui non
+    ferma lo stato a Glam: lo dice, e le etichette vanno messe a mano."""
+    try:
+        issue = _issue(repo, cod)
+        if issue is None:
+            print("nessuna issue aperta per il caso %s: etichette non toccate" % cod)
+            return
+        _metti(repo, issue["number"], "da-guardare")
+        _togli(repo, issue["number"], "in-lavorazione")
+        print("issue #%d: da-guardare, via in-lavorazione - la risposta riapre "
+              "il caso" % issue["number"])
+    except SystemExit as e:
+        print("etichette del caso %s non cambiate (%s): metti da-guardare e "
+              "togli in-lavorazione a mano" % (cod, e))
 
 
 def _stato_a_glam(glam, corpo):
@@ -2993,6 +3016,9 @@ def main():
                    help="la cartella dove `costruisci` (o `spazio`) ha salvato il GLB")
     q.add_argument("--spazio", default=SPAZIO,
                    help="lo Space che manda l'email della domanda (di serie %s)" % SPAZIO)
+    q.add_argument("--repo", default=REPO_CASI,
+                   help="il registro dei casi su GitHub: con --stato domanda o "
+                        "non-risolto il caso passa a da-guardare")
     q.set_defaults(fai=caso)
     for nome, fai, aiuto in (("prepara", prepara, "prende un caso libero, lo mette nel "
                               "parco, lo costruisce e fa il foglio da guardare"),
