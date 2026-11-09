@@ -354,33 +354,107 @@ invece di obbligare a ricaricare.
 
 ## I permessi della routine
 
-La routine lavora in modalita' auto, e il controllo automatico dei permessi
-le blocca l'unione delle sue PR («Merge Without Review»). Le regole che glielo
-permettono non stanno nel repository: `.claude/settings.json` lo legge solo
-una sessione con un repository solo, e la routine ne ha due (questo e
-`pack3d-casi`). Stanno nello **script di configurazione dell'ambiente cloud**
-(su Claude: menu dell'ambiente nella barra del titolo -> Modifica), che le
-scrive nelle impostazioni dell'utente prima che la sessione parta:
+Regola fissa: **i comandi Bash si approvano da soli**, nelle sessioni e nelle
+routine, senza chiedere conferma. Restano vietati, sempre e in ogni modalita',
+il force push (anche `+ramo` e `-f`), `git commit --amend`, `pkill` e le
+cancellazioni via API (`gh api ... -X DELETE`, `gh repo delete`).
 
-    mkdir -p ~/.claude
-    [ -f ~/.claude/settings.json ] || cat > ~/.claude/settings.json <<'FINE'
-    {
-      "permissions": {
-        "allow": [
-          "Bash(gh api -X POST repos/iccio84/pack3d-studio/pulls *)",
-          "Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)",
-          "Bash(gh api -X POST repos/iccio84/pack3d-casi/actions/workflows/parco.yml/dispatches *)"
-        ]
-      }
-    }
-    FINE
+Le regole stanno nelle **impostazioni dell'utente**, scritte dallo **script di
+configurazione dell'ambiente cloud "Default"**, quello delle sessioni e delle
+routine (su Claude: menu dell'ambiente nella barra del titolo -> Modifica ->
+Script di configurazione), prima che la sessione parta. Nello script e' la
+sezione «i permessi della routine», dopo l'installazione delle librerie e di
+Ghostscript.
 
-La prima apre le PR, la seconda le unisce: anche il rilascio verso `main`,
-che aggiorna lo Space. La terza lancia il parco intero nelle Actions di
-`pack3d-casi` (RILASCIO.md, punto 3): senza, il rilascio lo fa in locale, in
-un'ora o due invece di una mezz'ora. Chi vuole approvare i rilasci a mano
-toglie la seconda. `.claude/settings.json` nei due repository resta per le
-sessioni con un repository solo.
+- `Bash` approva tutto nelle modalita' che chiedono conferma.
+- Le regole strette (git, `gh api` sui repository di iccio84,
+  `python3 prove/...`) servono per la modalita' auto: entrando in auto, Claude
+  Code mette da parte `Bash` (da' accesso a qualunque comando) e tiene solo
+  quelle strette, che passano senza il controllo automatico.
+- `autoMode` da' il contesto al controllo automatico. Claude Code lo legge solo
+  dalle impostazioni dell'utente, mai dal repository.
+
+Non stanno in `.claude/settings.json` dei repository. Quel file lo legge solo
+una sessione con un repository solo, e le sessioni di pack3d ne hanno due
+(questo e `pack3d-casi`). Lì restano solo le due regole storiche del `gh api`.
+Claude non puo' cambiare da se' ne' quel file ne' le impostazioni dell'utente:
+il controllo lo blocca come auto-modifica, e va bene cosi'. Le scrive lo
+script:
+
+```sh
+mkdir -p ~/.claude
+cat > ~/.claude/settings.json <<'FINE'
+{
+  "permissions": {
+    "allow": [
+      "Bash",
+      "Bash(git status*)",
+      "Bash(git log *)",
+      "Bash(git diff*)",
+      "Bash(git show *)",
+      "Bash(git fetch *)",
+      "Bash(git add *)",
+      "Bash(git rev-parse *)",
+      "Bash(git merge --ff-only *)",
+      "Bash(git -c user.email=\"iccio84@gmail.com\" -c user.name=\"iccio84\" commit *)",
+      "Bash(git push -u origin claude/*)",
+      "Bash(timeout 120 git push -u origin claude/*)",
+      "Bash(git push origin main)",
+      "Bash(timeout 120 git push origin main)",
+      "Bash(git -C /home/user/pack3d-casi status*)",
+      "Bash(git -C /home/user/pack3d-casi log *)",
+      "Bash(git -C /home/user/pack3d-casi pull *)",
+      "Bash(gh api repos/iccio84/*)",
+      "Bash(gh api \"repos/iccio84/*)",
+      "Bash(gh api -X POST repos/iccio84/pack3d-studio/pulls *)",
+      "Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)",
+      "Bash(gh api -X POST repos/iccio84/pack3d-casi/actions/workflows/*)",
+      "Bash(gh run *)",
+      "Bash(python3 prove/*)",
+      "Bash(python3 -m unittest *)",
+      "Bash(jq *)",
+      "Bash(md5sum *)"
+    ],
+    "deny": [
+      "Bash(pkill *)",
+      "Bash(*git*push*--force*)",
+      "Bash(*git*push* -f*)",
+      "Bash(*git*push* +*)",
+      "Bash(*git*commit*--amend*)",
+      "Bash(gh api *-X DELETE*)",
+      "Bash(gh api *--method DELETE*)",
+      "Bash(gh repo delete*)"
+    ]
+  },
+  "autoMode": {
+    "environment": [
+      "$defaults",
+      "Source control: GitHub iccio84/pack3d-studio (public) and iccio84/pack3d-casi (private), both owned by the user.",
+      "Key internal services: the user's Hugging Face Space iccio-maurizio.hf.space, updated only by the GitHub workflow.",
+      "Host containment: ephemeral Claude Code cloud container, reclaimed after the session."
+    ],
+    "allow": [
+      "$defaults",
+      "Standing rule of the user: shell commands are approved automatically, in sessions and in routines.",
+      "Release flow: push claude/* and pack3d-casi main, open and merge PRs to coda-settimana and main, dispatch parco.yml."
+    ]
+  }
+}
+FINE
+```
+
+Lo script sovrascrive il file a ogni sessione, cosi' una regola nuova vale
+dalla sessione dopo. Le regole del `gh api` aprono le PR, le uniscono (anche
+il rilascio verso `main`, che aggiorna lo Space) e lanciano il parco intero
+nelle Actions di `pack3d-casi` (RILASCIO.md, punto 3). Chi vuole approvare i
+rilasci a mano toglie la regola `-X PUT .../pulls/*` dallo script e aggiunge
+`"ask": ["Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)"]`.
+
+Anche cosi', in modalita' auto il controllo automatico giudica i comandi che
+nessuna regola stretta copre. Se ne blocca 3 di fila (o 20 in tutto), la
+sessione torna a chiedere conferma. In una routine nessuno risponde: il
+comando non parte e il lavoro va avanti senza. Quando succede, il comando
+bloccato si aggiunge alle regole strette dello script.
 
 ## Aggiornare dopo una nuova regola
 
