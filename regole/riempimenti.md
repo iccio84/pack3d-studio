@@ -367,16 +367,28 @@ altezza fino al bordo dei fianchi». E' l'opzione del caso `tegola` (gradi,
 
 `riempimento.a_tegola`: ogni pezzo frontale ruota all'indietro attorno al
 largo del vano, la faccia stampata in su verso chi guarda; nella sua fila
-la colonna resta verticale e ogni pezzo poggia sul bordo di quello sotto
-(sale dell'altezza diviso il coseno), sfalsato come una tegola. Le file si
+la colonna resta verticale e ogni pezzo poggia sul corpo di quello sotto
+(sotto, al secondo no), sfalsato come una tegola. Le file si
 allargano su tutta la profondita', mai meno di uno spessore lungo la
 normale della faccia (19,2 / cos 30 = 22,2 mm). Poi i pezzi si gonfiano in
 altezza - una scala sul loro asse che sale, nel nodo - finche' la cima del
-corpo arriva al tetto del vano, il bordo delle pareti: al massimo del 15%
+corpo arriva al tetto del vano, il bordo delle pareti: al massimo del 30%
 (`GONFIA_TEGOLA`), o schiacciati fino a `SCHIACCIA_MAX` se la fila lo passa.
 Il pezzo poggia sul fondo con tutto (nessuna punta sotto); se le file
-escono dal vano e' un errore, non un modello sbagliato. Sul caso: file ogni
-23,6 mm, gonfiati del 2%, cima a 145,2 mm, il bordo a 145,2.
+escono dal vano e' un errore, non un modello sbagliato.
+
+Al secondo «Non approvo»: «Ruota i pack in avanti di un paio di gradi in
+modo che non ci siano spazi tra un piano e l'altro e se necessario gonfia di
+piu' i pack». La causa: ogni pezzo saliva di altezza / coseno, il bordo sul
+bordo; ma il corpo del flowpack e' arrotondato, e fra un piano e l'altro
+restavano 5 mm d'aria (in sezione, quattro file di cuscini staccati). La
+regola: il pezzo sopra poggia sul **corpo** di quello sotto - sale della
+corda verticale piu' lunga della sezione inclinata (l'inviluppo convesso del
+corpo, `riempimento._corda_verticale`), cosi' i due si toccano senza
+entrare. I piani piu' bassi chiedono piu' gonfiore per arrivare al bordo:
+`GONFIA_TEGOLA` passa dal 15 al 30%. Sul caso, opzione `tegola: 28`: file
+ogni 23,3 mm, gonfiati del 25%, cima a 145,2 mm, il bordo a 145,2 (a 30
+gradi e bordo sul bordo erano 2% e 5 mm d'aria per piano).
 
 Il fondo, non il piano: il piano di `misura_vassoio` e' la striscia della
 scatola chiusa, e nel vassoio aperto prendeva il lembo del davanti
