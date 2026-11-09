@@ -33,6 +33,51 @@ pagina coi suoi tratti resta la prima, e le altre si contano solo quando la
 prima ne ha pochi. Una scheda piena di tabelle davanti la regola non la
 vede: li' il disegno va messo per primo.
 
+**Un PDF che e' una foto si dice, non si cerca la forma.** Il display a
+scatola da 10 del caso 54a998aa3b era un PDF con dentro una JPEG sola, 2953 x
+2362 px a 72 ppi: fustella, grafica e DT appiattiti in una foto, nessun
+tracciato vettoriale e quote illeggibili. Ogni famiglia legge forma e misure
+dai tratti, e il riempimento si fermava con «dei due PDF nessuno si legge come
+vassoio espositore», che faceva cercare l'errore nel riconoscimento del
+display. Se la pagina del disegno non ha nessun tracciato, a nessuna
+profondita', e ha almeno un'immagine (`artwork.solo_immagine`), `analyze_pdf`
+si ferma subito con `artwork.PdfImmagine`, che chiede il PDF vettoriale; il
+riempimento la lascia passare col numero del PDF. Nel parco, il 8 novembre
+2026, l'unico PDF cosi' e' quello del caso: gli altri non cambiano strada.
+
+**Una foto con la larghezza della fustella si rifa' vettoriale.** Chi ha
+caricato il display del caso 54a998aa3b non aveva il PDF vettoriale: solo la
+foto. La fustella nella foto pero' si vede, una penna ciano sottile, e il DT
+nell'angolo ha le quote, piccole ma leggibili a occhio. `pack3d.foto` trova
+la penna (fra i colori saturi, quello che fa piu' righe sottili e lunghe; le
+campiture dello stesso colore, una tabella nutrizionale, restano fuori), la
+assottiglia a un pixel, la segue in polilinee (un tratteggio resta a pezzi,
+come nel vettoriale) e tiene il gruppo di tratti vicini piu' lungo: il DT in
+miniatura e le scritte restano fuori. La scala una foto non ce l'ha - il PDF
+diceva 72 ppi, la foto era a 150 - e la da' l'opzione `larghezza_fustella`:
+la quota piu' esterna del DT, in mm. Ne esce un PDF nuovo, la foto scalata e
+sopra i tratti con la penna della foto, che le famiglie leggono come gli
+altri. Sul caso: 436,5 mm danno 0,1695 mm per pixel, e con quella scala
+tornano tutte le altre quote del DT (281 di altezza, 191 del coperchio, i
+pannelli da 78, 56,5 e 24) entro mezzo millimetro. Senza l'opzione resta
+l'errore di sopra. Il display del caso pero' ancora non si costruisce: e' un
+display a scatola col fondo attaccato al fianco, non al retro, e coi fianchi
+diversi, che `scatola_plancia` non legge (issue del caso).
+
+**La foto si pulisce dalla penna.** I tratti rifatti vettoriali la
+costruzione li toglie come ogni DT, ma la penna resta nei pixel della foto:
+sul display T1x10 le linee ciano stavano sui bordi della texture, e la
+tabella nutrizionale ciano sul fondo era la GDA, che si toglie sempre
+(regole/pulizia.md, *La GDA si toglie da tutte le grafiche*) e che senza
+testo vivo `techink.zone_gda` non vede. Allora `foto.pulisci`, prima di
+scrivere la foto nel PDF nuovo: le campiture della penna (larghe almeno 2,5
+mm) si raccolgono in gruppi col loro fondo tenue della stessa tinta (il
+riquadro chiaro attorno ai valori) e ogni gruppo si copre, rettangolo con
+3 mm di bordo e le scritte dentro, col colore che ha attorno; i tratti
+sottili si riempiono col pixel buono piu' vicino. La foto pulita torna nello
+spazio colore di prima: in quadricromia se lo era (se no compare l'avviso
+della grafica in RGB, che nel file non c'era).
+
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
 tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,

@@ -270,6 +270,18 @@ spessore non basta, di lato*). Ma cosi' i pezzi stavano troppo bassi, e alla
 fine il pack ha il rigonfiamento nello spessore, al livello 9 (*Nello
 spessore, se lo si sceglie per il pack*): 3 strati da 21,3 mm, 64 dei 70,5.
 
+**Nella scatola chiusa si guarda dall'alto** (`Vano.dall_alto`). Il display
+a scatola T1x10 (caso 54a998aa3b): «Display che contiene 10 [flowpack] T1
+(5X2)», e la foto li mostra sdraiati con la faccia in su, 5 dal davanti al
+fondo. Frontali ne stavano 14 in una fila, e i 10 chiesti venivano uno
+strato solo: strati uguali, e la griglia non si cercava; restavano 10 in
+piedi in fila. Ma nella scatola chiusa il prodotto si guarda dalla finestra
+del coperchio, dall'alto. **Regola**: nel display a scatola (la prima riga
+della sua lettura, `scatola_plancia.TITOLO`) la griglia piena sdraiata si
+cerca anche se frontali fanno strati uguali. Sul caso: per il largo, 5 x 2,
+passo 37,8. Il T15 non cambia: frontali non facevano strati uguali e la
+griglia era gia' la sua (5 x 3, misure uguali).
+
 ### Sdraiati, stanno in piano
 
 Il T15 al primo «Non approvo» chiedeva i pezzi «leggermente inclinati
@@ -285,6 +297,38 @@ lunghezza per il seno: 113 x sin 10 = 19,6 mm in piu', 82 mm contro i 70,5 del
 vano, e i pezzi passavano nel coperchio e nella cornice della finestra. Chi
 l'ha caricato ha risposto di non inclinare: inclinato, il flowpack si
 interseca con il display. Se un pezzo ruotato non sta nel vano, non si ruota.
+
+### Inclinati in avanti, se ci stanno: una scelta del pack
+
+Il display T1x10 (caso 54a998aa3b), al primo «Non approvo»: i T1 «di 30 gradi
+in avanti, per far vedere il logo frontalmente». Col rigonfiamento 9 nello
+spessore (21,3 mm, come il T15 dello stesso prodotto) due strati da 30 gradi
+non stanno nei 44,6 mm del vano; chi l'ha caricato ha scelto «gonfi a 9,
+inclinati meno, quanto serve per stare dentro». E' l'opzione del caso
+`inclina` (gradi, `registro.inclina_scelta`; di serie 0, in piano, e gli
+altri casi non cambiano).
+
+`riempimento.inclina` ruota i pezzi sdraiati attorno al largo del vano, la
+faccia stampata verso il davanti, e scende di mezzo grado alla volta dai
+gradi chiesti finche' gli strati stanno nel vano: la cima sotto il tetto e
+nessun pezzo oltre le pareti (`fuori_dal_vano`), entro `FUORI_VANO`. Gli
+strati inclinati si appoggiano faccia su faccia: quello sopra sale dello
+spessore diviso il coseno. Sul caso: 15 gradi su 30 chiesti, e l'avviso lo
+dice. La regola di sopra resta: se neanche inclinati di poco ci stanno, i
+pezzi stanno in piano, e l'avviso lo dice.
+
+**Inclinati toccano il vassoio, non ci entrano.** Al secondo «Non approvo»:
+«i pack non devono interessare il vassoio: rigonfiamento a 8, e ruotali un
+po' che arrivino a filo con il vassoio senza intersecare». Con la tolleranza
+`FUORI_VANO` i pezzi da 15 gradi arrivavano a 45,7 mm, dentro il coperchio
+della scatola chiusa (il suo sotto a 44,4), e partivano da 0,3, dentro la
+striscia del fianco piegata sul fondo (1,6). `misura_vassoio` misura anche
+il **piano** (il vertice piu' alto sul fondo fra i fianchi: la striscia ha i
+vertici solo contro fronte e retro, quindi fra fronte e retro non si
+filtra) e il **coperchio** (il piu' basso in cima, fra le quattro pareti);
+`inclina` posa gli strati sul piano e li vuole sotto il coperchio e dentro
+le pareti senza tolleranza. Gli altri riempimenti non li usano. Sul caso,
+col rigonfiamento 8 (19,2 mm): 16 gradi, i pezzi da 1,6 a 44,3 mm.
 
 ### Nel display il flowpack resta quello del DT, con le pinne aperte
 

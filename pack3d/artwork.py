@@ -64,6 +64,51 @@ _UNA_PAGINA = stato.per_lavoro({})
 _UNA_PAGINA_MAX = 8
 
 
+class PdfImmagine(ValueError):
+    """Il PDF e' una fotografia della tavola: vedi `solo_immagine`."""
+
+
+MSG_IMMAGINE = ("il PDF e' un'immagine: dentro c'e' solo una foto della tavola, "
+                "senza le linee vettoriali della fustella o del DT, e da una foto "
+                "le misure non si leggono. Serve il PDF vettoriale, quello "
+                "esportato dal programma di grafica o dal CAD")
+
+
+def solo_immagine(pdf, page_no=0):
+    """Se la pagina e' solo immagini: nessun tracciato, a nessuna profondita',
+    e almeno un'immagine.
+
+    Il display a scatola del caso 54a998aa3b era un PDF con dentro una JPEG
+    sola, 2953 x 2362 px a 72 ppi: la fustella, la grafica e il DT appiattiti
+    in una foto. Ogni famiglia legge la forma e le misure dai tratti
+    vettoriali, e una foto non ne ha: il riempimento si fermava con «nessuno
+    si legge come vassoio espositore», che faceva cercare l'errore nel posto
+    sbagliato. Con un tracciato solo la pagina non e' una foto, e la strada
+    resta quella di sempre."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        conti = {"img": 0, "path": 0}
+
+        def cammina(oggetti):
+            for o in oggetti:
+                if o.type == raw.FPDF_PAGEOBJ_PATH:
+                    conti["path"] += 1
+                elif o.type == raw.FPDF_PAGEOBJ_IMAGE:
+                    conti["img"] += 1
+                elif o.type == raw.FPDF_PAGEOBJ_FORM:
+                    n = raw.FPDFFormObj_CountObjects(o.raw)
+                    cammina(pdfium.PdfObject(raw.FPDFFormObj_GetObject(o.raw, i),
+                                             page=o.page, pdf=o.pdf)
+                            for i in range(max(n, 0)))
+
+        cammina(doc[page_no].get_objects(max_depth=1))
+        return conti["path"] == 0 and conti["img"] > 0
+    finally:
+        doc.close()
+
+
 def pagina_unica(pdf):
     """`(pdf con la sola pagina del disegno, quante pagine aveva il file)`.
 

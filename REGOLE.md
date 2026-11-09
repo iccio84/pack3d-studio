@@ -487,6 +487,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Il fronte e' fustellato: segue i tagli della plancia
   - Dove entra
   - Cosa manca
+- Il display a scatola col fondo sul fianco
 
 **`regole/ballotin.md`** - ballotin
 
