@@ -61,6 +61,8 @@ ICONA_LATO_MM = (5.0, 20.0)
 ICONA_PROPORZIONE = (1.2, 1.8)
 ICONA_CHIUSA = 3.0
 ICONA_SATURA = 0.10
+# quanti pixel buoni per lato fanno l'estremo di una riga, nella copertura
+ESTREMI = 5
 
 
 def _hsv(rgb):
@@ -322,7 +324,10 @@ def _ricopri(out, m, bordo):
     """`out` con i pixel di `m` rifatti da quelli attorno, riga per riga: fra
     il pixel buono a sinistra e quello a destra. Le venature del legno e le
     sfumature dall'alto in basso continuano sotto l'icona; con la media di
-    tutto l'anello restava un tassello liscio sul fondo che cambia."""
+    tutto l'anello restava un tassello liscio sul fondo che cambia. Gli
+    estremi sono la mediana dei `ESTREMI` pixel buoni piu' vicini da ogni
+    lato: un pixel storto all'estremo tingeva tutta la riga (un filo celeste
+    sopra l'icona del T1x10)."""
     # e l'alone della JPEG attorno al bordo
     m = ndi.binary_dilation(m, iterations=6)
     ys, xs = np.nonzero(m)
@@ -336,8 +341,15 @@ def _ricopri(out, m, bordo):
         via = dentro[r]
         if not via.any() or via.all():
             continue
+        buone = colonne[~via]
+        riga = pezzo[r].copy()
+        for j in np.flatnonzero(np.diff(via.astype(np.int8)) != 0):
+            # j e' l'ultimo pixel prima di un salto: l'estremo buono e' j o j+1
+            e = j if not via[j] else j + 1
+            lato = buone[buone <= e][-ESTREMI:] if e == j else buone[buone >= e][:ESTREMI]
+            riga[e] = np.median(pezzo[r, lato], axis=0)
         for c in range(pezzo.shape[2]):
-            pezzo[r, via, c] = np.interp(colonne[via], colonne[~via], pezzo[r, ~via, c])
+            pezzo[r, via, c] = np.interp(colonne[via], buone, riga[~via, c])
     out = out.copy()
     out[y0:y1, x0:x1] = np.clip(np.rint(pezzo), 0, 255).astype(out.dtype)
     return out
