@@ -571,6 +571,27 @@ class Maglia:
                 np.array(self.T, np.uint32))
 
 
+# Un'aletta e' un lembo: una riga della sua maschera piu' corta di cosi'
+# (lungo la piega) non e' cartoncino dell'aletta, e' una scheggia della
+# sagoma. Sul vassoio T1x36 le alette del retro (54 mm) portavano una coda
+# larga 1,75 mm fino a 146 mm dalla piega, e piegata usciva di 8 mm oltre il
+# fianco opposto, in basso sul retro.
+ALETTA_SOTTILE = 3.0
+
+
+def _senza_code(masc, px_mm):
+    """La maschera dell'aletta senza le righe piu' corte di
+    `ALETTA_SOTTILE`: le schegge della sagoma attaccate al lembo."""
+    if masc is None or not masc.any():
+        return masc
+    corte = masc.sum(axis=1) < ALETTA_SOTTILE * px_mm
+    if not corte.any():
+        return masc
+    masc = masc.copy()
+    masc[corte, :] = False
+    return masc
+
+
 def _ingombro(masc, verso):
     """`(r0, r1, c0, c1)`: fin dove arriva DAVVERO il pezzo che `Maglia.pezzo`
     stende da `masc` in quel `verso`, sulla griglia del foglio. None se non ha
@@ -715,6 +736,8 @@ def corpo(maglia, mk, creste, px_mm, spessore=SPESSORE, dentro_alette=0.5,
             ("aletta nord-est", "est", xR, zT, -1),
             ("aletta sud-ovest", "ovest", xL, zB, +1),
             ("aletta sud-est", "est", xR, zB, +1)):
+        if mk.get(nome) is not None:
+            mk[nome] = _senza_code(mk[nome], px_mm)
         e = _ingombro(mk[nome], "righe")
         if e is None or fianco not in ancora:
             continue

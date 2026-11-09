@@ -57,6 +57,30 @@ def livelli(pdf):
         return {}
 
 
+def livelli_marcati(pdf, page_no=0):
+    """I nomi, minuscoli, dei livelli di Illustrator salvati senza i livelli
+    di Acrobat: niente OCG, solo il contenuto marcato `/Layer /MCn BDC`, con
+    il nome in `/Title` del dizionario fra le `/Properties` della pagina. Il
+    vassoio T1x36 (caso 87be37b868) ha cosi' `technical-drawing` e `notes`, e
+    in `notes` le zone colorate delle alette e dei lembi di colla: stampate
+    sul modello (regole/pulizia.md, *I livelli di Illustrator senza OCG*). Spegnerli
+    col dizionario non si puo': li spegne `dividi`, oggetto per oggetto."""
+    import pypdf
+    try:
+        r = pypdf.PdfReader(pdf)
+        pr = r.pages[page_no].get("/Resources", {}).get_object().get("/Properties")
+        if not pr:
+            return set()
+        fuori = set()
+        for v in pr.get_object().values():
+            v = v.get_object()
+            if hasattr(v, "get") and v.get("/Type") != "/OCG" and v.get("/Title"):
+                fuori.add(str(v.get("/Title")).strip().lower())
+        return fuori
+    except Exception:
+        return set()
+
+
 def spegni(src, dst, nomi):
     """Scrive `dst` con quei livelli spenti. Restituisce i nomi spenti.
 
@@ -97,9 +121,10 @@ def tecnici(pdf, page_no=0):
     tecniche (`techink.tecnica`) - `Cutter` passa di li'.
     """
     from . import techink
+    marcati = livelli_marcati(pdf, page_no)
     nomi = set(livelli(pdf))
     if not nomi:
-        return set()
+        return {n for n in marcati if n in techink.OCG_TECH or techink.tecnica(n)}
     fuori = set()
     try:
         import pypdf
@@ -110,7 +135,7 @@ def tecnici(pdf, page_no=0):
                 fuori.add(n)
     except Exception:
         pass
-    for n in nomi:
+    for n in nomi | marcati:
         if n in techink.OCG_TECH or techink.tecnica(n):
             fuori.add(n)
     return fuori
@@ -220,16 +245,20 @@ def _livelli_oggetto(o):
     """I nomi, minuscoli, dei livelli che marcano l'oggetto.
 
     pdfium li espone come marca `OC` con il dizionario dell'OCG fra i
-    parametri: `Name` e' il nome del livello. Dentro un form le marche le ha il
-    form, e i figli le ereditano: se ne occupa chi scende.
+    parametri: `Name` e' il nome del livello. Un livello di Illustrator senza
+    OCG e' la marca `Layer`, col nome in `Title` (`livelli_marcati`). Dentro
+    un form le marche le ha il form, e i figli le ereditano: se ne occupa chi
+    scende.
     """
     import pypdfium2.raw as raw
     fuori = set()
     for k in range(raw.FPDFPageObj_CountMarks(o)):
         m = raw.FPDFPageObj_GetMark(o, k)
-        if _utf16(raw.FPDFPageObjMark_GetName, m) != "OC":
+        tipo = _utf16(raw.FPDFPageObjMark_GetName, m)
+        if tipo not in ("OC", "Layer"):
             continue
-        nome = _utf16(raw.FPDFPageObjMark_GetParamStringValue, m, b"Name")
+        nome = _utf16(raw.FPDFPageObjMark_GetParamStringValue, m,
+                      b"Name" if tipo == "OC" else b"Title")
         if nome:
             fuori.add(nome.strip().lower())
     return fuori
