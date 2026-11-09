@@ -633,6 +633,12 @@ riquadro, resta: sul T6 i puntini della retinatura dei raggi gialli. Sul T6 e
 sul T10 vanno via 4 oggetti e torna il fondo marrone. Nel PDF-foto vedi
 regole/pdf.md, *La foto si pulisce dalla penna*.
 
+Non era un caso solo: il segnaposto e' lo stesso in tutti i file di quel
+committente, e nel parco c'era su **15 casi** - astucci, flowpack, display,
+anche capovolto - tutti col bianco e il celeste stampati sul modello. Tolto,
+sotto torna il fondo (il rosso, l'onda, il bianco), e nessun'altra cosa
+cambia: 32 casi uguali al byte, nessuna misura approvata cambiata.
+
 ### La tipologia non riconosciuta e' un errore, non un ripiego
 
 `kind` si dichiara e non si indovina, e c'era gia' la nota sul sinonimo
