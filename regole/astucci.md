@@ -278,7 +278,11 @@ riquadri e senza (qui il riquadro bianco da 174 x 16 spezza la prima falda in
 Sul modello (`folding._a_tetto`) la prima falda va dallo spigolo basso del
 fronte alla cresta e la seconda dalla cresta a quello del retro, ognuna
 lunga quanto il suo pannello e con la sua grafica; sotto resta il vuoto a
-triangolo, chiuso ai lati dai fianchi. Il controllo "aletta piu' corta della
+triangolo, chiuso ai lati dai fianchi. Le falde **stanno fra i fianchi**,
+rientrate dello spessore del cartoncino piu' un decimo di millimetro, come
+nella scatola vera: arrivando fino al piano dei fianchi, il loro bordo di
+taglio cadeva sulla faccia del fianco, e sui laterali si vedeva in basso la V
+delle falde (l'ha vista chi aveva approvato il modello). Il controllo "aletta piu' corta della
 profondita': texture riscalata" li' non vale, e l'avviso del modello dice il
 fondo a tetto, anche al controllo dell'AI.
 
