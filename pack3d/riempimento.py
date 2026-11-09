@@ -218,6 +218,22 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     # contiene niente. Il fianco a soffietto si guarda dopo
     V = vertici(J, B, senza=("plancia", "soffietto"))
     lo, hi = V.min(0), V.max(0)
+    # In pianta il vano lo chiudono le PARETI, cio' che si alza dal fondo:
+    # un ritaglio rimasto steso sul piano non tiene niente. Sul vassoio T1x36
+    # del caso 87be37b868 un lembo di 1,7 mm in fondo alla testata sporgeva
+    # di 8 mm oltre i fianchi, il vano veniva 152 invece di 138 e i pezzi,
+    # larghi come il vano, bucavano i fianchi.
+    # Solo dal lato dove una parete c'e': il fianco a soffietto non e' fra
+    # questi vertici, e da quella parte il vano resta la scatola intera.
+    su = V[V[:, 1] > lo[1] + 3 * spessore]
+    if len(su):
+        lo, hi = lo.copy(), hi.copy()
+        for a in (0, 2):
+            mezzo = (lo[a] + hi[a]) / 2.0
+            if su[:, a].min() < mezzo:
+                lo[a] = su[:, a].min()
+            if su[:, a].max() > mezzo:
+                hi[a] = su[:, a].max()
     z0 = lo[2] + spessore
     # la plancia col piede sul fondo (`scatola_plancia.maglia`, "fondo")
     # scende dentro la scatola, contro il retro: il vano comincia davanti a
@@ -798,7 +814,13 @@ def adatta(P, N, p, d):
             piegate += 1
             dx = segno * x[m] - meta
             dz = (P[m, spesso] - c_sp) * verso
-            P[m, lungo] = p.centro[lungo] + segno * (meta + dx * cs - dz * sn)
+            # la faccia della pinna dalla parte opposta alla piega, girando,
+            # esce oltre la piega di dz*sin: sul T1x36 del caso 87be37b868
+            # (vano 136,3, pezzo 150 col corpo 119) 1,1 mm dentro il fianco.
+            # Il film si schiaccia contro la parete, non la passa: la punta
+            # si ferma a meta' passo, dove la parete comincia
+            fuori = np.minimum(meta + dx * cs - dz * sn, meta + GIOCO)
+            P[m, lungo] = p.centro[lungo] + segno * fuori
             P[m, spesso] = c_sp + verso * (dx * sn + dz * cs)
             if N is not None:
                 nl, ns = N[m, lungo] * segno, N[m, spesso] * verso
