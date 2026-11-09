@@ -46,14 +46,29 @@ davvero, plancia esclusa; con la plancia il vano arrivava in cima al cartello,
 244 mm sul biscotto T3 invece di 104. Il biscotto T3 nel suo
 display: 2 file da 13; il wafer T1 nel suo: 4 file da 10.
 
-**Il fianco a soffietto stringe il vano.** Nel display a scatola col fianco
-a soffietto (regole/vassoi.md, *Il fianco col fondo a soffietto*) il
-soffietto e' un nodo suo, `soffietto`: fuori dall'ingombro, e da quella
-parte il vano arriva alla sua piega di mezzo, dalla parte di dentro
-(`misura_vassoio`, `vertici(..., solo="soffietto")`). Un vano solo,
-rettangolo: la piega rientra a meta' altezza, proprio dove si toccano i
-due strati, e i pezzi non la attraversano. Sul T1x10 137,5 -> 121,1 mm, e
-il pezzo con le pinne accartocciate 136,3 -> 119,9.
+**Contro il fianco a soffietto le punte si premono.** Nel display a
+scatola col fianco a soffietto (regole/vassoi.md, *Il fianco col fondo a
+soffietto*) il soffietto e' un nodo suo, `soffietto`, fuori dall'ingombro:
+il vano resta la scatola intera, e i pezzi stanno al centro con le pinne
+di sempre. Del soffietto si legge il profilo (`profilo_del_soffietto`: a
+ogni quarto di millimetro d'altezza, la sezione dei suoi triangoli e il
+punto piu' dentro), e dove la punta di un pezzo ci entrerebbe torna
+indietro lungo X fino alla parete, meno il gioco (`contro_il_soffietto`):
+il film si preme contro il cartone. Il soffietto e' uguale lungo tutta la
+scatola e conta solo l'altezza, quindi i pezzi di uno strato si premono
+uguali: una maglia per strato, invece di una sola per tutti.
+
+Prima la piega di mezzo stringeva il vano, un rettangolo: rientra a meta'
+altezza, proprio dove si toccano i due strati, e sul T1x10 il vano passava
+da 137,5 a 121,1 mm. I pezzi stavano spostati verso l'altro fianco e le
+pinne si accartocciavano a 2,5 mm. Il proprietario: «le pinne sono
+schiacciate e i pack non sono centrati. Lascia le pinne normali e centra i
+pack al display (ricorda che non devono intersecare)». Ora i pezzi stanno
+al centro, le pinne a sinistra sono quelle di prima (136,3 mm il pezzo) e
+a destra le punte, che entravano fino a 13,3 e 12,5 mm nei due strati,
+stanno contro la parete; il lato di un triangolo piu' vicino resta a 0,3
+mm dal soffietto. La misura del pezzo (`flowpack lungo`, la maglia del
+primo strato) e' 130,8: 68,2 da una parte del centro e 62,6 dall'altra.
 
 ### Il flowpack si misura sulla sua maglia
 
