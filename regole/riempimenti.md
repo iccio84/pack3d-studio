@@ -390,6 +390,28 @@ entrare. I piani piu' bassi chiedono piu' gonfiore per arrivare al bordo:
 ogni 23,3 mm, gonfiati del 25%, cima a 145,2 mm, il bordo a 145,2 (a 30
 gradi e bordo sul bordo erano 2% e 5 mm d'aria per piano).
 
+Al terzo «Non approvo»: «I pack sono stirati, la grafica allungata in
+altezza. Bisogna distribuirli 9x4. Scegli tu quanto inclinarli, quanto
+gonfiarli: l'importante e' che stiano nel vassoio riempiendo senza lasciare
+spazi o intersecare il vassoio, ma soprattutto lasciando la grafica del pack
+inalterata». La causa: il gonfiore in altezza e' una scala sull'asse della
+faccia stampata, e la grafica si allungava del 25%. La regola, per ogni
+posa a tegola: **la faccia stampata non si stira mai**, ne' in altezza ne'
+in largo. Si gonfia solo lo spessore (l'asse lungo la normale della
+faccia), al massimo di `GONFIA_TEGOLA`, quanto basta perche' le file si
+tocchino su tutta la profondita' del vano (lo spessore gonfio lungo la
+normale uguale al passo fra le file). L'inclinazione la sceglie la posa:
+fra `TEGOLA_MIN` e `TEGOLA_MAX` (5 e 60 gradi), un grado alla volta e poi il
+mezzo grado intorno, quella che porta la cima del corpo piu' vicina al
+bordo senza passarlo e senza uscire dal vano; a pari altezza la piu' vicina
+ai gradi chiesti (l'opzione `tegola`, che resta l'interruttore e la
+preferenza). Senza stiro la cima non arriva al bordo: quattro T1 in piedi
+fanno 126 mm, e inclinati i corpi arrotondati si incastrano di piu' e la
+fila scende. Sul caso: 9 gradi (chiesti 28), spessore +23%, file ogni 23,9
+mm a contatto, cima a 136,5 mm, il bordo a 145,2. Le pose da provare sono
+un centinaio: si provano sui soli punti dell'inviluppo convesso del pezzo e
+del corpo, che la scala e la rotazione non cambiano (da 500 a 34 s).
+
 Il fondo, non il piano: il piano di `misura_vassoio` e' la striscia della
 scatola chiusa, e nel vassoio aperto prendeva il lembo del davanti
 ripiegato dentro (36 mm sul T1x36).
