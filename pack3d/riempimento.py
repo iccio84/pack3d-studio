@@ -52,7 +52,7 @@ FUORI_MODELLO = 0.01        # mm: il corpo nel vassoio e' il suo modello, schiac
 FUORI_VANO = 1.0            # mm: quanto un pezzo puo' passare le pareti del vano
 PUNTA_NELLA_PARETE = 0.8    # mm: fin dove la punta piegata entra nel cartoncino (meno di FUORI_VANO)
 SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
-GONFIA_TEGOLA = 0.15        # a tegola, un pezzo si gonfia in altezza al massimo cosi'
+GONFIA_TEGOLA = 0.30        # a tegola, un pezzo si gonfia in altezza al massimo cosi' (a contatto, i 4 piani del T1x36 a 28 gradi chiedono il 25%)
 STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
 
 
@@ -754,11 +754,35 @@ def inclina(vano, p, poste, V_prodotto, gradi):
     return poste, 0.0
 
 
+def _corda_verticale(zy):
+    """La corda verticale piu' lunga della sezione (punti z, y; il suo
+    inviluppo convesso): di tanto sale un pezzo uguale messo sopra perche'
+    i due corpi si tocchino senza entrare l'uno nell'altro."""
+    pts = sorted(set(map(tuple, np.round(np.asarray(zy, float), 4))))
+    if len(pts) < 3:
+        return float(np.ptp(np.asarray(zy, float)[:, 1])) if len(pts) else 0.0
+
+    def mezzo(seq):
+        h = []
+        for q in seq:
+            while len(h) >= 2 and ((h[-1][0] - h[-2][0]) * (q[1] - h[-2][1])
+                                   - (h[-1][1] - h[-2][1]) * (q[0] - h[-2][0])) <= 0:
+                h.pop()
+            h.append(q)
+        return np.array(h)
+
+    sotto, sopra = mezzo(pts), mezzo(pts[::-1])[::-1]
+    zz = np.unique(np.concatenate([sotto[:, 0], sopra[:, 0]]))
+    return float((np.interp(zz, sopra[:, 0], sopra[:, 1])
+                  - np.interp(zz, sotto[:, 0], sotto[:, 1])).max())
+
+
 def a_tegola(vano, p, poste, V_prodotto, gradi):
     """Le pose frontali inclinate all'indietro a tegola: ogni pezzo ruota
     attorno al largo del vano (X) di `gradi`, la faccia stampata verso
-    l'alto-davanti, e nella sua fila poggia sul bordo di quello sotto - la
-    fila resta verticale, i pezzi sfalsati come tegole. Le file si allargano
+    l'alto-davanti, e nella sua fila poggia sul corpo di quello sotto, a
+    contatto, senza aria fra i piani - la fila resta verticale, i pezzi
+    sfalsati come tegole (`_corda_verticale`). Le file si allargano
     su tutta la profondita', mai meno di uno spessore fra due (lungo la
     normale della faccia). Poi i pezzi si gonfiano in altezza (il loro asse
     che sale) finche' la cima della fila arriva al tetto del vano, il bordo
@@ -798,7 +822,10 @@ def a_tegola(vano, p, poste, V_prodotto, gradi):
         h = _misura(p, j_alto) * k
         Wt = (V - p.centro) @ (Rx @ R0).T
         base = -Wt[:, 1].min()          # nessuna punta sotto il fondo
-        sale = h / c                       # sulla verticale, il bordo sul bordo
+        # sulla verticale, il corpo sul corpo: il passo fra due piani e' la
+        # corda verticale piu' lunga della sezione inclinata, non h / cos -
+        # col bordo sul bordo i corpi arrotondati lasciavano 5 mm d'aria
+        sale = _corda_verticale(Wt[corpo][:, [2, 1]])
         # davanti e dietro tutto il pezzo, pinne comprese: dentro le pareti
         largo_z = float(Wt[:, 2].max() - Wt[:, 2].min())
         nf = len(zs)
@@ -836,7 +863,7 @@ def a_tegola(vano, p, poste, V_prodotto, gradi):
         raise ValueError("riempimento: a tegola di %.0f gradi le %d file escono dal vano di "
                          "%.1f mm" % (float(gradi), len(zs), fuori))
     righe = ["a tegola: %d file da %d, inclinate all'indietro di %.0f gradi, ogni pezzo "
-             "sul bordo di quello sotto; file ogni %.1f mm (almeno %.1f)"
+             "sul corpo di quello sotto; file ogni %.1f mm (almeno %.1f)"
              % (len(zs), len(ys), float(gradi), pz, minimo),
              "a tegola, %s in altezza del %.0f%% perche' la fila arrivi al bordo delle "
              "pareti: cima a %.1f mm, il bordo a %.1f"
