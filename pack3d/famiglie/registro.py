@@ -29,6 +29,7 @@ from .flowpack import (CASI,
     _dice_film,
     _sig,
     build_flowpack,
+    cromate_scelte,
     nello_spessore_scelto,
     saldatura_scelta,
     sezione_da_agente)
@@ -600,7 +601,8 @@ def _costruisci_riempimento(r, info):
             (int(opts.get("teeth", 20)), str(soft), case_fp, r.q,
              sezione_da_agente(opts.get("params")),
              scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
-             saldatura_scelta(opts), nello_spessore_scelto(opts)), r.q,
+             saldatura_scelta(opts), nello_spessore_scelto(opts),
+             cromate_scelte(opts)), r.q,
             per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
             gradi=inclina_scelta(opts))
     return costruisci
@@ -615,7 +617,8 @@ def _costruisci_flowpack(r, info):
             r.pdf, uscita, int(opts.get("teeth", 20)), str(soft), r.case, r.q,
             sezione_da_agente(opts.get("params")),
             scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
-            saldatura_scelta(opts), nello_spessore_scelto(opts))
+            saldatura_scelta(opts), nello_spessore_scelto(opts),
+            cromate_scelte(opts))
     return costruisci
 
 

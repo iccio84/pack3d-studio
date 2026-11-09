@@ -1423,5 +1423,118 @@ class SchedeDeiDifetti(unittest.TestCase):
         self.assertEqual(self.parco._schede("tutto bene"), [])
 
 
+class PlanciaSenzaDenti(unittest.TestCase):
+    """Il profilo della plancia sagomata: un dente di una riga sola e'
+    rumore della lettura (il T1x10, 4,2 mm sulla diagonale), un gradino e
+    uno spigolo restano (`scatola_plancia._senza_denti`)."""
+
+    def setUp(self):
+        from pack3d import scatola_plancia
+        self.sp = scatola_plancia
+
+    def test_il_dente_torna_sulla_retta(self):
+        P = [(v, 270.0 - (v - 99.0), 370.0, 260.0, 380.0) for v in (99.0, 100.0, 101.0)]
+        P[1] = (100.0, 265.05, 370.0, 260.0, 380.0)
+        out = self.sp._senza_denti(P)
+        self.assertAlmostEqual(out[1][1], 269.0, places=6)
+        self.assertEqual(out[0][1], 270.0)
+        self.assertEqual(out[2][1], 268.0)
+
+    def test_gradino_e_spigolo_restano(self):
+        gradino = [(266.0, 288.6, 1, 2, 3), (267.0, 288.6, 1, 2, 3),
+                   (268.0, 283.6, 1, 2, 3), (269.0, 283.6, 1, 2, 3)]
+        self.assertEqual([q[1] for q in self.sp._senza_denti(gradino)],
+                         [288.6, 288.6, 283.6, 283.6])
+        spigolo = [(115.0, 254.3, 1, 2, 3), (116.0, 253.93, 1, 2, 3),
+                   (117.0, 253.93, 1, 2, 3)]
+        self.assertEqual([q[1] for q in self.sp._senza_denti(spigolo)],
+                         [254.3, 253.93, 253.93])
+
+
+class FiancoASoffietto(unittest.TestCase):
+    """Il fianco col fondo con la piega di mezzo si piega a soffietto
+    (`scatola_plancia._piega_di_mezzo`, `_rientro`); il riempimento stringe
+    il vano fino alla piega (`riempimento.misura_vassoio`)."""
+
+    def setUp(self):
+        from pack3d import scatola_plancia
+        self.sp = scatola_plancia
+
+    def test_la_piega_di_mezzo(self):
+        # il T1x10: coperchio a 250,8, piega di mezzo a 222,57, fondo a 194,43
+        pieghe = [194.43, 222.57, 250.8, 390.31, 436.5]
+        self.assertAlmostEqual(self.sp._piega_di_mezzo(pieghe, 250.8, 194.43, 44.88),
+                               222.57)
+        # un fianco non piu' lungo della scatola non e' un soffietto
+        self.assertIsNone(self.sp._piega_di_mezzo(pieghe, 250.8, 206.0, 44.88))
+        # e senza la piega di mezzo nemmeno: il di piu' va sotto il fondo
+        self.assertIsNone(self.sp._piega_di_mezzo([194.43, 250.8], 250.8, 194.43, 44.88))
+
+    def test_quanto_rientra(self):
+        p = self.sp.ScatolaPlancia(
+            regione=(0, 0, 1, 1), giro=0, centro=(0, 0), uL=250.8, uR=390.31,
+            vF=79.93, vB=271.05, H=44.88, fronte=44.88, fondo=(271.05, 315.93),
+            pl_u=(253.9, 387.3), buco_u=(281.0, 360.1), vT=83.9, vM=175.4,
+            vH=271.05, fondo_u=(194.43, 56.47), soffietto=222.57)
+        d, h = self.sp._rientro(p)
+        self.assertAlmostEqual(d, 17.0, delta=0.1)
+        self.assertAlmostEqual(p.H - h, 22.4, delta=0.1)
+        self.assertIn("a soffietto: 28.2 + 28.1", self.sp._fianco_col_fondo(p))
+
+    def test_il_vano_arriva_alla_piega(self):
+        from pack3d import exporters, riempimento
+        from PIL import Image
+        # una scatola 100 x 40 x 60 (fondo e due pareti) e il soffietto a +X
+        V = [(-50, 0, -30), (50, 0, -30), (50, 0, 30), (-50, 0, 30),
+             (-50, 40, -30), (-50, 40, 30), (50, 40, -30), (50, 40, 30),
+             (35, 20, -30), (35, 20, 30)]
+        T = [(0, 1, 2), (0, 2, 3), (0, 3, 5), (0, 5, 4),
+             (6, 7, 9), (6, 9, 8), (8, 9, 2), (8, 2, 1)]
+        with tempfile.TemporaryDirectory() as td:
+            out = os.path.join(td, "s.glb")
+            exporters.write_glb_mesh(np.array(V, float), np.zeros((len(V), 2)),
+                                     np.array(T), Image.new("RGB", (4, 4)), out,
+                                     parti=[("display", 0, 4), ("soffietto", 4, 8)])
+            with open(out, "rb") as fh:
+                J, B = riempimento.leggi(fh.read())
+        vano = riempimento.misura_vassoio(J, B)
+        self.assertAlmostEqual(vano.x0, -49.0, places=3)
+        self.assertAlmostEqual(vano.x1, 35.0, places=3)
+        self.assertEqual(len(riempimento.vertici(J, B, solo="soffietto")), 6)
+
+
+class PinneCromate(unittest.TestCase):
+    """Le pinne di testa cromate, scelta del pack: metallo lucido sulle due
+    testate dello steso, il resto del film com'era
+    (`famiglie.flowpack.pinne_cromate`)."""
+
+    def test_la_scelta(self):
+        from pack3d.famiglie.flowpack import cromate_scelte
+        self.assertTrue(cromate_scelte({"pinne_cromate": True}))
+        self.assertTrue(cromate_scelte({"pinne_cromate": "si"}))
+        self.assertFalse(cromate_scelte({}))
+        self.assertFalse(cromate_scelte({"pinne_cromate": "no"}))
+
+    def test_metallo_solo_sulle_testate(self):
+        from dataclasses import replace
+        from PIL import Image
+        from pack3d.famiglie.flowpack import MR_FILM, pinne_cromate
+        from pack3d.flowpack import Flowpack
+        # passo 150 mm su 300 px, pinne da 12: 24 px per parte
+        fp = Flowpack(L=126.0, end_fin=12.0, sheet=(0.0, 0.0, 150.0 / dl.PT2MM, 84.0 / dl.PT2MM))
+        foglio = Image.new("RGB", (300, 168), (200, 200, 200))
+        col, mr = pinne_cromate(foglio, foglio, None, fp)
+        m = np.asarray(mr)
+        self.assertTrue((m[:, :24, 2] == 255).all() and (m[:, -24:, 2] == 255).all())
+        self.assertTrue((m[:, 24:-24] == MR_FILM).all())
+        self.assertTrue((np.asarray(col)[:, 24:-24] == 200).all())
+        # steso ruotato: il passo e' la y della pagina
+        fp = replace(fp, ruotato=True)
+        _c, mr = pinne_cromate(foglio.transpose(Image.TRANSPOSE), foglio.transpose(Image.TRANSPOSE),
+                               None, fp)
+        m = np.asarray(mr)
+        self.assertTrue((m[:24, :, 2] == 255).all() and (m[24:-24, :, 2] == 0).all())
+
+
 if __name__ == "__main__":
     unittest.main()
