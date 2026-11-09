@@ -50,6 +50,7 @@ SOGLIA_CORPO = 0.5          # il corpo finisce dove lo spessore scende sotto met
 PASSO_MAX = 1.2             # in fila, al massimo un quinto di spessore d'aria fra due pezzi
 FUORI_MODELLO = 0.01        # mm: il corpo nel vassoio e' il suo modello, schiacciato come consentito
 FUORI_VANO = 1.0            # mm: quanto un pezzo puo' passare le pareti del vano
+PUNTA_NELLA_PARETE = 0.8    # mm: fin dove la punta piegata entra nel cartoncino (meno di FUORI_VANO)
 SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
 GONFIA_TEGOLA = 0.15        # a tegola, un pezzo si gonfia in altezza al massimo cosi'
 STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
@@ -908,10 +909,14 @@ def adatta(P, N, p, d):
             dz = (P[m, spesso] - c_sp) * verso
             # la faccia della pinna dalla parte opposta alla piega, girando,
             # esce oltre la piega di dz*sin: sul T1x36 del caso 87be37b868
-            # (vano 136,3, pezzo 150 col corpo 119) 1,1 mm dentro il fianco.
-            # Il film si schiaccia contro la parete, non la passa: la punta
-            # si ferma a meta' passo, dove la parete comincia
-            fuori = np.minimum(meta + dx * cs - dz * sn, meta + GIOCO)
+            # (vano 136,3, pezzo 150 col corpo 119) 1,1 mm oltre il vano,
+            # fuori dal cartoncino del fianco. Il film si schiaccia contro la
+            # parete, non la passa: la punta si ferma dentro il suo spessore,
+            # a `PUNTA_NELLA_PARETE` dal filo di dentro. I riempimenti
+            # approvati, con la punta mezzo millimetro nel cartoncino, non
+            # cambiano
+            fuori = np.minimum(meta + dx * cs - dz * sn,
+                               meta + GIOCO + PUNTA_NELLA_PARETE)
             P[m, lungo] = p.centro[lungo] + segno * fuori
             P[m, spesso] = c_sp + verso * (dx * sn + dz * cs)
             if N is not None:
