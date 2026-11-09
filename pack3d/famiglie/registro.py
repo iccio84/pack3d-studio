@@ -580,6 +580,17 @@ def inclina_scelta(opts):
     return min(max(g, 0.0), 60.0)
 
 
+def tegola_scelta(opts):
+    """Di quanti gradi si inclinano all'indietro, a tegola, i pezzi frontali,
+    scelta del pack (0: dritti, di serie). Inclinati, si gonfiano in altezza
+    fino al bordo delle pareti (`riempimento.a_tegola`)."""
+    try:
+        g = float(opts.get("tegola", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return min(max(g, 0.0), 60.0)
+
+
 def _costruisci_riempimento(r, info):
     if info.get("cu") == "carton":
         # un vassoio coi suoi astucci, chiusi
@@ -604,7 +615,7 @@ def _costruisci_riempimento(r, info):
              saldatura_scelta(opts), nello_spessore_scelto(opts),
              cromate_scelte(opts)), r.q,
             per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
-            gradi=inclina_scelta(opts))
+            gradi=inclina_scelta(opts), tegola=tegola_scelta(opts))
     return costruisci
 
 

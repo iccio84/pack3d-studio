@@ -354,6 +354,34 @@ filtra) e il **coperchio** (il piu' basso in cima, fra le quattro pareti);
 le pareti senza tolleranza. Gli altri riempimenti non li usano. Sul caso,
 col rigonfiamento 8 (19,2 mm): 16 gradi, i pezzi da 1,6 a 44,3 mm.
 
+### A tegola, inclinati all'indietro: una scelta del pack
+
+Il vassoio espositore T1x36 (caso 87be37b868, vano 136,3 x 217, pareti 146):
+36 T1 frontali, 9 file da 4, in piedi col fronte avanti. Al «Non approvo»
+chi l'ha caricato li voleva ruotati indietro di 45 gradi (o 30) e gonfiati
+fino al bordo del vassoio. Una fila di 4 inclinata tutta insieme non ci sta:
+a 30 gradi le 9 file chiedono 257 mm di profondita'. Alla domanda ha scelto
+«9 file da 4 inclinate di 30 gradi, appoggiate a tegola, i pack gonfiati in
+altezza fino al bordo dei fianchi». E' l'opzione del caso `tegola` (gradi,
+`registro.tegola_scelta`; di serie 0, dritti, e gli altri casi non cambiano).
+
+`riempimento.a_tegola`: ogni pezzo frontale ruota all'indietro attorno al
+largo del vano, la faccia stampata in su verso chi guarda; nella sua fila
+la colonna resta verticale e ogni pezzo poggia sul bordo di quello sotto
+(sale dell'altezza diviso il coseno), sfalsato come una tegola. Le file si
+allargano su tutta la profondita', mai meno di uno spessore lungo la
+normale della faccia (19,2 / cos 30 = 22,2 mm). Poi i pezzi si gonfiano in
+altezza - una scala sul loro asse che sale, nel nodo - finche' la cima del
+corpo arriva al tetto del vano, il bordo delle pareti: al massimo del 15%
+(`GONFIA_TEGOLA`), o schiacciati fino a `SCHIACCIA_MAX` se la fila lo passa.
+Il pezzo poggia sul fondo con tutto (nessuna punta sotto); se le file
+escono dal vano e' un errore, non un modello sbagliato. Sul caso: file ogni
+23,6 mm, gonfiati del 2%, cima a 145,2 mm, il bordo a 145,2.
+
+Il fondo, non il piano: il piano di `misura_vassoio` e' la striscia della
+scatola chiusa, e nel vassoio aperto prendeva il lembo del davanti
+ripiegato dentro (36 mm sul T1x36).
+
 ### Nel display il flowpack resta quello del DT, con le pinne aperte
 
 «I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
