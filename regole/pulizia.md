@@ -604,8 +604,40 @@ scritte uscivano dalla zona e restavano stampate senza piu' il pannello sotto.
 Sulla brioche vanno via 101 oggetti, sull'astuccio della ciambella 14, e sotto torna il fondo,
 rosso e marrone.
 
-Una GDA vettorializzata, senza testo vivo, non si legge e non si tocca: li' la
-puo' vedere solo l'agente, e lo dice.
+Una GDA vettorializzata, con le scritte diventate tracciati, non si legge e
+non si tocca: li' la puo' vedere solo l'agente, e lo dice.
+
+#### La GDA vuota si riconosce dalla forma
+
+"I nuovi 3D escono con la GDA nonostante le regole": sul fronte del pane
+ripieno T6 e del T10, e sulla plancia del display T1x10, la GDA e' il
+**segnaposto vuoto dell'icona dell'energia** - un rettangolo arrotondato piu'
+alto che largo, col tondo in basso dove va la percentuale, 8,8 x 12,7 mm -
+disegnato a strati uno dentro l'altro, celeste chiaro (ciano al 35%) e bianco.
+Non ha scritte, quindi `zone_gda` non la vede, e non ha un livello suo. Il
+bianco, poi, e' proprio quello che "i bianchi restano" lascerebbe stampato.
+
+Si riconosce dalla forma (`techink.icone_gda`): un tracciato col lato corto
+fra 5 e 20 mm e il lungo fra 1,2 e 1,8 volte, in piedi o coricato, con dentro
+almeno altri due tracciati che ne seguono il bordo a meno di 1,5 mm per lato,
+tutti chiari (ogni canale almeno 140), e **senza scritte ne' immagini
+dentro**: con le scritte e' la GDA stampata, e la trova `zone_gda`; un badge
+col testo non e' una GDA. Uno strato solo, una sagoma quadrata o scura non
+bastano.
+
+Vanno via solo **le sagome** dell'icona, quelle che ne contengono il nucleo
+(lo strato piu' interno, un punto piu' dentro: chi toglie la grafica misura
+i tracciati dai loro punti, e lo strato piu' interno gli veniva di un soffio
+piu' stretto - il contorno celeste restava). Quello che sta sotto, dentro il
+riquadro, resta: sul T6 i puntini della retinatura dei raggi gialli. Sul T6 e
+sul T10 vanno via 4 oggetti e torna il fondo marrone. Nel PDF-foto vedi
+regole/pdf.md, *La foto si pulisce dalla penna*.
+
+Non era un caso solo: il segnaposto e' lo stesso in tutti i file di quel
+committente, e nel parco c'era su **15 casi** - astucci, flowpack, display,
+anche capovolto - tutti col bianco e il celeste stampati sul modello. Tolto,
+sotto torna il fondo (il rosso, l'onda, il bianco), e nessun'altra cosa
+cambia: 32 casi uguali al byte, nessuna misura approvata cambiata.
 
 ### La tipologia non riconosciuta e' un errore, non un ripiego
 

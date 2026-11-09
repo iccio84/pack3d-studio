@@ -52,6 +52,17 @@ CAMPITURA_MM = 2.5
 BORDO_MM = 3.0
 # il fondo tenue di una tabella della penna: saturazione minima
 TENUE = 0.06
+# la GDA vuota (techink.icone_gda): un anello chiuso della tinta della penna,
+# col lato corto fra questi mm e la proporzione fra questi valori, pieno
+# almeno di tanto rispetto ai pixel del suo bordo. Il bordo e' celeste
+# chiaro (ciano al 35%), e col rumore della JPEG alla saturazione della penna
+# si spezza: si cerca a una saturazione piu' bassa
+ICONA_LATO_MM = (5.0, 20.0)
+ICONA_PROPORZIONE = (1.2, 1.8)
+ICONA_CHIUSA = 3.0
+ICONA_SATURA = 0.10
+# quanti pixel buoni per lato fanno l'estremo di una riga, nella copertura
+ESTREMI = 5
 
 
 def _hsv(rgb):
@@ -279,6 +290,71 @@ def tratti_della_foto(rgb):
     return _fustella(linee), tinta
 
 
+def icone_gda(rgb, tinta, mm_px):
+    """Le GDA vuote della foto (vedi `techink.icone_gda`): le maschere delle
+    icone, bordo compreso. E' un'icona un anello chiuso della tinta della
+    penna, anche chiara (`ICONA_SATURA`) - pieno, coi buchi chiusi, almeno
+    `ICONA_CHIUSA` volte i pixel del bordo - col lato corto fra
+    `ICONA_LATO_MM` e la proporzione fra `ICONA_PROPORZIONE`."""
+    lo, hi = ICONA_LATO_MM
+    plo, phi = ICONA_PROPORZIONE
+    h, s, v = _hsv(rgb)
+    vicino = np.minimum((h - tinta) % 360, (tinta - h) % 360) <= 22
+    chiaro = (s >= ICONA_SATURA) & (v >= LUCE) & vicino
+    lab, n = ndi.label(chiaro, np.ones((3, 3), bool))
+    icone = []
+    for k, sl in enumerate(ndi.find_objects(lab), 1):
+        if sl is None:
+            continue
+        corto, lungo = sorted(((sl[0].stop - sl[0].start) * mm_px,
+                               (sl[1].stop - sl[1].start) * mm_px))
+        if not (lo <= corto <= hi and plo * corto <= lungo <= phi * corto):
+            continue
+        bordo = lab[sl] == k
+        chiusa = ndi.binary_fill_holes(bordo)
+        if chiusa.sum() < ICONA_CHIUSA * bordo.sum():
+            continue
+        m = np.zeros(chiaro.shape, bool)
+        m[sl] = chiusa
+        icone.append(m)
+    return icone
+
+
+def _ricopri(out, m, bordo):
+    """`out` con i pixel di `m` rifatti da quelli attorno, riga per riga: fra
+    il pixel buono a sinistra e quello a destra. Le venature del legno e le
+    sfumature dall'alto in basso continuano sotto l'icona; con la media di
+    tutto l'anello restava un tassello liscio sul fondo che cambia. Gli
+    estremi sono la mediana dei `ESTREMI` pixel buoni piu' vicini da ogni
+    lato: un pixel storto all'estremo tingeva tutta la riga (un filo celeste
+    sopra l'icona del T1x10)."""
+    # e l'alone della JPEG attorno al bordo
+    m = ndi.binary_dilation(m, iterations=6)
+    ys, xs = np.nonzero(m)
+    H, W = m.shape
+    y0, y1 = max(0, ys.min() - bordo), min(H, ys.max() + bordo + 1)
+    x0, x1 = max(0, xs.min() - bordo), min(W, xs.max() + bordo + 1)
+    dentro = m[y0:y1, x0:x1]
+    pezzo = out[y0:y1, x0:x1].astype(np.float32)
+    colonne = np.arange(dentro.shape[1])
+    for r in range(dentro.shape[0]):
+        via = dentro[r]
+        if not via.any() or via.all():
+            continue
+        buone = colonne[~via]
+        riga = pezzo[r].copy()
+        for j in np.flatnonzero(np.diff(via.astype(np.int8)) != 0):
+            # j e' l'ultimo pixel prima di un salto: l'estremo buono e' j o j+1
+            e = j if not via[j] else j + 1
+            lato = buone[buone <= e][-ESTREMI:] if e == j else buone[buone >= e][:ESTREMI]
+            riga[e] = np.median(pezzo[r, lato], axis=0)
+        for c in range(pezzo.shape[2]):
+            pezzo[r, via, c] = np.interp(colonne[via], buone, riga[~via, c])
+    out = out.copy()
+    out[y0:y1, x0:x1] = np.clip(np.rint(pezzo), 0, 255).astype(out.dtype)
+    return out
+
+
 def pulisci(rgb, tinta, mm_px):
     """La foto senza i segni della penna (regole/pulizia.md, *Il PDF-foto*).
     Le campiture della penna - una tabella, i valori - si coprono col colore
@@ -310,6 +386,12 @@ def pulisci(rgb, tinta, mm_px):
         colore = np.median(rgb[anello], axis=0) if anello.any() else (255, 255, 255)
         out[y0:y1, x0:x1] = np.asarray(colore, dtype=rgb.dtype)
         pieno[y0:y1, x0:x1] = False
+    # la GDA vuota: la sagoma dell'icona dell'energia, bordata con la penna e
+    # bianca dentro. Tolto il bordo come un tratto, il bianco restava sulla
+    # grafica (la plancia del display T1x10): si toglie intera
+    for dentro in icone_gda(rgb, tinta, mm_px):
+        out = _ricopri(out, dentro, bordo)
+        pieno &= ~dentro
     # i tratti: col pixel buono piu' vicino
     tratti = ndi.binary_dilation(pieno, iterations=2)
     if tratti.any():
