@@ -348,6 +348,51 @@ def nello_spessore_scelto(opts):
     return str(opts.get("gonfio", "")).strip().lower() == "spessore"
 
 
+def cromate_scelte(opts):
+    """Le pinne di testa cromate: `"pinne_cromate": true` fra le opzioni del
+    caso. Una scelta del pack (il T1 del display T1x10), non una regola: di
+    serie le pinne sono del film, come il resto (`pinne_cromate`)."""
+    v = opts.get("pinne_cromate", False)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "si", "sì", "yes")
+    return bool(v)
+
+
+# il film di sempre, senza mappa metallo/ruvidita': plastica a ruvidita' 0,42
+# (`exporters.write_glb_mesh`), nel pixel della mappa di glTF
+MR_FILM = (255, 107, 0)
+
+
+def pinne_cromate(foglio, colore, mr, fp):
+    """(colore, mr) con le pinne di testa di metallo lucido: le due testate
+    dello steso, `fp.end_fin` da ogni capo del passo, come un film
+    metallizzato con la stampa sopra (`materiali.mappe_pbr`: l'argento
+    resta argento, l'oro oro). Il resto del film com'era: plastica, o i
+    materiali dei DT. Nel telaio della pagina, come `foglio`: il passo e'
+    la x, o la y se lo steso e' ruotato."""
+    w, h = foglio.size
+    lungo = (fp.sheet[2] - fp.sheet[0]) * PT2MM
+    n = h if fp.ruotato else w
+    k = int(round(fp.end_fin / lungo * n)) if lungo > 0 else 0
+    pinne = np.zeros((h, w), np.float32)
+    if k > 0:
+        if fp.ruotato:
+            pinne[:k, :] = pinne[h - k:, :] = 1.0
+        else:
+            pinne[:, :k] = pinne[:, w - k:] = 1.0
+    c, m, _q, _o = materiali.mappe_pbr(
+        foglio, {materiali.ALLUMINIO: pinne, materiali.BIANCO: np.zeros_like(pinne)})
+    dove = pinne[..., None] > 0
+    prima = (np.asarray(mr.convert("RGB")) if mr is not None
+             else np.empty((h, w, 3), np.uint8))
+    if mr is None:
+        prima[...] = MR_FILM
+    nuovo_mr = np.where(dove, np.asarray(m), prima)
+    nuovo_col = np.where(dove, np.asarray(c.convert("RGB")),
+                         np.asarray(colore.convert("RGB")))
+    return Image.fromarray(nuovo_col.astype(np.uint8)), Image.fromarray(nuovo_mr.astype(np.uint8))
+
+
 def saldatura_scelta(opts):
     """La saldatura delle pinne 0-3 scelta nella pagina: quanto si vedono le
     nervature delle ganasce. Se non la dice, 3: le nervature di sempre."""
@@ -536,7 +581,8 @@ def falda_sospetta(fp):
 def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None, materiali_dich=None,
-                   materiali_ai=None, saldatura=3, nello_spessore=False):
+                   materiali_ai=None, saldatura=3, nello_spessore=False,
+                   cromate=False):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -550,7 +596,8 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
     4. Le pinne non restano **mai a filo**: si aprono a farfalla verso la punta.
 
     Le pinne sono saldate, i due strati uniti; `saldatura` (0-3) dice quanto
-    si vedono le nervature delle ganasce: 0 nessuna, 3 piene.
+    si vedono le nervature delle ganasce: 0 nessuna, 3 piene. `cromate`,
+    scelta del pack, fa le pinne di testa di metallo lucido (`pinne_cromate`).
     """
     import math
     par = gonfiore(soft)
@@ -984,6 +1031,11 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             colore, mr = tex, None
             avvisi_sez.append("materiali dai DT non applicati (%s): il film "
                               "resta plastica" % e)
+    if cromate:
+        colore, mr = pinne_cromate(foglio, colore, mr, fp)
+        avvisi_sez.append("pinne di testa cromate (scelta del pack): metallo "
+                          "lucido sui %.1f mm di ogni testata, con la stampa "
+                          "sopra" % fp.end_fin)
     if fp.ruotato:
         # rotazione, non trasposizione: trasporre e' una riflessione e
         # specchierebbe la grafica. Di 270 perche' e' il verso che lascia il

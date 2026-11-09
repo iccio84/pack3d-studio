@@ -43,6 +43,10 @@ PONTICELLO = 2.0
 # mm: un foro nella plancia (la presa, l'occhiello) ha i tagli piu' corti di
 # cosi' e piu' vicini di cosi': `_profilo` non lo prende per il bordo
 FORO = 15.0
+# mm: nel profilo della plancia, una riga che esce da tutte e due le vicine
+# di piu' di cosi' e' un dente della lettura, non il bordo: la fustella non
+# ha punte larghe un millimetro (`_senza_denti`)
+DENTE = 1.5
 
 
 @dataclass
@@ -77,6 +81,10 @@ class ScatolaPlancia:
     # la striscia del fianco senza fondo che si piega dentro, sul fondo:
     # (u da, u a)
     striscia: tuple = ()
+    # la piega di mezzo del fianco col fondo (u sul foglio), o None: il
+    # fianco e' due pannelli piu' corti dell'altezza, e si piega a soffietto,
+    # in dentro (`_soffietto`)
+    soffietto: float = None
 
     @property
     def W(self):
@@ -343,13 +351,13 @@ def _leggi_fianco(H, V, tratti):
             f = _fianchi(V, uL, uR, vF, vB, Hs)
             if f is None:
                 continue
-            fianchi, fondo_u, striscia = f
+            fianchi, fondo_u, striscia, soffietto = f
             sp = _plancia_sagomata(H, tratti, uL, uR, vF, vB, Hs)
             if sp is None:
                 continue
             return dict(uL=uL, uR=uR, vF=vF, vB=vB, H=Hs, fronte=Hs,
                         fianchi=fianchi, fondo_u=fondo_u, striscia=striscia,
-                        **sp)
+                        soffietto=soffietto, **sp)
     return None
 
 
@@ -389,8 +397,40 @@ def _fianchi(V, uL, uR, vF, vB, Hs, tol=2.5):
                                          altro - lato * dopo[0])))
             pa = altro - lato * fp
             fianchi = (f, pa) if lato < 0 else (pa, f)
-            return fianchi, (f, far), striscia
+            return fianchi, (f, far), striscia, _piega_di_mezzo(pieghe, bordo, f, Hs)
     return None
+
+
+def _piega_di_mezzo(pieghe, bordo, f, Hs):
+    """La piega di mezzo del fianco col fondo, fra il bordo del coperchio e
+    la piega del fondo, o None: due pannelli ognuno piu' corto dell'altezza
+    della scatola e insieme piu' lunghi, cioe' un soffietto. Se ce n'e' piu'
+    d'una, la piu' vicina al mezzo."""
+    lun = abs(bordo - f)
+    if lun < Hs + 2.0:
+        return None
+    dentro = [u for u in pieghe if min(bordo, f) < u < max(bordo, f)
+              and abs(u - bordo) < Hs and abs(u - f) < Hs]
+    if not dentro:
+        return None
+    return min(dentro, key=lambda u: abs(u - (bordo + f) / 2))
+
+
+def _senza_denti(profilo, dente=DENTE):
+    """Il profilo senza i denti di una riga sola: una riga che, su un bordo
+    (della plancia o della finestra), esce da tutte e due le vicine dalla
+    stessa parte di piu' di `dente` torna sulla retta fra loro. Un gradino
+    vero (una riga uguale a una vicina) e uno spigolo restano: il dente e'
+    il rumore della lettura, sul T1x10 della foto rifatta vettoriale una
+    punta di 4,2 mm sulla diagonale della meta' ripiegata davanti."""
+    P = [[float(x) for x in q] for q in profilo]
+    for j in range(1, len(P[0]) if P else 1):
+        for i in range(1, len(P) - 1):
+            a, b, c = P[i - 1][j], P[i][j], P[i + 1][j]
+            if (b - a) * (b - c) > 0 and min(abs(b - a), abs(b - c)) > dente:
+                t = (P[i][0] - P[i - 1][0]) / ((P[i + 1][0] - P[i - 1][0]) or 1.0)
+                P[i][j] = a + (c - a) * t
+    return [tuple(q) for q in P]
 
 
 def _plancia_sagomata(H, tratti, uL, uR, vF, vB, Hs):
@@ -426,6 +466,7 @@ def _plancia_sagomata(H, tratti, uL, uR, vF, vB, Hs):
     tenuti.reverse()
     if not tenuti:
         return None
+    tenuti = _senza_denti(tenuti)
     vT = tenuti[0][0] - 0.5
     mezzo = []
     for r in H:
@@ -568,20 +609,44 @@ def dichiara(p):
             "%.1f x %.1f mm"
             % (p.pl_u[1] - p.pl_u[0], basso, p.vM - p.vT,
                p.buco_u[1] - p.buco_u[0], p.vH - max(p.vT, p.vF))] + (
-        ["il fondo attaccato al fianco (%.1f mm: %.1f di parete, il resto "
-         "sotto il fondo); dall'altra parte la striscia sul fondo; plancia "
-         "sagomata, cerniera %s"
-         % (abs(p.fondo_u[0] - (p.uL if p.fondo_u[0] < p.uL else p.uR)), p.H,
+        ["il fondo attaccato al fianco (%s); dall'altra parte la striscia "
+         "sul fondo; plancia sagomata, cerniera %s"
+         % (_fianco_col_fondo(p),
             "sul bordo del retro" if p.vH >= p.vB - 0.5 else "tratteggiata")]
         if p.fondo_u else [])
 
 
+def _fianco_col_fondo(p):
+    """Come sta il fianco che porta il fondo, in parole."""
+    piega = p.uL if p.fondo_u[0] < p.uL else p.uR
+    lun = abs(p.fondo_u[0] - piega)
+    if p.soffietto is None:
+        return "%.1f mm: %.1f di parete, il resto sotto il fondo" % (lun, p.H)
+    d, h = _rientro(p)
+    return ("%.1f mm a soffietto: %.1f + %.1f, la piega di mezzo rientra di "
+            "%.1f mm a %.1f mm dal fondo"
+            % (lun, abs(piega - p.soffietto), abs(p.soffietto - p.fondo_u[0]),
+               d, p.H - h))
+
+
+def _rientro(p):
+    """(quanto rientra la piega di mezzo del soffietto, quanto scende il
+    pannello di sopra), in mm: i due pannelli, il bordo del coperchio in
+    cima e il fondo in basso sulla stessa verticale, fanno un triangolo."""
+    piega = p.uL if p.fondo_u[0] < p.uL else p.uR
+    a, b = abs(piega - p.soffietto), abs(p.soffietto - p.fondo_u[0])
+    h = (a * a - b * b + p.H * p.H) / (2.0 * p.H)
+    return float(np.sqrt(max(a * a - h * h, 0.0))), h
+
+
 def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
-    """(V, UV, T, inizio_plancia) del display aperto, in mm, con la texture
-    del DT intero e sotto le strisce del rovescio (`ballotin.con_interno`).
-    Il fronte guarda +Z, la cima +Y, il fondo sta a Y = 0. I triangoli della
-    plancia vengono per ultimi, da `inizio_plancia`: nel GLB sono un nodo a
-    parte, e il riempimento misura il vano senza di lei.
+    """(V, UV, T, parti) del display aperto, in mm, con la texture del DT
+    intero e sotto le strisce del rovescio (`ballotin.con_interno`). Il
+    fronte guarda +Z, la cima +Y, il fondo sta a Y = 0. `parti` e'
+    `[(nome, primo, ultimo)]` sui triangoli, per `write_glb_mesh`: il
+    display, il fianco a soffietto se c'e' e la plancia per ultima. Nel GLB
+    sono nodi a parte: il riempimento misura il vano senza la plancia, e
+    dal soffietto sa dove il vano si stringe (`riempimento.misura_vassoio`).
 
     `dove_plancia`, scelta del pack: "fondo" mette il piede della plancia
     negli incastri sul fondo, dentro il retro, invece che sul bordo del
@@ -700,7 +765,11 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
         # dalla parte del fondo la parete e' alta quanto la scatola
         lati = tuple((fu if p.fianchi[i] == p.fondo_u[0] else p.fianchi[i], piega)
                      for i, (fu, piega) in enumerate(lati))
+    a_soffietto = (p.uL if p.fondo_u[0] < p.uL else p.uR) \
+        if p.soffietto is not None else None
     for fuori_u, piega_u in lati:
+        if piega_u == a_soffietto:
+            continue                # il fianco col fondo: `_soffietto`, dopo
         xx = X(piega_u)
         verso = np.sign(xx)
         quad([(xx, 0, Zc(p.vF)), (xx, 0, Zc(p.vB)), (xx, H, Zc(p.vB)),
@@ -722,6 +791,10 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
              [(p.uL, f0), (p.uR, f0), (p.uR, f1), (p.uL, f1)], (0, -1, 0))
     else:
         _fondo_sul_fianco(p, quad, X, Zc, H, sp)
+    parti = [("display", 0, len(T))]
+    if p.soffietto is not None:
+        _soffietto(p, quad, X, Zc, H)
+        parti.append(("soffietto", parti[-1][2], len(T)))
 
     inizio = len(T)
     # il piede della plancia: sul coperchio, o sul fondo dentro il retro,
@@ -737,7 +810,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
         piede, zh = 3.0 * sp + scende, max(zh, -D / 2 + 1.5 * sp)
     if p.profilo:
         _plancia_su(p, quad, X, zh, piede, sp)
-        return np.array(V, float), np.array(UV, float), np.array(T, int), inizio
+        return (np.array(V, float), np.array(UV, float), np.array(T, int),
+                parti + [("plancia", inizio, len(T))])
     # la plancia. Alzata sulla cerniera, che sta verso il retro, la parte
     # verso la cerniera sta in piedi e mostra la stampa a chi sta DIETRO, col
     # fronte del foglio in alto: la sua scritta, dritta sul foglio, si legge
@@ -758,7 +832,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
           (X(a1), H + alto - lun, zd), (X(a0), H + alto - lun, zd)],
          [(a0, p.vM), (a1, p.vM), (a1, p.vT), (a0, p.vT)], (0, 0, 1),
          coste=(1, 2, 3))
-    return np.array(V, float), np.array(UV, float), np.array(T, int), inizio
+    return (np.array(V, float), np.array(UV, float), np.array(T, int),
+            parti + [("plancia", inizio, len(T))])
 
 
 def _righe_plancia(p):
@@ -821,10 +896,10 @@ def _fondo_sul_fianco(p, quad, X, Zc, H, sp):
     quad([(X(piega), 0, zB), (X(piega), 0, zF), (X(altra), 0, zF),
           (X(altra), 0, zB)],
          [(fu, p.vB), (fu, p.vF), (far, p.vF), (far, p.vB)], (0, -1, 0))
-    # il di piu' del fianco, sotto il fondo
+    # il di piu' del fianco, sotto il fondo; a soffietto non ce n'e'
     giu = piega - verso * H
     resto = abs(giu - fu)
-    if resto > 1.0:
+    if resto > 1.0 and p.soffietto is None:
         xs, xe = X(piega), X(piega + verso * resto)
         y = -1.5 * sp
         quad([(xs, y, zB), (xs, y, zF), (xe, y, zF), (xe, y, zB)],
@@ -839,6 +914,27 @@ def _fondo_sul_fianco(p, quad, X, Zc, H, sp):
         quad([(xs, y, zB), (xs, y, zF), (xe, y, zF), (xe, y, zB)],
              [(vic, p.vB), (vic, p.vF), (lon, p.vF), (lon, p.vB)], (0, -1, 0),
              coste=(2,))
+
+
+def _soffietto(p, quad, X, Zc, H):
+    """Il fianco col fondo piegato a soffietto: due pannelli, dal bordo del
+    coperchio alla piega di mezzo e da li' al fondo, con la piega che
+    rientra (`_rientro`). La stampa resta fuori: in giu' sul pannello di
+    sopra, in su su quello di sotto. Alle due teste il soffietto finisce
+    contro il fronte e il retro, che lo coprono."""
+    fu = p.fondo_u[0]
+    piega = p.uL if fu < p.uL else p.uR
+    d, h = _rientro(p)
+    xx = X(piega)
+    verso = np.sign(xx)
+    xc, yc = xx - verso * d, H - h
+    zF, zB = Zc(p.vF), Zc(p.vB)
+    quad([(xx, H, zF), (xx, H, zB), (xc, yc, zB), (xc, yc, zF)],
+         [(piega, p.vF), (piega, p.vB), (p.soffietto, p.vB), (p.soffietto, p.vF)],
+         (verso * h, -d, 0))
+    quad([(xc, yc, zF), (xc, yc, zB), (xx, 0, zB), (xx, 0, zF)],
+         [(p.soffietto, p.vF), (p.soffietto, p.vB), (fu, p.vB), (fu, p.vF)],
+         (verso * (H - h), d, 0))
 
 
 def _plancia_su(p, quad, X, zh, H, sp):

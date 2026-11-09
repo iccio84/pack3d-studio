@@ -229,6 +229,19 @@ gli spigoli solo per la verifica, identica al byte (il display al livello 9
 e' `43cfbbfe`, quello approvato il 26 ottobre). Senza la scelta niente
 cambia: il T1 del vassoio da 36 resta largo 40,1.
 
+**Le pinne cromate, se lo si sceglie per il pack** (`"pinne_cromate":
+true` fra le opzioni del caso; `famiglie.flowpack.pinne_cromate`). Il T1
+del display T1x10, dal proprietario: «fai le pinne del T1 cromate». Le due
+testate dello steso, `end_fin` da ogni capo del passo (12 mm sul T1),
+diventano metallo lucido con la stampa sopra, come un film metallizzato:
+la mappa metallo/ruvidita' dei materiali (`materiali.mappe_pbr`), metallo
+1 e ruvidita' 0,16; il colore e' la stampa per la riflettanza
+dell'alluminio, e l'argento resta argento, l'oro oro (sul T1 una testata
+e' argento, l'altra oro). Il resto del film com'era: plastica a 0,42, o i
+materiali dei DT se ci sono. Di serie niente: gli altri flowpack restano
+identici al byte. Solo le pinne di testa: la pinna lunga sul retro resta
+film.
+
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi

@@ -149,11 +149,11 @@ def _quaternione(R):
     return q
 
 
-def vertici(J, B, senza=()):
+def vertici(J, B, senza=(), solo=None):
     """I vertici della scena, in mm, nel riferimento della scena: quelli che
-    i triangoli usano davvero, senza i nodi che si chiamano come `senza`. Il
-    display e la sua plancia stanno sugli stessi vertici, e si distinguono
-    solo dai triangoli."""
+    i triangoli usano davvero, senza i nodi che si chiamano come `senza`, o
+    solo quelli del nodo che si chiama `solo`. Il display e la sua plancia
+    stanno sugli stessi vertici, e si distinguono solo dai triangoli."""
     out = []
 
     def visita(i, M):
@@ -161,7 +161,7 @@ def vertici(J, B, senza=()):
         if nodo.get("name") in senza:
             return
         M = M @ _matrice(nodo)
-        if "mesh" in nodo:
+        if "mesh" in nodo and (solo is None or nodo.get("name") == solo):
             for prim in J["meshes"][nodo["mesh"]]["primitives"]:
                 P = _dati(J, B, prim["attributes"]["POSITION"]).astype(float)
                 if "indices" in prim:
@@ -173,7 +173,7 @@ def vertici(J, B, senza=()):
 
     for r in J["scenes"][J.get("scene", 0)]["nodes"]:
         visita(r, np.eye(4))
-    return np.vstack(out) * 1000.0
+    return np.vstack(out) * 1000.0 if out else np.zeros((0, 3))
 
 
 # --------------------------------------------------------------------------- #
@@ -209,8 +209,8 @@ class Vano:
 
 def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     # del display conta la scatola: la plancia sta dietro, in alto, e non
-    # contiene niente
-    V = vertici(J, B, senza=("plancia",))
+    # contiene niente. Il fianco a soffietto si guarda dopo
+    V = vertici(J, B, senza=("plancia", "soffietto"))
     lo, hi = V.min(0), V.max(0)
     z0 = lo[2] + spessore
     # la plancia col piede sul fondo (`scatola_plancia.maglia`, "fondo")
@@ -219,11 +219,21 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     # finestra o il fronte, e il vano resta la scatola intera (il T15)
     if plancia_sul_fondo:
         dentro = set(map(tuple, np.round(V, 4)))
-        pl = np.array([q for q in vertici(J, B) if tuple(np.round(q, 4)) not in dentro])
+        pl = np.array([q for q in vertici(J, B, senza=("soffietto",))
+                       if tuple(np.round(q, 4)) not in dentro])
         if len(pl) and pl[:, 2].max() < (lo[2] + hi[2]) / 2:
             z0 = max(z0, pl[:, 2].max() + GIOCO)
     vano = Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
                 lo[1] + spessore, hi[1])
+    # il fianco piegato a soffietto (`scatola_plancia._soffietto`) rientra:
+    # da quella parte il vano arriva alla sua piega di mezzo, dalla parte di
+    # dentro, e i pezzi non lo attraversano
+    S = vertici(J, B, solo="soffietto")
+    if len(S):
+        if S[:, 0].mean() > (lo[0] + hi[0]) / 2:
+            vano.x1 = min(vano.x1, float(S[:, 0].min()))
+        else:
+            vano.x0 = max(vano.x0, float(S[:, 0].max()))
     # fra i fianchi: i vertici piu' alti sul fondo (una striscia piegata
     # dentro ha i vertici solo agli angoli, contro il fronte e il retro) e,
     # anche fra fronte e retro, i piu' bassi in cima

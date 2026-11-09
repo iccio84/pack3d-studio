@@ -46,6 +46,15 @@ davvero, plancia esclusa; con la plancia il vano arrivava in cima al cartello,
 244 mm sul biscotto T3 invece di 104. Il biscotto T3 nel suo
 display: 2 file da 13; il wafer T1 nel suo: 4 file da 10.
 
+**Il fianco a soffietto stringe il vano.** Nel display a scatola col fianco
+a soffietto (regole/vassoi.md, *Il fianco col fondo a soffietto*) il
+soffietto e' un nodo suo, `soffietto`: fuori dall'ingombro, e da quella
+parte il vano arriva alla sua piega di mezzo, dalla parte di dentro
+(`misura_vassoio`, `vertici(..., solo="soffietto")`). Un vano solo,
+rettangolo: la piega rientra a meta' altezza, proprio dove si toccano i
+due strati, e i pezzi non la attraversano. Sul T1x10 137,5 -> 121,1 mm, e
+il pezzo con le pinne accartocciate 136,3 -> 119,9.
+
 ### Il flowpack si misura sulla sua maglia
 
 - L'**asse lungo** e' il lato piu' lungo dell'ingombro.

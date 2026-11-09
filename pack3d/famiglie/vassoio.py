@@ -244,7 +244,8 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     Come la scatola a punta: la texture e' il DT intero, pulito, e ogni pezzo
     della maglia prende la grafica dal suo posto sul foglio; sotto, le strisce
     del rovescio. Nel GLB la plancia e' un nodo a parte, come nel display con
-    plancia: il riempimento misura il vano senza di lei."""
+    plancia: il riempimento misura il vano senza di lei. Anche il fianco a
+    soffietto, se c'e': dice al riempimento dove il vano si stringe."""
     dpi, tmax = risoluzione(quality)
     scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
         pdf, p.regione, "Display a scatola letto cosi'", scatola_plancia.dichiara(p)))
@@ -278,13 +279,11 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     scala = dpi_tex / 72.0
     origine = (round(x0 * scala) / scala * PT2MM, round(y0 * scala) / scala * PT2MM)
     tela = ballotin.con_interno(tex)
-    V, UV, T, inizio = scatola_plancia.maglia(p, origine, scala / PT2MM,
-                                               tela.size, spessore=carta,
-                                               dove_plancia=dove_plancia)
+    V, UV, T, parti = scatola_plancia.maglia(p, origine, scala / PT2MM,
+                                              tela.size, spessore=carta,
+                                              dove_plancia=dove_plancia)
     tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
                                              TINTE_BALLOTIN)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,
-                             parti=[("display", 0, inizio),
-                                    ("plancia", inizio, len(T))],
-                             tinte=tinte)
+                             parti=parti, tinte=tinte)
     return scatola_plancia.dichiara(p) + avvisi
