@@ -70,6 +70,9 @@ class Dieline:
     # Freccia in mm del fronte curvo di un astuccio a fasciatura orizzontale
     # (il "mastello"): 0 = fronte piatto. Vedi `_fronte_curvo`.
     curva_mm: float = 0.0
+    # Il fondo a tetto, a soffietto dentro la scatola: (dove sta la cresta,
+    # in mm dal fronte, quanto sale), o None per il fondo piatto. Vedi `_tetto`.
+    tetto: tuple | None = None
 
     def cols_in_row(self, y0, y1, cover=0.8):
         """Cordonature verticali che attraversano davvero la fascia [y0, y1]."""
@@ -1093,6 +1096,59 @@ def _aperto(rows, tol=1.5):
     return r
 
 
+# Il fondo a tetto: le due falde uguali a meno di tanto, e insieme piu' lunghe
+# della profondita' di almeno tanto (a filo, piatte, sarebbero un fondo solo)
+TETTO_FALDE_TOL = 0.08
+TETTO_LUNGHE = 1.05
+
+
+def _tetto(rows, fianchi, tol=3.0):
+    """CIELO - FRONTE - FALDA - FALDA - RETRO, col fondo a tetto: `(ruoli,
+    rows)`, con le fasce del retro unite, o None.
+
+    Fra il fronte e il retro, al posto del fondo, due fasce uguali, ognuna
+    piu' corta della profondita' e insieme piu' lunghe: piatte non ci stanno,
+    e si chiudono a tetto dentro la scatola - il pane ripieno T15, "la base
+    che ripiega a triangolo dentro la scatola, tipo soffietto": due falde da
+    49 mm per una scatola profonda 72,7, e la cresta sale di 33. La
+    profondita' e' il cielo sopra il fronte, e i fianchi stanno sul fronte.
+    Il retro e' quello che viene dopo le falde, alto come il fronte: se una
+    riga lo spezza (109 + 29 sul T15, la fessura della linguetta in cima),
+    le fasce che insieme tornano col fronte sono il retro intero.
+    """
+    if fianchi is None or len(rows) < 5:
+        return None
+    for f in range(1, len(rows) - 3):
+        if not fianchi(f):
+            continue
+        H = rows[f][2] * PT2MM
+        D = rows[f - 1][2] * PT2MM
+        a, b = rows[f + 1][2] * PT2MM, rows[f + 2][2] * PT2MM
+        if not (D > 0 and abs(a - b) <= max(tol, TETTO_FALDE_TOL * max(a, b))
+                and max(a, b) < D and a + b >= TETTO_LUNGHE * D):
+            continue
+        somma = 0.0
+        for k in range(f + 3, len(rows)):
+            somma += rows[k][2] * PT2MM
+            if abs(somma - H) <= max(tol, 0.03 * H):
+                retro = (rows[f + 3][0], rows[k][1], rows[k][1] - rows[f + 3][0])
+                unite = list(rows[:f + 3]) + [retro] + list(rows[k + 1:])
+                return ({"front": f, "top": f - 1, "bottom": f + 1,
+                         "tetto": f + 2, "back": f + 3, "fianchi": f}, unite)
+            if somma > H + tol:
+                break
+    return None
+
+
+def cresta(D, a, b):
+    """Dove sta la cresta del fondo a tetto, in mm dal fronte, e quanto sale:
+    il triangolo che le due falde `a` (dal fronte) e `b` (dal retro) fanno
+    con la profondita' `D`."""
+    import math
+    x = (D * D + a * a - b * b) / (2.0 * D)
+    return x, math.sqrt(max(a * a - x * x, 0.0))
+
+
 def solve_carton(d: Dieline) -> Dieline:
     """Ruoli dei pannelli di un astuccio a fasciatura verticale.
 
@@ -1123,6 +1179,14 @@ def solve_carton(d: Dieline) -> Dieline:
                 hb = senza[r2["bottom"]][2]
                 if min(ht, hb) >= 0.6 * max(ht, hb):
                     ruoli, rows = r2, senza
+    if ruoli is None:
+        # il fondo a tetto: vedi `_tetto`. Coi riquadri e senza: sul T15 il
+        # riquadro della prima falda la spezza in 10 + 16 + 23
+        for cand in (rows, _fasce_del_corpo(d, riquadri=False)):
+            t = _tetto(cand, lambda i, c=cand: _ha_fianchi(d, c[i]))
+            if t is not None:
+                ruoli, rows = t
+                break
 
     def fasce():
         """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""
@@ -1207,6 +1271,9 @@ def solve_carton(d: Dieline) -> Dieline:
         d.finestra_mm = round(
             H - sum(P[k].h_mm for k in ("back_top", "back_bottom") if k in P), 1)
 
+    if "tetto" in P:
+        x, h = cresta(D, P["bottom"].h_mm, P["tetto"].h_mm)
+        d.tetto = (round(x, 2), round(h, 2))
     W = P["front"].w_mm
     d.panels = P
     d.kind = "carton"
@@ -1409,6 +1476,10 @@ def check(d: Dieline):
         if e > 2.0:
             msgs.append(f"i due fianchi differiscono di {e:.1f} mm")
     for k in ("top", "bottom"):
+        if k == "bottom" and d.tetto:
+            # le falde del fondo a tetto sono piu' corte della profondita'
+            # apposta: vanno su per la cresta, non stese (`_tetto`)
+            continue
         if k in P:
             depth = P[k].h_mm if d.layout != "vwrap" else P[k].h_mm
             # col fronte curvo l'aletta e' lunga quanto il cielo in mezzo

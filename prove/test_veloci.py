@@ -1237,6 +1237,101 @@ class GdaVuota(unittest.TestCase):
         self.assertTrue((pezzo[::1, :, 0] < 220).any())
 
 
+class FondoATetto(unittest.TestCase):
+    """`dieline._tetto`: fra fronte e retro due falde uguali, ognuna piu'
+    corta della profondita' e insieme piu' lunghe, sono un fondo a tetto; e
+    `folding.build_faces` le chiude a triangolo dentro la scatola."""
+
+    @staticmethod
+    def _fasce(*mm):
+        y, out = 0.0, []
+        for v in mm:
+            h = v / dl.PT2MM
+            out.append((y, y + h, h))
+            y += h
+        return out
+
+    def test_le_due_falde_e_il_retro_spezzato(self):
+        # linguetta, bordo, cielo, fronte coi fianchi, due falde, retro 109 + 29
+        rows = self._fasce(16, 16, 72.7, 139.8, 49, 49, 109, 29)
+        r = dl._tetto(rows, lambda i: i == 3)
+        self.assertIsNotNone(r)
+        ruoli, unite = r
+        self.assertEqual((ruoli["top"], ruoli["front"], ruoli["bottom"],
+                          ruoli["tetto"], ruoli["back"]), (2, 3, 4, 5, 6))
+        self.assertAlmostEqual(unite[6][2] * dl.PT2MM, 138.0, places=3)
+        x, h = dl.cresta(72.7, 49.0, 49.0)
+        self.assertAlmostEqual(x, 36.35, places=2)
+        self.assertAlmostEqual(h, 32.9, delta=0.1)
+
+    def test_un_fondo_piatto_o_falde_diverse_non_sono_un_tetto(self):
+        def fronte(i):
+            return i == 3
+        # un fondo solo, profondo come il cielo
+        self.assertIsNone(dl._tetto(self._fasce(16, 16, 72.7, 139.8, 72.7, 138), fronte))
+        # due falde che insieme non arrivano alla profondita'
+        self.assertIsNone(dl._tetto(self._fasce(16, 16, 72.7, 139.8, 30, 30, 138), fronte))
+        # due falde diverse
+        self.assertIsNone(dl._tetto(self._fasce(16, 16, 72.7, 139.8, 30, 60, 138), fronte))
+        # un retro che non torna col fronte
+        self.assertIsNone(dl._tetto(self._fasce(16, 16, 72.7, 139.8, 49, 49, 100), fronte))
+        # i fianchi non sul fronte
+        self.assertIsNone(dl._tetto(self._fasce(16, 16, 72.7, 139.8, 49, 49, 138),
+                                    lambda i: False))
+
+    def test_le_falde_salgono_alla_cresta(self):
+        from PIL import Image
+        from pack3d import folding
+        tex = {k: Image.new("RGB", (4, 4)) for k in
+               ("front", "top", "bottom", "tetto", "back", "left", "right")}
+        W, H, D = 190.0, 139.0, 72.7
+        x, h = dl.cresta(D, 49.0, 49.0)
+        facce = folding.build_faces((W, H, D), tex, chiuso=True, spessore=0,
+                                    fianchi_sul_fronte=True, tetto=(x, h))
+        per = {f["name"]: np.array(f["quad"], float) for f in facce}
+        fondo, tetto = per["bottom"], per["tetto"]
+        # la prima falda dal fronte (z = D/2, in basso) alla cresta
+        self.assertTrue(np.allclose(fondo[:2, 1], -H / 2) and np.allclose(fondo[:2, 2], D / 2))
+        self.assertTrue(np.allclose(fondo[2:, 1], -H / 2 + h) and np.allclose(fondo[2:, 2], D / 2 - x))
+        # la seconda dalla cresta al retro, e la cresta e' in comune
+        self.assertTrue(np.allclose(tetto[:2], fondo[[3, 2]]))
+        self.assertTrue(np.allclose(tetto[2:, 2], -D / 2) and np.allclose(tetto[2:, 1], -H / 2))
+        # ogni falda lunga quanto il suo pannello
+        for q in (fondo, tetto):
+            self.assertAlmostEqual(np.linalg.norm(q[3] - q[0]), 49.0, delta=0.05)
+        # la normale uscente della prima falda (meno il prodotto vettoriale,
+        # come `folding._normale`) guarda in giu'
+        n = -np.cross(fondo[1] - fondo[0], fondo[3] - fondo[0])
+        self.assertLess(n[1], 0)
+
+
+class DomandaSenzaLucchetto(unittest.TestCase):
+    """`parco.py caso --stato domanda` (o non-risolto): il caso passa a
+    `da-guardare` e il lucchetto `in-lavorazione` va via, se no la risposta
+    non lo riapre."""
+
+    def test_le_etichette_cambiano_da_sole(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        fatte = []
+        with mock.patch.object(parco, "_issue", return_value={"number": 23}), \
+                mock.patch.object(parco, "_metti", side_effect=lambda r, n, *x: fatte.append(("metti", n) + x)), \
+                mock.patch.object(parco, "_togli", side_effect=lambda r, n, *x: fatte.append(("togli", n) + x)), \
+                contextlib.redirect_stdout(io.StringIO()):
+            parco._in_attesa("a/b", "4ca1feb06b")
+        self.assertEqual(fatte, [("metti", 23, "da-guardare"),
+                                 ("togli", 23, "in-lavorazione")])
+
+    def test_senza_github_non_si_ferma(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        uscita = io.StringIO()
+        with mock.patch.object(parco, "_issue", side_effect=SystemExit("manca gh")), \
+                contextlib.redirect_stdout(uscita):
+            parco._in_attesa("a/b", "4ca1feb06b")
+        self.assertIn("a mano", uscita.getvalue())
+
+
 class CassaDelParco(unittest.TestCase):
     """`parco.py costruisci --riusa`: si rifanno solo i casi cambiati."""
 

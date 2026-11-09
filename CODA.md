@@ -422,8 +422,12 @@ caso che non si risolve.
 
 **Se manca un'informazione che ha chi ha il pack in mano** - come si monta,
 come sta un pezzo, quale lato e' il fronte - chiediglielo. Prima rileggi
-`voci.md`: la risposta puo' essere gia' in una nota. Poi, **prima** della
-domanda, commento, `da-guardare` e via `in-lavorazione`, e la domanda:
+`voci.md`: la risposta puo' essere gia' in una nota. Poi il commento sulla
+issue, e la domanda; il comando mette da se' `da-guardare` e toglie
+`in-lavorazione` (anche con `--stato non-risolto`). Col lucchetto rimasto la
+risposta non riapriva il caso: la routine partita alla risposta lo prendeva
+per il lavoro di un'altra sessione e si fermava, e il T15 a soffietto e'
+rimasto fermo cosi' finche' non l'ha ripreso una sessione a mano.
 
     python3 prove/parco.py caso https://iccio-3d-viewer.lovable.app ../pack3d-casi <codice> --stato domanda --domanda "..." --opzione "..." --opzione "..." --anteprima <nome> --uscita /tmp/caso_<codice>
 
