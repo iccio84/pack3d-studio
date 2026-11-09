@@ -799,6 +799,20 @@ vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
 (`famiglie.registro._prova_vassoio`, `build_vassoio`). I casi del parco che passavano non
 cambiano strada.
 
+### L'aletta senza la coda: le righe sottili sono schegge della sagoma
+
+Il vassoio T1x36 (caso 87be37b868): in basso sul retro due listelli sottili
+uscivano di 8 mm oltre i fianchi. La maschera di ogni aletta del retro,
+oltre al lembo vero (54 mm dalla piega), aveva una coda larga 1,75 mm che
+arrivava a 146 mm: una scheggia della sagoma lungo la cordonatura del
+fondo. Piegata con l'aletta, finiva sul piano del retro da -69 a +77 mm,
+oltre il fianco opposto a 69,2.
+
+**Regola** (`vassoio._senza_code`, `ALETTA_SOTTILE`). Un'aletta e' un lembo:
+le righe della sua maschera, contate lungo la piega, piu' corte di 3 mm non
+sono cartoncino dell'aletta e si tolgono prima di misurarla e piegarla. Sul
+caso il vassoio torna 138,3 x 146,2 x 219 mm (era 154,2 di largo).
+
 ### Cosa manca
 
 - La cima della plancia segue il contorno interno sul DT (le spalle, e

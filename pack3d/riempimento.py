@@ -52,6 +52,7 @@ FUORI_MODELLO = 0.01        # mm: il corpo nel vassoio e' il suo modello, schiac
 FUORI_VANO = 1.0            # mm: quanto un pezzo puo' passare le pareti del vano
 PUNTA_NELLA_PARETE = 0.8    # mm: fin dove la punta piegata entra nel cartoncino (meno di FUORI_VANO)
 SCHIACCIA_MAX = 0.25        # nel display fatto per N pezzi, un flowpack gonfio si schiaccia al massimo cosi'
+GONFIA_TEGOLA = 0.15        # a tegola, un pezzo si gonfia in altezza al massimo cosi'
 STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
 
 
@@ -753,6 +754,97 @@ def inclina(vano, p, poste, V_prodotto, gradi):
     return poste, 0.0
 
 
+def a_tegola(vano, p, poste, V_prodotto, gradi):
+    """Le pose frontali inclinate all'indietro a tegola: ogni pezzo ruota
+    attorno al largo del vano (X) di `gradi`, la faccia stampata verso
+    l'alto-davanti, e nella sua fila poggia sul bordo di quello sotto - la
+    fila resta verticale, i pezzi sfalsati come tegole. Le file si allargano
+    su tutta la profondita', mai meno di uno spessore fra due (lungo la
+    normale della faccia). Poi i pezzi si gonfiano in altezza (il loro asse
+    che sale) finche' la cima della fila arriva al tetto del vano, il bordo
+    delle pareti; al massimo di `GONFIA_TEGOLA`, e si schiacciano fino a
+    `SCHIACCIA_MAX` se la fila passa il tetto.
+
+    Torna (pose, scala, righe): `scala` sono i fattori lungo gli assi del
+    prodotto, da mettere nei nodi; ValueError se le file non stanno nel vano
+    nemmeno strette a uno spessore (regole/riempimenti.md, *A tegola,
+    inclinati all'indietro*)."""
+    if not poste or gradi <= 0:
+        return poste, np.ones(3), []
+    R0 = poste[0][0]
+    a = math.radians(float(gradi))
+    c, s_ = math.cos(a), math.sin(a)
+    # Y verso Y cos - Z sen: la cima va indietro; Z verso la faccia, in su
+    Rx = np.array([[1.0, 0.0, 0.0], [0.0, c, s_], [0.0, -s_, c]])
+    ys = sorted(set(round(float(t[1]), 6) for _, t in poste))
+    zs = sorted(set(round(float(t[2]), 6) for _, t in poste), reverse=True)
+    strato = {y: k for k, y in enumerate(ys)}
+    fila = {z: k for k, z in enumerate(zs)}
+    j_alto = int(np.argmax(np.abs(R0[1, :])))
+    alto = vano.coperchio if vano.coperchio is not None else vano.tetto
+    # sul fondo, come le file dritte: il piano di `misura_vassoio` e' la
+    # striscia della scatola chiusa, e nel vassoio aperto prende il lembo
+    # del davanti ripiegato dentro (36 mm sul T1x36)
+    piano = vano.fondo
+    # il corpo, non le pinne: piatte, alle testate, sono piu' larghe
+    spesso = _misura(p, int(np.argmax(np.abs(R0[2, :]))))
+
+    corpo = np.abs(V_prodotto[:, p.assi[0]] - p.centro[p.assi[0]]) <= 0.5 * p.corpo
+
+    def metti(k):
+        scala = np.ones(3)
+        scala[j_alto] = k
+        V = p.centro + (V_prodotto - p.centro) * scala
+        h = _misura(p, j_alto) * k
+        Wt = (V - p.centro) @ (Rx @ R0).T
+        base = -Wt[:, 1].min()          # nessuna punta sotto il fondo
+        sale = h / c                       # sulla verticale, il bordo sul bordo
+        # davanti e dietro tutto il pezzo, pinne comprese: dentro le pareti
+        largo_z = float(Wt[:, 2].max() - Wt[:, 2].min())
+        nf = len(zs)
+        minimo = spesso / c                # uno spessore lungo la normale
+        pz = minimo if nf == 1 else max(minimo, (vano.z1 - vano.z0 - largo_z) / (nf - 1))
+        z_davanti = vano.z1 - Wt[:, 2].max()
+        nuove = [(Rx @ R, np.array([t[0], piano + base + strato[round(float(t[1]), 6)] * sale,
+                                    z_davanti - fila[round(float(t[2]), 6)] * pz]))
+                 for R, t in poste]
+        # la cima e' quella del corpo: le pinne, film, si piegano sui vicini
+        cima = max(((V[corpo] - p.centro) @ R.T + t)[:, 1].max() for R, t in nuove)
+        return nuove, scala, V, cima, pz, minimo
+
+    lo, hi = 1.0 - SCHIACCIA_MAX, 1.0 + GONFIA_TEGOLA
+    nuove, scala, V, cima, pz, minimo = metti(1.0)
+    if cima > alto:
+        lo, hi = lo, 1.0
+    else:
+        lo, hi = 1.0, hi
+    if metti(hi)[3] <= alto:
+        k = hi
+    elif metti(lo)[3] > alto:
+        k = lo
+    else:
+        for _ in range(40):
+            m = 0.5 * (lo + hi)
+            if metti(m)[3] <= alto:
+                lo = m
+            else:
+                hi = m
+        k = lo
+    nuove, scala, V, cima, pz, minimo = metti(k)
+    fuori = fuori_dal_vano(vano, p, nuove, V)
+    if fuori > FUORI_VANO:
+        raise ValueError("riempimento: a tegola di %.0f gradi le %d file escono dal vano di "
+                         "%.1f mm" % (float(gradi), len(zs), fuori))
+    righe = ["a tegola: %d file da %d, inclinate all'indietro di %.0f gradi, ogni pezzo "
+             "sul bordo di quello sotto; file ogni %.1f mm (almeno %.1f)"
+             % (len(zs), len(ys), float(gradi), pz, minimo),
+             "a tegola, %s in altezza del %.0f%% perche' la fila arrivi al bordo delle "
+             "pareti: cima a %.1f mm, il bordo a %.1f"
+             % ("gonfiati" if k >= 1.0 else "schiacciati", abs(k - 1.0) * 100.0,
+                cima - vano.fondo, alto - vano.fondo)]
+    return nuove, scala, righe
+
+
 # --------------------------------------------------------------------------- #
 # Il prodotto adattato al vano
 
@@ -875,13 +967,14 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
 # Il GLB composto
 
 def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
-            dall_alto=False, gradi=0.0, plancia_sul_fondo=False):
+            dall_alto=False, gradi=0.0, plancia_sul_fondo=False, tegola=0.0):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
     neanche uno. `rigido`: il pack e' un astuccio, che non ha pinne da
     adattare e non si schiaccia. `gradi`: sdraiati, inclinati in avanti di
-    tanto, o meno se non ci stanno (`inclina`)."""
+    tanto, o meno se non ci stanno (`inclina`). `tegola`: frontali, inclinati
+    all'indietro di tanto, a tegola, e gonfiati fino al bordo (`a_tegola`)."""
     Jv, Bv = leggi(glb_vassoio)
     Jp, Bp = leggi(glb_prodotto)
     cosa = "l'astuccio" if rigido else "il flowpack"
@@ -943,6 +1036,10 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
                else "ci stanno") if messi > 0 else
             "chiesti inclinati di %.0f gradi, ma neanche di poco ci stanno nel vano: in "
             "piano" % float(gradi))
+    scala = np.ones(3)
+    if tegola and d.posa == "frontali":
+        poste, scala, dette = a_tegola(vano, p, poste, Vp, float(tegola))
+        accorciato += dette
     R = d.R
 
     J = json.loads(json.dumps(Jv))
@@ -1074,10 +1171,14 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
         q = _quaternione(Rk)
         # t e' dove va il centro del prodotto: il nodo sposta prima il centro
         # nell'origine
-        tt = t - Rk @ p.centro
-        J["nodes"].append({"name": "pezzo %d" % (k + 1), "children": figli,
-                           "rotation": [float(v) for v in q],
-                           "translation": [float(v) / 1000.0 for v in tt]})
+        tt = t - Rk @ (scala * p.centro)
+        nodo = {"name": "pezzo %d" % (k + 1), "children": figli,
+                "rotation": [float(v) for v in q],
+                "translation": [float(v) / 1000.0 for v in tt]}
+        if not np.allclose(scala, 1.0):
+            # a tegola, gonfiato in altezza: la scala negli assi del prodotto
+            nodo["scale"] = [float(v) for v in scala]
+        J["nodes"].append(nodo)
         scena.append(len(J["nodes"]) - 1)
     J["buffers"] = [{"byteLength": len(B) + (-len(B) % 4)}]
     for chiave in ("extensionsUsed", "extensionsRequired"):
@@ -1089,7 +1190,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     if chiesti is not None and chiesti > quanti:
         righe.append(DIFETTO + "ne hai chiesti %d, ma %s nel vassoio ce ne stanno al "
                      "massimo %d: ne ho messi %d" % (chiesti, d.posa, massimo, quanti))
-    fuori = fuori_dal_vano(vano, p, poste, Vp)
+    fuori = fuori_dal_vano(vano, p, poste, p.centro + (Vp - p.centro) * scala)
     if fuori > FUORI_VANO:
         righe.append(DIFETTO + "un pezzo esce dal vano di %.1f mm: si interseca con il "
                      "vassoio" % fuori)
@@ -1148,3 +1249,4 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
         righe.append("pinne piu' larghe del passo fra due pezzi (%.1f contro %.1f): si "
                      "stringono come il film accartocciato" % (p.largo_pinne, passo))
     return scrivi(J, bytes(B)), righe
+
