@@ -110,7 +110,7 @@ sono in GADGET.md.
 | vassoio espositore | `vassoio.py` |
 | vassoio sagomato (pareti oblique o con incavi, il fondo fra quattro cordonature; si prova per ultimo) | `vassoio.riconosci_sagomato` |
 | display con plancia | `plancia.py` |
-| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py` (la plancia sul fondo: opzione `plancia`), montato in `famiglie.vassoio.build_scatola_plancia` |
+| display a scatola (la plancia nel coperchio, disegnata in CAD a fessure e cerniera tratteggiata; si prova dopo lo sportello) | `scatola_plancia.py` (la plancia sul fondo: opzione `plancia`; il fianco col fondo a soffietto, nodo `soffietto`; il profilo senza denti), montato in `famiglie.vassoio.build_scatola_plancia` |
 | display con la plancia dentro il coperchio | `sportello.py`; costruito da `build_plancia` con `forma=sportello` |
 | ballotin | `ballotin.py` (finestre e pellicola comprese) |
 | coppa e cono | `coppa.py`, `cup.py` |

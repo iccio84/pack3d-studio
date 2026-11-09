@@ -826,7 +826,8 @@ corti o 56,5 del fianco col fondo? Chiesto: «Alta 45: quel fianco si
 ripiega e una parte va sotto, sul fondo». **Regola**: la scatola e' alta
 quanto il fronte (e il retro, che devono essere uguali); il fianco col fondo
 puo' essere piu' lungo, e il di piu' sta sotto il fondo, una striscia
-doppia.
+doppia. Se pero' il DT gli disegna la piega di mezzo, il fianco si piega a
+soffietto (*Il fianco col fondo a soffietto*, sotto).
 
 **La firma** (`scatola_plancia._leggi_fianco`, provata solo dopo la prima,
 nei quattro versi). Il fronte e il retro: due righe orizzontali della
@@ -865,7 +866,8 @@ della finestra). Le letture del parco non cambiano.
 **Il modello** (`_sagomata`, `_fondo_sul_fianco`, `_plancia_su`): il
 coperchio a strisce dal bordo alla finestra; il fianco col fondo alto
 quanto la scatola, il fondo dalla sua piega all'altro fianco con la stampa
-sotto, il di piu' del fianco una striscia sotto il fondo; la striscia
+sotto, il di piu' del fianco una striscia sotto il fondo (o il fianco a
+soffietto, se c'e' la piega di mezzo: `_soffietto`); la striscia
 dell'altro fianco dentro, sul fondo; la plancia a strisce lungo il
 profilo, in piedi fino alla riga di mezzo e poi ripiegata davanti, e la
 cima nel fronte fra il bordo e i tagli. Il T15 non cambia: la prima firma
@@ -902,3 +904,55 @@ prima volta il vano si spostava per ogni plancia che scende sotto il bordo,
 e le plance di serie scendono davanti, dentro la finestra o il fronte. Sul
 display T15 il vano era passato da 137,5 a 116,8 mm e il flowpack si
 accorciava da 136,3 a 115,6: il parco del rilascio l'ha fermato.
+
+### Il fianco col fondo a soffietto
+
+Il T1x10, al terzo giro, dal proprietario con la foto del display vero:
+«fai il lato destro (quello piu' lungo) rientrato a soffietto». Il fianco
+che porta il fondo e' 56,4 mm, e il DT lo divide a meta' con una piega
+lungo tutta la colonna: 28,2 + 28,1, due pannelli ognuno piu' corto dei 45
+della scatola. Non e' un fianco alto col di piu' sotto il fondo: e' un
+soffietto, e la piega di mezzo rientra.
+
+**Regola** (`scatola_plancia._piega_di_mezzo`, letta da `_fianchi`): se il
+fianco col fondo e' piu' lungo dell'altezza della scatola e fra la piega
+del coperchio e quella del fondo c'e' una piega che lo attraversa tutto,
+con i due pannelli ognuno piu' corto dell'altezza, il fianco e' a soffietto
+(`ScatolaPlancia.soffietto`, la piega piu' vicina al mezzo). Senza quella
+piega resta la regola di sopra, il di piu' sotto il fondo.
+
+**La forma** (`_rientro`, `_soffietto`): il bordo del coperchio in cima e
+il fondo in basso stanno sulla stessa verticale, e i due pannelli fanno un
+triangolo con lei. Il pannello di sopra scende di
+`h = (a^2 - b^2 + H^2) / 2H`, la piega rientra di `sqrt(a^2 - h^2)`: sul
+T1x10 17,0 mm a 22,4 mm dal fondo. La stampa resta fuori, in giu' sul
+pannello di sopra e in su su quello di sotto: come nella foto, il marchio
+sul pannello di sopra e il prodotto su quello di sotto. Alle due teste il
+soffietto finisce contro il fronte e il retro, che lo coprono. Il fondo
+resta attaccato al bordo basso, e sotto il fondo non c'e' piu' niente.
+
+**Nel GLB e' un nodo a parte**, `soffietto`, come la plancia: il
+riempimento ci misura dove il vano si stringe (regole/riempimenti.md, *Il
+vano*). Sul T1x10 il vano passa da 137,5 a 121,1 mm di largo, e le pinne
+dei T1 si accartocciano di piu': il pezzo passa da 136,3 a 119,9 mm, col
+corpo da 115 intero. Nessun pezzo entra nel soffietto (4 mm di margine
+alla piega).
+
+### La plancia senza denti
+
+Lo stesso giro: «togli il triangolino che sbuca dalla plancia». Il profilo
+della plancia del T1x10 viene dalla foto rifatta vettoriale, e su una riga
+sola, a 100,4 mm, il bordo della meta' ripiegata davanti usciva di 4,2 mm
+dalla diagonale: un dente di un millimetro per quattro, bianco da davanti e
+grigio da dietro.
+
+**Regola** (`scatola_plancia._senza_denti`, `DENTE` = 1,5 mm): nel profilo
+letto, su ognuno dei quattro bordi (plancia e finestra, a sinistra e a
+destra), una riga che esce da tutte e due le vicine dalla stessa parte di
+piu' di `DENTE` torna sulla retta fra loro. Un gradino vero (la riga uguale
+a una vicina, come gli incastri del piede) e uno spigolo restano.
+
+Restano, da dietro, i due cunei grigi ai lati della base: il retro della
+meta' ripiegata davanti, che sul DT si stringe piu' piano della meta' in
+piedi (da 133 a 75 mm in 30 mm, contro 22). Sono la fustella, non la
+lettura.
