@@ -1088,6 +1088,133 @@ TABELLA = _re.compile(
     r"ballaststoff|fibr|valori nutrizionali|nutrition|n.hrwert|voedingswaarde")
 
 
+# La GDA VUOTA: il segnaposto dell'icona dell'energia, senza scritte. Sul
+# fronte del pane ripieno T6 e del T10, e sulla plancia del display T1x10, e'
+# la sagoma dell'icona - un rettangolo arrotondato, piu' alto che largo, col
+# tondo in basso dove va la percentuale - disegnata a strati uno dentro
+# l'altro, in celeste chiaro e bianco: 8,8 x 12,7 mm. Non ha testo, quindi
+# `zone_gda` non la vede, e non ha un livello suo. Si riconosce dalla forma.
+ICONA_LATO = (5.0 / PT2MM, 20.0 / PT2MM)   # il lato corto dell'icona
+ICONA_PROPORZIONE = (1.2, 1.8)             # lato lungo / lato corto
+ICONA_STRATI = 3                           # sagome una dentro l'altra, almeno
+ICONA_SCARTO = 1.5 / PT2MM                 # fra uno strato e quello fuori
+ICONA_CHIARA = 140                         # ogni canale di ogni strato, almeno
+ICONA_MARGINE = 0.3 / PT2MM
+ICONA_NUCLEO = 1.0                         # punti dentro lo strato piu' interno
+
+
+def _sagome(pdf, page_no=0):
+    """`(tracciati, altri)` della pagina nel telaio di misura (punti,
+    MediaBox, y in giu'): i tracciati come `(x0, y0, x1, y1, colore)`, col
+    colore del pieno o, se non e' pieno, del tratto; gli altri - scritte e
+    immagini - come riquadri."""
+    import ctypes
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as raw
+    from .tracciati import _componi, _matrice
+
+    tracciati, altri = [], []
+    lati = [ctypes.c_float() for _ in range(4)]
+    pieno, tratto = ctypes.c_int(), ctypes.c_int()
+    v = [ctypes.c_uint() for _ in range(4)]
+
+    def giro(cont, quanti, prendi, m, ml, mt):
+        for i in range(quanti(cont)):
+            o = prendi(cont, i)
+            t = raw.FPDFPageObj_GetType(o)
+            if t == raw.FPDF_PAGEOBJ_FORM:
+                giro(o, raw.FPDFFormObj_CountObjects, raw.FPDFFormObj_GetObject,
+                     _componi(m, _matrice(o)), ml, mt)
+                continue
+            if t not in (raw.FPDF_PAGEOBJ_PATH, raw.FPDF_PAGEOBJ_TEXT,
+                         raw.FPDF_PAGEOBJ_IMAGE):
+                continue
+            if not raw.FPDFPageObj_GetBounds(o, *(ctypes.byref(c) for c in lati)):
+                continue
+            sx, giu, dx, su = (c.value for c in lati)
+            xs = [m[0] * px + m[2] * py + m[4] for px in (sx, dx) for py in (giu, su)]
+            ys = [m[1] * px + m[3] * py + m[5] for px in (sx, dx) for py in (giu, su)]
+            r = (min(xs) - ml, mt - max(ys), max(xs) - ml, mt - min(ys))
+            if t != raw.FPDF_PAGEOBJ_PATH:
+                altri.append(r)
+                continue
+            raw.FPDFPath_GetDrawMode(o, ctypes.byref(pieno), ctypes.byref(tratto))
+            if pieno.value:
+                raw.FPDFPageObj_GetFillColor(o, *(ctypes.byref(c) for c in v))
+            elif tratto.value:
+                raw.FPDFPageObj_GetStrokeColor(o, *(ctypes.byref(c) for c in v))
+            else:
+                continue
+            tracciati.append(r + (tuple(c.value for c in v[:3]),))
+
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        pg = doc[page_no]
+        ml, _mb, _mr, mt = pg.get_mediabox()
+        giro(pg.raw, raw.FPDFPage_CountObjects, raw.FPDFPage_GetObject,
+             (1.0, 0.0, 0.0, 1.0, 0.0, 0.0), ml, mt)
+    finally:
+        doc.close()
+    return tracciati, altri
+
+
+def icone_gda(pdf, page_no=0):
+    """Le GDA vuote del foglio - il segnaposto dell'icona dell'energia,
+    senza scritte - come zone `[(nucleo, zona, True)]` per `dentro_gda`: il
+    nucleo e' lo strato piu' interno, la zona l'icona intera.
+
+    E' un'icona un tracciato col lato corto fra `ICONA_LATO` e la proporzione
+    fra `ICONA_PROPORZIONE` (in piedi o coricato), con dentro almeno altri
+    `ICONA_STRATI` - 1 tracciati che ne seguono il bordo a meno di
+    `ICONA_SCARTO` per lato, tutti chiari (`ICONA_CHIARA`), e senza scritte
+    ne' immagini dentro: un'icona con le scritte e' quella stampata, e la
+    trova `zone_gda`; un badge col testo non e' una GDA."""
+    try:
+        tracciati, altri = _sagome(pdf, page_no)
+    except Exception:
+        return []
+    lo, hi = ICONA_LATO
+    plo, phi = ICONA_PROPORZIONE
+    s = ICONA_SCARTO
+    candidati = []
+    for k, (x0, y0, x1, y1, _c) in enumerate(tracciati):
+        corto, lungo = sorted((x1 - x0, y1 - y0))
+        if not (lo <= corto <= hi and plo * corto <= lungo <= phi * corto):
+            continue
+        strati = [j for j, t in enumerate(tracciati)
+                  if t[0] >= x0 - 0.2 and t[1] >= y0 - 0.2
+                  and t[2] <= x1 + 0.2 and t[3] <= y1 + 0.2
+                  and t[0] - x0 <= s and t[1] - y0 <= s
+                  and x1 - t[2] <= s and y1 - t[3] <= s]
+        if len(strati) < ICONA_STRATI:
+            continue
+        if any(min(tracciati[j][4]) < ICONA_CHIARA for j in strati):
+            continue
+        if any(a[0] >= x0 - 0.2 and a[1] >= y0 - 0.2 and a[2] <= x1 + 0.2
+               and a[3] <= y1 + 0.2 for a in altri):
+            continue
+        dentro = min(strati, key=lambda j: (tracciati[j][2] - tracciati[j][0])
+                     * (tracciati[j][3] - tracciati[j][1]))
+        # il nucleo un po' dentro lo strato piu' interno: chi toglie la
+        # grafica misura i tracciati dai loro punti, e il riquadro dello
+        # strato piu' interno gli veniva di un soffio piu' stretto di quello
+        # di pdfium - il contorno celeste restava
+        a = tracciati[dentro]
+        q = ICONA_NUCLEO
+        candidati.append(((x1 - x0) * (y1 - y0), (x0, y0, x1, y1),
+                          (a[0] + q, a[1] + q, a[2] - q, a[3] - q)))
+    # gli strati di un'icona sono a loro volta candidati: si tiene il piu' grande
+    zone = []
+    for _a, fuori, nucleo in sorted(candidati, reverse=True):
+        if any(fuori[0] >= z[0] and fuori[1] >= z[1] and fuori[2] <= z[2]
+               and fuori[3] <= z[3] for _n, z, _s in zone):
+            continue
+        m = ICONA_MARGINE
+        zone.append((nucleo, (fuori[0] - m, fuori[1] - m, fuori[2] + m,
+                              fuori[3] + m), True))
+    return zone
+
+
 def zone_gda(pdf, page_no=0):
     """I riquadri della GDA sul foglio, `[(nucleo, zona)]` nel telaio di
     misura (punti, MediaBox, y in giu'): il nucleo e' il riquadro delle sue
@@ -1189,9 +1316,14 @@ def dentro_gda(r, zone):
     """Il riquadro `r` di un oggetto e' della GDA? Si', se sta tutto nella
     zona di una GDA, o se ne contiene tutte le scritte e non e' piu' grande
     di `GDA_CONTENITORE` volte la zona: e' il pannello, o la sagoma
-    dell'icona, su cui le scritte stanno."""
-    for n, z in zone:
-        if r[0] >= z[0] and r[1] >= z[1] and r[2] <= z[2] and r[3] <= z[3]:
+    dell'icona, su cui le scritte stanno.
+
+    Una zona con un terzo elemento vero e' un'icona vuota (`icone_gda`): li'
+    vanno via solo le sagome che contengono il suo nucleo, non quello che sta
+    dentro la zona - i puntini della retinatura sotto l'icona restano."""
+    for n, z, *sagome in zone:
+        if (not (sagome and sagome[0])
+                and r[0] >= z[0] and r[1] >= z[1] and r[2] <= z[2] and r[3] <= z[3]):
             return True
         if (r[0] <= n[0] and r[1] <= n[1] and r[2] >= n[2] and r[3] >= n[3]
                 and (r[2] - r[0]) * (r[3] - r[1])

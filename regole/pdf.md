@@ -78,6 +78,17 @@ sottili si riempiono col pixel buono piu' vicino. La foto pulita torna nello
 spazio colore di prima: in quadricromia se lo era (se no compare l'avviso
 della grafica in RGB, che nel file non c'era).
 
+Anche la **GDA vuota** - il segnaposto dell'icona dell'energia, bordato di
+celeste e bianco dentro - si toglie intera (`foto.icone_gda`). Tolto solo il
+bordo come un tratto, il bianco restava sulla plancia del display T1x10, e
+chi l'ha caricato l'ha visto. E' un anello chiuso della tinta della penna,
+cercato a saturazione bassa (0,10: il celeste al 35%, col rumore della JPEG,
+alla saturazione della penna si spezzava), col lato corto fra 5 e 20 mm e il
+lungo fra 1,2 e 1,8 volte: sul T1x10 8,8 x 12,7 mm, come nei PDF vettoriali.
+Si copre riga per riga, fra il pixel buono a sinistra e quello a destra: le
+venature del legno continuano sotto, dove la media dell'anello lasciava un
+tassello liscio.
+
 **Un DT solo: quello con la grafica, che di norma e' il piu' grosso.** Sulla
 stessa pagina lo stesso disegno puo' tornare piu' volte: le copie per i
 tecnicismi di stampa - supporto trasparente, alluminio, battuta di bianco,

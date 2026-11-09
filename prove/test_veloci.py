@@ -1164,6 +1164,79 @@ class NumeriDelleQuote(unittest.TestCase):
         self.assertAlmostEqual(y, (200 - 47) * PT2MM, delta=1.5)
 
 
+def _icona(x, y, w=25.0, h=36.0, colore=b"0.65 0.86 0.97 rg"):
+    """Il contenuto PDF di una GDA vuota: tre strati uno dentro l'altro,
+    celeste, bianco e celeste, a (x, y) in punti con la y dal basso."""
+    return (colore + b" %.2f %.2f %.2f %.2f re f\n" % (x, y, w, h)
+            + b"1 g %.2f %.2f %.2f %.2f re f\n" % (x + 1, y + 1, w - 2, h - 2)
+            + colore + b" %.2f %.2f %.2f %.2f re f\n" % (x + 1.5, y + 2, w - 3, h - 4))
+
+
+class GdaVuota(unittest.TestCase):
+    """La GDA vuota, il segnaposto dell'icona dell'energia senza scritte, si
+    toglie come quella stampata: per forma nel PDF (`techink.icone_gda`), e
+    nel PDF-foto (`foto.icone_gda`, `foto.pulisci`)."""
+
+    def test_l_icona_vettoriale_si_trova(self):
+        from pack3d import techink
+        with tempfile.TemporaryDirectory() as c:
+            f = _pdf(c, altro=_icona(100, 300))
+            zone = techink.icone_gda(f)
+        self.assertEqual(len(zone), 1)
+        nucleo, zona, sagome = zone[0]
+        self.assertTrue(sagome)
+        # nel telaio di misura: y in giu' da una pagina alta 600
+        self.assertAlmostEqual(zona[0], 100, delta=1.5)
+        self.assertAlmostEqual(zona[1], 600 - 336, delta=1.5)
+        self.assertAlmostEqual(zona[3], 600 - 300, delta=1.5)
+
+    def test_una_sagoma_scura_quadrata_o_sola_non_e_una_gda(self):
+        from pack3d import techink
+        scura = _icona(100, 300, colore=b"0.2 0.2 0.2 rg")
+        quadrata = _icona(100, 300, w=30.0, h=30.0)
+        sola = b"0.65 0.86 0.97 rg 100 300 25 36 re f\n"
+        for altro in (scura, quadrata, sola):
+            with tempfile.TemporaryDirectory() as c:
+                self.assertEqual(techink.icone_gda(_pdf(c, altro=altro)), [])
+
+    def test_via_le_sagome_restano_i_puntini_sotto(self):
+        from pack3d import techink
+        zona = (100.0, 264.0, 125.0, 300.0)
+        nucleo = (102.5, 267.0, 122.5, 297.0)
+        icona = [(nucleo, zona, True)]
+        self.assertTrue(techink.dentro_gda((100.0, 264.0, 125.0, 300.0), icona))
+        self.assertTrue(techink.dentro_gda((101.5, 266.0, 123.5, 298.0), icona))
+        # un puntino della retinatura dentro l'icona resta
+        self.assertFalse(techink.dentro_gda((110.0, 280.0, 111.0, 281.0), icona))
+        # il fondo, che la contiene ma e' molto piu' grande, resta
+        self.assertFalse(techink.dentro_gda((0.0, 0.0, 600.0, 600.0), icona))
+        # la GDA stampata, senza il terzo elemento, toglie tutto quello che sta
+        # nella zona, come prima
+        self.assertTrue(techink.dentro_gda((110.0, 280.0, 111.0, 281.0),
+                                           [(nucleo, zona)]))
+
+    def test_l_icona_della_foto_si_copre_col_fondo(self):
+        from pack3d import foto
+        mm_px = 0.17
+        # un fondo di legno: righe orizzontali di due toni
+        rgb = np.zeros((300, 300, 3), np.uint8)
+        rgb[:] = (232, 205, 172)
+        rgb[::6] = (214, 182, 146)
+        # l'icona: 9 x 13 mm, un bordo celeste chiaro di 3 pixel, bianca dentro
+        h, w = int(13 / mm_px), int(9 / mm_px)
+        y0, x0 = 100, 120
+        rgb[y0:y0 + h, x0:x0 + w] = (166, 219, 247)
+        rgb[y0 + 3:y0 + h - 3, x0 + 3:x0 + w - 3] = (255, 255, 255)
+        icone = foto.icone_gda(rgb, 196.0, mm_px)
+        self.assertEqual(len(icone), 1)
+        out = foto.pulisci(rgb, 196.0, mm_px)
+        pezzo = out[y0 - 2:y0 + h + 2, x0 - 2:x0 + w + 2].astype(int)
+        # niente bianco e niente celeste: sotto torna il legno, righe comprese
+        self.assertLess(pezzo.min(axis=2).max(), 236)
+        self.assertGreater(pezzo[..., 0].min(), 200)
+        self.assertTrue((pezzo[::1, :, 0] < 220).any())
+
+
 class CassaDelParco(unittest.TestCase):
     """`parco.py costruisci --riusa`: si rifanno solo i casi cambiati."""
 

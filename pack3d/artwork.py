@@ -1361,11 +1361,16 @@ def senza_coperture(pdf, page_no=0, extra=(), regione=None, conti=None,
         if conti is not None:
             conti["bianchi"] = lasciate
     # La GDA va via da tutte le grafiche, dovunque stia: vedi
-    # `techink.zone_gda`.
+    # `techink.zone_gda`, e per l'icona vuota, senza scritte,
+    # `techink.icone_gda`.
     try:
         zone = techink.zone_gda(pdf, page_no)
     except Exception:
         zone = []
+    try:
+        zone = zone + techink.icone_gda(pdf, page_no)
+    except Exception:
+        pass
     lastre = sorted(lastre)
     if not lastre and regione is None and not zone:
         return pdf, []
