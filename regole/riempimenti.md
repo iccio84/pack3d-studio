@@ -451,6 +451,11 @@ sparivano dietro le pinne.
 - **La punta piegata si ferma a mezzo passo** (`adatta`, punto 2): girando
   attorno alla piega, la faccia della pinna dalla parte opposta esce oltre
   la piega di `dz * sin`, e col vano giusto (136,3, pezzo 150 col corpo 119)
-  entrava 1,1 mm nel fianco. Il film si schiaccia contro la parete, non la
-  passa: la punta si ferma a `meta + GIOCO`, dove la parete comincia.
+  usciva 1,1 mm oltre il vano, fuori dal cartoncino del fianco. Il film si
+  schiaccia contro la parete, non la passa: la punta si ferma dentro il suo
+  spessore, a `PUNTA_NELLA_PARETE` (0,8 mm, meno di `FUORI_VANO`) dal filo
+  di dentro. Fermata al filo di dentro, accorciava di 1 mm i flowpack
+  approvati di `riempimento_kms` (146,5) e
+  `riempimento_nutella_biscuits_display` (172,9), che hanno la punta mezzo
+  millimetro nel cartoncino: il parco del rilascio li ha visti.
 
