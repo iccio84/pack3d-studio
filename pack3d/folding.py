@@ -541,23 +541,40 @@ def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
                 "tex": textures[name],
             })
     if tetto and layout == "vwrap" and "tetto" in textures:
-        _a_tetto(faces, C, tetto, textures["tetto"])
+        _a_tetto(faces, C, tetto, textures["tetto"],
+                 rientro=max(spessore or 0.0, 0.0) + TETTO_SCOSTO)
     return guscio(faces, spessore)
 
 
-def _a_tetto(faces, C, tetto, tex):
+# Le falde del fondo a tetto stanno fra i fianchi, non sul loro piano: tanto
+# oltre lo spessore del cartoncino, perche' non tocchino il rovescio del fianco
+TETTO_SCOSTO = 0.1
+
+
+def _a_tetto(faces, C, tetto, tex, rientro=0.0):
     """Il fondo a tetto, sul posto: la prima falda va dallo spigolo basso del
     fronte alla cresta, la seconda (`tetto`) dalla cresta a quello del retro.
     La cresta corre lungo la larghezza, a `x` mm dal fronte e `h` sopra il
     piano d'appoggio; la riga alta di ogni ritaglio e' quella che confina con
     la faccia prima, come sul foglio. Sotto resta il vuoto a triangolo,
-    chiuso ai lati dai fianchi."""
+    chiuso ai lati dai fianchi.
+
+    Le falde rientrano dai fianchi di `rientro` mm per parte, come nella
+    scatola vera, dove stanno fra i due fianchi: arrivando fino al loro
+    piano, il bordo di taglio delle falde cadeva sulla faccia del fianco, e
+    sul T15 a soffietto si vedeva in basso sui laterali la V delle falde."""
     x, h = tetto
-    fl, fr = C["FBL"], C["FBR"]
+    r = float(rientro)
+
+    def dentro(p):
+        return (p[0] + r if p[0] < 0 else p[0] - r, p[1], p[2])
+
+    fl, fr = dentro(C["FBL"]), dentro(C["FBR"])
+    bl, br = dentro(C["BBL"]), dentro(C["BBR"])
     cl = (fl[0], fl[1] + h, fl[2] - x)
     cr = (fr[0], fr[1] + h, fr[2] - x)
     for f in faces:
         if f["name"] == "bottom":
             f["quad"] = [fl, fr, cr, cl]
-    faces.append({"name": "tetto", "quad": [cl, cr, C["BBR"], C["BBL"]],
+    faces.append({"name": "tetto", "quad": [cl, cr, br, bl],
                   "uv": list(UV), "tex": tex})

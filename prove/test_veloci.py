@@ -1286,10 +1286,15 @@ class FondoATetto(unittest.TestCase):
                ("front", "top", "bottom", "tetto", "back", "left", "right")}
         W, H, D = 190.0, 139.0, 72.7
         x, h = dl.cresta(D, 49.0, 49.0)
-        facce = folding.build_faces((W, H, D), tex, chiuso=True, spessore=0,
+        s = 0.45
+        facce = folding.build_faces((W, H, D), tex, chiuso=True, spessore=s,
                                     fianchi_sul_fronte=True, tetto=(x, h))
         per = {f["name"]: np.array(f["quad"], float) for f in facce}
         fondo, tetto = per["bottom"], per["tetto"]
+        # le falde stanno fra i fianchi, oltre il rovescio del cartoncino: sul
+        # loro piano il bordo di taglio delle falde si vedeva sui laterali
+        for q in (fondo, tetto):
+            self.assertLessEqual(np.abs(q[:, 0]).max(), W / 2 - s - 0.05)
         # la prima falda dal fronte (z = D/2, in basso) alla cresta
         self.assertTrue(np.allclose(fondo[:2, 1], -H / 2) and np.allclose(fondo[:2, 2], D / 2))
         self.assertTrue(np.allclose(fondo[2:, 1], -H / 2 + h) and np.allclose(fondo[2:, 2], D / 2 - x))
