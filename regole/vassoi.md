@@ -321,6 +321,13 @@ pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
   i PDF si leggevano come vassoio.
 - La verifica delle pareti prende la prima e l'ultima riga della griglia,
   non la sesta e la quarta: sul sagomato le righe sono di piu'.
+- **Il fondo e' la luce piu' larga fra quelle chiuse da una cordonatura**,
+  non la piu' larga di tutte. Sul vassoio T1x36 del caso 87be37b868 i
+  fianchi sono alti 144 e 143 mm e il fondo, fra le cordonature di 3,9 e 3,7,
+  e' profondo 134,5: la luce piu' larga era un fianco, in cima al foglio,
+  senza niente prima di lei, e il riempimento si fermava su «nessuno si legge
+  come vassoio». Si guardano solo le luci con una cordonatura per lato, e fra
+  loro la piu' larga: fondo 138,3 x 219,0, davanti 51, fianchi e retro 146.
 - **Nel riempimento perde con un vassoio letto prima**
   (`famiglie.riempimento.analisi_riempimento`). Le quattro cordonature non bastavano: il
   film del flowpack del display da 26 del parco ha un fondo chiuso da

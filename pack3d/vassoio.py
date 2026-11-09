@@ -125,12 +125,20 @@ def _asse_sagomato(t):
     luci = _fasce(t)
     if len(luci) < 3:
         return None
-    i = max(range(len(luci)), key=luci.__getitem__)
-    if i == 0 or i == len(luci) - 1:
+
+    def chiusa(i):
+        a, b = luci[i - 1], luci[i + 1]
+        return max(a, b) <= CORDONATURA_LARGA and abs(a - b) <= 1.0
+
+    # Il fondo e' la luce piu' larga FRA QUELLE chiuse da una cordonatura sui
+    # due lati, non la piu' larga di tutte: sul vassoio T1x36 del caso
+    # 87be37b868 i fianchi sono alti 144 e 143 mm e il fondo e' profondo
+    # 134,5 - la luce piu' larga era un fianco, in cima al foglio, e il
+    # vassoio non si leggeva.
+    dentro = [i for i in range(1, len(luci) - 1) if chiusa(i)]
+    if not dentro:
         return None
-    a, b = luci[i - 1], luci[i + 1]
-    if max(a, b) > CORDONATURA_LARGA or abs(a - b) > 1.0:
-        return None
+    i = max(dentro, key=luci.__getitem__)
     return t[i], t[i + 1], (t[i - 1] + t[i]) / 2.0, (t[i + 1] + t[i + 2]) / 2.0
 
 

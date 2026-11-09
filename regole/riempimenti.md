@@ -435,3 +435,27 @@ flowpack si possono schiacciare, ma senza modificare la mappatura».
 
 Gli altri riempimenti e i vassoi del parco restano identici al byte a quelli
 pubblicati.
+
+### Il vano lo chiudono le pareti, e la punta piegata si ferma alla parete
+
+Il vassoio T1x36 del caso 87be37b868 (36 flowpack T1, 9 per fila e 4
+strati) aveva, in fondo a una testata, un lembo alto 1,7 mm rimasto steso sul
+piano che sporgeva di 8 mm oltre i fianchi. Il vano si misurava
+sull'ingombro di tutto il vassoio: veniva largo 152 invece di 136, i pezzi
+si mettevano larghi come lui e bucavano i fianchi, che nelle viste
+sparivano dietro le pinne.
+
+- **In pianta il vano si misura su cio' che si alza dal fondo**, oltre tre
+  spessori di cartoncino (`misura_vassoio`): un ritaglio steso sul piano non
+  tiene niente. Il fondo e il tetto restano quelli di prima.
+- **La punta piegata si ferma a mezzo passo** (`adatta`, punto 2): girando
+  attorno alla piega, la faccia della pinna dalla parte opposta esce oltre
+  la piega di `dz * sin`, e col vano giusto (136,3, pezzo 150 col corpo 119)
+  usciva 1,1 mm oltre il vano, fuori dal cartoncino del fianco. Il film si
+  schiaccia contro la parete, non la passa: la punta si ferma dentro il suo
+  spessore, a `PUNTA_NELLA_PARETE` (0,8 mm, meno di `FUORI_VANO`) dal filo
+  di dentro. Fermata al filo di dentro, accorciava di 1 mm i flowpack
+  approvati di `riempimento_kms` (146,5) e
+  `riempimento_nutella_biscuits_display` (172,9), che hanno la punta mezzo
+  millimetro nel cartoncino: il parco del rilascio li ha visti.
+
