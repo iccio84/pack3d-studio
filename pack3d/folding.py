@@ -494,7 +494,8 @@ def gira_facce(faces, gradi):
 def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
                 panels: dict | None = None, chiuso: bool = True,
                 spessore: float = SPESSORE_CRT,
-                fianchi_sul_fronte: bool | None = None) -> list:
+                fianchi_sul_fronte: bool | None = None,
+                tetto: tuple | None = None) -> list:
     """Facce pronte per rasterizzatore ed export: quad 3D + texture + UV.
 
     Con `panels` si costruiscono anche le falde del retro, che sono fasce e
@@ -502,7 +503,9 @@ def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
     fianchi si agganciano al fronte, vedi FIANCHI_SUL_FRONTE; lo stesso se
     `fianchi_sul_fronte` lo dice di un astuccio chiuso, i cui fianchi stampati
     stanno sulla fascia del fronte (`Dieline.fianchi_su`). Con `spessore` il
-    guscio prende lo spessore del cartoncino, vedi `guscio`.
+    guscio prende lo spessore del cartoncino, vedi `guscio`. Con `tetto` -
+    `(mm dal fronte, mm di salita)` della cresta, `Dieline.tetto` - il fondo
+    sono due falde che salgono a tetto dentro la scatola: vedi `_a_tetto`.
     """
     W, H, D = dims_mm
     C = corners(W, H, D)
@@ -537,4 +540,24 @@ def build_faces(dims_mm, textures: dict, layout: str = "vwrap",
                 "uv": list(UV),
                 "tex": textures[name],
             })
+    if tetto and layout == "vwrap" and "tetto" in textures:
+        _a_tetto(faces, C, tetto, textures["tetto"])
     return guscio(faces, spessore)
+
+
+def _a_tetto(faces, C, tetto, tex):
+    """Il fondo a tetto, sul posto: la prima falda va dallo spigolo basso del
+    fronte alla cresta, la seconda (`tetto`) dalla cresta a quello del retro.
+    La cresta corre lungo la larghezza, a `x` mm dal fronte e `h` sopra il
+    piano d'appoggio; la riga alta di ogni ritaglio e' quella che confina con
+    la faccia prima, come sul foglio. Sotto resta il vuoto a triangolo,
+    chiuso ai lati dai fianchi."""
+    x, h = tetto
+    fl, fr = C["FBL"], C["FBR"]
+    cl = (fl[0], fl[1] + h, fl[2] - x)
+    cr = (fr[0], fr[1] + h, fr[2] - x)
+    for f in faces:
+        if f["name"] == "bottom":
+            f["quad"] = [fl, fr, cr, cl]
+    faces.append({"name": "tetto", "quad": [cl, cr, C["BBR"], C["BBL"]],
+                  "uv": list(UV), "tex": tex})
