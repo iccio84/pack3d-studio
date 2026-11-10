@@ -1553,5 +1553,51 @@ class PinneCromate(unittest.TestCase):
         self.assertTrue((m[:24, :, 2] == 255).all() and (m[24:-24, :, 2] == 0).all())
 
 
+class ScatolaAPuntaLiscia(unittest.TestCase):
+    """La scatola a punta senza facce e senza spigoletti: il fronte curvo e
+    le ali del soffietto coi vertici in comune, il fianco dritto che segue la
+    curva del fronte fino alla piega (`punta.maglia`)."""
+
+    def setUp(self):
+        from pack3d import punta
+        self.punta = punta
+        # le quote del T6 sul foglio, la y in giu': aletta, cresta, falda,
+        # dritto, fondo, retro
+        self.p = punta.Punta(regione=(0, 0, 1, 1), xL=0.0, xR=131.5, D=45.3, yP=0.0,
+                             yR=32.0, yF0=35.4, yG=103.0, yF1=205.0, yB0=261.5,
+                             yB1=431.1, taglio_x=10.2, taglio_y=10.06)
+        self.V, self.UV, self.T = punta.maglia(self.p, (0.0, 0.0), 1.0, (600.0, 500.0),
+                                               spessore=0.45)
+
+    def test_niente_costa_sulla_curva_sotto_la_piega(self):
+        from pack3d.ballotin import STRISCIA
+        p, V, UV, T = self.p, self.V, self.UV, self.T
+        v_taglio = (500.0 - 0.5 * STRISCIA) / 500.0
+        taglio = np.all(np.abs(UV[T][:, :, 1] - v_taglio) < 1e-6, axis=1)
+        c = V[T].mean(axis=1)
+        sui_lati = (np.abs(np.abs(c[:, 0]) - p.W / 2) < 0.6) & (c[:, 2] > p.D / 2 - 1.5)
+        th = np.arcsin(p.chiude / p.falda)
+        ls = self.punta.SMUSSO * np.tan(th / 2)
+        sotto = (c[:, 1] > p.dritto - ls - 0.01) & (c[:, 1] < p.dritto - 0.01)
+        self.assertEqual(int((taglio & sui_lati & sotto).sum()), 0)
+
+    def test_il_fianco_arriva_alla_piega_dove_e_il_fronte(self):
+        p, V = self.p, self.V
+        sul = V[(np.abs(V[:, 0] + p.W / 2) < 1e-4) & (np.abs(V[:, 1] - p.dritto) < 1e-4)]
+        # alla piega il fronte e' rientrato di un quarto di mm: c'e' un vertice
+        # del fianco li', non sullo spigolo vivo
+        self.assertTrue(np.any(np.abs(sul[:, 2] - (p.D / 2 - 0.25)) < 0.02))
+
+    def test_la_curva_ha_i_vertici_in_comune(self):
+        p, V, UV, T = self.p, self.V, self.UV, self.T
+        # i vertici stampati del fronte sull'arco: ognuno una volta sola
+        # nei triangoli del fronte (vertici in comune fra un passo e l'altro)
+        fr = np.abs(V[T][:, :, 2].mean(axis=1) - p.D / 2) < 1.2
+        fr &= (V[T][:, :, 1].mean(axis=1) > p.dritto - 3.0) & (V[T][:, :, 1].mean(axis=1) < p.dritto + 3.0)
+        usati = np.unique(T[fr].ravel())
+        self.assertGreater(len(usati), 40)
+        stampati = usati[UV[usati][:, 1] < 0.9]
+        self.assertEqual(len(np.unique(np.round(V[stampati], 5), axis=0)), len(stampati))
+
 if __name__ == "__main__":
     unittest.main()
