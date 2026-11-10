@@ -813,6 +813,42 @@ le righe della sua maschera, contate lungo la piega, piu' corte di 3 mm non
 sono cartoncino dell'aletta e si tolgono prima di misurarla e piegarla. Sul
 caso il vassoio torna 138,3 x 146,2 x 219 mm (era 154,2 di largo).
 
+### L'aletta si stende sul taglio, non sui pixel
+
+Lo stesso T1x36, dal proprietario: «la parte frontale fustellata male
+(seghettata)». Sopra il fronte basso (51 mm) le alette si vedono, e il loro
+taglio - la curva in cima e il bordo obliquo che scende verso il fronte -
+usciva a scalini di un quarto di millimetro, con le coste di ogni scalino a
+vista. Non erano i pixel letti male: riga per riga i capi dell'aletta stanno
+in media a 0,3 pixel dal taglio vero (misurato contro la sagoma resa a
+16 px/mm). Era il modo di stendere: fra due righe `Maglia.pezzo` mette il
+rettangolo del tratto che hanno in comune, e il resto della riga piu' lunga
+diventa un gradino con la sua costa. Un bordo quasi parallelo alle righe
+fa gradini lunghi millimetri.
+
+**Regola** (`Maglia.pezzo_liscio`, in `vassoio.corpo` per le quattro
+alette). Fra due righe c'e' il trapezio coi capi delle due righe: il bordo e'
+una linea, e la costa una fascia continua. Dove il bordo scende quasi dritto
+(al massimo un pixel per riga) i capi fanno uno scalino ogni tante righe, e
+una retta sulle 4 righe vicine per parte li mette sul taglio (`_liscia`,
+`LISCIO_RIGHE`): con 10 righe gli angoli si arrotondano e il taglio si
+allontana. Le UV restano la posizione sul foglio: la mappatura non cambia.
+
+Prima si tolgono le parti piu' strette di 3 mm in qualunque verso
+(`_senza_schegge`): sul T1x36 la stampa del fronte cadeva nel taglio fra
+fronte e aletta, una striscia di 2 mm lungo tutta l'aletta, che `_senza_code`
+lasciava perche' stava su righe che hanno anche il lembo. Di ogni riga
+restano interi i tratti che toccano il lembo, cosi' gli angoli non si
+arrotondano e una scheggia staccata da una fessura non torna. Il pezzo
+liscio vuole un tratto per riga: una fessura sotto 5 mm si chiude
+(`FESSURA_MM`, sul T1x36 un intaglio a V dietro il fronte e una crepa di un
+pixel nella stampa); con due tratti veri l'aletta si stende come prima.
+
+Sul parco cambiano i 10 display e vassoi con le alette: viste uguali salvo i
+bordi delle alette che si vedono (al massimo lo 0,06% dei pixel), nessuna
+misura approvata cambiata, e i vertici del vassoio scendono (sul T1x36 da
+9888 a 5100).
+
 ### Cosa manca
 
 - La cima della plancia segue il contorno interno sul DT (le spalle, e

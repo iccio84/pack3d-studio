@@ -1599,5 +1599,151 @@ class ScatolaAPuntaLiscia(unittest.TestCase):
         stampati = usati[UV[usati][:, 1] < 0.9]
         self.assertEqual(len(np.unique(np.round(V[stampati], 5), axis=0)), len(stampati))
 
+
+class VerticiSeparati(unittest.TestCase):
+    """Il GLB finito con ogni primitiva coi suoi vertici, perche' KeyShot
+    mostri la texture (`pack3d.primitive`), alla fine di ogni costruzione
+    (`famiglie.registro`)."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+        from PIL import Image
+        from pack3d import exporters
+        self.cartella = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.cartella)
+        # un quadrato stampato sopra e col rovescio sotto, sugli stessi
+        # quattro vertici: la normale sommata sulle due facce e' nulla
+        V = np.array([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]], float)
+        UV = np.array([[0, 1], [1, 1], [1, 0], [0, 0]], float)
+        T = np.array([[0, 1, 2], [0, 2, 3], [0, 2, 1], [0, 3, 2]])
+        tinte = SimpleNamespace(quale=np.array([-1, -1, 0, 0]),
+                                colori=[("interno", (230, 230, 230))])
+        self.f = os.path.join(self.cartella, "q.glb")
+        exporters.write_glb_mesh(V, UV, T, Image.new("RGB", (8, 8), (200, 30, 30)),
+                                 self.f, tinte=tinte)
+
+    def test_ogni_primitiva_ha_i_suoi_vertici(self):
+        from pack3d import primitive
+        from pack3d.riempimento import _dati, leggi
+        with open(self.f, "rb") as fh:
+            prima = fh.read()
+        J0, B0 = leggi(prima)
+        J, B = leggi(primitive.per_tutti(prima))
+        prims0 = J0["meshes"][0]["primitives"]
+        prims = J["meshes"][0]["primitives"]
+        self.assertEqual(len(prims0), 2)
+        self.assertEqual(prims0[0]["attributes"]["POSITION"], prims0[1]["attributes"]["POSITION"])
+        self.assertNotEqual(prims[0]["attributes"]["POSITION"], prims[1]["attributes"]["POSITION"])
+        for p0, p in zip(prims0, prims):
+            i0 = _dati(J0, B0, p0["indices"]).ravel()
+            i = _dati(J, B, p["indices"]).ravel()
+            self.assertEqual(J["accessors"][p["attributes"]["POSITION"]]["count"], 4)
+            np.testing.assert_array_equal(_dati(J0, B0, p0["attributes"]["POSITION"])[i0],
+                                          _dati(J, B, p["attributes"]["POSITION"])[i])
+            N = _dati(J, B, p["attributes"]["NORMAL"])
+            np.testing.assert_allclose(np.linalg.norm(N, axis=1), 1.0, atol=1e-6)
+        # la stampa tiene le UV, il rovescio di colore pieno no; le normali
+        # rifatte guardano dalla parte delle facce
+        i = _dati(J, B, prims[0]["indices"]).ravel()
+        np.testing.assert_array_equal(_dati(J0, B0, prims0[0]["attributes"]["TEXCOORD_0"])[
+            _dati(J0, B0, prims0[0]["indices"]).ravel()],
+            _dati(J, B, prims[0]["attributes"]["TEXCOORD_0"])[i])
+        self.assertNotIn("TEXCOORD_0", prims[1]["attributes"])
+        self.assertGreater(_dati(J, B, prims[0]["attributes"]["NORMAL"])[:, 2].min(), 0.99)
+        self.assertLess(_dati(J, B, prims[1]["attributes"]["NORMAL"])[:, 2].max(), -0.99)
+
+    def test_nomi_unici_e_una_texture_per_immagine(self):
+        from pack3d import primitive
+        J = {"meshes": [{"name": "vassoio", "primitives": [{"material": 0}, {"material": 1}]},
+                        {"name": "flowpack", "primitives": [{"material": 2}]},
+                        {"name": "astuccio", "primitives": [{"material": 3}]}],
+             "materials": [{"name": "film", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}},
+                           {"name": "interno"},
+                           {"name": "film", "pbrMetallicRoughness": {"baseColorTexture": {"index": 1}},
+                            "normalTexture": {"index": 2}},
+                           {"name": "front"}],
+             "textures": [{"source": 0, "sampler": 0}, {"source": 0, "sampler": 1},
+                          {"source": 1, "sampler": 1}],
+             "samplers": [{"magFilter": 9729}, {"magFilter": 9729}]}
+        primitive.una_texture_per_immagine(primitive.nomi_unici(J))
+        self.assertEqual([m["name"] for m in J["materials"]],
+                         ["film", "interno", "flowpack", "front"])
+        self.assertEqual(J["textures"], [{"source": 0, "sampler": 0}, {"source": 1, "sampler": 0}])
+        self.assertEqual(len(J["samplers"]), 1)
+        self.assertEqual(J["materials"][2]["pbrMetallicRoughness"]["baseColorTexture"]["index"], 0)
+        self.assertEqual(J["materials"][2]["normalTexture"]["index"], 1)
+
+    def test_ogni_costruzione_finisce_coi_vertici_separati(self):
+        from pack3d.famiglie import registro
+        from pack3d.riempimento import leggi
+        for kind, prepara in registro.COSTRUZIONI.items():
+            self.assertEqual(prepara.__wrapped__.__name__, prepara.__name__, kind)
+        with mock.patch.object(registro, "build_punta",
+                               lambda pdf, uscita, *a, **k: shutil.copy(self.f, uscita) and ["ok"]):
+            r = mock.Mock(pdf="x.pdf", q=1, col_riq=None, carta=None)
+            uscita = os.path.join(self.cartella, "fatto.glb")
+            self.assertEqual(registro.COSTRUZIONI["punta"](r, {})([], uscita), ["ok"])
+        with open(uscita, "rb") as fh:
+            J, _B = leggi(fh.read())
+        prims = J["meshes"][0]["primitives"]
+        self.assertNotEqual(prims[0]["attributes"]["POSITION"], prims[1]["attributes"]["POSITION"])
+
+
+class AlettaLiscia(unittest.TestCase):
+    """L'aletta del vassoio stesa sul taglio e non sui pixel: fra due righe
+    il trapezio coi loro capi, senza gradini, e le schegge attaccate tolte
+    (`vassoio.Maglia.pezzo_liscio`, `vassoio._senza_schegge`)."""
+
+    def test_il_bordo_obliquo_e_una_linea(self):
+        from pack3d import vassoio
+        # un lembo col bordo destro obliquo: un pixel in piu' ogni 8 righe
+        m = np.zeros((80, 60), bool)
+        for r in range(80):
+            m[r, 0:20 + r // 8] = True
+        g = vassoio.Maglia(60, 80)
+        fatto = g.pezzo_liscio(m, "righe", lambda X, Y: (X, Y, 0.0), (0, 0, -1),
+                               [("X", 0)], "lembo")
+        self.assertTrue(fatto)
+        V = np.array(g.V)
+        # i vertici della faccia esterna sul bordo destro: su una retta
+        # (scarto sotto mezzo pixel), non a scalini da un pixel
+        fuori = V[(np.abs(V[:, 2]) < 1e-9) & (V[:, 0] > 15)]
+        retta = np.polyfit(fuori[:, 1], fuori[:, 0], 1)
+        self.assertLess(np.abs(np.polyval(retta, fuori[:, 1]) - fuori[:, 0]).max(), 0.5)
+        self.assertAlmostEqual(retta[0], 1.0 / 8.0, delta=0.02)
+        # ogni costa del bordo destro guarda fuori, verso +x
+        n = np.cross(V[np.array(g.T)[:, 1]] - V[np.array(g.T)[:, 0]],
+                     V[np.array(g.T)[:, 2]] - V[np.array(g.T)[:, 0]])
+        c = V[np.array(g.T)].mean(axis=1)
+        coste = (np.abs(n[:, 2]) < 1e-9) & (c[:, 0] > 15) & (c[:, 1] > 1) & (c[:, 1] < 78)
+        self.assertTrue(coste.any())
+        self.assertTrue((n[coste, 0] > 0).all())
+
+    def test_due_tratti_in_una_riga_tornano_a_pezzo(self):
+        from pack3d import vassoio
+        m = np.zeros((20, 60), bool)
+        m[:, 0:20] = True
+        m[:, 40:60] = True
+        g = vassoio.Maglia(60, 20)
+        self.assertFalse(g.pezzo_liscio(m, "righe", lambda X, Y: (X, Y, 0.0), (0, 0, -1)))
+        self.assertEqual(g.V, [])
+        # una fessura stretta si chiude
+        self.assertTrue(g.pezzo_liscio(m, "righe", lambda X, Y: (X, Y, 0.0), (0, 0, -1),
+                                       fessura=20))
+
+    def test_la_scheggia_attaccata_se_ne_va(self):
+        from pack3d import vassoio
+        m = np.zeros((120, 120), bool)
+        m[10:110, 10:70] = True          # il lembo, 15 x 25 mm a 4 px/mm
+        m[10:110, 74:80] = True          # una scheggia larga 1,5 mm, staccata
+        m[100:110, 70:74] = True         # attaccata in fondo
+        p = vassoio._senza_schegge(m, 4.0)
+        # dove la fessura la stacca se ne va; dove e' cartoncino di fila col
+        # lembo, sulla stessa riga, resta
+        self.assertFalse(p[10:100, 74:80].any())
+        self.assertTrue(p[100:110, 10:80].all())
+        self.assertTrue(p[10:110, 10:70].all())
+
+
 if __name__ == "__main__":
     unittest.main()
