@@ -1826,12 +1826,17 @@ class ScatolaChiusa(unittest.TestCase):
         self.assertTrue(all(abs(v - p.vM) > 1 for l in linee[2:] for _u, v in l))
         # dritta, la linea si semplifica ai due capi
         self.assertEqual(len(linee[0]), 2)
-        V, _UV, T, _parti = sp.maglia(p, (0, 0), 1.0, (1000, 1000), chiusa=True)
+        V, UV, T, _parti = sp.maglia(p, (0, 0), 1.0, (1000, 1000), chiusa=True)
         # i solchi: vertici appena sotto il coperchio e dietro il fronte
         sotto = (V[:, 1] < p.H - 1e-4) & (V[:, 1] > p.H - 0.3)
         dietro = (V[:, 2] < p.D / 2 - 1e-4) & (V[:, 2] > p.D / 2 - 0.3) & (V[:, 1] > 1)
         self.assertGreater(int(sotto.sum()), 100)
         self.assertGreater(int(dietro.sum()), 20)
+        # con la stampa del foglio dove stanno, non col colore del taglio
+        # (le strisce in fondo alla texture)
+        from pack3d.ballotin import STRISCIA
+        striscia = (1000 - 2 * STRISCIA) / 1000
+        self.assertTrue((UV[sotto | dietro][:, 1] < striscia).all())
 
 
 if __name__ == "__main__":
