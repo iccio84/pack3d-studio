@@ -1011,3 +1011,21 @@ Restano, da dietro, i due cunei grigi ai lati della base: il retro della
 meta' ripiegata davanti, che sul DT si stringe piu' piano della meta' in
 piedi (da 133 a 75 mm in 30 mm, contro 22). Sono la fustella, non la
 lettura.
+
+### La scatola chiusa, una scelta del pack
+
+Il T1x10, dal proprietario: «fai il t1X10 chiuso (i flowpack non metterli
+perche' non si vedrebbero)». La scatola com'e' prima di aprirla: la plancia
+e' ancora nel coperchio, la sua cima nel fronte. E' l'opzione del caso
+`chiusa: true` (`registro.chiusa_scelta`), di serie aperta.
+
+**Regola** (`scatola_plancia.maglia(chiusa=True)`): il coperchio e' un
+pannello intero, dal bordo del fronte a quello del retro e da un fianco
+all'altro, e il fronte pure, senza il taglio della cima; ognuno prende la
+stampa dal suo posto sul foglio, plancia compresa (la sua scritta, che
+alzata si legge da dietro, sul coperchio sta capovolta come sul foglio).
+Niente finestra e niente plancia; fianchi, retro, fondo e soffietto come
+aperta. Il caso del parco e' il solo display, dichiarato vassoio: i pezzi
+dentro non si vedrebbero. I tagli a strappo della plancia restano nella
+stampa come una riga chiara a puntini, come la perforazione sulla scatola
+vera.

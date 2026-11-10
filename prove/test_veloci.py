@@ -1767,5 +1767,41 @@ class AlettaLiscia(unittest.TestCase):
         self.assertTrue(p[10:110, 10:70].all())
 
 
+class ScatolaChiusa(unittest.TestCase):
+    """Il display a scatola chiuso, scelta del pack: coperchio e fronte
+    interi, la plancia ancora nel coperchio (`scatola_plancia.maglia`,
+    `registro.chiusa_scelta`)."""
+
+    def test_la_scelta(self):
+        from pack3d.famiglie.registro import chiusa_scelta
+        self.assertTrue(chiusa_scelta({"chiusa": True}))
+        self.assertTrue(chiusa_scelta({"chiusa": "si"}))
+        self.assertFalse(chiusa_scelta({}))
+        self.assertFalse(chiusa_scelta({"chiusa": "no"}))
+
+    def test_coperchio_intero_e_niente_plancia(self):
+        from pack3d import scatola_plancia as sp
+        # il T1x10: il fondo sul fianco a soffietto
+        p = sp.ScatolaPlancia(
+            regione=(0, 0, 1, 1), giro=0, centro=(0, 0), uL=250.8, uR=390.31,
+            vF=79.93, vB=271.05, H=44.88, fronte=44.88, fondo=(271.05, 315.93),
+            pl_u=(253.9, 387.3), buco_u=(281.0, 360.1), vT=83.9, vM=175.4,
+            vH=271.05, fondo_u=(194.43, 56.47), soffietto=222.57,
+            fianchi=(194.43, 436.5))
+        for chiusa in (False, True):
+            V, _UV, T, parti = sp.maglia(p, (0, 0), 1.0, (1000, 1000), chiusa=chiusa)
+            P = V[T]
+            n = np.cross(P[:, 1] - P[:, 0], P[:, 2] - P[:, 0])
+            sopra = (np.abs(P[:, :, 1] - p.H).max(1) < 1e-6) & (n[:, 1] > 0)
+            area = float((np.linalg.norm(n[sopra], axis=1) / 2).sum())
+            nomi = [x[0] for x in parti]
+            if chiusa:
+                self.assertEqual(nomi, ["display", "soffietto"])
+                self.assertAlmostEqual(area, p.W * p.D, delta=0.5)
+            else:
+                self.assertIn("plancia", nomi)
+                self.assertLess(area, 0.5 * p.W * p.D)
+
+
 if __name__ == "__main__":
     unittest.main()
