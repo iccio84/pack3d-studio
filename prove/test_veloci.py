@@ -1599,5 +1599,95 @@ class ScatolaAPuntaLiscia(unittest.TestCase):
         stampati = usati[UV[usati][:, 1] < 0.9]
         self.assertEqual(len(np.unique(np.round(V[stampati], 5), axis=0)), len(stampati))
 
+
+class VerticiSeparati(unittest.TestCase):
+    """Il GLB finito con ogni primitiva coi suoi vertici, perche' KeyShot
+    mostri la texture (`pack3d.primitive`), alla fine di ogni costruzione
+    (`famiglie.registro`)."""
+
+    def setUp(self):
+        from types import SimpleNamespace
+        from PIL import Image
+        from pack3d import exporters
+        self.cartella = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.cartella)
+        # un quadrato stampato sopra e col rovescio sotto, sugli stessi
+        # quattro vertici: la normale sommata sulle due facce e' nulla
+        V = np.array([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]], float)
+        UV = np.array([[0, 1], [1, 1], [1, 0], [0, 0]], float)
+        T = np.array([[0, 1, 2], [0, 2, 3], [0, 2, 1], [0, 3, 2]])
+        tinte = SimpleNamespace(quale=np.array([-1, -1, 0, 0]),
+                                colori=[("interno", (230, 230, 230))])
+        self.f = os.path.join(self.cartella, "q.glb")
+        exporters.write_glb_mesh(V, UV, T, Image.new("RGB", (8, 8), (200, 30, 30)),
+                                 self.f, tinte=tinte)
+
+    def test_ogni_primitiva_ha_i_suoi_vertici(self):
+        from pack3d import primitive
+        from pack3d.riempimento import _dati, leggi
+        with open(self.f, "rb") as fh:
+            prima = fh.read()
+        J0, B0 = leggi(prima)
+        J, B = leggi(primitive.per_tutti(prima))
+        prims0 = J0["meshes"][0]["primitives"]
+        prims = J["meshes"][0]["primitives"]
+        self.assertEqual(len(prims0), 2)
+        self.assertEqual(prims0[0]["attributes"]["POSITION"], prims0[1]["attributes"]["POSITION"])
+        self.assertNotEqual(prims[0]["attributes"]["POSITION"], prims[1]["attributes"]["POSITION"])
+        for p0, p in zip(prims0, prims):
+            i0 = _dati(J0, B0, p0["indices"]).ravel()
+            i = _dati(J, B, p["indices"]).ravel()
+            self.assertEqual(J["accessors"][p["attributes"]["POSITION"]]["count"], 4)
+            np.testing.assert_array_equal(_dati(J0, B0, p0["attributes"]["POSITION"])[i0],
+                                          _dati(J, B, p["attributes"]["POSITION"])[i])
+            N = _dati(J, B, p["attributes"]["NORMAL"])
+            np.testing.assert_allclose(np.linalg.norm(N, axis=1), 1.0, atol=1e-6)
+        # la stampa tiene le UV, il rovescio di colore pieno no; le normali
+        # rifatte guardano dalla parte delle facce
+        i = _dati(J, B, prims[0]["indices"]).ravel()
+        np.testing.assert_array_equal(_dati(J0, B0, prims0[0]["attributes"]["TEXCOORD_0"])[
+            _dati(J0, B0, prims0[0]["indices"]).ravel()],
+            _dati(J, B, prims[0]["attributes"]["TEXCOORD_0"])[i])
+        self.assertNotIn("TEXCOORD_0", prims[1]["attributes"])
+        self.assertGreater(_dati(J, B, prims[0]["attributes"]["NORMAL"])[:, 2].min(), 0.99)
+        self.assertLess(_dati(J, B, prims[1]["attributes"]["NORMAL"])[:, 2].max(), -0.99)
+
+    def test_nomi_unici_e_una_texture_per_immagine(self):
+        from pack3d import primitive
+        J = {"meshes": [{"name": "vassoio", "primitives": [{"material": 0}, {"material": 1}]},
+                        {"name": "flowpack", "primitives": [{"material": 2}]},
+                        {"name": "astuccio", "primitives": [{"material": 3}]}],
+             "materials": [{"name": "film", "pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}},
+                           {"name": "interno"},
+                           {"name": "film", "pbrMetallicRoughness": {"baseColorTexture": {"index": 1}},
+                            "normalTexture": {"index": 2}},
+                           {"name": "front"}],
+             "textures": [{"source": 0, "sampler": 0}, {"source": 0, "sampler": 1},
+                          {"source": 1, "sampler": 1}],
+             "samplers": [{"magFilter": 9729}, {"magFilter": 9729}]}
+        primitive.una_texture_per_immagine(primitive.nomi_unici(J))
+        self.assertEqual([m["name"] for m in J["materials"]],
+                         ["film", "interno", "flowpack", "front"])
+        self.assertEqual(J["textures"], [{"source": 0, "sampler": 0}, {"source": 1, "sampler": 0}])
+        self.assertEqual(len(J["samplers"]), 1)
+        self.assertEqual(J["materials"][2]["pbrMetallicRoughness"]["baseColorTexture"]["index"], 0)
+        self.assertEqual(J["materials"][2]["normalTexture"]["index"], 1)
+
+    def test_ogni_costruzione_finisce_coi_vertici_separati(self):
+        from pack3d.famiglie import registro
+        from pack3d.riempimento import leggi
+        for kind, prepara in registro.COSTRUZIONI.items():
+            self.assertEqual(prepara.__wrapped__.__name__, prepara.__name__, kind)
+        with mock.patch.object(registro, "build_punta",
+                               lambda pdf, uscita, *a, **k: shutil.copy(self.f, uscita) and ["ok"]):
+            r = mock.Mock(pdf="x.pdf", q=1, col_riq=None, carta=None)
+            uscita = os.path.join(self.cartella, "fatto.glb")
+            self.assertEqual(registro.COSTRUZIONI["punta"](r, {})([], uscita), ["ok"])
+        with open(uscita, "rb") as fh:
+            J, _B = leggi(fh.read())
+        prims = J["meshes"][0]["primitives"]
+        self.assertNotEqual(prims[0]["attributes"]["POSITION"], prims[1]["attributes"]["POSITION"])
+
+
 if __name__ == "__main__":
     unittest.main()
