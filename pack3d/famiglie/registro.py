@@ -544,7 +544,8 @@ def _costruisci_coppa(r, info):
 def _costruisci_vassoio(r, info):
     def costruisci(lastre, uscita):
         return build_vassoio(r.pdf, uscita, r.q, lastre, r.col_riq,
-                             dove_plancia=plancia_scelta(r.opts))
+                             dove_plancia=plancia_scelta(r.opts),
+                             chiusa=chiusa_scelta(r.opts))
     return costruisci
 
 
@@ -599,6 +600,16 @@ def plancia_scelta(opts):
     col piede negli incastri sul fondo, dentro il retro; di serie sul bordo
     del retro, sopra il coperchio (`scatola_plancia.maglia`)."""
     return "fondo" if str(opts.get("plancia", "")).strip().lower() == "fondo" else None
+
+
+def chiusa_scelta(opts):
+    """La scatola chiusa, scelta del pack (`"chiusa": true`): il display a
+    scatola com'e' prima di aprirlo, la plancia nel coperchio. Di serie
+    aperto, con la plancia alzata (`scatola_plancia.maglia`)."""
+    v = opts.get("chiusa", False)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "si", "sì", "yes")
+    return bool(v)
 
 
 def inclina_scelta(opts):

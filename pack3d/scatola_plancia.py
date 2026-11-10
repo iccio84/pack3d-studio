@@ -639,7 +639,8 @@ def _rientro(p):
     return float(np.sqrt(max(a * a - h * h, 0.0))), h
 
 
-def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
+def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None,
+           chiusa=False):
     """(V, UV, T, parti) del display aperto, in mm, con la texture del DT
     intero e sotto le strisce del rovescio (`ballotin.con_interno`). Il
     fronte guarda +Z, la cima +Y, il fondo sta a Y = 0. `parti` e'
@@ -651,7 +652,12 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
     `dove_plancia`, scelta del pack: "fondo" mette il piede della plancia
     negli incastri sul fondo, dentro il retro, invece che sul bordo del
     retro sopra il coperchio (regole/riempimenti.md, *La plancia sul
-    fondo*)."""
+    fondo*).
+
+    `chiusa`, scelta del pack: la scatola com'e' prima di aprirla, la
+    plancia ancora nel coperchio e la sua cima nel fronte. Coperchio e
+    fronte sono pannelli interi, ognuno con la sua stampa dal foglio; niente
+    finestra e niente plancia (regole/vassoi.md, *La scatola chiusa*)."""
     from .ballotin import STRISCIA
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     W, D, H = p.W, p.D, p.H
@@ -714,11 +720,17 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
     # finestra, larga quanto le fessure esterne
     b0, b1 = p.buco_u
     vh = p.vH
-    if p.profilo:
+    if p.profilo and not chiusa:
         _sagomata(p, quad, X, Zc, H, D, sp)
-    pezzi_cop = [] if p.profilo else [((p.uL, p.vF), (b0, p.vB), (2,)),       # a sinistra
-                 ((b1, p.vF), (p.uR, p.vB), (0,)),       # a destra
-                 ((b0, vh), (b1, p.vB), ())]             # dietro la cerniera
+    if chiusa:
+        # chiusa: il coperchio intero, la plancia ancora dentro
+        pezzi_cop = [((p.uL, p.vF), (p.uR, p.vB), ())]
+    elif p.profilo:
+        pezzi_cop = []
+    else:
+        pezzi_cop = [((p.uL, p.vF), (b0, p.vB), (2,)),       # a sinistra
+                     ((b1, p.vF), (p.uR, p.vB), (0,)),       # a destra
+                     ((b0, vh), (b1, p.vB), ())]             # dietro la cerniera
     for (u0, v0), (u1, v1), coste in pezzi_cop:
         quad([(X(u0), H, Zc(v1)), (X(u0), H, Zc(v0)), (X(u1), H, Zc(v0)),
               (X(u1), H, Zc(v1))],
@@ -733,8 +745,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
         return H - (p.vF - v) * H / p.fronte
 
     v0 = p.vF - p.fronte
-    taglio = list(p.taglio)
-    if not taglio and p.vT < p.vF:
+    taglio = [] if chiusa else list(p.taglio)
+    if not taglio and p.vT < p.vF and not chiusa:
         # la cima della plancia dritta dentro il fronte: la tacca
         taglio = [(b0 + 0.05, p.vT), (b1 - 0.05, p.vT)]
     if taglio:
@@ -796,6 +808,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
         _soffietto(p, quad, X, Zc, H)
         parti.append(("soffietto", parti[-1][2], len(T)))
 
+    if chiusa:
+        return (np.array(V, float), np.array(UV, float), np.array(T, int), parti)
     inizio = len(T)
     # il piede della plancia: sul coperchio, o sul fondo dentro il retro,
     # sopra le strisce piegate sul fondo e staccata dalla parete
