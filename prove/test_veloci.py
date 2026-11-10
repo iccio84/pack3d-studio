@@ -1802,6 +1802,37 @@ class ScatolaChiusa(unittest.TestCase):
                 self.assertIn("plancia", nomi)
                 self.assertLess(area, 0.5 * p.W * p.D)
 
+    def test_la_fustella_di_apertura_incisa(self):
+        from dataclasses import replace
+        from pack3d import scatola_plancia as sp
+        p = sp.ScatolaPlancia(
+            regione=(0, 0, 1, 1), giro=0, centro=(0, 0), uL=250.8, uR=390.31,
+            vF=79.93, vB=271.05, H=44.88, fronte=44.88, fondo=(271.05, 315.93),
+            pl_u=(253.9, 387.3), buco_u=(281.0, 360.1), vT=83.9, vM=175.4,
+            vH=271.05, fondo_u=(194.43, 56.47), soffietto=222.57,
+            fianchi=(194.43, 436.5))
+        # la plancia sagomata: davanti la finestra 2 mm piu' larga, poi uguale
+        prof = tuple((v, 260.0, 380.0, 258.0 if v < 120 else 260.0,
+                      382.0 if v < 120 else 380.0) for v in range(85, 271, 5))
+        p = replace(p, profilo=prof, taglio=((281.0, 79.93), (300.0, 60.0),
+                                              (320.0, 55.0), (340.0, 60.0),
+                                              (360.1, 79.93)))
+        linee = sp.tagli_del_coperchio(p)
+        # i due bordi della plancia, dal fronte alla cerniera, e la finestra
+        # dove se ne stacca; la riga di mezzo no
+        self.assertEqual(len(linee), 4)
+        self.assertAlmostEqual(linee[0][0][1], p.vF)
+        self.assertAlmostEqual(linee[0][-1][1], p.vH)
+        self.assertTrue(all(abs(v - p.vM) > 1 for l in linee[2:] for _u, v in l))
+        # dritta, la linea si semplifica ai due capi
+        self.assertEqual(len(linee[0]), 2)
+        V, _UV, T, _parti = sp.maglia(p, (0, 0), 1.0, (1000, 1000), chiusa=True)
+        # i solchi: vertici appena sotto il coperchio e dietro il fronte
+        sotto = (V[:, 1] < p.H - 1e-4) & (V[:, 1] > p.H - 0.3)
+        dietro = (V[:, 2] < p.D / 2 - 1e-4) & (V[:, 2] > p.D / 2 - 0.3) & (V[:, 1] > 1)
+        self.assertGreater(int(sotto.sum()), 100)
+        self.assertGreater(int(dietro.sum()), 20)
+
 
 if __name__ == "__main__":
     unittest.main()
