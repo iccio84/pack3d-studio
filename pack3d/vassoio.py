@@ -331,6 +331,61 @@ def gira(V):
     return W
 
 
+# il verso della grafica, in gradi orari, che porta l'alto delle scritte di
+# ogni parete VERSO il fondo: e' il verso di un coperchio, con le pareti che
+# scendono dal fondo stampato in alto. Su un vassoio aperto l'alto punta al
+# bordo libero, il verso opposto.
+VERSO_COPERCHIO = {"nord": 180, "est": 270, "sud": 0, "ovest": 90}
+
+
+def coperchio(pdf, v: Vassoio, verso=None):
+    """Se il vassoio e' un COPERCHIO: (True, testata davanti) o (False, None).
+
+    Il foglio e' lo stesso - un fondo e quattro pareti - ma si monta al
+    contrario: le pareti si piegano in giu' e il fondo, stampato col marchio,
+    fa da faccia di sopra. Lo dice la grafica, non il DT: sulle pareti di un
+    coperchio l'alto delle scritte punta al fondo, perche' quando la parete
+    scende dal fondo il suo alto e' la piega. Sul coperchio del display T1x36 (caso
+    2168c4ac0e) nord 180, est 270, sud 0 e ovest 90: tutte e quattro verso il
+    fondo, e montato come vassoio il marchio stava sotto e le scritte a testa
+    in giu'.
+
+    Vale solo se almeno due pareti hanno testo che vota (`tracciati.
+    verso_grafica`) e TUTTE quelle che votano puntano al fondo: un vassoio
+    senza testo vivo, o con una parete sola girata, resta un vassoio.
+
+    Il davanti e' la testata che sta in basso rispetto alla grafica del
+    fondo: con l'alto del fondo verso la nord si guarda dalla sud. Se il fondo
+    non lo dice (niente testo, o testo lungo le testate) decide
+    `testata_davanti`.
+    """
+    if verso is None:
+        from . import tracciati
+        try:
+            verso = tracciati.verso_grafica(pdf, v.riquadri)
+        except Exception:
+            return False, None
+    pareti = {k: g for k, g in verso.items() if k in VERSO_COPERCHIO}
+    if len(pareti) < 2 or any(g != VERSO_COPERCHIO[k]
+                              for k, g in pareti.items()):
+        return False, None
+    davanti = {0: "sud", 180: "nord"}.get(verso.get("fondo"),
+                                         testata_davanti(v))
+    return True, davanti
+
+
+def capovolgi(V):
+    """Mezzo giro attorno all'asse davanti-dietro: le pareti scendono dal
+    fondo, che passa in alto. Il davanti resta davanti, e l'ingombro resta
+    dov'era (il piano di appoggio e' il bordo delle pareti)."""
+    import numpy as np
+    W = np.array(V, float, copy=True)
+    y0, y1 = W[:, 1].min(), W[:, 1].max()
+    W[:, 0] *= -1.0
+    W[:, 1] = y0 + y1 - W[:, 1]
+    return W
+
+
 def con_coda(steso):
     """Lo steso con in fondo due strisce: colore dell'interno e del taglio."""
     import numpy as np
