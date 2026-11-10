@@ -1695,6 +1695,36 @@ class VerticiSeparati(unittest.TestCase):
         self.assertEqual(J["materials"][2]["pbrMetallicRoughness"]["baseColorTexture"]["index"], 0)
         self.assertEqual(J["materials"][2]["normalTexture"]["index"], 1)
 
+    def test_le_facce_dello_stesso_materiale_sono_un_elemento(self):
+        from types import SimpleNamespace
+        from PIL import Image
+        from pack3d import exporters, primitive, template, texture
+        from pack3d.riempimento import _dati, leggi
+        # stampa sopra, e sotto due facce col rovescio dello stesso colore:
+        # come le facce di un astuccio, un materiale per faccia
+        V = np.array([[0, 0, 0], [10, 0, 0], [10, 10, 0], [0, 10, 0]], float)
+        UV = np.array([[0, 1], [1, 1], [1, 0], [0, 0]], float)
+        T = np.array([[0, 1, 2], [0, 2, 3], [0, 2, 1], [0, 3, 2]])
+        tinte = SimpleNamespace(quale=np.array([-1, -1, 0, 1]),
+                                colori=[("front interno", (230, 230, 230)),
+                                        ("back interno", (230, 230, 230))])
+        f = os.path.join(self.cartella, "facce.glb")
+        exporters.write_glb_mesh(V, UV, T, Image.new("RGB", (8, 8), (200, 30, 30)),
+                                 f, tinte=tinte)
+        with open(f, "rb") as fh:
+            prima = fh.read()
+        dopo = primitive.per_tutti(prima)
+        J, B = leggi(dopo)
+        prims = J["meshes"][0]["primitives"]
+        self.assertEqual(len(prims), 2)
+        self.assertEqual([m["name"] for m in J["materials"]], ["film", "interno"])
+        self.assertEqual(prims[1]["extras"]["pack3d_facce"],
+                         [["front interno", 0, 1], ["back interno", 1, 1]])
+        self.assertEqual(len(_dati(J, B, prims[1]["indices"]).ravel()), 6)
+        # il template legge i nomi delle facce come prima
+        s = texture.texture(dopo)[0]["sorgente"]
+        self.assertEqual(template.triangoli(dopo, s)[2], template.triangoli(prima, s)[2])
+
     def test_ogni_costruzione_finisce_coi_vertici_separati(self):
         from pack3d.famiglie import registro
         from pack3d.riempimento import leggi
