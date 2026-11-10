@@ -40,9 +40,16 @@ CRESTA_MAX = 6.0
 ALETTA_MIN = 8.0
 FIANCO_MIN = 10.0
 # la piega del fronte, sotto il marchio, non ha cordonatura sul DT: il
-# cartoncino la fa smussata, un arco di questo raggio in mm, in pochi pezzi
+# cartoncino la fa smussata, un arco di questo raggio in mm. I passi sono
+# tanti e coi vertici in comune, perche' la curva non mostri le facce: con 6
+# pezzi piatti, ognuno coi suoi vertici, si vedevano gli spigoli
 SMUSSO = 20.0
-PASSI_SMUSSO = 6
+PASSI_SMUSSO = 24
+# le ali del soffietto, fra la gamba della V e il bordo della falda: una
+# griglia coi vertici in comune, tante righe lungo la gamba e tante colonne
+# di traverso. A 6 strisce piatte e staccate si vedevano le facce
+ALA_RIGHE = 24
+ALA_COLONNE = 4
 # mm: due bordi di pezzi diversi piu' vicini di cosi' combaciano; un bordo che
 # non ne ha uno cosi' vicino e' un taglio, e prende la costa
 COMBACIA = 0.1
@@ -386,6 +393,71 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             UV.extend([tuple(uv_interno)] * len(P3))
             T.extend([(b + i, b + k, b + j) for i, j, k in tri])
 
+    def poligono(P3, S2, fuori, interno=True):
+        """Un pezzo piano convesso di quanti angoli si vuole, a ventaglio dal
+        primo: il fianco che segue la curva del fronte."""
+        P3 = np.asarray(P3, float)
+        n = np.zeros(3)
+        for i in range(1, len(P3) - 1):
+            n += np.cross(P3[i] - P3[0], P3[i + 1] - P3[0])
+        tri = [(0, i, i + 1) for i in range(1, len(P3) - 1)]
+        if float(n @ np.asarray(fuori, float)) < 0:
+            tri = [(i, k, j) for i, j, k in tri]
+            n = -n
+        n = n / (np.linalg.norm(n) or 1.0)
+        pezzi.append((P3.copy(), n))
+        b = len(V)
+        V.extend(P3.tolist())
+        UV.extend([uv(*q) for q in S2])
+        T.extend([(b + i, b + j, b + k) for i, j, k in tri])
+        if interno:
+            b = len(V)
+            V.extend((P3 - n * sp).tolist())
+            UV.extend([tuple(uv_interno)] * len(P3))
+            T.extend([(b + i, b + k, b + j) for i, j, k in tri])
+
+    def griglia(P3, S2, fuori, interno=True, normali=None):
+        """Pezzi in griglia coi vertici in comune: le normali si raccordano
+        da un pezzo all'altro, e una superficie curva non mostra le facce.
+        `P3` e `S2`: righe di punti 3D e sul foglio, tutte lunghe uguali.
+        `normali`, una per riga, dice dove va il rovescio (di serie quella
+        del pezzo). Ogni pezzo conta per le coste come un pezzo di `quad`."""
+        P3 = np.asarray(P3, float)
+        r, c = P3.shape[:2]
+        fuori = np.asarray(fuori, float)
+        b = len(V)
+        V.extend(P3.reshape(-1, 3).tolist())
+        UV.extend([uv(*q) for riga in S2 for q in riga])
+
+        def k(i, j):
+            return i * c + j
+        celle = []
+        for i in range(r - 1):
+            for j in range(c - 1):
+                Q = np.array([P3[i, j], P3[i, j + 1], P3[i + 1, j + 1], P3[i + 1, j]])
+                n = np.cross(Q[1] - Q[0], Q[2] - Q[0]) + np.cross(Q[2] - Q[0], Q[3] - Q[0])
+                idx = [k(i, j), k(i, j + 1), k(i + 1, j + 1), k(i + 1, j)]
+                tri = [(0, 1, 2), (0, 2, 3)]
+                if float(n @ fuori) < 0:
+                    tri = [(a, cc, bb) for a, bb, cc in tri]
+                    n = -n
+                ln = np.linalg.norm(n)
+                if ln < 1e-12:
+                    continue
+                pezzi.append((Q, n / ln))
+                celle.append([(idx[a], idx[bb], idx[cc]) for a, bb, cc in tri])
+        for cella in celle:
+            T.extend([(b + x, b + y, b + z) for x, y, z in cella])
+        if interno:
+            bi = len(V)
+            for i in range(r):
+                n = np.asarray(normali[i], float) if normali is not None else fuori
+                n = n / (np.linalg.norm(n) or 1.0)
+                V.extend((P3[i] - n * sp).tolist())
+                UV.extend([tuple(uv_interno)] * c)
+            for cella in celle:
+                T.extend([(bi + x, bi + z, bi + y) for x, y, z in cella])
+
     hw = W / 2.0
     # fronte, dritto e falda. Sul DT la piega del fronte non ha cordonatura,
     # e passa sotto il marchio: e' smussata, un arco di raggio SMUSSO tangente
@@ -394,21 +466,26 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     th = np.arcsin(c / s)                       # quanto pende la falda
     ls = SMUSSO * np.tan(th / 2.0)
     su_f = np.sign(p.yF0 - p.yG)                # verso la cima, sul foglio
-    quad([(-hw, 0, D / 2), (hw, 0, D / 2), (hw, h1 - ls, D / 2), (-hw, h1 - ls, D / 2)],
-         [(x_corpo(-hw), p.yF1), (x_corpo(hw), p.yF1),
-          (x_corpo(hw), p.yG - su_f * ls), (x_corpo(-hw), p.yG - su_f * ls)], (0, 0, 1))
-    arco = []
-    for a in np.linspace(0.0, th, PASSI_SMUSSO + 1):
-        arco.append((h1 - ls + SMUSSO * np.sin(a), D / 2 - SMUSSO * (1.0 - np.cos(a)),
-                     p.yG + su_f * ls * (2.0 * a / th - 1.0)))
-    for (y0, z0, f0), (y1, z1, f1) in zip(arco[:-1], arco[1:]):
-        quad([(-hw, y0, z0), (hw, y0, z0), (hw, y1, z1), (-hw, y1, z1)],
-             [(x_corpo(-hw), f0), (x_corpo(hw), f0), (x_corpo(hw), f1), (x_corpo(-hw), f1)],
-             (0, z0 - z1, y1 - y0))
-    y0, z0, f0 = arco[-1]
-    quad([(-hw, y0, z0), (hw, y0, z0), (hw, H, t / 2), (-hw, H, t / 2)],
-         [(x_corpo(-hw), f0), (x_corpo(hw), f0),
-          (x_corpo(hw), p.yF0), (x_corpo(-hw), p.yF0)], (0, c, v))
+    # il fronte e' una fila sola coi vertici in comune - il dritto, l'arco a
+    # PASSI_SMUSSO passi, la falda - perche' le normali si raccordino lungo
+    # la curva. Una riga anche dove l'arco passa l'altezza della piega: fin
+    # li' il fianco lo segue (sotto), e da li' in su il bordo e' un taglio.
+    # Sul foglio ogni riga e' dove era: la mappatura non cambia
+    a_piega = float(np.arcsin(np.clip(ls / SMUSSO, 0.0, 1.0)))
+    angoli = sorted(set(np.linspace(0.0, th, PASSI_SMUSSO + 1).round(12).tolist())
+                    | ({round(a_piega, 12)} if 0.0 < a_piega < th else set()))
+    arco = [(h1 - ls + SMUSSO * np.sin(a), D / 2 - SMUSSO * (1.0 - np.cos(a)),
+             p.yG + su_f * ls * (2.0 * a / th - 1.0), a) for a in angoli]
+    righe = [(0.0, D / 2, p.yF1, (0.0, 0.0, 1.0))]
+    righe += [(y, z, f_, (0.0, np.sin(a), np.cos(a))) for y, z, f_, a in arco]
+    righe += [(H, t / 2, p.yF0, (0.0, c / s, v / s))]
+    griglia([[(-hw, y, z), (hw, y, z)] for y, z, _f, _n in righe],
+            [[(x_corpo(-hw), f_), (x_corpo(hw), f_)] for _y, _z, f_, _n in righe],
+            (0, 0, 1), normali=[n for *_r, n in righe])
+    # dove il fronte e' all'altezza della piega, e dove era prima: sotto, il
+    # fianco ha il bordo sull'arco
+    z_piega = D / 2 - SMUSSO * (1.0 - np.cos(min(a_piega, th)))
+    sotto = [(y, z) for y, z, _f, a in arco if a <= a_piega + 1e-12]
     # retro, dritto e falda: la piega sul fondo non specchia le x
     quad([(-hw, 0, -D / 2), (hw, 0, -D / 2), (hw, h1, -D / 2), (-hw, h1, -D / 2)],
          [(x_corpo(-hw), p.yB0), (x_corpo(hw), p.yB0),
@@ -450,11 +527,20 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
     su = np.sign(p.yF0 - p.yG)                   # verso la cima, sul foglio
     tx, ty = p.taglio_x, p.taglio_y
     nf = np.array([0.0, c, v]) / s               # normale uscente del fronte
+    def foglio_dritto(y, z, destro):
+        # il fianco dritto sul foglio: z lungo il fianco, y dal piede alla piega
+        return (x_fianco(z, destro), p.yF1 + (p.yG - p.yF1) * (y / h1))
+
     for destro, X, verso in ((False, -hw, -1.0), (True, hw, 1.0)):
-        quad([(X, 0, D / 2), (X, 0, -D / 2), (X, h1, -D / 2), (X, h1, D / 2)],
-             [(x_fianco(D / 2, destro), p.yF1), (x_fianco(-D / 2, destro), p.yF1),
-              (x_fianco(-D / 2, destro), p.yG), (x_fianco(D / 2, destro), p.yG)],
-             (verso, 0, 0))
+        # il fianco dritto: dal piede alla piega, col bordo davanti che segue
+        # l'arco del fronte dove il fronte comincia a curvare. Dritto fino a
+        # D/2 restava fuori dal fronte curvo (un quarto di millimetro alla
+        # piega), e i lati dell'arco, senza un bordo accanto, prendevano la
+        # costa del taglio: gli spigoletti sulla curva
+        bordo = [(0.0, -D / 2), (h1, -D / 2)] + [(yy, zz) for yy, zz in reversed(sotto)] \
+            + [(0.0, D / 2)]
+        poligono([(X, yy, zz) for yy, zz in bordo],
+                 [foglio_dritto(yy, zz, destro) for yy, zz in bordo], (verso, 0, 0))
         su3 = np.array([-verso * c, v, 0.0]) / s     # in su lungo il pezzo centrale
         n_c = np.array([verso * v, c, 0.0]) / s      # e la sua normale, fuori
 
@@ -465,27 +551,33 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None):
             return np.array([x_fianco(z, destro), p.yG + su * eta])
 
         A = punto(0.0, s)
-        CE = {k: punto(k * (D / 2 - tx), ty) for k in (1, -1)}
+        # sulla piega l'angolo davanti e' dove e' il fronte curvo, come il
+        # bordo del fianco dritto sotto
+        zc = {1: min(D / 2 - tx, z_piega) if ty <= 0 else D / 2 - tx, -1: D / 2 - tx}
+        CE = {k: punto(k * zc[k], ty) for k in (1, -1)}
+        f_ce = {k: foglio(k * zc[k], ty) for k in (1, -1)}
         # il pezzo centrale: dalla piega alla fine dei tagli, poi a punta
         if tx > 0:
-            quad([punto(D / 2, 0), punto(-D / 2, 0), CE[-1], CE[1]],
-                 [foglio(D / 2, 0), foglio(-D / 2, 0),
-                  foglio(-(D / 2 - tx), ty), foglio(D / 2 - tx, ty)], n_c)
-        quad([CE[1], CE[-1], A],
-             [foglio(D / 2 - tx, ty), foglio(-(D / 2 - tx), ty), foglio(0.0, s)], n_c)
+            quad([punto(z_piega, 0), punto(-D / 2, 0), CE[-1], CE[1]],
+                 [foglio(z_piega, 0), foglio(-D / 2, 0), f_ce[-1], f_ce[1]], n_c)
+        quad([CE[1], CE[-1], A], [f_ce[1], f_ce[-1], foglio(0.0, s)], n_c)
         for k, n_falda in ((1, nf), (-1, nf * [1, 1, -1])):
             # l'ala: il bordo libero lungo il bordo della falda, uno spessore e
             # mezzo dentro; l'altro lato e' la gamba della V
             g = 1.5 * sp * n_falda
             fuori0, fuori1 = np.array([X, h1, k * D / 2]) - g, np.array([X, H, k * t / 2]) - g
             f_fuori0, f_fuori1 = foglio(k * D / 2, 0), foglio(k * D / 2, s)
-            f_ce, f_a = foglio(k * (D / 2 - tx), ty), foglio(0.0, s)
-            passi = np.linspace(0.0, 1.0, 7)
-            for a, b in zip(passi[:-1], passi[1:]):
-                quad([_lerp(fuori0, fuori1, a), _lerp(fuori0, fuori1, b),
-                      _lerp(CE[k], A, b), _lerp(CE[k], A, a)],
-                     [_lerp(f_fuori0, f_fuori1, a), _lerp(f_fuori0, f_fuori1, b),
-                      _lerp(f_ce, f_a, b), _lerp(f_ce, f_a, a)], -n_falda, interno=False)
+            f_a = foglio(0.0, s)
+            # una griglia: lungo la gamba (a) e di traverso, dal bordo della
+            # falda alla gamba (b). In 3D e sul foglio gli stessi due lati e la
+            # stessa interpolazione di prima: la mappatura non cambia, la
+            # superficie si legge piu' fitta
+            ra = np.linspace(0.0, 1.0, ALA_RIGHE + 1)
+            rb = np.linspace(0.0, 1.0, ALA_COLONNE + 1)
+            griglia([[_lerp(_lerp(fuori0, fuori1, a), _lerp(CE[k], A, a), b) for b in rb]
+                     for a in ra],
+                    [[_lerp(_lerp(f_fuori0, f_fuori1, a), _lerp(f_ce[k], f_a, a), b)
+                      for b in rb] for a in ra], -n_falda, interno=False)
     # le coste: ogni bordo che non combacia con quello di un altro pezzo e'
     # un taglio, e mostra lo spessore del cartoncino - le falde e le ali
     # lungo il soffietto, la cresta, l'aletta, i tagli a 45 gradi. Un bordo
