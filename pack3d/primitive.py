@@ -16,7 +16,9 @@ compone i GLB intermedi come sempre. In piu':
 - ogni primitiva prende solo i vertici che usa, e le UV solo se il suo
   materiale ha una texture (il rovescio e il taglio, di colore pieno, no);
 - le normali restano quelle di prima, fatte sui vertici in comune: lungo il
-  confine fra due primitive l'ombreggiatura non cambia;
+  confine fra due primitive l'ombreggiatura non cambia; quelle nulle si
+  rifanno e quelle lunghe piu' o meno di 1 si riportano a 1, come vuole
+  glTF (`_senza_nulle`);
 - due materiali con lo stesso nome (il "film" del vassoio e quello del
   flowpack, in un riempimento) prendono nomi diversi, dalla mesh che li
   usa; un nome che c'e' una volta sola resta com'e' (le facce di un
@@ -109,13 +111,18 @@ def una_texture_per_immagine(J):
 
 
 def _senza_nulle(N, P, T):
-    """Le normali `N` della primitiva, con quelle nulle rifatte sulle sue
-    facce. Sui vertici in comune una normale si somma su tutte le facce che
+    """Le normali `N` della primitiva lunghe 1, con quelle nulle rifatte
+    sulle sue facce. Sui vertici in comune una normale si somma su tutte le facce che
     li toccano, e dove una parete ha la stampa da un lato e il rovescio
     dall'altro le due si annullano: glTF la vuole lunga 1, e il validatore
     la segna come errore. Sola, la primitiva ha le facce da un lato solo."""
     N = np.array(N, np.float32)
-    nulle = np.linalg.norm(N, axis=1) < 1e-6
+    lun = np.linalg.norm(N, axis=1)
+    nulle = lun < 1e-6
+    # una normale lunga piu' o meno di 1 (il display KMS T10 aperto le ha
+    # lunghe 1,026) si riporta a 1: la direzione resta quella
+    storte = ~nulle & (np.abs(lun - 1.0) > 1e-3)
+    N[storte] /= lun[storte, None]
     if not nulle.any():
         return N
     P = P.astype(float)
