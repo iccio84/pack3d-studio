@@ -105,7 +105,8 @@ riempiono lo spazio fino al bordo delle falde, contro il loro rovescio, con la
 la gamba della V e il bordo della falda di dietro si vede la stampa dell'ala,
 in ombra, fino alla cresta. Un'ala rigida con il bordo libero sul bordo
 della falda e l'altro lato sulla gamba della V ha le misure del foglio a uno
-o due mm: il cartoncino si incurva appena, e il modello fa l'ala a strisce.
+o due mm: il cartoncino si incurva appena, e il modello fa l'ala a griglia
+(*Le facce non si vedono*, sotto).
 
 La quinta versione aveva il pezzo centrale a triangolo dagli angoli alla
 punta e le ali dagli angoli: di tre quarti andava, ma dall'alto il pezzo
@@ -123,6 +124,29 @@ foglio l'arco prende i 3,2 mm prima e dopo la piega. Il retro e tutte le
 cordonature vere - gli angoli, la piega dei fianchi, le gambe della V, la
 cresta - restano spigoli. Una prova con fronte e retro curvi per un terzo
 della falda cambiava la pendenza e l'altezza: non era quello che serviva.
+
+**Il fianco segue la curva del fronte.** Sotto la piega il fianco dritto e'
+attaccato al fronte: dove il fronte comincia a curvare (3,2 mm sotto la
+piega) il bordo davanti del fianco segue l'arco, coi suoi stessi punti, fino
+alla piega, e li' comincia il pezzo centrale del soffietto, con l'angolo
+davanti dove e' il fronte. Prima il fianco restava dritto fino allo spigolo
+vivo: alla piega usciva di un quarto di millimetro dal fronte curvo, e i lati
+dei pezzi dell'arco, senza un bordo accanto, prendevano la costa del taglio.
+Il proprietario: «ci sono piccoli spigoletti dove sul fronte curva la
+geometria». Sul foglio il fianco e' quello di sempre: cambia il bordo, non
+la mappatura.
+
+**Le facce non si vedono.** Il fronte e' una fila sola coi vertici in comune
+- il dritto, l'arco a `PASSI_SMUSSO` passi (24), la falda - e le ali del
+soffietto una griglia (`ALA_RIGHE` x `ALA_COLONNE`, 24 x 4) fra la gamba della
+V e il bordo della falda (`maglia`, `griglia`): le normali si raccordano da un
+pezzo all'altro. Prima l'arco era di 6 pezzi piatti e le ali di 6 strisce,
+ognuno coi suoi vertici: ognuno con la sua normale, e dentro il soffietto
+«si vedono le facce low poly». Le righe e le colonne di prima ci sono ancora
+tutte (una ogni quattro), e le nuove stanno sulla stessa interpolazione, in
+3D e sul foglio: la texture e' la stessa, e sul fronte e sul fianco dritto
+la grafica cade dove cadeva (le UV negli stessi punti a un decimillesimo di
+pixel).
 
 **Il cartoncino ha spessore.** Oltre al rovescio, ogni bordo che non combacia
 con quello di un altro pezzo prende la **costa** del taglio, come
@@ -147,8 +171,9 @@ stampato capovolto esce dritto da se'.
 
 ### Cosa manca
 
-Il pezzo centrale del soffietto e' piano, e le ali sono a strisce: il
-cartoncino vero si incurva un poco anche li'. Anche il retro, che sul DT non
+Il pezzo centrale del soffietto e' piano, e le ali seguono la superficie
+fra la gamba della V e il bordo della falda: il cartoncino vero si incurva un
+poco anche li'. Anche il retro, che sul DT non
 ha cordonatura alla piega, resta a spigolo. Non sono modellate le alette di
 colla del retro e del fondo, che stanno dentro. Gli angoli arrotondati dell'aletta restano squadrati.
 
