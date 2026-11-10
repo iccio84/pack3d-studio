@@ -242,6 +242,14 @@ materiali dei DT se ci sono. Di serie niente: gli altri flowpack restano
 identici al byte. Solo le pinne di testa: la pinna lunga sul retro resta
 film.
 
+**Argentate, se lo si sceglie** (`"pinne_cromate": "argento"`). Il T1 del
+vassoio T1x36, dal proprietario: «sul T1x36 fai le pinne argentate». Sullo
+steso di quel T1 la testata sinistra e' stampata grigio argento e la destra
+arancio-oro: con la stampa sopra una pinna sarebbe uscita d'oro. Argentate,
+sotto l'alluminio non c'e' inchiostro: il colore delle due testate e' la
+riflettanza dell'alluminio (`materiali.F0_ALLUMINIO`), lo stesso argento
+neutro tutte e due, metallo 1 e ruvidita' 0,16 come le cromate.
+
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi

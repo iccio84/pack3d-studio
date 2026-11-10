@@ -1531,6 +1531,28 @@ class PinneCromate(unittest.TestCase):
         self.assertTrue(cromate_scelte({"pinne_cromate": "si"}))
         self.assertFalse(cromate_scelte({}))
         self.assertFalse(cromate_scelte({"pinne_cromate": "no"}))
+        self.assertEqual(cromate_scelte({"pinne_cromate": "argento"}), "argento")
+        self.assertEqual(cromate_scelte({"pinne_cromate": "Argentate"}), "argento")
+
+    def test_argentate_senza_la_stampa(self):
+        from PIL import Image
+        from pack3d.famiglie.flowpack import MR_FILM, pinne_cromate
+        from pack3d.flowpack import Flowpack
+        fp = Flowpack(L=126.0, end_fin=12.0, sheet=(0.0, 0.0, 150.0 / dl.PT2MM, 84.0 / dl.PT2MM))
+        # una testata stampata d'oro, l'altra d'argento
+        foglio = Image.new("RGB", (300, 168), (120, 60, 30))
+        foglio.paste((230, 170, 60), (0, 0, 24, 168))
+        foglio.paste((180, 180, 185), (276, 0, 300, 168))
+        col, mr = pinne_cromate(foglio, foglio, None, fp, argento=True)
+        c, m = np.asarray(col).astype(int), np.asarray(mr)
+        # le due testate dello stesso argento, neutro, e di metallo
+        self.assertTrue((c[:, :24] == c[0, 0]).all() and (c[:, -24:] == c[0, 0]).all())
+        self.assertLessEqual(int(np.ptp(c[0, 0])), 1)
+        self.assertGreater(int(c[0, 0, 0]), 200)
+        self.assertTrue((m[:, :24, 2] == 255).all() and (m[:, -24:, 2] == 255).all())
+        # il resto del film com'era
+        self.assertTrue((c[:, 24:-24] == (120, 60, 30)).all())
+        self.assertTrue((m[:, 24:-24] == MR_FILM).all())
 
     def test_metallo_solo_sulle_testate(self):
         from dataclasses import replace

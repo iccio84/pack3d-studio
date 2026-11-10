@@ -348,13 +348,21 @@ def nello_spessore_scelto(opts):
     return str(opts.get("gonfio", "")).strip().lower() == "spessore"
 
 
+ARGENTO = "argento"
+
+
 def cromate_scelte(opts):
     """Le pinne di testa cromate: `"pinne_cromate": true` fra le opzioni del
-    caso. Una scelta del pack (il T1 del display T1x10), non una regola: di
-    serie le pinne sono del film, come il resto (`pinne_cromate`)."""
+    caso, o `"argento"` per averle argentate (il T1 del vassoio T1x36). Una
+    scelta del pack (il T1 del display T1x10), non una regola: di serie le
+    pinne sono del film, come il resto (`pinne_cromate`). Torna False, True
+    o `ARGENTO`."""
     v = opts.get("pinne_cromate", False)
     if isinstance(v, str):
-        return v.strip().lower() in ("1", "true", "si", "sì", "yes")
+        v = v.strip().lower()
+        if v in (ARGENTO, "argentate", "argentata", "silver"):
+            return ARGENTO
+        return v in ("1", "true", "si", "sì", "yes")
     return bool(v)
 
 
@@ -363,13 +371,14 @@ def cromate_scelte(opts):
 MR_FILM = (255, 107, 0)
 
 
-def pinne_cromate(foglio, colore, mr, fp):
+def pinne_cromate(foglio, colore, mr, fp, argento=False):
     """(colore, mr) con le pinne di testa di metallo lucido: le due testate
     dello steso, `fp.end_fin` da ogni capo del passo, come un film
     metallizzato con la stampa sopra (`materiali.mappe_pbr`: l'argento
-    resta argento, l'oro oro). Il resto del film com'era: plastica, o i
-    materiali dei DT. Nel telaio della pagina, come `foglio`: il passo e'
-    la x, o la y se lo steso e' ruotato."""
+    resta argento, l'oro oro). Con `argento` le testate sono alluminio senza
+    la stampa: argento tutte e due, anche quella stampata d'oro. Il resto
+    del film com'era: plastica, o i materiali dei DT. Nel telaio della
+    pagina, come `foglio`: il passo e' la x, o la y se lo steso e' ruotato."""
     w, h = foglio.size
     lungo = (fp.sheet[2] - fp.sheet[0]) * PT2MM
     n = h if fp.ruotato else w
@@ -380,8 +389,11 @@ def pinne_cromate(foglio, colore, mr, fp):
             pinne[:k, :] = pinne[h - k:, :] = 1.0
         else:
             pinne[:, :k] = pinne[:, w - k:] = 1.0
+    # argentate: sotto l'alluminio niente inchiostro, il colore e' la sua
+    # riflettanza
+    sotto = Image.new("RGB", foglio.size, (255, 255, 255)) if argento else foglio
     c, m, _q, _o = materiali.mappe_pbr(
-        foglio, {materiali.ALLUMINIO: pinne, materiali.BIANCO: np.zeros_like(pinne)})
+        sotto, {materiali.ALLUMINIO: pinne, materiali.BIANCO: np.zeros_like(pinne)})
     dove = pinne[..., None] > 0
     prima = (np.asarray(mr.convert("RGB")) if mr is not None
              else np.empty((h, w, 3), np.uint8))
@@ -1031,7 +1043,12 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             colore, mr = tex, None
             avvisi_sez.append("materiali dai DT non applicati (%s): il film "
                               "resta plastica" % e)
-    if cromate:
+    if cromate == ARGENTO:
+        colore, mr = pinne_cromate(foglio, colore, mr, fp, argento=True)
+        avvisi_sez.append("pinne di testa argentate (scelta del pack): "
+                          "alluminio lucido sui %.1f mm di ogni testata, senza "
+                          "la stampa" % fp.end_fin)
+    elif cromate:
         colore, mr = pinne_cromate(foglio, colore, mr, fp)
         avvisi_sez.append("pinne di testa cromate (scelta del pack): metallo "
                           "lucido sui %.1f mm di ogni testata, con la stampa "
