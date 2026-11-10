@@ -3,6 +3,7 @@ Il vassoio espositore, la plancia e la scatola con la plancia.
 """
 from __future__ import annotations
 
+import numpy as np
 
 from .. import artwork
 from .. import ballotin
@@ -287,9 +288,14 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
                                               dove_plancia=dove_plancia,
                                               chiusa=chiusa)
     if chiusa:
+        linee = scatola_plancia.tagli_del_coperchio(p) + (
+            [list(p.taglio)] if p.taglio else [])
+        mm = sum(float(np.hypot(*np.diff(np.asarray(l, float), axis=0).T).sum())
+                 for l in linee if len(l) > 1)
         avvisi.append("scatola chiusa (scelta del pack): coperchio e fronte "
                       "interi, la plancia ancora nel coperchio, niente "
-                      "finestra")
+                      "finestra; la fustella di apertura incisa come solchi, "
+                      "come negli astucci: %d tagli, %.0f mm" % (len(linee), mm))
     tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
                                              TINTE_BALLOTIN)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,

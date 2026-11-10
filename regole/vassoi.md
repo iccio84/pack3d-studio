@@ -1026,6 +1026,21 @@ stampa dal suo posto sul foglio, plancia compresa (la sua scritta, che
 alzata si legge da dietro, sul coperchio sta capovolta come sul foglio).
 Niente finestra e niente plancia; fianchi, retro, fondo e soffietto come
 aperta. Il caso del parco e' il solo display, dichiarato vassoio: i pezzi
-dentro non si vedrebbero. I tagli a strappo della plancia restano nella
-stampa come una riga chiara a puntini, come la perforazione sulla scatola
-vera.
+dentro non si vedrebbero.
+
+**La fustella di apertura si incide**, come sugli astucci (regole/astucci.md,
+*L'apertura a strappo si incide, non si disegna*), dal proprietario:
+«modella anche la fustella di apertura», come sull'astuccio T10 al lampone.
+Chiusa, la scatola fa vedere i tagli della plancia: sono solchi a V nel
+coperchio e nel fronte (`incisioni.maglia_incisa`, larghi 0,35 mm e
+profondi 0,22, mai piu' di meta' del cartoncino), con le pareti del colore
+del taglio, e la grafica sotto resta intera. Quali tagli lo dice la lettura
+della plancia, non i tratti grezzi: sul T1x10 il DT viene da una foto, e i
+tratti sono centinaia di pezzetti. Nel coperchio i due bordi della plancia,
+dal fronte alla cerniera, e quelli della finestra dove se ne stacca
+(`scatola_plancia.tagli_del_coperchio`, dal profilo); nel fronte la cima
+con la presa (`p.taglio`, semplificata a 0,15 mm: `_semplice`). La riga di
+mezzo e' una piega e la cerniera il bordo del retro: non si incidono. Sul
+T1x10 sei tagli nel coperchio (due da 227 mm e quattro da 43-49) e la cima
+nel fronte (102 mm). Accanto ai solchi la stampa della foto ha ancora la
+riga chiara a puntini dei tagli.
