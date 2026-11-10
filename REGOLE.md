@@ -463,6 +463,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 
 - Vassoi espositori
   - Le testate del vassoio
+  - Il coperchio: lo stesso foglio, montato al contrario
   - Il contorno non e' un rettangolo, e il DT lo dice
   - Il foglio si riconosce da dove sta, non da quanto inchiostro ha
   - Una texture sola, e uno specchio solo

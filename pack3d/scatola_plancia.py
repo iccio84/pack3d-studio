@@ -639,7 +639,8 @@ def _rientro(p):
     return float(np.sqrt(max(a * a - h * h, 0.0))), h
 
 
-def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
+def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None,
+           chiusa=False):
     """(V, UV, T, parti) del display aperto, in mm, con la texture del DT
     intero e sotto le strisce del rovescio (`ballotin.con_interno`). Il
     fronte guarda +Z, la cima +Y, il fondo sta a Y = 0. `parti` e'
@@ -651,8 +652,14 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
     `dove_plancia`, scelta del pack: "fondo" mette il piede della plancia
     negli incastri sul fondo, dentro il retro, invece che sul bordo del
     retro sopra il coperchio (regole/riempimenti.md, *La plancia sul
-    fondo*)."""
+    fondo*).
+
+    `chiusa`, scelta del pack: la scatola com'e' prima di aprirla, la
+    plancia ancora nel coperchio e la sua cima nel fronte. Coperchio e
+    fronte sono pannelli interi, ognuno con la sua stampa dal foglio; niente
+    finestra e niente plancia (regole/vassoi.md, *La scatola chiusa*)."""
     from .ballotin import STRISCIA
+    from .incisioni import PROFONDITA, maglia_incisa
     sp = folding.SPESSORE_CRT if spessore is None else spessore
     W, D, H = p.W, p.D, p.H
     Wt, Ht = misura_tex
@@ -700,6 +707,41 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
             else:
                 T.extend([(b, b + 1, b + 2), (b, b + 2, b + 3)])
 
+    prof = min(PROFONDITA, 0.5 * sp)
+
+    def quad_inciso(P3, S2, fuori, linee):
+        """Come `quad`, senza coste, con i tagli `linee` (u, v sul foglio)
+        incisi come solchi nella faccia stampata (`incisioni.maglia_incisa`,
+        come sugli astucci): le pareti del solco col colore del taglio, la
+        faccia interna liscia."""
+        P3 = np.asarray(P3, float)
+        S2 = np.asarray(S2, float)
+        if float(-np.cross(P3[1] - P3[0], P3[3] - P3[0]) @ np.asarray(fuori, float)) < 0:
+            P3, S2 = P3[[0, 3, 2, 1]], S2[[0, 3, 2, 1]]
+        M = np.linalg.inv(np.column_stack([S2[1] - S2[0], S2[3] - S2[0]]))
+        loc = [((M @ (np.asarray(l, float) - S2[0]).T).T).tolist() for l in linee]
+        sup, solco = maglia_incisa(P3, loc, prof)
+        for parte, colore in ((sup, None), (solco, uv_taglio)):
+            if parte is None:
+                continue
+            Vp, _N, UVp, Tp = parte
+            b = len(V)
+            V.extend(np.asarray(Vp, float).tolist())
+            if colore is None:
+                st = np.asarray(UVp, float)
+                fo = S2[0] + st[:, :1] * (S2[1] - S2[0]) + st[:, 1:] * (S2[3] - S2[0])
+                UV.extend([uv(*q) for q in fo])
+            else:
+                UV.extend([colore] * len(Vp))
+            T.extend([(b + int(i), b + int(j), b + int(k)) for i, j, k in Tp])
+        # la faccia interna, liscia, come in `quad`
+        n = -np.cross(P3[1] - P3[0], P3[3] - P3[0])
+        n = n / (np.linalg.norm(n) or 1.0)
+        b = len(V)
+        V.extend((P3 - n * sp).tolist())
+        UV.extend([uv_interno] * 4)
+        T.extend([(b, b + 1, b + 2), (b, b + 2, b + 3)])
+
     uc = (p.uL + p.uR) / 2
 
     def X(u):
@@ -714,11 +756,22 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
     # finestra, larga quanto le fessure esterne
     b0, b1 = p.buco_u
     vh = p.vH
-    if p.profilo:
+    if p.profilo and not chiusa:
         _sagomata(p, quad, X, Zc, H, D, sp)
-    pezzi_cop = [] if p.profilo else [((p.uL, p.vF), (b0, p.vB), (2,)),       # a sinistra
-                 ((b1, p.vF), (p.uR, p.vB), (0,)),       # a destra
-                 ((b0, vh), (b1, p.vB), ())]             # dietro la cerniera
+    if chiusa:
+        # chiusa: il coperchio intero, la plancia ancora dentro, coi tagli
+        # della plancia e della finestra incisi
+        quad_inciso([(X(p.uL), H, Zc(p.vB)), (X(p.uL), H, Zc(p.vF)),
+                     (X(p.uR), H, Zc(p.vF)), (X(p.uR), H, Zc(p.vB))],
+                     [(p.uL, p.vB), (p.uL, p.vF), (p.uR, p.vF), (p.uR, p.vB)],
+                     (0, 1, 0), tagli_del_coperchio(p))
+        pezzi_cop = []
+    elif p.profilo:
+        pezzi_cop = []
+    else:
+        pezzi_cop = [((p.uL, p.vF), (b0, p.vB), (2,)),       # a sinistra
+                     ((b1, p.vF), (p.uR, p.vB), (0,)),       # a destra
+                     ((b0, vh), (b1, p.vB), ())]             # dietro la cerniera
     for (u0, v0), (u1, v1), coste in pezzi_cop:
         quad([(X(u0), H, Zc(v1)), (X(u0), H, Zc(v0)), (X(u1), H, Zc(v0)),
               (X(u1), H, Zc(v1))],
@@ -733,8 +786,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
         return H - (p.vF - v) * H / p.fronte
 
     v0 = p.vF - p.fronte
-    taglio = list(p.taglio)
-    if not taglio and p.vT < p.vF:
+    taglio = [] if chiusa else list(p.taglio)
+    if not taglio and p.vT < p.vF and not chiusa:
         # la cima della plancia dritta dentro il fronte: la tacca
         taglio = [(b0 + 0.05, p.vT), (b1 - 0.05, p.vT)]
     if taglio:
@@ -753,6 +806,12 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
             quad([(X(ue), 0, D / 2), (X(ut), 0, D / 2),
                   (X(ut), Yf(vt_), D / 2), (X(ue), Yf(vt_), D / 2)],
                  [(ue, v0), (ut, v0), (ut, vt_), (ue, vt_)], (0, 0, 1))
+    elif chiusa and p.taglio:
+        # chiusa: il fronte intero, col taglio della cima della plancia
+        quad_inciso([(X(p.uL), 0, D / 2), (X(p.uR), 0, D / 2),
+                     (X(p.uR), H, D / 2), (X(p.uL), H, D / 2)],
+                    [(p.uL, v0), (p.uR, v0), (p.uR, p.vF), (p.uL, p.vF)],
+                    (0, 0, 1), [_semplice(list(p.taglio))])
     else:
         quad([(X(p.uL), 0, D / 2), (X(p.uR), 0, D / 2), (X(p.uR), H, D / 2),
               (X(p.uL), H, D / 2)],
@@ -796,6 +855,8 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
         _soffietto(p, quad, X, Zc, H)
         parti.append(("soffietto", parti[-1][2], len(T)))
 
+    if chiusa:
+        return (np.array(V, float), np.array(UV, float), np.array(T, int), parti)
     inizio = len(T)
     # il piede della plancia: sul coperchio, o sul fondo dentro il retro,
     # sopra le strisce piegate sul fondo e staccata dalla parete
@@ -834,6 +895,63 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None):
          coste=(1, 2, 3))
     return (np.array(V, float), np.array(UV, float), np.array(T, int),
             parti + [("plancia", inizio, len(T))])
+
+
+# Il taglio della cima viene dalla foto rifatta vettoriale: passi di un
+# quinto di millimetro che vanno e vengono. Per inciderlo si semplifica a
+# questo scarto (mm): la forma resta, il solco non trema.
+SCARTO_TAGLIO = 0.15
+
+
+def _semplice(linea, scarto=SCARTO_TAGLIO):
+    """La polilinea senza i punti che stanno entro `scarto` dalla corda
+    (Douglas-Peucker)."""
+    P = np.asarray(linea, float)
+    if len(P) < 3:
+        return P.tolist()
+    a, b = P[0], P[-1]
+    d = b - a
+    lun = float(np.hypot(*d))
+    if lun < 1e-9:
+        dist = np.hypot(*(P - a).T)
+    else:
+        dist = np.abs(d[0] * (P[:, 1] - a[1]) - d[1] * (P[:, 0] - a[0])) / lun
+    k = int(np.argmax(dist))
+    if dist[k] <= scarto:
+        return [a.tolist(), b.tolist()]
+    return _semplice(P[:k + 1], scarto)[:-1] + _semplice(P[k:], scarto)
+
+
+def tagli_del_coperchio(p, distinti=0.5):
+    """I tagli della plancia nel coperchio, (u, v) sul foglio: i due bordi
+    della plancia e i due della finestra, dal bordo del fronte alla
+    cerniera. Dove il bordo della finestra e' quello della plancia (entro
+    `distinti` mm) il taglio e' uno. La riga di mezzo e' una piega, e la
+    cerniera il bordo del retro: non si incidono. Vuoto senza profilo."""
+    if not p.profilo:
+        return []
+    righe = [q for q in p.profilo if q[0] <= p.vH]
+    righe = [(p.vF,) + tuple(righe[0][1:])] + righe
+    if righe[-1][0] < p.vH:
+        righe.append((p.vH,) + tuple(righe[-1][1:]))
+    linee = [[(r[1], r[0]) for r in righe], [(r[2], r[0]) for r in righe]]
+    for k, pl in ((3, 1), (4, 2)):
+        tratto = []
+        for i, r in enumerate(righe):
+            if abs(r[k] - r[pl]) > distinti:
+                if not tratto and i > 0:
+                    # parte dal bordo della plancia, dove se ne stacca
+                    tratto.append((righe[i - 1][k], righe[i - 1][0]))
+                tratto.append((r[k], r[0]))
+            elif tratto:
+                # chiude sul bordo della plancia, dove si riattacca
+                tratto.append((r[k], r[0]))
+                if len(tratto) > 1:
+                    linee.append(tratto)
+                tratto = []
+        if len(tratto) > 1:
+            linee.append(tratto)
+    return [_semplice(l) for l in linee]
 
 
 def _righe_plancia(p):

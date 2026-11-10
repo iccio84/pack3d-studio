@@ -4,6 +4,8 @@ e come si costruisce (`COSTRUZIONI`).
 """
 from __future__ import annotations
 
+import functools
+import os
 import traceback
 
 from .. import artwork
@@ -12,6 +14,7 @@ from .. import dieline as dl
 from .. import gelato
 from .. import plancia
 from .. import pouch
+from .. import primitive
 from .. import punta
 from .. import scatola_plancia
 from .. import sportello
@@ -507,7 +510,29 @@ def _analyze_pdf(pdf, kind=None, domande=False):
 # dell'AI rifa' con le lastre tecniche che ha riconosciuto. `r` e' la
 # richiesta: i PDF, le scelte della pagina, la qualita' (vedi `_col_pdf`).
 # Una famiglia che qui non c'e' si costruisce come flowpack, come prima.
+# Ogni costruzione finisce con `_vertici_separati`.
 
+def _vertici_separati(prepara):
+    """La costruzione di `prepara`, col GLB finito rifatto da
+    `primitive.per_tutti`: ogni primitiva coi suoi vertici, perche' KeyShot
+    mostri la texture. Mai un errore: se non riesce, il GLB resta com'e'."""
+    @functools.wraps(prepara)
+    def prepara_e_separa(r, info):
+        costruisci = prepara(r, info)
+
+        def costruisci_e_separa(lastre, uscita):
+            avvisi = costruisci(lastre, uscita)
+            if os.path.exists(uscita):
+                try:
+                    primitive.rifinisci(uscita)
+                except Exception:                   # noqa: BLE001
+                    traceback.print_exc()
+            return avvisi
+        return costruisci_e_separa
+    return prepara_e_separa
+
+
+@_vertici_separati
 def _costruisci_coppa(r, info):
     def costruisci(lastre, uscita):
         return build_coppa(r.pdfs, uscita, r.q, lastre,
@@ -515,19 +540,23 @@ def _costruisci_coppa(r, info):
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_vassoio(r, info):
     def costruisci(lastre, uscita):
         return build_vassoio(r.pdf, uscita, r.q, lastre, r.col_riq,
-                             dove_plancia=plancia_scelta(r.opts))
+                             dove_plancia=plancia_scelta(r.opts),
+                             chiusa=chiusa_scelta(r.opts))
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_pouch(r, info):
     def costruisci(lastre, uscita):
         return build_pouch(r.pdf, uscita, r.q, lastre, r.col_riq)
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_ballotin(r, info):
     def costruisci(lastre, uscita):
         return build_ballotin(r.pdf, uscita, r.q, lastre, r.col_riq,
@@ -535,18 +564,21 @@ def _costruisci_ballotin(r, info):
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_punta(r, info):
     def costruisci(lastre, uscita):
         return build_punta(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta)
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_incarto(r, info):
     def costruisci(lastre, uscita):
         return build_incarto(r.pdf, uscita, r.q, lastre, r.col_riq)
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_tubo(r, info):
     def costruisci(lastre, uscita):
         return build_tubo(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta,
@@ -554,6 +586,7 @@ def _costruisci_tubo(r, info):
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_astuccio(r, info):
     def costruisci(lastre, uscita):
         return build_carton(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta,
@@ -567,6 +600,16 @@ def plancia_scelta(opts):
     col piede negli incastri sul fondo, dentro il retro; di serie sul bordo
     del retro, sopra il coperchio (`scatola_plancia.maglia`)."""
     return "fondo" if str(opts.get("plancia", "")).strip().lower() == "fondo" else None
+
+
+def chiusa_scelta(opts):
+    """La scatola chiusa, scelta del pack (`"chiusa": true`): il display a
+    scatola com'e' prima di aprirlo, la plancia nel coperchio. Di serie
+    aperto, con la plancia alzata (`scatola_plancia.maglia`)."""
+    v = opts.get("chiusa", False)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "si", "sì", "yes")
+    return bool(v)
 
 
 def inclina_scelta(opts):
@@ -591,6 +634,7 @@ def tegola_scelta(opts):
     return min(max(g, 0.0), 60.0)
 
 
+@_vertici_separati
 def _costruisci_riempimento(r, info):
     if info.get("cu") == "carton":
         # un vassoio coi suoi astucci, chiusi
@@ -619,6 +663,7 @@ def _costruisci_riempimento(r, info):
     return costruisci
 
 
+@_vertici_separati
 def _costruisci_flowpack(r, info):
     soft, scatola, pinne, mat = r.parametri_flowpack(r.pdf, r.nomi[0])
 

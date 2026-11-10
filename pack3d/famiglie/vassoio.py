@@ -3,6 +3,7 @@ Il vassoio espositore, la plancia e la scatola con la plancia.
 """
 from __future__ import annotations
 
+import numpy as np
 
 from .. import artwork
 from .. import ballotin
@@ -28,7 +29,7 @@ from .comune import (TINTE_BALLOTIN,
 
 
 def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
-                  colata_riquadro=None, dove_plancia=None):
+                  colata_riquadro=None, dove_plancia=None, chiusa=False):
     """Costruisce un vassoio espositore: fondo e quattro pareti alzate.
 
     Un blocco unico, senza feritoie: le alette angolari stanno dentro lo
@@ -63,7 +64,8 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
         if sp is not None:
             return build_scatola_plancia(sorgente, sp, out_glb, quality,
                                          lastre_extra, colata_riquadro,
-                                         n_pagine, dove_plancia=dove_plancia)
+                                         n_pagine, dove_plancia=dove_plancia,
+                                         chiusa=chiusa)
         # per ultimo il vassoio sagomato, le pareti con gli obliqui e gli
         # incavi: vedi `vassoio.riconosci_sagomato`
         pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(sorgente,
@@ -112,7 +114,17 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste, alt_texture=steso.height,
                             parti=parti)
     avvisi_fronte = []
-    if vassoio.testata_davanti(v) == "sud":
+    # il coperchio si monta al contrario, col fondo stampato in alto: vedi
+    # `vassoio.coperchio`. Il davanti lo dice la grafica del fondo.
+    e_coperchio, davanti = vassoio.coperchio(pdf, v)
+    if e_coperchio:
+        if davanti == "sud":
+            V = vassoio.gira(V)
+        avvisi_fronte.append("coperchio: le scritte delle pareti hanno l'alto "
+                             "verso il fondo, quindi le pareti scendono e il "
+                             "fondo stampato sta sopra; davanti la testata %s"
+                             % davanti)
+    elif vassoio.testata_davanti(v) == "sud":
         # il davanti e' la testata bassa, e la maglia mette davanti la nord
         V = vassoio.gira(V)
         avvisi_fronte.append("il fronte e' la testata sud, piu' bassa della "
@@ -124,6 +136,10 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                                       dpi_tex / 25.4, vassoio.CODA)
     # e un blocco unico, senza feritoie fra le pareti e sul fondo
     verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
+    if e_coperchio:
+        # DOPO le verifiche, come il giro del flowpack: il mezzo giro attorno
+        # al davanti non cambia ne' il fronte ne' le pareti sulle fasce
+        V = vassoio.capovolgi(V)
     riscontro = quotature.riscontro_vassoio(pdf, v, d)
     # La texture e' lo steso del PDF (`pack3d.steso`): senza la coda delle
     # tinte, che diventano colori pieni, sul riquadro del DT con un
@@ -236,7 +252,7 @@ def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
 
 def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
                           colata_riquadro=None, n_pagine=1, carta=None,
-                          dove_plancia=None):
+                          dove_plancia=None, chiusa=False):
     """Il display a scatola: la scatola chiusa con la plancia alzata dal
     coperchio e la finestra da cui si vede il prodotto. Vedi
     `pack3d.scatola_plancia`.
@@ -245,7 +261,9 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     della maglia prende la grafica dal suo posto sul foglio; sotto, le strisce
     del rovescio. Nel GLB la plancia e' un nodo a parte, come nel display con
     plancia: il riempimento misura il vano senza di lei. Anche il fianco a
-    soffietto, se c'e': dice al riempimento dove il vano si stringe."""
+    soffietto, se c'e': dice al riempimento dove il vano si stringe.
+    `chiusa`, scelta del pack: la scatola prima di aprirla, la plancia nel
+    coperchio (`scatola_plancia.maglia`)."""
     dpi, tmax = risoluzione(quality)
     scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
         pdf, p.regione, "Display a scatola letto cosi'", scatola_plancia.dichiara(p)))
@@ -281,7 +299,17 @@ def build_scatola_plancia(pdf, p, out_glb, quality="hd", lastre_extra=(),
     tela = ballotin.con_interno(tex)
     V, UV, T, parti = scatola_plancia.maglia(p, origine, scala / PT2MM,
                                               tela.size, spessore=carta,
-                                              dove_plancia=dove_plancia)
+                                              dove_plancia=dove_plancia,
+                                              chiusa=chiusa)
+    if chiusa:
+        linee = scatola_plancia.tagli_del_coperchio(p) + (
+            [list(p.taglio)] if p.taglio else [])
+        mm = sum(float(np.hypot(*np.diff(np.asarray(l, float), axis=0).T).sum())
+                 for l in linee if len(l) > 1)
+        avvisi.append("scatola chiusa (scelta del pack): coperchio e fronte "
+                      "interi, la plancia ancora nel coperchio, niente "
+                      "finestra; la fustella di apertura incisa come solchi, "
+                      "come negli astucci: %d tagli, %.0f mm" % (len(linee), mm))
     tela, UV, tinte = lo_steso.senza_strisce(tex.height, tela, UV, T,
                                              TINTE_BALLOTIN)
     exporters.write_glb_mesh(V, UV, T, tela, out_glb, tex_max=tmax,

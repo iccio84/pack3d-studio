@@ -57,6 +57,31 @@ griglia; le colonne sono i laterali. Valgono le regole di tutte le famiglie:
   Sul display T1x40 le pareti cadono sulle loro fasce entro 0,3 mm; le quote
   sono vettorializzate e non si leggono come testo, e lo si dice.
 
+### Il coperchio: lo stesso foglio, montato al contrario
+
+**Un fondo e quattro pareti possono essere un coperchio**: le pareti si
+piegano in giu' e il fondo, stampato col marchio, fa da faccia di sopra. Il
+DT e' lo stesso del vassoio; lo dice la **grafica** (`vassoio.coperchio`).
+Su una parete che scende dal fondo l'alto e' la piega, quindi l'alto delle
+scritte punta AL FONDO: in gradi orari (`tracciati.verso_grafica`) nord 180,
+est 270, sud 0, ovest 90. Su un vassoio aperto punta al bordo libero.
+
+Il caso e' il coperchio del display T1x36 (caso 2168c4ac0e): fondo
+145,5 x 229,5, pareti 146,3 / 147,5 / 146,2 / 147,5, e tutte e quattro le
+pareti col testo verso il fondo. Montato come vassoio il marchio del fondo
+stava sotto, dentro si vedeva il bianco, e le scritte si leggevano a testa in
+giu' su tutti i lati.
+
+- vale se **almeno due** pareti hanno testo che vota e **tutte** quelle che
+  votano puntano al fondo: senza testo vivo, o con una parete sola girata,
+  resta un vassoio. Nel parco nessun altro vassoio cambia;
+- il **davanti** e' la testata in basso rispetto alla grafica del fondo: col
+  fondo a 0 gradi la sud, a 180 la nord; se il fondo non lo dice decide
+  `testata_davanti`;
+- il mezzo giro attorno al davanti (`vassoio.capovolgi`) si fa **dopo** le
+  verifiche, come il giro del flowpack: non cambia il fronte ne' le pareti
+  sulle loro fasce, e l'ingombro resta quello.
+
 ### Il contorno non e' un rettangolo, e il DT lo dice
 
 La prima versione del vassoio faceva quattro rettangoli dalla griglia. Era
@@ -813,6 +838,42 @@ le righe della sua maschera, contate lungo la piega, piu' corte di 3 mm non
 sono cartoncino dell'aletta e si tolgono prima di misurarla e piegarla. Sul
 caso il vassoio torna 138,3 x 146,2 x 219 mm (era 154,2 di largo).
 
+### L'aletta si stende sul taglio, non sui pixel
+
+Lo stesso T1x36, dal proprietario: «la parte frontale fustellata male
+(seghettata)». Sopra il fronte basso (51 mm) le alette si vedono, e il loro
+taglio - la curva in cima e il bordo obliquo che scende verso il fronte -
+usciva a scalini di un quarto di millimetro, con le coste di ogni scalino a
+vista. Non erano i pixel letti male: riga per riga i capi dell'aletta stanno
+in media a 0,3 pixel dal taglio vero (misurato contro la sagoma resa a
+16 px/mm). Era il modo di stendere: fra due righe `Maglia.pezzo` mette il
+rettangolo del tratto che hanno in comune, e il resto della riga piu' lunga
+diventa un gradino con la sua costa. Un bordo quasi parallelo alle righe
+fa gradini lunghi millimetri.
+
+**Regola** (`Maglia.pezzo_liscio`, in `vassoio.corpo` per le quattro
+alette). Fra due righe c'e' il trapezio coi capi delle due righe: il bordo e'
+una linea, e la costa una fascia continua. Dove il bordo scende quasi dritto
+(al massimo un pixel per riga) i capi fanno uno scalino ogni tante righe, e
+una retta sulle 4 righe vicine per parte li mette sul taglio (`_liscia`,
+`LISCIO_RIGHE`): con 10 righe gli angoli si arrotondano e il taglio si
+allontana. Le UV restano la posizione sul foglio: la mappatura non cambia.
+
+Prima si tolgono le parti piu' strette di 3 mm in qualunque verso
+(`_senza_schegge`): sul T1x36 la stampa del fronte cadeva nel taglio fra
+fronte e aletta, una striscia di 2 mm lungo tutta l'aletta, che `_senza_code`
+lasciava perche' stava su righe che hanno anche il lembo. Di ogni riga
+restano interi i tratti che toccano il lembo, cosi' gli angoli non si
+arrotondano e una scheggia staccata da una fessura non torna. Il pezzo
+liscio vuole un tratto per riga: una fessura sotto 5 mm si chiude
+(`FESSURA_MM`, sul T1x36 un intaglio a V dietro il fronte e una crepa di un
+pixel nella stampa); con due tratti veri l'aletta si stende come prima.
+
+Sul parco cambiano i 10 display e vassoi con le alette: viste uguali salvo i
+bordi delle alette che si vedono (al massimo lo 0,06% dei pixel), nessuna
+misura approvata cambiata, e i vertici del vassoio scendono (sul T1x36 da
+9888 a 5100).
+
 ### Cosa manca
 
 - La cima della plancia segue il contorno interno sul DT (le spalle, e
@@ -975,3 +1036,36 @@ Restano, da dietro, i due cunei grigi ai lati della base: il retro della
 meta' ripiegata davanti, che sul DT si stringe piu' piano della meta' in
 piedi (da 133 a 75 mm in 30 mm, contro 22). Sono la fustella, non la
 lettura.
+
+### La scatola chiusa, una scelta del pack
+
+Il T1x10, dal proprietario: «fai il t1X10 chiuso (i flowpack non metterli
+perche' non si vedrebbero)». La scatola com'e' prima di aprirla: la plancia
+e' ancora nel coperchio, la sua cima nel fronte. E' l'opzione del caso
+`chiusa: true` (`registro.chiusa_scelta`), di serie aperta.
+
+**Regola** (`scatola_plancia.maglia(chiusa=True)`): il coperchio e' un
+pannello intero, dal bordo del fronte a quello del retro e da un fianco
+all'altro, e il fronte pure, senza il taglio della cima; ognuno prende la
+stampa dal suo posto sul foglio, plancia compresa (la sua scritta, che
+alzata si legge da dietro, sul coperchio sta capovolta come sul foglio).
+Niente finestra e niente plancia; fianchi, retro, fondo e soffietto come
+aperta. Il caso del parco e' il solo display, dichiarato vassoio: i pezzi
+dentro non si vedrebbero.
+
+**La fustella di apertura si incide**, come sugli astucci (regole/astucci.md,
+*L'apertura a strappo si incide, non si disegna*), dal proprietario:
+«modella anche la fustella di apertura», come sull'astuccio T10 al lampone.
+Chiusa, la scatola fa vedere i tagli della plancia: sono solchi a V nel
+coperchio e nel fronte (`incisioni.maglia_incisa`, larghi 0,35 mm e
+profondi 0,22, mai piu' di meta' del cartoncino), con le pareti del colore
+del taglio, e la grafica sotto resta intera. Quali tagli lo dice la lettura
+della plancia, non i tratti grezzi: sul T1x10 il DT viene da una foto, e i
+tratti sono centinaia di pezzetti. Nel coperchio i due bordi della plancia,
+dal fronte alla cerniera, e quelli della finestra dove se ne stacca
+(`scatola_plancia.tagli_del_coperchio`, dal profilo); nel fronte la cima
+con la presa (`p.taglio`, semplificata a 0,15 mm: `_semplice`). La riga di
+mezzo e' una piega e la cerniera il bordo del retro: non si incidono. Sul
+T1x10 sei tagli nel coperchio (due da 227 mm e quattro da 43-49) e la cima
+nel fronte (102 mm). Accanto ai solchi la stampa della foto ha ancora la
+riga chiara a puntini dei tagli.

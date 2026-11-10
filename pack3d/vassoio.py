@@ -331,6 +331,61 @@ def gira(V):
     return W
 
 
+# il verso della grafica, in gradi orari, che porta l'alto delle scritte di
+# ogni parete VERSO il fondo: e' il verso di un coperchio, con le pareti che
+# scendono dal fondo stampato in alto. Su un vassoio aperto l'alto punta al
+# bordo libero, il verso opposto.
+VERSO_COPERCHIO = {"nord": 180, "est": 270, "sud": 0, "ovest": 90}
+
+
+def coperchio(pdf, v: Vassoio, verso=None):
+    """Se il vassoio e' un COPERCHIO: (True, testata davanti) o (False, None).
+
+    Il foglio e' lo stesso - un fondo e quattro pareti - ma si monta al
+    contrario: le pareti si piegano in giu' e il fondo, stampato col marchio,
+    fa da faccia di sopra. Lo dice la grafica, non il DT: sulle pareti di un
+    coperchio l'alto delle scritte punta al fondo, perche' quando la parete
+    scende dal fondo il suo alto e' la piega. Sul coperchio del display T1x36 (caso
+    2168c4ac0e) nord 180, est 270, sud 0 e ovest 90: tutte e quattro verso il
+    fondo, e montato come vassoio il marchio stava sotto e le scritte a testa
+    in giu'.
+
+    Vale solo se almeno due pareti hanno testo che vota (`tracciati.
+    verso_grafica`) e TUTTE quelle che votano puntano al fondo: un vassoio
+    senza testo vivo, o con una parete sola girata, resta un vassoio.
+
+    Il davanti e' la testata che sta in basso rispetto alla grafica del
+    fondo: con l'alto del fondo verso la nord si guarda dalla sud. Se il fondo
+    non lo dice (niente testo, o testo lungo le testate) decide
+    `testata_davanti`.
+    """
+    if verso is None:
+        from . import tracciati
+        try:
+            verso = tracciati.verso_grafica(pdf, v.riquadri)
+        except Exception:
+            return False, None
+    pareti = {k: g for k, g in verso.items() if k in VERSO_COPERCHIO}
+    if len(pareti) < 2 or any(g != VERSO_COPERCHIO[k]
+                              for k, g in pareti.items()):
+        return False, None
+    davanti = {0: "sud", 180: "nord"}.get(verso.get("fondo"),
+                                         testata_davanti(v))
+    return True, davanti
+
+
+def capovolgi(V):
+    """Mezzo giro attorno all'asse davanti-dietro: le pareti scendono dal
+    fondo, che passa in alto. Il davanti resta davanti, e l'ingombro resta
+    dov'era (il piano di appoggio e' il bordo delle pareti)."""
+    import numpy as np
+    W = np.array(V, float, copy=True)
+    y0, y1 = W[:, 1].min(), W[:, 1].max()
+    W[:, 0] *= -1.0
+    W[:, 1] = y0 + y1 - W[:, 1]
+    return W
+
+
 def con_coda(steso):
     """Lo steso con in fondo due strisce: colore dell'interno e del taglio."""
     import numpy as np
@@ -564,6 +619,107 @@ class Maglia:
         if self.parti is not None and nome:
             self.parti[nome] = (primo, len(T))
 
+    def pezzo_liscio(self, masc, verso, punto, dentro, pieghe=(), nome=None,
+                     punto_dentro=None, fessura=0):
+        """Come `pezzo`, col contorno sul taglio e non sui pixel.
+
+        `pezzo` stende fra due righe il rettangolo del tratto che hanno in
+        comune, e il resto della riga piu' lunga diventa un gradino con la
+        sua costa: un bordo obliquo o curvo esce a scalini di un quarto di
+        millimetro, coste comprese. Qui fra due righe c'e' il TRAPEZIO coi
+        capi delle due righe, lisciati (`_liscia`): il bordo e' una linea, e
+        la sua costa una fascia continua. Le UV restano la posizione sul
+        foglio.
+
+        Vale per un pezzo con un tratto solo per riga, su righe di fila; una
+        fessura piu' stretta di `fessura` pixel si chiude. Per gli altri torna
+        False senza stendere niente, e chi chiama usa `pezzo`.
+        """
+        import numpy as np
+
+        m = masc if verso == "righe" else masc.T
+        righe = np.flatnonzero(m.any(axis=1))
+        if len(righe) < 2 or len(righe) != righe[-1] - righe[0] + 1:
+            return False
+        A, B = [], []
+        for r in righe:
+            x = np.flatnonzero(m[r])
+            if len(x) > 1 and int((np.diff(x) - 1).max()) > fessura:
+                return False
+            A.append(x[0])
+            B.append(x[-1] + 1)
+        a, b = _liscia(A), _liscia(B)
+        if (b - a < 0.5).any():
+            return False
+        V, UV, T = self.V, self.UV, self.T
+        W, H, q, vI = self.W, self.H, self.q, self.vI
+        primo = len(T)
+        d = np.array(dentro, float) * self.spessore
+        if punto_dentro is None:
+            punto_dentro = lambda X, Y: tuple(np.array(punto(X, Y), float) + d)
+        # il verso dell'avvolgimento si misura, come in `pezzo`
+        o = np.array(punto(0.0, 0.0), float)
+        ex = np.array(punto(1.0, 0.0), float) - o
+        ey = np.array(punto(0.0, 1.0), float) - o
+        n = np.cross(ey, ex) if verso == "righe" else np.cross(ex, ey)
+        rovescio = float(np.dot(n, np.array(dentro, float))) > 0
+
+        def dove(t, riga):
+            return (t, riga + 0.5) if verso == "righe" else (riga + 0.5, t)
+
+        def in_piega(P0, P1):
+            for asse, val in pieghe:
+                i = 0 if asse == "X" else 1
+                if abs(P0[i] - val) <= PIEGA_TOL and abs(P1[i] - val) <= PIEGA_TOL:
+                    return True
+            return False
+
+        def costa(P0, P1, verso_fuori):
+            if P0 == P1 or in_piega(P0, P1):
+                return
+            M = ((P0[0] + P1[0]) / 2.0, (P0[1] + P1[1]) / 2.0)
+            dt, driga = verso_fuori
+            passo = (dt, driga) if verso == "righe" else (driga, dt)
+            fuori = (np.array(punto(M[0] + passo[0], M[1] + passo[1]), float)
+                     - np.array(punto(*M), float))
+            self.faccia(punto(*P0), punto(*P1), punto_dentro(*P1),
+                        punto_dentro(*P0), (0.5, self.vT), fuori)
+
+        # le righe i cui capi stanno su una retta con quelli di prima si
+        # stendono in un trapezio solo: la superficie e' la stessa
+        tagli = [0]
+        for i in range(1, len(righe) - 1):
+            s = tagli[-1]
+            for v in (a, b):
+                if abs((v[i + 1] - v[s]) * (i - s) - (v[i] - v[s]) * (i + 1 - s)) > 1e-6:
+                    tagli.append(i)
+                    break
+        tagli.append(len(righe) - 1)
+        for s, e in zip(tagli[:-1], tagli[1:]):
+            r0, r1 = float(righe[s]), float(righe[e])
+            a0, b0, a1, b1 = a[s], b[s], a[e], b[e]
+            # le coste dei due capi guardano fuori, di traverso al bordo
+            costa(dove(a0, r0), dove(a1, r1), (-(r1 - r0), a1 - a0))
+            costa(dove(b0, r0), dove(b1, r1), (r1 - r0, -(b1 - b0)))
+            if rovescio:
+                a0, b0, a1, b1 = b0, a0, b1, a1
+            XY = [dove(a0, r0), dove(b0, r0), dove(a1, r1), dove(b1, r1)]
+            k = len(V)
+            for X, Y in XY:
+                V.append(tuple(np.array(punto(X, Y), float)))
+                UV.append((X / float(W), Y / float(H) * q))
+            for X, Y in XY:
+                V.append(tuple(np.array(punto_dentro(X, Y), float)))
+                UV.append((0.5, vI))
+            T.append((k, k + 2, k + 1)); T.append((k + 2, k + 3, k + 1))
+            T.append((k + 4, k + 5, k + 6)); T.append((k + 6, k + 5, k + 7))
+        # la prima e l'ultima riga: un taglio, o la piega
+        costa(dove(a[0], float(righe[0])), dove(b[0], float(righe[0])), (0, -1))
+        costa(dove(a[-1], float(righe[-1])), dove(b[-1], float(righe[-1])), (0, +1))
+        if self.parti is not None and nome:
+            self.parti[nome] = (primo, len(T))
+        return True
+
     def array(self):
         """`(V, UV, T)` come array, come li vuole l'esportatore."""
         import numpy as np
@@ -590,6 +746,73 @@ def _senza_code(masc, px_mm):
     masc = masc.copy()
     masc[corte, :] = False
     return masc
+
+
+def _senza_schegge(masc, px_mm):
+    """La maschera senza le parti piu' strette di `ALETTA_SOTTILE`, in
+    qualunque verso: le schegge attaccate al lembo che `_senza_code` lascia,
+    perche' stanno su righe che hanno anche l'aletta. Sul T1x36 la stampa del
+    fronte che cade nel taglio fra fronte e aletta, larga 2 mm per tutta
+    l'aletta. Resta il pezzo piu' grande, col contorno di prima: di ogni riga
+    i tratti che toccano quello che l'apertura lascia, interi, cosi' gli
+    angoli non si arrotondano e una scheggia staccata da una fessura, anche
+    stretta, non torna."""
+    import numpy as np
+    from scipy.ndimage import binary_opening, label
+    if masc is None or not masc.any():
+        return masc
+    k = max(1, int(round(ALETTA_SOTTILE * px_mm)))
+    aperta = binary_opening(masc, np.ones((k, k), bool))
+    lab, n = label(aperta)
+    if n == 0:
+        return masc
+    dim = np.bincount(lab.ravel())
+    dim[0] = 0
+    aperta = lab == int(np.argmax(dim))
+    # i tratti di ogni riga, uno per etichetta
+    tratti, _n = label(masc, structure=np.array([[0, 0, 0], [1, 1, 1], [0, 0, 0]]))
+    tenuti = np.unique(tratti[aperta])
+    return np.isin(tratti, tenuti[tenuti > 0])
+
+
+# I capi di un tratto, riga per riga, si lisciano su tante righe per parte,
+# dove il bordo scende quasi dritto (al massimo un pixel per riga). Misurato
+# sulle alette del T1x36 contro la sagoma a 16 px/mm: i capi grezzi stanno in
+# media a 0,3 pixel dal taglio, 4 righe li avvicinano, 10 arrotondano gli
+# angoli e li allontanano.
+LISCIO_RIGHE = 4
+# Una fessura in una riga piu' stretta di cosi' (mm) si chiude, per stendere
+# il pezzo liscio: sul T1x36 un intaglio a V di 4 mm dietro il fronte, e una
+# crepa di un pixel nella stampa.
+FESSURA_MM = 5.0
+
+
+def _liscia(v, finestra=LISCIO_RIGHE):
+    """I capi `v` di un tratto, riga per riga, senza gli scalini dei pixel.
+
+    Dove il bordo scende quasi dritto da una riga all'altra (al massimo un
+    pixel per riga) i capi fanno uno scalino ogni tante righe: li' una retta
+    sulle righe vicine dice dov'e' il taglio. Dove il bordo corre quasi lungo
+    le righe (due pixel o piu' per riga) i capi sono gia' sul taglio, e
+    restano."""
+    import numpy as np
+    v = np.asarray(v, float)
+    out = v.copy()
+    n = len(v)
+    if n < 3:
+        return out
+    salti = np.flatnonzero(np.abs(np.diff(v)) > 1.0)
+    for s, e in zip(np.r_[0, salti + 1], np.r_[salti, n - 1]):
+        if e - s < 2:
+            continue
+        for i in range(s, e + 1):
+            a, b = max(s, i - finestra), min(e, i + finestra)
+            y = v[a:b + 1]
+            if np.ptp(y) == 0:
+                continue
+            p = np.polyfit(np.arange(a, b + 1, dtype=float), y, 1)
+            out[i] = p[0] * i + p[1]
+    return out
 
 
 def _ingombro(masc, verso):
@@ -756,7 +979,21 @@ def corpo(maglia, mk, creste, px_mm, spessore=SPESSORE, dentro_alette=0.5,
         # nello spessore: con l'aletta mezzo millimetro in fuori, all'interno
         # del wafer T1 i suoi bordi disegnavano due righe a trattini sul retro.
         # Dove la parete e' piu' bassa - il fronte del T1 della barretta fresca - l'aletta sporge
-        # sopra ed e' un pannello a se', chiuso dalle sue coste.
+        # sopra ed e' un pannello a se', chiuso dalle sue coste: li' il suo
+        # taglio si vede, e si stende liscio (`Maglia.pezzo_liscio`), senza
+        # le schegge attaccate (`_senza_schegge`). Sul T1x36 il taglio curvo
+        # e obliquo delle alette del fronte usciva a scalini.
+        liscia = _senza_schegge(mk[nome], px_mm)
+        if maglia.pezzo_liscio(
+                liscia, "righe",
+                lambda X, Y, h=h, piega=piega, x_p=x_p, passo=passo, z_p=z_p, dz=dz:
+                (x_p + passo * (piega - Y) / px_mm, h(X),
+                 z_p + dz * dentro_alette),
+                (0, 0, dz), [("Y", piega)], nome,
+                lambda X, Y, h=h, piega=piega, x_p=x_p, passo=passo, z_p=z_p, dz=dz:
+                (x_p + passo * (piega - Y) / px_mm, h(X), z_p + dz * t),
+                fessura=int(round(FESSURA_MM * px_mm))):
+            continue
         pezzo(mk[nome], "righe",
               lambda X, Y, h=h, piega=piega, x_p=x_p, passo=passo, z_p=z_p, dz=dz:
               (x_p + passo * (piega - Y) / px_mm, h(X),
