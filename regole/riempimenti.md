@@ -354,6 +354,68 @@ filtra) e il **coperchio** (il piu' basso in cima, fra le quattro pareti);
 le pareti senza tolleranza. Gli altri riempimenti non li usano. Sul caso,
 col rigonfiamento 8 (19,2 mm): 16 gradi, i pezzi da 1,6 a 44,3 mm.
 
+### A tegola, inclinati all'indietro: una scelta del pack
+
+Il vassoio espositore T1x36 (caso 87be37b868, vano 136,3 x 217, pareti 146):
+36 T1 frontali, 9 file da 4, in piedi col fronte avanti. Al «Non approvo»
+chi l'ha caricato li voleva ruotati indietro di 45 gradi (o 30) e gonfiati
+fino al bordo del vassoio. Una fila di 4 inclinata tutta insieme non ci sta:
+a 30 gradi le 9 file chiedono 257 mm di profondita'. Alla domanda ha scelto
+«9 file da 4 inclinate di 30 gradi, appoggiate a tegola, i pack gonfiati in
+altezza fino al bordo dei fianchi». E' l'opzione del caso `tegola` (gradi,
+`registro.tegola_scelta`; di serie 0, dritti, e gli altri casi non cambiano).
+
+`riempimento.a_tegola`: ogni pezzo frontale ruota all'indietro attorno al
+largo del vano, la faccia stampata in su verso chi guarda; nella sua fila
+la colonna resta verticale e ogni pezzo poggia sul corpo di quello sotto
+(sotto, al secondo no), sfalsato come una tegola. Le file si
+allargano su tutta la profondita', mai meno di uno spessore lungo la
+normale della faccia (19,2 / cos 30 = 22,2 mm). Poi i pezzi si gonfiano in
+altezza - una scala sul loro asse che sale, nel nodo - finche' la cima del
+corpo arriva al tetto del vano, il bordo delle pareti: al massimo del 30%
+(`GONFIA_TEGOLA`), o schiacciati fino a `SCHIACCIA_MAX` se la fila lo passa.
+Il pezzo poggia sul fondo con tutto (nessuna punta sotto); se le file
+escono dal vano e' un errore, non un modello sbagliato.
+
+Al secondo «Non approvo»: «Ruota i pack in avanti di un paio di gradi in
+modo che non ci siano spazi tra un piano e l'altro e se necessario gonfia di
+piu' i pack». La causa: ogni pezzo saliva di altezza / coseno, il bordo sul
+bordo; ma il corpo del flowpack e' arrotondato, e fra un piano e l'altro
+restavano 5 mm d'aria (in sezione, quattro file di cuscini staccati). La
+regola: il pezzo sopra poggia sul **corpo** di quello sotto - sale della
+corda verticale piu' lunga della sezione inclinata (l'inviluppo convesso del
+corpo, `riempimento._corda_verticale`), cosi' i due si toccano senza
+entrare. I piani piu' bassi chiedono piu' gonfiore per arrivare al bordo:
+`GONFIA_TEGOLA` passa dal 15 al 30%. Sul caso, opzione `tegola: 28`: file
+ogni 23,3 mm, gonfiati del 25%, cima a 145,2 mm, il bordo a 145,2 (a 30
+gradi e bordo sul bordo erano 2% e 5 mm d'aria per piano).
+
+Al terzo «Non approvo»: «I pack sono stirati, la grafica allungata in
+altezza. Bisogna distribuirli 9x4. Scegli tu quanto inclinarli, quanto
+gonfiarli: l'importante e' che stiano nel vassoio riempiendo senza lasciare
+spazi o intersecare il vassoio, ma soprattutto lasciando la grafica del pack
+inalterata». La causa: il gonfiore in altezza e' una scala sull'asse della
+faccia stampata, e la grafica si allungava del 25%. La regola, per ogni
+posa a tegola: **la faccia stampata non si stira mai**, ne' in altezza ne'
+in largo. Si gonfia solo lo spessore (l'asse lungo la normale della
+faccia), al massimo di `GONFIA_TEGOLA`, quanto basta perche' le file si
+tocchino su tutta la profondita' del vano (lo spessore gonfio lungo la
+normale uguale al passo fra le file). L'inclinazione la sceglie la posa:
+fra `TEGOLA_MIN` e `TEGOLA_MAX` (5 e 60 gradi), un grado alla volta e poi il
+mezzo grado intorno, quella che porta la cima del corpo piu' vicina al
+bordo senza passarlo e senza uscire dal vano; a pari altezza la piu' vicina
+ai gradi chiesti (l'opzione `tegola`, che resta l'interruttore e la
+preferenza). Senza stiro la cima non arriva al bordo: quattro T1 in piedi
+fanno 126 mm, e inclinati i corpi arrotondati si incastrano di piu' e la
+fila scende. Sul caso: 9 gradi (chiesti 28), spessore +23%, file ogni 23,9
+mm a contatto, cima a 136,5 mm, il bordo a 145,2. Le pose da provare sono
+un centinaio: si provano sui soli punti dell'inviluppo convesso del pezzo e
+del corpo, che la scala e la rotazione non cambiano (da 500 a 34 s).
+
+Il fondo, non il piano: il piano di `misura_vassoio` e' la striscia della
+scatola chiusa, e nel vassoio aperto prendeva il lembo del davanti
+ripiegato dentro (36 mm sul T1x36).
+
 ### Nel display il flowpack resta quello del DT, con le pinne aperte
 
 «I flowpack non sono venuti bene. Devono essere piu' gonfi, avere le pinne
@@ -435,3 +497,27 @@ flowpack si possono schiacciare, ma senza modificare la mappatura».
 
 Gli altri riempimenti e i vassoi del parco restano identici al byte a quelli
 pubblicati.
+
+### Il vano lo chiudono le pareti, e la punta piegata si ferma alla parete
+
+Il vassoio T1x36 del caso 87be37b868 (36 flowpack T1, 9 per fila e 4
+strati) aveva, in fondo a una testata, un lembo alto 1,7 mm rimasto steso sul
+piano che sporgeva di 8 mm oltre i fianchi. Il vano si misurava
+sull'ingombro di tutto il vassoio: veniva largo 152 invece di 136, i pezzi
+si mettevano larghi come lui e bucavano i fianchi, che nelle viste
+sparivano dietro le pinne.
+
+- **In pianta il vano si misura su cio' che si alza dal fondo**, oltre tre
+  spessori di cartoncino (`misura_vassoio`): un ritaglio steso sul piano non
+  tiene niente. Il fondo e il tetto restano quelli di prima.
+- **La punta piegata si ferma a mezzo passo** (`adatta`, punto 2): girando
+  attorno alla piega, la faccia della pinna dalla parte opposta esce oltre
+  la piega di `dz * sin`, e col vano giusto (136,3, pezzo 150 col corpo 119)
+  usciva 1,1 mm oltre il vano, fuori dal cartoncino del fianco. Il film si
+  schiaccia contro la parete, non la passa: la punta si ferma dentro il suo
+  spessore, a `PUNTA_NELLA_PARETE` (0,8 mm, meno di `FUORI_VANO`) dal filo
+  di dentro. Fermata al filo di dentro, accorciava di 1 mm i flowpack
+  approvati di `riempimento_kms` (146,5) e
+  `riempimento_nutella_biscuits_display` (172,9), che hanno la punta mezzo
+  millimetro nel cartoncino: il parco del rilascio li ha visti.
+

@@ -321,6 +321,13 @@ pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
   i PDF si leggevano come vassoio.
 - La verifica delle pareti prende la prima e l'ultima riga della griglia,
   non la sesta e la quarta: sul sagomato le righe sono di piu'.
+- **Il fondo e' la luce piu' larga fra quelle chiuse da una cordonatura**,
+  non la piu' larga di tutte. Sul vassoio T1x36 del caso 87be37b868 i
+  fianchi sono alti 144 e 143 mm e il fondo, fra le cordonature di 3,9 e 3,7,
+  e' profondo 134,5: la luce piu' larga era un fianco, in cima al foglio,
+  senza niente prima di lei, e il riempimento si fermava su «nessuno si legge
+  come vassoio». Si guardano solo le luci con una cordonatura per lato, e fra
+  loro la piu' larga: fondo 138,3 x 219,0, davanti 51, fianchi e retro 146.
 - **Nel riempimento perde con un vassoio letto prima**
   (`famiglie.riempimento.analisi_riempimento`). Le quattro cordonature non bastavano: il
   film del flowpack del display da 26 del parco ha un fondo chiuso da
@@ -791,6 +798,20 @@ Solo dichiarato: nel vassoio dichiarato (e quindi nel riempimento), dopo il
 vassoio, il display con plancia e lo sportello, quando hanno rifiutato tutti
 (`famiglie.registro._prova_vassoio`, `build_vassoio`). I casi del parco che passavano non
 cambiano strada.
+
+### L'aletta senza la coda: le righe sottili sono schegge della sagoma
+
+Il vassoio T1x36 (caso 87be37b868): in basso sul retro due listelli sottili
+uscivano di 8 mm oltre i fianchi. La maschera di ogni aletta del retro,
+oltre al lembo vero (54 mm dalla piega), aveva una coda larga 1,75 mm che
+arrivava a 146 mm: una scheggia della sagoma lungo la cordonatura del
+fondo. Piegata con l'aletta, finiva sul piano del retro da -69 a +77 mm,
+oltre il fianco opposto a 69,2.
+
+**Regola** (`vassoio._senza_code`, `ALETTA_SOTTILE`). Un'aletta e' un lembo:
+le righe della sua maschera, contate lungo la piega, piu' corte di 3 mm non
+sono cartoncino dell'aletta e si tolgono prima di misurarla e piegarla. Sul
+caso il vassoio torna 138,3 x 146,2 x 219 mm (era 154,2 di largo).
 
 ### Cosa manca
 

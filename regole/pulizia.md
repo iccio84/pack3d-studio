@@ -106,6 +106,31 @@ Sul parco: brioche STD `Cutter, Legend`; T1 al mandarino `check, notes,
 technical-drawing`; T1 ai cereali `Guides and Grids, check`. Gli altri sei file
 livelli non ne hanno, e per loro resta la regola dei tratti.
 
+#### I livelli di Illustrator senza OCG
+
+Illustrator, se il PDF si salva senza «Crea livelli di Acrobat», i livelli
+non li scrive come OCG: resta solo il contenuto marcato, `/Layer /MCn BDC`,
+col nome in `/Title` del dizionario `/MCn` fra le `/Properties` della
+pagina. Per il dizionario dei livelli il file non ne ha nessuno, e il
+livello tecnico finiva nella texture.
+
+Il caso 87be37b868, vassoio espositore T1x36: cinque livelli cosi', la
+grafica, il logo, `GDA`, `notes` e `technical-drawing`. In `notes` le zone
+colorate del disegno: salmone sulle alette del davanti, turchese sotto il
+retino delle linguette e del mezzo cerchio sui fianchi, arancio sotto il
+retino dei lembi di colla. Sul modello le alette uscivano salmone e sui
+fianchi c'era un mezzo cerchio turchese; chi l'ha caricato le voleva
+bianche e senza il cerchio.
+
+**Regola** (`strati.livelli_marcati`, `strati._livelli_oggetto`). I nomi dei
+livelli marcati contano come quelli degli OCG: `tecnici` li prende coi
+criteri di sempre (`techink.OCG_TECH`, `techink.tecnica`), e `dividi` li
+riconosce sugli oggetti dalla marca `Layer` col nome in `Title`, come la
+marca `OC` col nome in `Name`. Spegnerli col dizionario non si puo' - non
+c'e' un OCG - e `senza_tecnici` li lascia a `dividi`, oggetto per oggetto. La
+sagoma del vassoio si prende dalla pagina intera, e non cambia. Sul parco
+le 48 letture restano uguali.
+
 ### I due livelli li fa la costruzione, oggetto per oggetto
 
 Il file i livelli li dichiara quando vuole: brioche STD `Cutter` e `Legend`,
