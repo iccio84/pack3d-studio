@@ -84,10 +84,13 @@ sono in GADGET.md.
 - `pack3d/exporters.py`: il GLB (`write_glb_mesh`; per l'astuccio
   `write_glb`, con lo steso al posto delle immagini delle facce).
 - `pack3d/primitive.py`: il GLB finito con ogni primitiva coi suoi vertici,
-  i nomi dei materiali unici e una texture per immagine, alla fine di ogni
-  costruzione (`registro._vertici_separati`). Senza, KeyShot apre bianchi i
-  modelli di piu' primitive (display, vassoi, stampa col rovescio); dentro,
-  il codice compone i GLB intermedi come sempre.
+  le primitive della stessa mesh e dello stesso materiale unite in una
+  (`unisci`: l'astuccio aveva una primitiva per faccia, e in KeyShot erano
+  tanti elementi; i nomi delle facce restano negli extras, `pack3d_facce`,
+  per il template), i nomi dei materiali unici e una texture per immagine,
+  alla fine di ogni costruzione (`registro._vertici_separati`). Senza,
+  KeyShot apre bianchi i modelli di piu' primitive (display, vassoi, stampa
+  col rovescio); dentro, il codice compone i GLB intermedi come sempre.
 - `pack3d/steso.py`: la texture e' lo steso del PDF. Le famiglie ci arrivano
   alla fine della costruzione: giro indietro, ritaglio sul DT, strisce delle
   tinte tolte; per l'astuccio il telaio di ogni faccia e il riscontro.

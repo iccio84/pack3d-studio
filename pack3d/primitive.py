@@ -24,7 +24,12 @@ compone i GLB intermedi come sempre. In piu':
   usa; un nome che c'e' una volta sola resta com'e' (le facce di un
   astuccio, che il template scrive sul PSD);
 - una texture per immagine e campionatore: due texture uguali diventano
-  una.
+  una;
+- le primitive della stessa mesh con lo stesso materiale, a meno del nome,
+  diventano una (`unisci`): l'astuccio ne aveva una per faccia, sulla stessa
+  texture, e in KeyShot erano tanti elementi. Il T10 passa da 12 a 2: la
+  stampa con la texture e il rovescio. I nomi delle facce restano negli
+  extras della primitiva (`pack3d_facce`), per il template.
 
 Le immagini, le zone di un atlante e i nodi restano com'erano.
 """
@@ -202,13 +207,131 @@ def separa(J, B):
     return J, _ricompatta(J, B, [])
 
 
+def _chiave(J, p):
+    """Cosa deve avere uguale una primitiva per unirsi a un'altra: il
+    materiale a meno del nome, gli attributi, il modo."""
+    m = dict((J.get("materials") or [])[p["material"]]) if "material" in p else {}
+    m.pop("name", None)
+    return json.dumps([m, sorted(p["attributes"]), p.get("mode", 4)], sort_keys=True)
+
+
+def _nome_comune(nomi, mesh):
+    """Il nome del materiale unito: la parte finale comune ("front interno",
+    "back interno" -> "interno"), o il nome della mesh."""
+    parole = [n.split() for n in nomi]
+    comune = []
+    for gruppo in zip(*[list(reversed(w)) for w in parole]):
+        if len(set(gruppo)) != 1:
+            break
+        comune.insert(0, gruppo[0])
+    return " ".join(comune) or mesh
+
+
+def unisci(J, B):
+    """`(J, B)` con le primitive della stessa mesh e dello stesso materiale
+    (a meno del nome) unite in una. L'astuccio scrive una primitiva per
+    faccia, ognuna col suo materiale sulla stessa texture: in KeyShot e negli
+    altri programmi erano tanti elementi, uno per faccia. Uniti, il pack e'
+    un elemento solo: la stampa con la sua texture, e il rovescio e il
+    taglio coi loro colori. I nomi delle facce restano negli `extras` della
+    primitiva, `pack3d_facce`: [[nome, primo triangolo, quanti]], per il
+    template (`template.triangoli`). Va dopo `separa`: ogni primitiva ha i
+    suoi vertici, e unirle e' metterli in fila."""
+    B = bytearray(B)
+    materiali = J.get("materials") or []
+
+    def aggiungi(arr, vecchio, target):
+        arr = np.ascontiguousarray(arr)
+        while len(B) % 4:
+            B.append(0)
+        J["bufferViews"].append({"buffer": 0, "byteOffset": len(B),
+                                 "byteLength": arr.nbytes, "target": target})
+        B.extend(arr.tobytes())
+        acc = {"bufferView": len(J["bufferViews"]) - 1,
+               "componentType": vecchio["componentType"],
+               "count": int(arr.shape[0]), "type": vecchio["type"]}
+        if vecchio.get("normalized"):
+            acc["normalized"] = True
+        if "min" in vecchio or "max" in vecchio:
+            acc["min"] = arr.min(0).tolist()
+            acc["max"] = arr.max(0).tolist()
+        J["accessors"].append(acc)
+        return len(J["accessors"]) - 1
+
+    for me in J.get("meshes") or []:
+        gruppi = {}
+        for p in me.get("primitives") or []:
+            if p.get("targets") or "indices" not in p:
+                gruppi.setdefault(id(p), []).append(p)
+                continue
+            gruppi.setdefault(_chiave(J, p), []).append(p)
+        nuove = []
+        for gruppo in gruppi.values():
+            if len(gruppo) == 1:
+                nuove.append(gruppo[0])
+                continue
+            facce, dati, indici, n_vert, n_tri = [], {}, [], 0, 0
+            for p in gruppo:
+                ix = _dati(J, B, p["indices"]).astype(np.int64).ravel()
+                nome = materiali[p["material"]].get("name", "") if "material" in p else ""
+                for f in (p.get("extras") or {}).get("pack3d_facce") or [[nome, 0, len(ix) // 3]]:
+                    facce.append([f[0], n_tri + int(f[1]), int(f[2])])
+                indici.append(ix + n_vert)
+                for k, i in p["attributes"].items():
+                    dati.setdefault(k, []).append(_dati(J, B, i))
+                n_vert += J["accessors"][p["attributes"]["POSITION"]]["count"]
+                n_tri += len(ix) // 3
+            primo = gruppo[0]
+            nuova = {"attributes": {k: aggiungi(np.vstack(v), J["accessors"][primo["attributes"][k]],
+                                                VERTICI) for k, v in dati.items()},
+                     "indices": aggiungi(np.concatenate(indici).astype(np.uint32),
+                                         {"componentType": 5125, "type": "SCALAR"}, INDICI),
+                     "extras": dict(primo.get("extras") or {}, pack3d_facce=facce)}
+            for k in ("material", "mode"):
+                if k in primo:
+                    nuova[k] = primo[k]
+            if "material" in primo:
+                materiali[primo["material"]]["name"] = _nome_comune(
+                    [materiali[p["material"]].get("name", "") for p in gruppo],
+                    me.get("name") or "mesh")
+            nuove.append(nuova)
+        me["primitives"] = nuove
+    # via i materiali che nessuno usa piu'
+    usati = sorted({p["material"] for me in J.get("meshes") or []
+                    for p in me.get("primitives") or [] if "material" in p})
+    if materiali and len(usati) < len(materiali):
+        m = {k: n for n, k in enumerate(usati)}
+        J["materials"] = [materiali[k] for k in usati]
+        for me in J.get("meshes") or []:
+            for p in me.get("primitives") or []:
+                if "material" in p:
+                    p["material"] = m[p["material"]]
+    # e gli accessori, con le loro viste
+    usati = sorted({v for me in J.get("meshes") or [] for p in me.get("primitives") or []
+                    for v in list(p["attributes"].values()) + [p["indices"]]
+                    + [x for t in p.get("targets") or [] for x in t.values()]})
+    m = {k: n for n, k in enumerate(usati)}
+    J["accessors"] = [J["accessors"][k] for k in usati]
+    for me in J.get("meshes") or []:
+        for p in me.get("primitives") or []:
+            p["attributes"] = {k: m[v] for k, v in p["attributes"].items()}
+            p["indices"] = m[p["indices"]]
+            for t in p.get("targets") or []:
+                for k in t:
+                    t[k] = m[t[k]]
+    return J, _ricompatta(J, B, [])
+
+
 def per_tutti(glb):
-    """Il GLB coi vertici separati per primitiva, i nomi dei materiali unici
+    """Il GLB coi vertici separati per primitiva, le primitive dello stesso
+    materiale unite (un elemento solo per mesh), i nomi dei materiali unici
     e una texture per immagine."""
     J, B = leggi(glb)
     nomi_unici(J)
     una_texture_per_immagine(J)
     J, B = separa(J, B)
+    J, B = unisci(J, B)
+    nomi_unici(J)
     return scrivi(J, B)
 
 

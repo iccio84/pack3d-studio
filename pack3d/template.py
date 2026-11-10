@@ -116,7 +116,8 @@ def _accessorio(J, binario, i):
 def triangoli(glb, sorgente):
     """`(P, UV, nomi)`: i triangoli del GLB che usano l'immagine `sorgente`
     come colore, coi vertici nel modello (n, 3, 3) e sulle UV (n, 3, 2), e
-    per ognuno il nome del suo materiale."""
+    per ognuno il nome della sua faccia: quello del materiale, o quello che
+    gli extras della primitiva (`pack3d_facce`) danno ai suoi triangoli."""
     J, binario = _texture._parti(glb)
     materiali = J.get("materials") or []
     P, UV, nomi = [], [], []
@@ -138,7 +139,16 @@ def triangoli(glb, sorgente):
             ix = ix[:len(ix) // 3 * 3].reshape(-1, 3)
             P.append(V[ix])
             UV.append(U[ix])
-            nomi += [m.get("name") or ""] * len(ix)
+            # le facce unite in una primitiva (`primitive.unisci`) hanno i
+            # loro nomi negli extras, a intervalli di triangoli
+            facce = (p.get("extras") or {}).get("pack3d_facce")
+            if facce:
+                qui = [m.get("name") or ""] * len(ix)
+                for nome, primo, quanti in facce:
+                    qui[int(primo):int(primo) + int(quanti)] = [nome] * int(quanti)
+                nomi += qui[:len(ix)]
+            else:
+                nomi += [m.get("name") or ""] * len(ix)
     if not P:
         return np.zeros((0, 3, 3)), np.zeros((0, 3, 2)), []
     return np.concatenate(P), np.concatenate(UV), nomi
