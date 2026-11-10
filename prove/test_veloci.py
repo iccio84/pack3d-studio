@@ -1689,5 +1689,61 @@ class VerticiSeparati(unittest.TestCase):
         self.assertNotEqual(prims[0]["attributes"]["POSITION"], prims[1]["attributes"]["POSITION"])
 
 
+class AlettaLiscia(unittest.TestCase):
+    """L'aletta del vassoio stesa sul taglio e non sui pixel: fra due righe
+    il trapezio coi loro capi, senza gradini, e le schegge attaccate tolte
+    (`vassoio.Maglia.pezzo_liscio`, `vassoio._senza_schegge`)."""
+
+    def test_il_bordo_obliquo_e_una_linea(self):
+        from pack3d import vassoio
+        # un lembo col bordo destro obliquo: un pixel in piu' ogni 8 righe
+        m = np.zeros((80, 60), bool)
+        for r in range(80):
+            m[r, 0:20 + r // 8] = True
+        g = vassoio.Maglia(60, 80)
+        fatto = g.pezzo_liscio(m, "righe", lambda X, Y: (X, Y, 0.0), (0, 0, -1),
+                               [("X", 0)], "lembo")
+        self.assertTrue(fatto)
+        V = np.array(g.V)
+        # i vertici della faccia esterna sul bordo destro: su una retta
+        # (scarto sotto mezzo pixel), non a scalini da un pixel
+        fuori = V[(np.abs(V[:, 2]) < 1e-9) & (V[:, 0] > 15)]
+        retta = np.polyfit(fuori[:, 1], fuori[:, 0], 1)
+        self.assertLess(np.abs(np.polyval(retta, fuori[:, 1]) - fuori[:, 0]).max(), 0.5)
+        self.assertAlmostEqual(retta[0], 1.0 / 8.0, delta=0.02)
+        # ogni costa del bordo destro guarda fuori, verso +x
+        n = np.cross(V[np.array(g.T)[:, 1]] - V[np.array(g.T)[:, 0]],
+                     V[np.array(g.T)[:, 2]] - V[np.array(g.T)[:, 0]])
+        c = V[np.array(g.T)].mean(axis=1)
+        coste = (np.abs(n[:, 2]) < 1e-9) & (c[:, 0] > 15) & (c[:, 1] > 1) & (c[:, 1] < 78)
+        self.assertTrue(coste.any())
+        self.assertTrue((n[coste, 0] > 0).all())
+
+    def test_due_tratti_in_una_riga_tornano_a_pezzo(self):
+        from pack3d import vassoio
+        m = np.zeros((20, 60), bool)
+        m[:, 0:20] = True
+        m[:, 40:60] = True
+        g = vassoio.Maglia(60, 20)
+        self.assertFalse(g.pezzo_liscio(m, "righe", lambda X, Y: (X, Y, 0.0), (0, 0, -1)))
+        self.assertEqual(g.V, [])
+        # una fessura stretta si chiude
+        self.assertTrue(g.pezzo_liscio(m, "righe", lambda X, Y: (X, Y, 0.0), (0, 0, -1),
+                                       fessura=20))
+
+    def test_la_scheggia_attaccata_se_ne_va(self):
+        from pack3d import vassoio
+        m = np.zeros((120, 120), bool)
+        m[10:110, 10:70] = True          # il lembo, 15 x 25 mm a 4 px/mm
+        m[10:110, 74:80] = True          # una scheggia larga 1,5 mm, staccata
+        m[100:110, 70:74] = True         # attaccata in fondo
+        p = vassoio._senza_schegge(m, 4.0)
+        # dove la fessura la stacca se ne va; dove e' cartoncino di fila col
+        # lembo, sulla stessa riga, resta
+        self.assertFalse(p[10:100, 74:80].any())
+        self.assertTrue(p[100:110, 10:80].all())
+        self.assertTrue(p[10:110, 10:70].all())
+
+
 if __name__ == "__main__":
     unittest.main()
