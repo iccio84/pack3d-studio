@@ -112,7 +112,17 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     V, UV, T = vassoio.mesh(v, sagoma, px_mm, creste, alt_texture=steso.height,
                             parti=parti)
     avvisi_fronte = []
-    if vassoio.testata_davanti(v) == "sud":
+    # il coperchio si monta al contrario, col fondo stampato in alto: vedi
+    # `vassoio.coperchio`. Il davanti lo dice la grafica del fondo.
+    e_coperchio, davanti = vassoio.coperchio(pdf, v)
+    if e_coperchio:
+        if davanti == "sud":
+            V = vassoio.gira(V)
+        avvisi_fronte.append("coperchio: le scritte delle pareti hanno l'alto "
+                             "verso il fondo, quindi le pareti scendono e il "
+                             "fondo stampato sta sopra; davanti la testata %s"
+                             % davanti)
+    elif vassoio.testata_davanti(v) == "sud":
         # il davanti e' la testata bassa, e la maglia mette davanti la nord
         V = vassoio.gira(V)
         avvisi_fronte.append("il fronte e' la testata sud, piu' bassa della "
@@ -124,6 +134,10 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
                                       dpi_tex / 25.4, vassoio.CODA)
     # e un blocco unico, senza feritoie fra le pareti e sul fondo
     verifiche += verifica.blocco(V, UV, T, parti, steso.size, vassoio.CODA)[1]
+    if e_coperchio:
+        # DOPO le verifiche, come il giro del flowpack: il mezzo giro attorno
+        # al davanti non cambia ne' il fronte ne' le pareti sulle fasce
+        V = vassoio.capovolgi(V)
     riscontro = quotature.riscontro_vassoio(pdf, v, d)
     # La texture e' lo steso del PDF (`pack3d.steso`): senza la coda delle
     # tinte, che diventano colori pieni, sul riquadro del DT con un

@@ -57,6 +57,31 @@ griglia; le colonne sono i laterali. Valgono le regole di tutte le famiglie:
   Sul display T1x40 le pareti cadono sulle loro fasce entro 0,3 mm; le quote
   sono vettorializzate e non si leggono come testo, e lo si dice.
 
+### Il coperchio: lo stesso foglio, montato al contrario
+
+**Un fondo e quattro pareti possono essere un coperchio**: le pareti si
+piegano in giu' e il fondo, stampato col marchio, fa da faccia di sopra. Il
+DT e' lo stesso del vassoio; lo dice la **grafica** (`vassoio.coperchio`).
+Su una parete che scende dal fondo l'alto e' la piega, quindi l'alto delle
+scritte punta AL FONDO: in gradi orari (`tracciati.verso_grafica`) nord 180,
+est 270, sud 0, ovest 90. Su un vassoio aperto punta al bordo libero.
+
+Il caso e' il coperchio del display T1x36 (caso 2168c4ac0e): fondo
+145,5 x 229,5, pareti 146,3 / 147,5 / 146,2 / 147,5, e tutte e quattro le
+pareti col testo verso il fondo. Montato come vassoio il marchio del fondo
+stava sotto, dentro si vedeva il bianco, e le scritte si leggevano a testa in
+giu' su tutti i lati.
+
+- vale se **almeno due** pareti hanno testo che vota e **tutte** quelle che
+  votano puntano al fondo: senza testo vivo, o con una parete sola girata,
+  resta un vassoio. Nel parco nessun altro vassoio cambia;
+- il **davanti** e' la testata in basso rispetto alla grafica del fondo: col
+  fondo a 0 gradi la sud, a 180 la nord; se il fondo non lo dice decide
+  `testata_davanti`;
+- il mezzo giro attorno al davanti (`vassoio.capovolgi`) si fa **dopo** le
+  verifiche, come il giro del flowpack: non cambia il fronte ne' le pareti
+  sulle loro fasce, e l'ingombro resta quello.
+
 ### Il contorno non e' un rettangolo, e il DT lo dice
 
 La prima versione del vassoio faceva quattro rettangoli dalla griglia. Era
