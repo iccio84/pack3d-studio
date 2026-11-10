@@ -712,8 +712,10 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None,
     def quad_inciso(P3, S2, fuori, linee):
         """Come `quad`, senza coste, con i tagli `linee` (u, v sul foglio)
         incisi come solchi nella faccia stampata (`incisioni.maglia_incisa`,
-        come sugli astucci): le pareti del solco col colore del taglio, la
-        faccia interna liscia."""
+        come sugli astucci), la faccia interna liscia. Le pareti del solco
+        hanno la stampa del punto del foglio dove stanno: la grafica continua
+        dentro il solco, e il taglio si legge dall'ombra, senza la riga color
+        cartone che la raschiava via."""
         P3 = np.asarray(P3, float)
         S2 = np.asarray(S2, float)
         if float(-np.cross(P3[1] - P3[0], P3[3] - P3[0]) @ np.asarray(fuori, float)) < 0:
@@ -721,18 +723,15 @@ def maglia(p, origine_mm, px_mm, misura_tex, spessore=None, dove_plancia=None,
         M = np.linalg.inv(np.column_stack([S2[1] - S2[0], S2[3] - S2[0]]))
         loc = [((M @ (np.asarray(l, float) - S2[0]).T).T).tolist() for l in linee]
         sup, solco = maglia_incisa(P3, loc, prof)
-        for parte, colore in ((sup, None), (solco, uv_taglio)):
+        for parte in (sup, solco):
             if parte is None:
                 continue
             Vp, _N, UVp, Tp = parte
             b = len(V)
             V.extend(np.asarray(Vp, float).tolist())
-            if colore is None:
-                st = np.asarray(UVp, float)
-                fo = S2[0] + st[:, :1] * (S2[1] - S2[0]) + st[:, 1:] * (S2[3] - S2[0])
-                UV.extend([uv(*q) for q in fo])
-            else:
-                UV.extend([colore] * len(Vp))
+            st = np.asarray(UVp, float)
+            fo = S2[0] + st[:, :1] * (S2[1] - S2[0]) + st[:, 1:] * (S2[3] - S2[0])
+            UV.extend([uv(*q) for q in fo])
             T.extend([(b + int(i), b + int(j), b + int(k)) for i, j, k in Tp])
         # la faccia interna, liscia, come in `quad`
         n = -np.cross(P3[1] - P3[0], P3[3] - P3[0])

@@ -1058,8 +1058,12 @@ dentro non si vedrebbero.
 «modella anche la fustella di apertura», come sull'astuccio T10 al lampone.
 Chiusa, la scatola fa vedere i tagli della plancia: sono solchi a V nel
 coperchio e nel fronte (`incisioni.maglia_incisa`, larghi 0,35 mm e
-profondi 0,22, mai piu' di meta' del cartoncino), con le pareti del colore
-del taglio, e la grafica sotto resta intera. Quali tagli lo dice la lettura
+profondi 0,22, mai piu' di meta' del cartoncino), e la grafica resta intera.
+**Le pareti del solco hanno la stampa** del punto del foglio dove stanno, non
+la tinta del taglio come negli astucci: dal proprietario, «riesci a mantenere
+la grafica sui solchi della fustella invece di raschiarla via?». Col colore
+del cartone il solco era una riga chiara che tagliava la grafica; con la
+stampa la grafica continua dentro il solco, e il taglio si legge dall'ombra. Quali tagli lo dice la lettura
 della plancia, non i tratti grezzi: sul T1x10 il DT viene da una foto, e i
 tratti sono centinaia di pezzetti. Nel coperchio i due bordi della plancia,
 dal fronte alla cerniera, e quelli della finestra dove se ne stacca
