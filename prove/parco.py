@@ -188,9 +188,10 @@ def _avvia(codice, log, casi=None):
     raise SystemExit("il server non risponde: vedi %s" % log.name)
 
 
-def _richiesta(url, percorso, cartella, caso):
+def _richiesta(url, percorso, cartella, caso, controllo=True):
     """La richiesta di un caso del parco, come la manda la pagina: i suoi PDF
-    in un corpo solo e le sue opzioni."""
+    in un corpo solo e le sue opzioni. Con `controllo` falso lo Space non
+    chiama Claude per il verdetto (`server.senza_controllo`)."""
     files = [os.path.join(cartella, "parco", "pdf", f) for f in caso["file"]]
     blocchi = []
     for f in files:
@@ -203,18 +204,20 @@ def _richiesta(url, percorso, cartella, caso):
     # un caso del parco e' una prova, non un lavoro: sullo Space non conta
     # nelle statistiche (`pack3d.statistiche.in_prova`)
     opts["prova"] = True
+    if not controllo:
+        opts["controllo"] = False
     return urllib.request.Request(
         url + percorso, data=b"".join(blocchi), method="POST",
         headers={"Content-Type": "application/pdf",
                  "X-Pack3d": json.dumps(opts)})
 
 
-def _costruisci_caso(url, cartella, caso, lettura=None):
+def _costruisci_caso(url, cartella, caso, lettura=None, controllo=True):
     """(stato, glb o None, avvisi, secondi, controllo) di un caso, come lo chiede
     la pagina. `controllo` e' il verdetto dell'AI, o None se e' spento. Con
     `lettura`, un percorso, ci salva la lettura del PDF che la pagina mette
     accanto al modello (`pack3d.lettura`), se il server l'ha fatta."""
-    req = _richiesta(url, "/api/build", cartella, caso)
+    req = _richiesta(url, "/api/build", cartella, caso, controllo)
     t = time.time()
     try:
         with urllib.request.urlopen(req, timeout=ATTESA_COSTRUZIONE) as r:
@@ -682,6 +685,12 @@ def _versione_in_linea(url):
 ESITI = {"ok": 0, "dubbio": 1, "sbagliato": 2}
 
 
+def _peso(cartella, caso):
+    """I byte dei PDF di un caso del parco."""
+    return sum(os.path.getsize(os.path.join(cartella, "parco", "pdf", f))
+               for f in caso["file"])
+
+
 def _una_per_famiglia(cartella):
     """Un caso per famiglia, la `kind` della lettura approvata: il piu'
     leggero, perche' la prova dello Space a ogni rilascio resti di pochi
@@ -702,17 +711,32 @@ def _una_per_famiglia(cartella):
     return [(k, scelti[k][1]) for k in sorted(scelti)]
 
 
+def _da_provare(cartella, nomi, uno=False):
+    """[(famiglia o None, caso)] che `spazio` costruisce: i nominati, o uno
+    per famiglia, o con `uno` il piu' leggero di tutti."""
+    if nomi:
+        return [(None, c) for c in _casi(cartella, nomi)]
+    casi = _una_per_famiglia(cartella)
+    if uno and casi:
+        casi = [min(casi, key=lambda fc: _peso(cartella, fc[1]))]
+    return casi
+
+
 def spazio(args):
     """I casi del parco sullo Space vero, appena ripartito col codice di qui:
-    quelli nominati, o uno per famiglia (`_una_per_famiglia`). Esce col
-    codice peggiore: 0 ok, 1 dubbio, 2 sbagliato, 3 non costruito o senza
-    controllo dell'AI. Sono prove: non contano nelle statistiche dello Space
-    (`_richiesta`)."""
+    quelli nominati, o uno per famiglia (`_una_per_famiglia`), o con `--uno`
+    il piu' leggero di tutti. Esce col codice peggiore: 0 ok, 1 dubbio, 2
+    sbagliato, 3 non costruito o senza il controllo dell'AI che si aspettava.
+    Sono prove: non contano nelle statistiche dello Space (`_richiesta`).
+
+    Il controllo dell'AI e' una chiamata a Claude per caso, sulla chiave
+    della console: c'e' per i casi nominati (il verdetto serve alla issue e a
+    Glam), non per la prova per famiglia ne' per `--uno`, che dicono se lo
+    Space costruisce (RILASCIO.md, punto 6). `--controllo si|no` lo
+    decide a mano."""
     from pack3d import versione
-    if args.nomi:
-        casi = [(None, c) for c in _casi(args.casi, args.nomi)]
-    else:
-        casi = _una_per_famiglia(args.casi)
+    casi = _da_provare(args.casi, args.nomi, args.uno)
+    args.con_ai = {"si": True, "no": False}.get(args.controllo, bool(args.nomi))
     url = args.url.rstrip("/")
     attesa = versione.impronta(QUI)
     fine = time.time() + args.attendi * 60
@@ -727,15 +751,18 @@ def spazio(args):
         print("lo Space dice %s, aspetto %s" % (in_linea, attesa))
         sys.stdout.flush()
         time.sleep(30)
-    print("lo Space e' alla versione %s: costruisco %d %s" % (
+    print("lo Space e' alla versione %s: costruisco %d %s, %s" % (
         attesa, len(casi), "caso" if len(casi) == 1 else "casi, uno per famiglia"
-        if not args.nomi else "casi"))
+        if not args.nomi else "casi",
+        "col controllo dell'AI" if args.con_ai else "senza il controllo dell'AI"))
     sys.stdout.flush()
     esiti = []
     for famiglia, caso in casi:
         esiti.append((famiglia, caso["nome"], _uno_sullo_spazio(url, args, caso, attesa)))
     if len(esiti) > 1:
         nomi = {v: k for k, v in ESITI.items()}
+        if not args.con_ai:
+            nomi[0] = "costruito"
         print("\n%d casi: %s" % (len(esiti), ", ".join(
             "%s %s" % (f or n, nomi.get(c, "non costruito")) for f, n, c in esiti)))
     raise SystemExit(max(c for _f, _n, c in esiti))
@@ -748,7 +775,9 @@ def _uno_sullo_spazio(url, args, caso, attesa):
     nome = caso["nome"]
     print("\n%s" % nome)
     sys.stdout.flush()
-    stato, glb, avvisi, sec, controllo = _costruisci_caso(url, args.casi, caso)
+    con_ai = getattr(args, "con_ai", True)
+    stato, glb, avvisi, sec, controllo = _costruisci_caso(url, args.casi, caso,
+                                                          controllo=con_ai)
     os.makedirs(args.uscita, exist_ok=True)
     esito = dict(nome=nome, url=url, versione=attesa, stato=stato,
                  secondi=round(sec, 1), avvisi=avvisi, controllo=controllo)
@@ -765,6 +794,10 @@ def _uno_sullo_spazio(url, args, caso, attesa):
     if stato != 200:
         print("costruzione fallita sullo Space (%d): %s" % (stato, avvisi[0][:300]))
         return 3
+    if not controllo and not con_ai:
+        # una prova che il controllo non l'ha chiesto: basta che costruisca
+        print("costruito in %.0f s, senza il controllo dell'AI (prova)" % sec)
+        return 0
     if not controllo:
         print("costruito in %.0f s, ma il controllo dell'AI non c'e' stato" % sec)
         return 3
@@ -3004,6 +3037,11 @@ def main():
                    help="dove salvare GLB, viste e verdetto")
     s.add_argument("--attendi", type=int, default=25,
                    help="minuti di attesa massima per la ripartenza dello Space")
+    s.add_argument("--uno", action="store_true",
+                   help="senza nomi: solo il caso piu' leggero, non uno per famiglia "
+                        "(il rilascio col parco uguale al byte)")
+    s.add_argument("--controllo", choices=("auto", "si", "no"), default="auto",
+                   help="il controllo dell'AI: di serie si' coi nomi, no senza")
     s.set_defaults(fai=spazio)
     g = sub.add_parser("glam", help="manda a Glam Lab il modello che lo Space "
                                     "ha appena approvato")
