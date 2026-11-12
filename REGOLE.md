@@ -130,6 +130,13 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 | **Riempimenti** - TU: un vassoio o un display con dentro le CU | che cosa e' il **pack (CU)**: flowpack o astuccio, e dell'astuccio lo spessore della carta; due posti, il **pack (CU)** e il **vassoio o display**, e finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack, o - per l'astuccio con l'apertura a strappo - se se ne vuole la fustella modellata | `cu`, `analisi_riempimento`, `build_riempimento` |
 | **Incarti** - un foglio di carta, alluminio o plastica che avvolge un prodotto | come si **chiude**: **a pieghe** (le barrette) o **avvolto** (tipo l'ovetto); due posti, il **PDF dello steso** e l'**immagine del prodotto** da incartare (JPEG, PNG o WebP), e finche' non ci sono tutti e due non si procede. Poi si costruisce, senza altre domande | passo `incarto-scelta`; `chiusura` e `prodotto` nell'intestazione; `analisi_incarto_dichiarato`, `build_incarto` |
 
+**La finestra dei materiali POP.** La stessa pagina con `pop=1`
+nell'indirizzo - in Glam, «Crea materiali POP 3D da PDF» - chiede «Che tipo
+di materiale POP intendi realizzare?» e ha le voci dei materiali per il punto
+vendita. Per ora **Totem**: il PDF del totem, e parte da solo. Il codice non
+lo sa ancora costruire: la lettura si ferma e il caso va in coda
+(`pack3d/famiglie/pop.py`, GLAM.md, sezione 10).
+
 Le famiglie da un PDF solo partono appena il PDF c'e'. Se la lettura o la
 costruzione si ferma, si torna al passo coi PDF ancora al loro posto: se ne
 cambia uno, o si riprova. *Annulla* e *Cambia tipo* tornano alla prima

@@ -101,7 +101,9 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  # un foglio che avvolge un prodotto: a pieghe (la barretta)
                  # o avvolto tutto (l'ovetto), vedi `analisi_incarto_dichiarato`
                  "incarto": "incarto", "incarti": "incarto",
-                 "wrapping": "incarto", "wrapper": "incarto"}
+                 "wrapping": "incarto", "wrapper": "incarto",
+                 # i materiali POP, dalla loro finestra: vedi `famiglie.pop`
+                 "totem": "totem"}
 
 
 def normalizza_kind(kind):
@@ -111,14 +113,18 @@ def normalizza_kind(kind):
 
 
 KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch", "riempimento",
-             "incarto")
+             "incarto", "totem")
 # come l'utente ha chiamato il pack, per il controllo dell'AI
 NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
              "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato",
              "pouch": "pouch (busta stand-up col soffietto sul fondo)",
              "riempimento": "riempimento (un vassoio espositore coi suoi flowpack)",
              "incarto": "incarto (un foglio di carta, alluminio o plastica che "
-                        "avvolge un prodotto)"}
+                        "avvolge un prodotto)",
+             # i materiali POP, dalla loro finestra: vedi `famiglie.pop`
+             "totem": "totem (materiale POP: espositore da terra, un pannello "
+                      "piatto o curvato in piedi sulla sua base, anche con i "
+                      "popup)"}
 
 
 def dichiarazione(kind, pezzi):

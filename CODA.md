@@ -409,6 +409,13 @@ fondato, guardando il foglio e i difetti:
 - **Il tipo e' giusto e il codice non conosce quella fustella**: e' un caso
   come gli altri, con una regola generale per quella famiglia, anche quando
   serve un modulo nuovo (*Cosa si risolve*).
+- **Un materiale POP** (tipo dichiarato `totem`, dalla finestra «Crea
+  materiali POP 3D da PDF»): il codice non ne sa ancora costruire nessuno, e
+  ogni caso e' il primo della sua famiglia. Si parte da `pack3d/famiglie/pop.py`
+  e dalla sua riga del registro. Il modello torna nella finestra POP di Glam
+  da solo: `glam`, `consegna` e la consegna dello Space mandano
+  `X-Model-Section: pop` quando il tipo e' un materiale POP (GLAM.md,
+  sezione 10).
 
 ## Un caso che non si risolve
 

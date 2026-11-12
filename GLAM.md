@@ -35,6 +35,7 @@ messaggio:
   codice: "b312f1e238",                 // 10 cifre esadecimali
   nome: "NOME_DEL_PDF",                 // il nome che avrà il modello in Glam
   cartella: "Casi risolti",             // dove arriverà
+  sezione: "pack",                      // "pop" dalla finestra dei materiali POP (sezione 10)
   esito: "errore",                      // "errore", "sbagliato" o "dubbio"
   stima: "Di solito arriva entro un’ora." }
 ```
@@ -430,6 +431,43 @@ I destinatari e le risposte sono quelli di `/api/import-texture`; il
 template sostituisce quello che il modello aveva. Se non passa, il modello e
 la texture restano: lo Space e la routine lo scrivono e vanno avanti.
 
+## 10. La finestra dei materiali POP
+
+I materiali per il punto vendita - totem, e poi dondolini, strip, vele,
+angolari, portaprezzi, sticker - si caricano da **un'altra finestra** di
+Glam, **«Crea materiali POP 3D da PDF»**, accanto a «Costruisci modello 3D da
+PDF». È la stessa pagina dello Space, con **`pop=1`** nell'indirizzo
+dell'iframe (`.../api/public/pack3d?api=...&casi=1&pop=1`): la stessa
+interfaccia, con le voci dei materiali al posto di quelle dei pack. Per ora
+c'è **Totem**.
+
+Il codice i materiali POP non li sa ancora costruire: un totem caricato si
+ferma alla lettura e diventa un **caso** (`pack3d/famiglie/pop.py`), che chi
+l'ha caricato manda con «Invia il caso» come ogni caso nuovo. Da lì parte la
+famiglia (CODA.md, *Un caso che non si costruisce*).
+
+Tutto quello che fa la finestra dei pack, la finestra POP lo fa uguale:
+`pack3d:built` con texture e template, `pack3d:caso`, `pack3d:chiudi`, i
+ruoli e l'eliminazione dei casi. Cambia **dove finiscono**:
+
+- **i casi**: `pack3d:caso` porta `sezione: "pop"`. Glam lo tiene nel caso, e
+  il badge, le notifiche e l'elenco dei casi della finestra POP sono i suoi;
+- **i modelli**: quelli salvati da questa finestra vanno nella sua sezione
+  (`<user_id>/pop/` invece di `<user_id>/pdf/`), cartella «Casi risolti» per
+  quelli corretti;
+- **dallo Space e dalla routine**: `/api/import-model`, `/api/import-texture`
+  e `/api/import-template` prendono l'intestazione facoltativa
+  **`X-Model-Section: pop`**, che manda il modello (e trova il modello di
+  texture e template) nella finestra POP. Senza, tutto come oggi. La mandano
+  da sole la consegna dello Space (`pack3d/coda.py`) e `prove/parco.py glam`
+  e `consegna`, quando il tipo dichiarato del caso è un materiale POP.
+
+Nella pagina con `pop=1` cambiano anche i testi per chi carica il PDF: la
+domanda («Che tipo di materiale POP intendi realizzare?»), il riquadro del
+caso nuovo («questo materiale»), e la sezione dove arriverà il modello. I
+casi e le notifiche che la pagina tiene nel browser stanno a parte da quelli
+dei pack.
+
 ## Il testo per Lovable
 
 Da incollare in Lovable così com'è. Dei due segreti, `PACK3D_IMPORT_TOKEN`
@@ -579,4 +617,22 @@ Quando chi ha caricato un PDF manda un caso nuovo dalla pagina dello Space ("Inv
 2. Quando arriva, chiudi il dialog come fai dopo aver salvato un modello, e mostra un toast di successo con titolo (testo semplice, al massimo 120 caratteri; "Caso inviato" se manca) e, come descrizione, testo (testo semplice, al massimo 300 caratteri). Mostrali come testo, mai come HTML.
 
 3. Tutto il resto resta com'è: "pack3d:caso", "pack3d:built" e il salvataggio del modello con texture e template, i casi, le notifiche e il badge.
+```
+
+### Il testo per Lovable: la finestra dei materiali POP
+
+Da incollare dopo i testi qui sopra. Non servono segreti nuovi.
+
+```text
+Aggiungi una nuova finestra, "Crea materiali POP 3D da PDF", accanto a "Costruisci modello 3D da PDF": un tasto suo e un dialog suo, fatti come quelli di "Costruisci modello 3D da PDF". Il contratto completo è in GLAM.md, sezione 10, del repository iccio84/pack3d-studio.
+
+1. Il dialog contiene lo stesso iframe della pagina dello Space di "Costruisci modello 3D da PDF", con pop=1 in più nell'indirizzo (.../api/public/pack3d?api=...&casi=1&pop=1). Con pop=1 la pagina mostra le voci dei materiali POP (per ora Totem) invece di quelle dei pack.
+
+2. Nel dialog nuovo ascolta gli stessi messaggi dell'iframe che ascolti in "Costruisci modello 3D da PDF" ("pack3d:built", "pack3d:texture", "pack3d:template", "pack3d:caso", "pack3d:chiudi", "pack3d:ruolo?", "pack3d:elimina"), con gli stessi controlli, e trattali allo stesso modo. Cambia solo dove vanno le cose: i modelli salvati da questo dialog vanno nella sezione "Crea materiali POP 3D da PDF" (percorso <user_id>/pop/<uuid>.glb invece di <user_id>/pdf/), con la loro texture e il loro template.
+
+3. Tabella pack3d_cases: nuova colonna sezione text not null default 'pack' ('pack' o 'pop'). Quando arriva "pack3d:caso", salva la sezione del messaggio (campo sezione; se manca, quella del dialog che l'ha ricevuto). Il badge del tasto "Crea materiali POP 3D da PDF" conta i casi con sezione 'pop', quello di "Costruisci modello 3D da PDF" i casi con sezione 'pack'. Con "pack3d:ruolo?" rispondi con i casi della sezione del dialog che chiede. Le notifiche di un caso con sezione 'pop' aprono la sezione "Crea materiali POP 3D da PDF", e la notifica 'risolto' dice "Lo trovi in Crea materiali POP 3D da PDF, cartella Casi risolti".
+
+4. /api/import-model, /api/import-texture e /api/import-template accettano l'intestazione facoltativa X-Model-Section: se vale "pop", il modello si salva nella sezione "Crea materiali POP 3D da PDF" (<user_id>/pop/), e texture e template cercano il modello in quella sezione. Senza intestazione, o con un altro valore, tutto come adesso.
+
+5. Tutto il resto resta com'è: la finestra "Costruisci modello 3D da PDF", i suoi casi, le notifiche, la busta, il modulo di risposta e i token.
 ```
