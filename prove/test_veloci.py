@@ -1123,6 +1123,28 @@ class ProvaDelloSpazio(unittest.TestCase):
         opts = json.loads(req.get_header("X-pack3d"))
         self.assertIs(opts["prova"], True)
         self.assertEqual(opts["kind"], "flowpack")
+        # di serie il controllo dell'AI c'e': la richiesta non dice niente
+        self.assertNotIn("controllo", opts)
+
+    def test_la_prova_senza_il_controllo_dell_ai(self):
+        caso = {"nome": "a", "file": ["a.pdf"], "opzioni": {"kind": "flowpack"}}
+        req = self.parco._richiesta("http://x", "/api/build", self.dir, caso,
+                                    controllo=False)
+        opts = json.loads(req.get_header("X-pack3d"))
+        self.assertIs(opts["controllo"], False)
+        import server
+        self.assertTrue(server.senza_controllo(opts))
+        # solo una prova lo puo' spegnere: un utente il controllo lo ha sempre
+        self.assertFalse(server.senza_controllo({"controllo": False}))
+        self.assertFalse(server.senza_controllo({"prova": True}))
+        self.assertFalse(server.senza_controllo(None))
+
+    def test_uno_solo_il_piu_leggero(self):
+        casi = self.parco._da_provare(self.dir, [], uno=True)
+        self.assertEqual([(k, c["nome"]) for k, c in casi], [("flowpack", "b")])
+        # coi nomi, quelli
+        casi = self.parco._da_provare(self.dir, ["c", "a"], uno=True)
+        self.assertEqual(sorted(c["nome"] for _k, c in casi), ["a", "c"])
 
 
 class NumeriDelleQuote(unittest.TestCase):
