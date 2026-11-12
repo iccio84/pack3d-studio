@@ -869,8 +869,9 @@ caso risolto dalla coda entra nel parco: da quel momento nessuna modifica puo'
 romperlo senza che si veda.
 
 Dopo la pubblicazione - il rilascio - la sessione prova i casi
-**sullo Space vero**, col controllo dell'AI acceso, e
-chiude le issue solo se il verdetto e' "ok". Per sapere quando lo Space e'
+**sullo Space vero**: quelli del rilascio col controllo dell'AI acceso, e
+chiude le issue solo se il verdetto e' "ok"; le altre prove senza, perche'
+ogni controllo e' una chiamata a Claude (RILASCIO.md, punto 6). Per sapere quando lo Space e'
 ripartito col codice nuovo, `/api/ping` restituisce l'**impronta** dei file
 del codice in esecuzione (`pack3d/versione.py`): non git, che nell'immagine
 dello Space non c'e'. Senza questa attesa la prova girava sul codice vecchio,

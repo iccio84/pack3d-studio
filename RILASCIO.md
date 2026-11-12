@@ -112,19 +112,44 @@ approvati da chiudere (punto 1).
    delle PR dei casi (CODA.md, *Quando si unisce*), con `base=main` e
    `head=coda-settimana`. Controlla che il workflow "Sync to Hugging Face
    Spaces" sul commit di unione finisca con **success**.
-6. **Lo Space**: da un clone di `main` aggiornato,
+6. **Lo Space**: da un clone di `main` aggiornato, `prove/parco.py spazio`
+   aspetta che lo Space riparta col codice nuovo e costruisce i casi come un
+   utente. Quanti, e con o senza il controllo dell'AI, lo dice il parco:
 
-       python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi [<nome>...]
+   - **I casi di questo rilascio e ogni issue `da-rilasciare`**, tutti in un
+     comando solo (l'attesa dello Space la paga il primo), **col controllo
+     dell'AI**: il verdetto serve alla issue e a Glam (`glam` manda solo un
+     modello che il controllo ha detto "ok").
 
-   che aspetta che lo Space riparta col codice nuovo e costruisce i casi
-   come un utente, col controllo dell'AI acceso. Senza nomi prova **un caso
-   per famiglia** - flowpack, astuccio, ballotin, coppa, incarto, pouch,
-   scatola a punta, riempimento, tubo, vassoio: per ognuna il caso del parco
-   col PDF piu' leggero (`_una_per_famiglia`), una decina di minuti in tutto.
-   Coi nomi prova quelli: i casi di questo rilascio e ogni issue
-   `da-rilasciare`, tutti in un comando solo (l'attesa dello Space la paga il
-   primo). Esce col codice peggiore. Sono prove: le richieste del parco
-   portano `"prova": true` e non contano nelle statistiche dello Space
+         python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi <nome>...
+
+   - **Il parco ha cambiato dei modelli**: anche **un caso per famiglia** -
+     flowpack, astuccio, ballotin, coppa, incarto, pouch, scatola a punta,
+     riempimento, tubo, vassoio, ognuna col PDF piu' leggero
+     (`_una_per_famiglia`) - **senza il controllo dell'AI**: dice se lo Space
+     costruisce ogni famiglia, e le verifiche restano.
+
+         python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi
+
+   - **Il parco non ha cambiato niente** (0 cambiati) e il rilascio non ha
+     casi: **una costruzione sola**, la piu' leggera, senza il controllo:
+     basta a dire che lo Space e' ripartito col codice nuovo e costruisce.
+
+         python3 prove/parco.py spazio https://iccio-maurizio.hf.space ../pack3d-casi --uno
+
+   **Perche' cosi'.** Il controllo dell'AI e' una chiamata a Claude con le
+   immagini, sulla chiave della console Anthropic. La prova per famiglia a
+   ogni rilascio, col controllo acceso, ne faceva dieci: dal 9 al 12 novembre
+   2026 le prove hanno fatto circa 137 controlli, gli utenti veri 3, e quasi
+   tutti su modelli che il parco aveva appena trovato uguali al byte. Dal
+   proprietario, il 12 novembre 2026: la prova per famiglia solo quando il
+   parco cambia dei modelli, e le prove senza il controllo dell'AI tranne il
+   caso che si rilascia. Lo Space lo salta solo per le prove che lo chiedono
+   (`"prova": true` e `"controllo": false`, `server.senza_controllo`): un
+   utente il controllo lo ha sempre. `--controllo si|no` lo decide a mano.
+
+   Esce col codice peggiore. Sono prove: le richieste del parco portano
+   `"prova": true` e non contano nelle statistiche dello Space
    (`pack3d.statistiche.in_prova`), che devono contare i PDF veri.
    - **"ok"** (uscita 0): se la issue e' `da-rilasciare` - chi l'ha
      caricato ha approvato - commenta col verdetto e il link al rilascio,
@@ -134,8 +159,10 @@ approvati da chiudere (punto 1).
    - **"dubbio" o "sbagliato"** (uscita 1 o 2): commenta col verdetto e i
      difetti, metti `da-guardare` e lasciala aperta: il controllo non e'
      d'accordo, lo guarda chi gestisce il servizio.
-   - **Lo Space non riparte** in 25 minuti (uscita 4) o il controllo non c'e'
-     stato (uscita 3): scrivilo sulla issue; la riprova il giro dopo.
+   - **Lo Space non riparte** in 25 minuti (uscita 4), o un caso col
+     controllo non l'ha avuto o non si e' costruito (uscita 3): scrivilo
+     sulla issue; la riprova il giro dopo. Senza il controllo, una
+     costruzione riuscita esce con 0 ("costruito").
    - **I lavoratori**: `curl -s https://iccio-maurizio.hf.space/api/lavori`
      dice quanti sono e la macchina che hanno visto (`macchina`). Devono
      essere tanti quante le vCPU dello Space; se no vedi DEPLOY.md, *Piu'

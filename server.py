@@ -188,6 +188,18 @@ def traccia(fase, da=None, dettaglio=""):
     return ora
 
 
+def senza_controllo(opts):
+    """Una prova che chiede di non chiamare Claude: le richieste di
+    `prove/parco.py spazio` portano `"prova": true`, e `"controllo": false`
+    quando la prova non ha bisogno del verdetto dell'AI (la prova per
+    famiglia a ogni rilascio, RILASCIO.md). Il controllo e' una chiamata a
+    Claude con le immagini, sulla chiave della console: le prove ne facevano
+    cento volte piu' degli utenti. Solo le prove lo possono spegnere: un
+    utente il controllo lo ha sempre."""
+    return (isinstance(opts, dict) and opts.get("prova") is True
+            and opts.get("controllo") is False)
+
+
 def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None):
     """`(errore, verdetto)` di una lettura o di una costruzione che si e'
     fermata, col caso gia' messo in coda.
@@ -1070,7 +1082,8 @@ class Handler(BaseHTTPRequestHandler):
                                 # /api/analyze-ai e torna qui dentro params
                                 scelto = livello_da_agente(opts.get("params"))
                                 perche = "nessuna analisi AI allegata alla richiesta"
-                                if scelto is None and controllo.attivo():
+                                if (scelto is None and controllo.attivo()
+                                        and not senza_controllo(opts)):
                                     # La pagina non chiama /api/analyze-ai: la
                                     # scelta la fa qui Claude guardando
                                     # l'artwork, con le regole di REGOLE.md.
@@ -1145,7 +1158,11 @@ class Handler(BaseHTTPRequestHandler):
                         # fuori, a posto restituito: e' solo attesa di rete, e
                         # chi viene dopo intanto costruisce.
                         quadro = None
-                        if controllo.attivo():
+                        if controllo.attivo() and senza_controllo(opts):
+                            righe_ai.append("controllo AI non fatto: e' una prova "
+                                            "che non lo chiede (controllo: false)")
+                            meta.append(righe_ai[-1])
+                        elif controllo.attivo():
                             try:
                                 quadro = controllo.prepara(pdfs, out)
                             except Exception as e:
