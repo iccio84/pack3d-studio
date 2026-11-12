@@ -9,6 +9,7 @@ import os
 import traceback
 
 from .. import artwork
+from .. import pop
 from .. import ballotin
 from .. import dieline as dl
 from .. import gelato
@@ -37,7 +38,6 @@ from .flowpack import (CASI,
     saldatura_scelta,
     sezione_da_agente)
 from .incarto import _analisi_incarto, analisi_incarto_dichiarato, build_incarto
-from .pop import MATERIALI_POP, analisi_pop
 from .pouch import analisi_pouch, build_pouch
 from .punta import build_punta
 from .riempimento import build_riempimento
@@ -121,9 +121,9 @@ def _prova_incarto_dichiarato(l):
 
 
 def _prova_pop(l):
-    # un materiale POP, dalla sua finestra: il codice non lo sa ancora
-    # costruire, si ferma col motivo e il caso va in coda (`famiglie.pop`)
-    return analisi_pop([l.pdf], l.kind)
+    # un materiale POP, dalla sua finestra: la lettura sta nel suo pacchetto
+    # (`pack3d.pop`), che le famiglie dei pack non toccano
+    return pop.analisi([l.pdf], l.kind)
 
 
 def _prova_pouch(l):
@@ -467,7 +467,7 @@ RICONOSCIMENTO = (
     Famiglia("coppa", ["coppa"], _prova_coppa_dichiarata),
     Famiglia("riempimento", ["riempimento"], _prova_riempimento),
     Famiglia("incarto dichiarato", ["incarto"], _prova_incarto_dichiarato),
-    Famiglia("materiale POP", MATERIALI_POP, _prova_pop),
+    Famiglia("materiale POP", pop.MATERIALI_POP, _prova_pop),
     Famiglia("pouch", ["pouch"], _prova_pouch),
     Famiglia("caso calibrato", [None, "flowpack", "carton", "vassoio"],
              _prova_caso_calibrato),
@@ -698,3 +698,5 @@ COSTRUZIONI = {
     "riempimento": _costruisci_riempimento,
     "flowpack": _costruisci_flowpack,
 }
+# i materiali POP portano le loro, dal loro pacchetto (`pack3d.pop`)
+COSTRUZIONI.update(pop.COSTRUZIONI)

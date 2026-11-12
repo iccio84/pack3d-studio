@@ -13,6 +13,7 @@ from .. import folding
 from .. import lamina
 from .. import lettura as lettura_pdf
 from .. import vassoio
+from ..pop import MATERIALI_POP, NOMI_POP
 
 
 # --------------------------------------------------------------------------- #
@@ -101,9 +102,9 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  # un foglio che avvolge un prodotto: a pieghe (la barretta)
                  # o avvolto tutto (l'ovetto), vedi `analisi_incarto_dichiarato`
                  "incarto": "incarto", "incarti": "incarto",
-                 "wrapping": "incarto", "wrapper": "incarto",
-                 # i materiali POP, dalla loro finestra: vedi `famiglie.pop`
-                 "totem": "totem"}
+                 "wrapping": "incarto", "wrapper": "incarto"}
+# i materiali POP, dalla loro finestra: li dice il loro pacchetto (`pack3d.pop`)
+SINONIMI_KIND.update({k: k for k in MATERIALI_POP})
 
 
 def normalizza_kind(kind):
@@ -113,7 +114,7 @@ def normalizza_kind(kind):
 
 
 KIND_NOTI = ("carton", "flowpack", "vassoio", "coppa", "pouch", "riempimento",
-             "incarto", "totem")
+             "incarto") + MATERIALI_POP
 # come l'utente ha chiamato il pack, per il controllo dell'AI
 NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
              "vassoio": "vassoio espositore", "coppa": "coppa o cono gelato",
@@ -121,10 +122,7 @@ NOMI_KIND = {"carton": "cartotecnico", "flowpack": "flowpack",
              "riempimento": "riempimento (un vassoio espositore coi suoi flowpack)",
              "incarto": "incarto (un foglio di carta, alluminio o plastica che "
                         "avvolge un prodotto)",
-             # i materiali POP, dalla loro finestra: vedi `famiglie.pop`
-             "totem": "totem (materiale POP: espositore da terra, un pannello "
-                      "piatto o curvato in piedi sulla sua base, anche con i "
-                      "popup)"}
+             **NOMI_POP}
 
 
 def dichiarazione(kind, pezzi):

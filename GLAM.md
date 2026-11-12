@@ -442,7 +442,7 @@ interfaccia, con le voci dei materiali al posto di quelle dei pack. Per ora
 c'è **Totem**.
 
 Il codice i materiali POP non li sa ancora costruire: un totem caricato si
-ferma alla lettura e diventa un **caso** (`pack3d/famiglie/pop.py`), che chi
+ferma alla lettura e diventa un **caso** (`pack3d/pop/`), che chi
 l'ha caricato manda con «Invia il caso» come ogni caso nuovo. Da lì parte la
 famiglia (CODA.md, *Un caso che non si costruisce*).
 
