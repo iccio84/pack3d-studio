@@ -477,7 +477,7 @@
   </div>
   <div id="empty">
     <strong>Il modello 3D comparir&agrave; qui</strong>
-    <div>Scegli qui sotto il tipo di pack, poi carica i PDF: puoi anche trascinarli qui.</div>
+    <div id="empty-testo">Scegli qui sotto il tipo di pack, poi carica i PDF: puoi anche trascinarli qui.</div>
     <button id="riprova" type="button" hidden>Riprova</button>
   </div>
   <div id="caso" role="alert">
@@ -576,14 +576,17 @@
   </section>
 
   <div id="famiglie" class="pannello on">
-    <h2 class="domanda">Che tipo di Pack/Riempimento intendi realizzare?</h2>
-    <div class="carte" role="group" aria-label="Famiglia del pack">
+    <h2 class="domanda" id="famiglie-domanda">Che tipo di Pack/Riempimento intendi realizzare?</h2>
+    <div class="carte" id="carte-pack" role="group" aria-label="Famiglia del pack">
       <button type="button" data-f="flowpack"><b>Flowpack</b><span>Pack con saldature e pinne laterali</span></button>
       <button type="button" data-f="pouch"><b>Pouch</b><span>Pack con fondo a soffietto ed estremit&agrave; saldata</span></button>
       <button type="button" data-f="carton"><b>Cartotecnico</b><span>Astuccio o scatola</span></button>
       <button type="button" data-f="vassoio"><b>Vassoio</b><span>Vassoi espositori e display, realizzati vuoti</span></button>
       <button type="button" data-f="riempimento"><b>Riempimenti</b><span>Un vassoio o un display con dentro le CU</span></button>
       <button type="button" data-f="incarto"><b>Incarti</b><span>Un foglio che avvolge il prodotto: chiuso a pieghe o avvolto</span></button>
+    </div>
+    <div class="carte" id="carte-pop" role="group" aria-label="Materiale POP" hidden>
+      <button type="button" data-f="totem"><b>Totem</b><span>Espositore da terra: pannello piatto o curvato, anche con i popup</span></button>
     </div>
   </div>
 
@@ -1170,7 +1173,17 @@ const OFFLINE = 'Backend non raggiungibile. Avvia server.py, oppure apri la pagi
 // il sottotitolo del riquadro vuoto cambia quando il backend manca: si tiene
 // da parte l'originale invece di riscriverlo a mano, che e' il modo di farli
 // divergere
-const INVITO = document.querySelector('#empty div').textContent;
+// La finestra dei materiali POP, i materiali per il punto vendita: la stessa
+// pagina con pop=1 nell'indirizzo, e le voci dei materiali al posto di quelle
+// dei pack. In Glam Lab e' la finestra «Crea materiali POP 3D da PDF», con le
+// sue cartelle (GLAM.md, sezione 10).
+const POP = new URLSearchParams(location.search).get('pop') === '1';
+const GLAM_SEZIONE = POP ? 'Crea materiali POP 3D da PDF' : 'Costruisci modello 3D da PDF';
+// come la pagina chiama quello che si costruisce: nei testi che parlano a chi
+// carica il PDF
+const COSA = POP ? 'materiale' : 'pack';
+const INVITO = POP ? 'Scegli qui sotto il materiale POP, poi carica il PDF: puoi anche trascinarlo qui.'
+                   : document.querySelector('#empty div').textContent;
 
 /* Un servizio che si sveglia NON e' un servizio irraggiungibile: un servizio
    ospitato si mette in pausa quando nessuno lo usa - quindici minuti sul
@@ -1638,7 +1651,8 @@ function avvisaGlam(v){
   try{
     if (window.parent === window) return;
     window.parent.postMessage({type:'pack3d:caso', codice:v.codice, nome:nomeInGlam(),
-      cartella:GLAM_CARTELLA, esito:v.esito || '', stima:STIMA}, location.origin);
+      cartella:GLAM_CARTELLA, sezione:POP ? 'pop' : 'pack', esito:v.esito || '', stima:STIMA},
+      location.origin);
   }catch(e){ /* senza Glam la pagina va lo stesso */ }
 }
 
@@ -1654,8 +1668,8 @@ function mostraCaso(v, blob, tieniNota){
   // comunque, e la frase sul modello non avrebbe senso
   const errore = v.esito === 'errore';
   document.getElementById('caso-titolo').textContent = errore
-    ? 'Caso nuovo: il codice non sa ancora costruire questo pack'
-    : 'Caso nuovo: il modello non è il tuo pack';
+    ? 'Caso nuovo: il codice non sa ancora costruire questo ' + COSA
+    : 'Caso nuovo: il modello non è il tuo ' + COSA;
   document.getElementById('caso-mostra').hidden = !blob;
   document.getElementById('caso-pdf').textContent = v.pack_nel_pdf ? 'Nel PDF: ' + v.pack_nel_pdf : '';
   document.getElementById('caso-mod').textContent = v.modello && !errore ? 'Il modello: ' + v.modello : '';
@@ -1663,7 +1677,7 @@ function mostraCaso(v, blob, tieniNota){
   // senza coda nessuno lo correggera': meglio non promettere niente
   document.getElementById('caso-dove').textContent = v.in_coda
     ? 'Quando sar\u00e0 corretto, troverai il modello giusto in Glam Lab, nella sezione '
-      + '\u00abCostruisci modello 3D da PDF\u00bb, cartella \u00ab' + GLAM_CARTELLA
+      + '\u00ab' + GLAM_SEZIONE + '\u00bb, cartella \u00ab' + GLAM_CARTELLA
       + '\u00bb, col nome \u00ab' + nomeInGlam() + '\u00bb.'
     : '';
   document.getElementById('caso-quando').textContent = v.in_coda
@@ -1697,7 +1711,7 @@ function mostraVerifica(v){
   verificaEl.textContent = v.in_coda
     ? chi + ', e il caso è andato in verifica (codice '
       + (v.codice || '-') + '). Se va corretto, troverai il modello giusto in Glam Lab, nella sezione '
-      + '«Costruisci modello 3D da PDF», cartella «' + GLAM_CARTELLA
+      + '«' + GLAM_SEZIONE + '», cartella «' + GLAM_CARTELLA
       + '», col nome «' + nomeInGlam() + '». ' + STIMA
     : chi + ' su questo modello (codice ' + (v.codice || '-')
       + '). Il modello lo puoi usare lo stesso.';
@@ -1853,7 +1867,8 @@ invioSi.addEventListener('click', async () => {
   else if (v.esito === 'dubbio') mostraVerifica(v);
   else {
     verificaEl.textContent = 'Caso inviato (codice ' + v.codice + '): quando sarà corretto,'
-      + ' troverai il modello giusto in Glam Lab, cartella «' + GLAM_CARTELLA + '». ' + STIMA;
+      + ' troverai il modello giusto in Glam Lab, nella sezione «' + GLAM_SEZIONE
+      + '», cartella «' + GLAM_CARTELLA + '». ' + STIMA;
     verificaEl.classList.add('on');
     aggiornaAI();
     avvisaGlam(v);
@@ -1875,8 +1890,8 @@ function casoFinito(v){
   annulla();
   setStatus('Caso inviato · lo segui nella finestra dei casi', '');
   const inGlam = aGlam({type: 'pack3d:chiudi', codice: v.codice, titolo: 'Caso inviato',
-    testo: '«' + nome + '»: quando sarà corretto, lo trovi in «Costruisci modello 3D'
-      + ' da PDF», cartella «' + GLAM_CARTELLA + '». ' + STIMA});
+    testo: '«' + nome + '»: quando sarà corretto, lo trovi in «' + GLAM_SEZIONE
+      + '», cartella «' + GLAM_CARTELLA + '». ' + STIMA});
   if (!inGlam) apriFinestra(casiEl, casiBtn, true);
 }
 
@@ -1905,7 +1920,9 @@ addEventListener('pagehide', () => scartaInAttesa(true));
 // sono anche quelli che il ruolo vede (vedi "eliminare un caso"). Lo stato lo dice
 // lo Space (/api/casi), che lo legge dal registro dei casi: la routine ci
 // scrive a che punto e' e, se le manca qualcosa, la domanda.
-const RICORDA_CASI = 'pack3d.casi', RICORDA_NOTIFICHE = 'pack3d.notifiche';
+// la finestra dei materiali POP tiene i suoi, a parte
+const RICORDA_CASI = POP ? 'pack3d.pop.casi' : 'pack3d.casi';
+const RICORDA_NOTIFICHE = POP ? 'pack3d.pop.notifiche' : 'pack3d.notifiche';
 const RICORDA_EMAIL = 'pack3d.email', RICORDA_FINESTRE = 'pack3d.finestre';
 const NOTIFICHE_MAX = 10;
 // un caso appena mandato arriva su GitHub dopo qualche secondo: fino ad
@@ -2197,7 +2214,7 @@ function decisioneInviata(c, approvato){
   aGlam({type: 'pack3d:chiudi', codice: c.codice,
     titolo: approvato ? 'Modello approvato' : 'Modello non approvato',
     testo: approvato
-      ? '\u00ab' + c.nome + '\u00bb: lo trovi in \u00abCostruisci modello 3D da PDF\u00bb, cartella \u00ab'
+      ? '\u00ab' + c.nome + '\u00bb: lo trovi in \u00ab' + GLAM_SEZIONE + '\u00bb, cartella \u00ab'
         + GLAM_CARTELLA + '\u00bb.'
       : '\u00ab' + c.nome + '\u00bb: abbiamo ricevuto cosa non va, e il caso \u00e8 ripartito. '
         + 'Il modello nuovo lo approvi nella finestra dei casi.'});
@@ -2774,9 +2791,16 @@ const FAMIGLIE = {
             slot: ['Il PDF dello steso (il foglio aperto)',
                    'L\u2019immagine del prodotto da incartare'],
             tipi: ['pdf', 'img']},
+  // i materiali POP, nella finestra con pop=1: il codice non li sa ancora
+  // costruire, e il caso va in coda col PDF (pack3d/famiglie/pop.py)
+  totem: {nome: 'Totem',
+          descr: 'Espositore da terra per il punto vendita: un pannello piatto o curvato, '
+               + 'in piedi sulla sua base, anche con i popup (le sagome in rilievo applicate '
+               + 'davanti). Carica il PDF del totem.',
+          slot: ['Il PDF del totem']},
 };
 // queste partono da sole appena c'e' il PDF: nessun'altra domanda prima
-const DA_SOLE = ['flowpack', 'pouch', 'vassoio'];
+const DA_SOLE = ['flowpack', 'pouch', 'vassoio', 'totem'];
 // la famiglia scelta, astuccio o scatola, e i PDF caricati, uno per posto
 let famiglia = null, carto = null, slots = [], slotAttivo = -1;
 // come si chiude l'incarto: 'pieghe' o 'avvolto'
@@ -2956,7 +2980,11 @@ async function riceviFile(lista){
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
-  if (!famiglia){ setStatus('Prima scegli che tipo di pack vuoi realizzare','err'); return; }
+  if (!famiglia){
+    setStatus(POP ? 'Prima scegli che materiale POP vuoi realizzare'
+                  : 'Prima scegli che tipo di pack vuoi realizzare','err');
+    return;
+  }
   if (!passoEl.classList.contains('on')){
     setStatus('Per cambiare i PDF premi Annulla e ricomincia','err'); return;
   }
@@ -3335,6 +3363,16 @@ fileImgEl.onchange = e => { riceviFile(e.target.files); e.target.value=''; };
 fileImgEl.addEventListener('cancel', () => { slotAttivo = -1; });
 // se la finestra dei file si chiude senza scegliere, il posto non resta in attesa
 fileEl.addEventListener('cancel', () => { slotAttivo = -1; });
+// la finestra dei materiali POP: la sua domanda, le sue voci, il suo nome
+if (POP){
+  document.title = GLAM_SEZIONE;
+  document.getElementById('famiglie-domanda').textContent =
+    'Che tipo di materiale POP intendi realizzare?';
+  document.getElementById('carte-pack').hidden = true;
+  document.getElementById('carte-pop').hidden = false;
+  document.getElementById('empty-testo').textContent = INVITO;
+  document.getElementById('caso-titolo').textContent = 'Caso nuovo: il modello non \u00e8 il tuo materiale';
+}
 famiglieEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliFamiglia(b.dataset.f); });
 cartoEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCarto(b.dataset.c); });
 cuSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCu(b.dataset.u); });

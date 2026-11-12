@@ -24,7 +24,7 @@ sono in GADGET.md.
 - `pack3d/famiglie/registro.py`, `RICONOSCIMENTO`: la **lettura** del PDF e il riconoscimento
   della famiglia, una riga per prova nell'ordine in cui si fanno, ognuna
   con le tipologie dichiarate per cui vale e la sua `_prova_<forma>`: le
-  dichiarate sole (coppa, riempimento, incarto, pouch), il caso calibrato,
+  dichiarate sole (coppa, riempimento, incarto, il materiale POP, pouch), il caso calibrato,
   vassoio e display, cono, ballotin, il film che lo dice, l'astuccio, poi -
   solo se il solutore astuccio ha rifiutato un cartotecnico - punta, pezzo
   di coppa e tubo, l'incarto a triangolo e per ultimo il flowpack.
@@ -34,6 +34,10 @@ sono in GADGET.md.
   `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`); la sua
   immagine del prodotto la separa dal PDF `_separa_prodotto` (in
   `server.py`), all'inizio di `do_POST`, e va col caso (`blocchi_caso`).
+  I **materiali POP** (per ora il totem), dalla finestra «Crea materiali POP
+  3D da PDF» (la pagina con `pop=1`), stanno in `pack3d/famiglie/pop.py`: la
+  loro riga del registro ferma la lettura e il caso va in coda; `sezione_glam`
+  dice che il modello torna nella finestra POP di Glam (GLAM.md, sezione 10).
 - `pack3d/famiglie/`: `build_carton` (`astuccio`), `build_vassoio`,
   `build_plancia`, `build_scatola_plancia` (`vassoio`), `build_coppa`,
   `build_prisma` (`coppa`), `build_pouch`, `build_ballotin`, `build_punta`,

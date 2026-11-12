@@ -898,6 +898,10 @@ def glam(args):
     # il caso della coda: Glam mette il modello a chi l'ha caricato
     if caso.get("codice"):
         intestazioni["X-Pack3d-Codice"] = caso["codice"]
+    # un materiale POP va nella sua finestra, «Crea materiali POP 3D da PDF»
+    sezione = sezione_glam(caso)
+    if sezione:
+        intestazioni["X-Model-Section"] = sezione
     req = urllib.request.Request(
         args.url.rstrip("/") + "/api/import-model", data=glb, method="POST",
         headers=intestazioni)
@@ -920,11 +924,25 @@ def glam(args):
         risposta.get("name", nome), risposta.get("category", args.categoria),
         risposta.get("id", "?"),
         ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
-    _texture_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"))
-    _template_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"))
+    _texture_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"), sezione)
+    _template_in_glam(args.url, glb, nome, args.categoria, caso.get("codice"), sezione)
 
 
-def _template_in_glam(url, glb, nome, categoria, codice):
+def _nome_sezione(caso):
+    """Il nome della finestra di Glam dove va il modello del caso."""
+    from pack3d.famiglie.pop import SEZIONI_GLAM
+    return SEZIONI_GLAM[sezione_glam(caso)]
+
+
+def sezione_glam(caso):
+    """La finestra di Glam dove va il modello del caso: "pop" per un
+    materiale POP (GLAM.md, sezione 10), None per i pack, che vanno in
+    «Costruisci modello 3D da PDF» come sempre."""
+    from pack3d.famiglie import pop
+    return pop.sezione_glam((caso.get("opzioni") or {}).get("kind"))
+
+
+def _template_in_glam(url, glb, nome, categoria, codice, sezione=None):
     """Il template PSD del modello appena mandato, per «Scarica Template» di
     Glam (GLAM.md, sezione 9): `pack3d.template`. Come la texture: il
     modello in Glam c'e' gia', e se il template non passa lo si dice e
@@ -951,6 +969,8 @@ def _template_in_glam(url, glb, nome, categoria, codice):
                     "User-Agent": "pack3d-studio"}
     if codice:
         intestazioni["X-Pack3d-Codice"] = codice
+    if sezione:
+        intestazioni["X-Model-Section"] = sezione
     req = urllib.request.Request(
         url.rstrip("/") + "/api/import-template", data=t["dati"], method="POST",
         headers=intestazioni)
@@ -975,7 +995,7 @@ def _template_in_glam(url, glb, nome, categoria, codice):
         ", utenti: %s" % risposta["utenti"] if risposta.get("utenti") else ""))
 
 
-def _texture_in_glam(url, glb, nome, categoria, codice):
+def _texture_in_glam(url, glb, nome, categoria, codice, sezione=None):
     """La texture del modello appena mandato, nella sezione texture di Glam,
     legata a quel modello (GLAM.md, sezione 8): `pack3d.texture`. Il
     modello in Glam c'e' gia': se la texture non passa lo si dice, e il
@@ -998,6 +1018,8 @@ def _texture_in_glam(url, glb, nome, categoria, codice):
                     "User-Agent": "pack3d-studio"}
     if codice:
         intestazioni["X-Pack3d-Codice"] = codice
+    if sezione:
+        intestazioni["X-Model-Section"] = sezione
     req = urllib.request.Request(
         url.rstrip("/") + "/api/import-texture", data=t["dati"], method="POST",
         headers=intestazioni)
@@ -1966,8 +1988,8 @@ def approvato(args):
     detto = rumore.getvalue().strip()
     nome = nome_glam(voce)
     messaggio = args.messaggio or ("Il modello corretto e' in Glam Lab, nella sezione "
-                                   "«Costruisci modello 3D da PDF», cartella «%s», col "
-                                   "nome «%s»." % (args.categoria, nome))
+                                   "«%s», cartella «%s», col nome «%s»."
+                                   % (_nome_sezione(voce), args.categoria, nome))
     with redirect_stdout(io.StringIO()):
         try:
             caso(argparse.Namespace(url=args.glam, casi=args.casi, codice=cod,
