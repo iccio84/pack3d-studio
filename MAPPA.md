@@ -35,9 +35,13 @@ sono in GADGET.md.
   immagine del prodotto la separa dal PDF `_separa_prodotto` (in
   `server.py`), all'inizio di `do_POST`, e va col caso (`blocchi_caso`).
   I **materiali POP** (per ora il totem), dalla finestra «Crea materiali POP
-  3D da PDF» (la pagina con `pop=1`), stanno in `pack3d/famiglie/pop.py`: la
+  3D da PDF» (la pagina con `pop=1`), stanno in `pack3d/pop/`, e solo li'
+  (regole/pop.md, *Il confine*): il registro e i tipi dichiarati li leggono
+  da `pack3d.pop` (`MATERIALI_POP`, `NOMI_POP`, `analisi`, `COSTRUZIONI`); la
   loro riga del registro ferma la lettura e il caso va in coda; `sezione_glam`
   dice che il modello torna nella finestra POP di Glam (GLAM.md, sezione 10).
+  `prove/confini.py` divide il repository in POP, comune e pack, e nelle
+  Actions ferma una PR verso coda-settimana che tocca POP e pack insieme.
 - `pack3d/famiglie/`: `build_carton` (`astuccio`), `build_vassoio`,
   `build_plancia`, `build_scatola_plancia` (`vassoio`), `build_coppa`,
   `build_prisma` (`coppa`), `build_pouch`, `build_ballotin`, `build_punta`,

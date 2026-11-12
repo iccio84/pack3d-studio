@@ -20,6 +20,16 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
+        with:
+          # la PR unita alla sua base e la base: il confine fra POP e pack
+          # guarda i file che la PR cambia
+          fetch-depth: 2
+      # Una PR verso il ramo della settimana o e' del POP o e' dei pack, mai
+      # le due cose insieme (regole/pop.md, *Il confine*). Non vale per il
+      # rilascio (verso main) ne' per il riallineo (da main)
+      - name: Il confine fra POP e pack
+        if: github.event_name == 'pull_request' && github.base_ref == 'coda-settimana' && github.head_ref != 'main'
+        run: python prove/confini.py HEAD^1 HEAD
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"

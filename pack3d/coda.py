@@ -849,7 +849,7 @@ def _sezione(cartella):
     materiale POP (GLAM.md, sezione 10), None per un pack, che va in
     «Costruisci modello 3D da PDF» come sempre. Lo dice il tipo dichiarato,
     nel contesto di verdetto.json."""
-    from .famiglie.pop import sezione_glam
+    from .pop import sezione_glam
     try:
         dati, _sha = _leggi_json(cartella + "/verdetto.json")
         kind = ((dati.get("contesto") or {}).get("opzioni") or {}).get("kind")
@@ -930,7 +930,7 @@ def _in_glam(cod, issue, cartella, nome):
     """Nel suo thread: il modello approvato in Glam, il caso risolto, la issue
     `da-rilasciare`. Se Glam non lo prende, rilancia la routine."""
     from urllib.parse import quote
-    from .famiglie.pop import SEZIONI_GLAM
+    from .pop import SEZIONI_GLAM
     n = issue["number"]
     sezione = _sezione(cartella)
     try:

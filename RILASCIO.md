@@ -25,7 +25,12 @@ macchina (l'impronta del processore): le macchine di GitHub non sono tutte
 uguali e lo stesso codice da' GLB diversi al byte da un processore all'altro,
 quindi una costruzione in cassa vale solo contro una della stessa macchina.
 Su un processore che la cassa non ha ancora visto, `main` si ricostruisce
-intera: il giro dura una ventina di minuti in piu'. Senza correzioni non si rilascia niente:
+intera: il giro dura una ventina di minuti in piu'.
+
+**POP e pack, nel parco.** Una PR del POP non cambia nessun caso dei pack, e
+una dei pack nessun caso POP (regole/pop.md, *Il confine*): nel confronto del
+parco ogni `CAMBIA` deve essere della parte della PR che si rilascia. Un caso
+dell'altra parte che cambia ferma il rilascio, come una misura approvata. Senza correzioni non si rilascia niente:
 il giro della routine che non trova casi non pubblica.
 
 Resta una **rete di sicurezza**: il giro programmato della routine (quello

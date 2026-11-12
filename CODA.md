@@ -411,10 +411,14 @@ fondato, guardando il foglio e i difetti:
   serve un modulo nuovo (*Cosa si risolve*).
 - **Un materiale POP** (tipo dichiarato `totem`, dalla finestra «Crea
   materiali POP 3D da PDF»): il codice non ne sa ancora costruire nessuno, e
-  ogni caso e' il primo della sua famiglia. Si parte da `pack3d/famiglie/pop.py`
-  e dalla sua riga del registro. Il modello torna nella finestra POP di Glam
-  da solo: `glam`, `consegna` e la consegna dello Space mandano
-  `X-Model-Section: pop` quando il tipo e' un materiale POP (GLAM.md,
+  ogni caso e' il primo della sua famiglia. Si lavora **solo** in
+  `pack3d/pop/`, `regole/pop.md` e `prove/test_pop.py`, piu' la voce nella
+  pagina se serve: le famiglie dei pack non si toccano, e la PR e' solo del
+  POP (regole/pop.md, *Il confine*; `prove/confini.py` la ferma se tocca
+  anche i pack). Se al POP serve una modifica in un modulo dei pack, e' una
+  PR dei pack a parte, prima, col parco che lo prova. Il modello torna nella
+  finestra POP di Glam da solo: `glam`, `consegna` e la consegna dello Space
+  mandano `X-Model-Section: pop` quando il tipo e' un materiale POP (GLAM.md,
   sezione 10).
 
 ## Un caso che non si risolve
