@@ -844,7 +844,29 @@ def glam_configurato():
     return bool(os.environ.get("PACK3D_IMPORT_TOKEN", "").strip())
 
 
-def _texture_in_glam(cod, glb, nome):
+def _sezione(cartella):
+    """La finestra di Glam del caso: "pop" se dalla pagina e' arrivato un
+    materiale POP (GLAM.md, sezione 10), None per un pack, che va in
+    «Costruisci modello 3D da PDF» come sempre. Lo dice il tipo dichiarato,
+    nel contesto di verdetto.json."""
+    from .famiglie.pop import sezione_glam
+    try:
+        dati, _sha = _leggi_json(cartella + "/verdetto.json")
+        kind = ((dati.get("contesto") or {}).get("opzioni") or {}).get("kind")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return sezione_glam(kind)
+
+
+def _con_sezione(intestazioni, sezione):
+    """Le intestazioni per Glam, con la finestra del modello se e' quella dei
+    materiali POP."""
+    if sezione:
+        intestazioni["X-Model-Section"] = sezione
+    return intestazioni
+
+
+def _texture_in_glam(cod, glb, nome, sezione=None):
     """La texture del modello appena mandato, nella sezione texture di Glam
     (GLAM.md, sezione 8; `pack3d.texture`). Il modello in Glam c'e' gia':
     se la texture non passa, lo dice il log e basta."""
@@ -858,13 +880,14 @@ def _texture_in_glam(cod, glb, nome):
             return
         req = urllib.request.Request(
             GLAM_URL + "/api/import-texture", data=t["dati"], method="POST",
-            headers={"Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
-                     "Content-Type": t["mime"],
-                     "X-Model-Name": quote(nome, safe=_URI),
-                     "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
-                     "X-Texture-Name": quote(texture.nomi_file(nome, [t])[0], safe=_URI),
-                     "X-Pack3d-Codice": cod,
-                     "User-Agent": "pack3d-studio"})
+            headers=_con_sezione({
+                "Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
+                "Content-Type": t["mime"],
+                "X-Model-Name": quote(nome, safe=_URI),
+                "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
+                "X-Texture-Name": quote(texture.nomi_file(nome, [t])[0], safe=_URI),
+                "X-Pack3d-Codice": cod,
+                "User-Agent": "pack3d-studio"}, sezione))
         with urllib.request.urlopen(req, timeout=120) as r:
             r.read()
         print("coda: caso %s, in Glam anche la texture" % cod, file=sys.stderr)
@@ -873,7 +896,7 @@ def _texture_in_glam(cod, glb, nome):
               % (cod, e), file=sys.stderr)
 
 
-def _template_in_glam(cod, glb, nome):
+def _template_in_glam(cod, glb, nome, sezione=None):
     """Il template PSD del modello appena mandato, per «Scarica Template» di
     Glam (GLAM.md, sezione 9; `pack3d.template`). Come la texture: se non
     passa, lo dice il log e basta."""
@@ -887,13 +910,14 @@ def _template_in_glam(cod, glb, nome):
             return
         req = urllib.request.Request(
             GLAM_URL + "/api/import-template", data=t["dati"], method="POST",
-            headers={"Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
-                     "Content-Type": template.MIME,
-                     "X-Model-Name": quote(nome, safe=_URI),
-                     "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
-                     "X-Template-Name": quote(template.nome_file(nome), safe=_URI),
-                     "X-Pack3d-Codice": cod,
-                     "User-Agent": "pack3d-studio"})
+            headers=_con_sezione({
+                "Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
+                "Content-Type": template.MIME,
+                "X-Model-Name": quote(nome, safe=_URI),
+                "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
+                "X-Template-Name": quote(template.nome_file(nome), safe=_URI),
+                "X-Pack3d-Codice": cod,
+                "User-Agent": "pack3d-studio"}, sezione))
         with urllib.request.urlopen(req, timeout=300) as r:
             r.read()
         print("coda: caso %s, in Glam anche il template" % cod, file=sys.stderr)
@@ -906,7 +930,9 @@ def _in_glam(cod, issue, cartella, nome):
     """Nel suo thread: il modello approvato in Glam, il caso risolto, la issue
     `da-rilasciare`. Se Glam non lo prende, rilancia la routine."""
     from urllib.parse import quote
+    from .famiglie.pop import SEZIONI_GLAM
     n = issue["number"]
+    sezione = _sezione(cartella)
     try:
         glb = modello(cod)
         info, _sha = _leggi_json(cartella + "/modello.json")
@@ -918,12 +944,13 @@ def _in_glam(cod, issue, cartella, nome):
             GLAM_URL + "/api/import-model", data=glb, method="POST",
             # Glam sta dietro Cloudflare, che respinge l'intestazione di serie
             # di urllib (errore 1010)
-            headers={"Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
-                     "Content-Type": "model/gltf-binary",
-                     "X-Model-Name": quote(nome, safe=_URI),
-                     "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
-                     "X-Pack3d-Codice": cod,
-                     "User-Agent": "pack3d-studio"})
+            headers=_con_sezione({
+                "Authorization": "Bearer " + os.environ["PACK3D_IMPORT_TOKEN"].strip(),
+                "Content-Type": "model/gltf-binary",
+                "X-Model-Name": quote(nome, safe=_URI),
+                "X-Model-Category": quote(GLAM_CARTELLA, safe=_URI),
+                "X-Pack3d-Codice": cod,
+                "User-Agent": "pack3d-studio"}, sezione))
         with urllib.request.urlopen(req, timeout=300) as r:
             r.read()
     except (OSError, ValueError, KeyError) as e:
@@ -933,8 +960,8 @@ def _in_glam(cod, issue, cartella, nome):
                       "Il caso %s: chi l'ha caricato ha APPROVATO il modello corretto, e "
                       "lo Space non e' riuscito a mandarlo in Glam: %s")
         return
-    _texture_in_glam(cod, glb, nome)
-    _template_in_glam(cod, glb, nome)
+    _texture_in_glam(cod, glb, nome, sezione)
+    _template_in_glam(cod, glb, nome, sezione)
     try:
         ora = datetime.datetime.now(datetime.timezone.utc)
         percorso = cartella + "/stato.json"
@@ -943,9 +970,9 @@ def _in_glam(cod, issue, cartella, nome):
         storia = [v for v in dati.get("storia") or [] if isinstance(v, dict)]
         dati["storia"] = (storia + [{
             "stato": "risolto", "nome": nome,
-            "messaggio": "Il modello corretto e' in Glam Lab, nella sezione «Costruisci "
-                         "modello 3D da PDF», cartella «%s», col nome «%s»."
-                         % (GLAM_CARTELLA, nome),
+            "messaggio": "Il modello corretto e' in Glam Lab, nella sezione «%s», "
+                         "cartella «%s», col nome «%s»."
+                         % (SEZIONI_GLAM[sezione], GLAM_CARTELLA, nome),
             "quando": ora.strftime("%Y-%m-%dT%H:%M:%SZ")}])[-30:]
         _scrivi_json(percorso, dati, sha, "Caso %s: risolto" % cod)
         _richiesta("POST", "/repos/%s/issues/%d/comments" % (_repo(), n), {"body": "\n".join([
