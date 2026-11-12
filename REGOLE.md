@@ -15,6 +15,18 @@ il display T1x48 - perche' nel repository pubblico non vanno i nomi dei
 clienti. Quale prodotto e' ognuno, col suo caso del parco e i suoi PDF, lo
 dice `regole/nomi.md` nel repository privato dei casi.
 
+## Il POP e i pack non si toccano
+
+I materiali POP (totem, e poi dondolini, strip, vele, angolari, portaprezzi,
+sticker) hanno la loro casa - `pack3d/pop/`, `regole/pop.md`,
+`prove/test_pop.py` - e una PR verso `coda-settimana` o e' del POP o e' dei
+pack, mai le due cose insieme: un materiale POP nuovo, o una sua regola, non
+coinvolge flowpack, astucci, vassoi e le altre famiglie, e una correzione dei
+pack non tocca il POP. Le parti comuni (la pagina, `server.py`, la coda, il
+registro, il parco) si toccano con l'una o con l'altra. Lo controlla
+`prove/confini.py` su ogni PR, e il parco dopo: una PR del POP non cambia
+nessun caso dei pack. Vedi regole/pop.md, *Il confine*.
+
 ## Tre regole, per tutte le famiglie
 
 Vengono prima di ogni altra regola, qui e in `regole/`, e valgono per **flowpack,
@@ -135,7 +147,7 @@ nell'indirizzo - in Glam, «Crea materiali POP 3D da PDF» - chiede «Che tipo
 di materiale POP intendi realizzare?» e ha le voci dei materiali per il punto
 vendita. Per ora **Totem**: il PDF del totem, e parte da solo. Il codice non
 lo sa ancora costruire: la lettura si ferma e il caso va in coda
-(`pack3d/famiglie/pop.py`, GLAM.md, sezione 10).
+(`pack3d/pop/`, GLAM.md, sezione 10).
 
 Le famiglie da un PDF solo partono appena il PDF c'e'. Se la lettura o la
 costruzione si ferma, si torna al passo coi PDF ancora al loro posto: se ne
@@ -581,6 +593,13 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Sdraiati, stanno in piano
   - Nel display il flowpack resta quello del DT, con le pinne aperte
   - Nel riempimento il CU resta il suo modello: si schiaccia, non si allarga
+
+**`regole/pop.md`** - i materiali POP, a parte dai pack
+
+- I materiali POP
+  - Il confine
+  - La finestra
+  - Il totem
 
 **`regole/casi.md`** - i casi calibrati e le assunzioni non verificate
 

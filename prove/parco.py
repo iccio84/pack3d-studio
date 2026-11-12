@@ -930,7 +930,7 @@ def glam(args):
 
 def _nome_sezione(caso):
     """Il nome della finestra di Glam dove va il modello del caso."""
-    from pack3d.famiglie.pop import SEZIONI_GLAM
+    from pack3d.pop import SEZIONI_GLAM
     return SEZIONI_GLAM[sezione_glam(caso)]
 
 
@@ -938,7 +938,7 @@ def sezione_glam(caso):
     """La finestra di Glam dove va il modello del caso: "pop" per un
     materiale POP (GLAM.md, sezione 10), None per i pack, che vanno in
     «Costruisci modello 3D da PDF» come sempre."""
-    from pack3d.famiglie import pop
+    from pack3d import pop
     return pop.sezione_glam((caso.get("opzioni") or {}).get("kind"))
 
 
