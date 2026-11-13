@@ -236,3 +236,52 @@ class PiegheEIncisioniPop(unittest.TestCase):
         pts, tri = F.triangola([anello])
         self.assertLess(len(tri), 2000)
         self.assertGreater(len(tri), 0)
+
+
+class PiegheSempliciPop(unittest.TestCase):
+    """Le pieghe semplici tonde (`Montaggio.arrotonda`) e le note tolte."""
+
+    def _due_pannelli(self, convessa):
+        import numpy as np
+        from PIL import Image
+        from pack3d.pop import espositore as E, fustella as F
+        G = F.Griglia((0.0, 0.0, 100.0, 100.0), 1.0)
+        mo = E.Montaggio(G, 4.0)
+        mo.texture(Image.new("RGB", (G.W, G.H), "orange"))
+        pz = F.Pezzo((0.0, 0.0, 60.0, 80.0), tagli=[[(0, 0), (60, 0), (60, 80), (0, 80), (0, 0)]])
+        pz.linee_piega = [[(0.0, 40.0), (60.0, 40.0)]]
+        a = np.zeros((80, 60), bool)
+        a[:42] = True                       # sopra la piega (con la sua banda)
+        b = np.zeros((80, 60), bool)
+        b[38:] = True
+        # A: un davanti in piedi a z = 0 (stampa verso +z); B: il fondo, che
+        # va indietro (convessa: stampa sotto) o avanti (stampa sopra, dentro)
+        mo.pannello(pz, a, (0, 0), lambda lx, ly: (lx, 40.0 - ly, 0.0), (0, 0, -1), "f")
+        if convessa:
+            mo.pannello(pz, b, (0, 0), lambda lx, ly: (lx, 0.0, -(ly - 40.0)), (0, 1, 0), "f")
+        else:
+            mo.pannello(pz, b, (0, 0), lambda lx, ly: (lx, 0.0, ly - 40.0), (0, -1, 0), "f")
+        return mo
+
+    def test_la_piega_con_la_stampa_fuori_si_arrotonda(self):
+        import numpy as np
+        mo = self._due_pannelli(True)
+        V, UV, T, parti = mo.array()
+        self.assertEqual(len(mo.tonde), 1)
+        self.assertAlmostEqual(mo.tonde[0][1], 90.0, places=0)
+        self.assertEqual(sum(1 for p in mo.grezzi if p.get("curva") is not None), 1)
+        # nessun vertice della faccia stampata sullo spigolo vivo
+        vicini = np.hypot(V[:, 1], V[:, 2]) < 0.5
+        self.assertFalse(vicini.any())
+
+    def test_la_piega_con_la_stampa_dentro_resta_viva(self):
+        mo = self._due_pannelli(False)
+        mo.array()
+        self.assertEqual(mo.tonde, [])
+
+    def test_le_note_si_tolgono(self):
+        from pack3d.pop import fustella as F
+        for nome in ("notes", "Note tecniche", "COLLA", "legenda"):
+            self.assertTrue(F.NOTE.search(nome), nome)
+        for nome in ("technical-drawing", "0101-italy.ITAL", "shared", "grafica"):
+            self.assertFalse(F.NOTE.search(nome), nome)

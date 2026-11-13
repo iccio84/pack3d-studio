@@ -23,6 +23,8 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass, field
 
+import re
+
 import numpy as np
 
 MM = 25.4 / 72.0
@@ -435,7 +437,18 @@ def resa_senza_dt(pdf, griglia, tagli, linee, quota=0.03):
         cambiati = (np.abs(tutta - senza).sum(-1) > 30) & cartone
         if cambiati.sum() <= quota * max(1, cartone.sum()):
             via.update(strati[nome])
+    # Lo strato delle note - le zone rosa della colla e di quello che non si
+    # stampa, le scritte dei pezzi - non e' la stampa. Dal proprietario: «le
+    # note rosa vanno tolte».
+    for nome, indici in strati.items():
+        if nome and NOTE.search(nome):
+            via.update(indici)
     return _senza(pdf, griglia, via)
+
+
+# I nomi degli strati delle note: note, notes, nota, annotazioni, legenda,
+# info, colla, glue
+NOTE = re.compile(r"\b(note?s?|nota|annotazion\w*|legend\w*|info|colla|glue)\b", re.I)
 
 
 def _oggetti(pdf, albero):

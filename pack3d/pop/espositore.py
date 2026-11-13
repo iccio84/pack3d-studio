@@ -30,7 +30,7 @@ La grafica e' quella del PDF senza il disegno tecnico
 (`fustella.resa_senza_dt`); i contorni seguono le curve del PDF, lo spessore
 prende il colore della stampa, e due parti non stanno mai nello stesso posto
 (`Montaggio.risolvi`, `intersezioni`). Lo spessore viene dalle pieghe doppie
-(`spessore`), le pieghe doppie sono tonde (`piega_tonda`), e la prefustella
+(`spessore`), le pieghe sono tonde (`piega_tonda`, `Montaggio.arrotonda`), e la prefustella
 dei lati della testata e' incisa come un solco: regole/pop.md, *Come si
 costruisce*.
 """
@@ -243,6 +243,7 @@ class Montaggio:
         self.grezzi = []
         self.pannelli = []
         self.intagli = []
+        self.tonde = []
         self._cache = {}
 
     def pannello(self, pezzo, masc, scarto, punto, dentro, nome, incisioni=None):
@@ -314,6 +315,162 @@ class Montaggio:
         D = np.array([p["dentro_f"](*pz.locale(x, y)) for x, y in xy], float).reshape(-1, 3)
         return D / np.maximum(np.linalg.norm(D, axis=1), 1e-12)[:, None]
 
+    # --- le pieghe semplici, tonde
+
+    def _di(self, piatti, q):
+        """Il pannello piatto (fra `piatti`) che ha il punto `q` della pagina."""
+        G = self.G
+        X, Y = G.a_pixel(q[0], q[1])
+        for p in piatti:
+            j, i = int(np.floor(X - p["scarto"][0])), int(np.floor(Y - p["scarto"][1]))
+            h, w = p["masc"].shape
+            if 0 <= i < h and 0 <= j < w and p["masc"][i, j]:
+                return p
+        return None
+
+    def arrotonda(self):
+        """Le pieghe semplici diventano tonde come le doppie (dal
+        proprietario: «le curvature delle pieghe teniamo queste anche per
+        gli altri»): raggio fuori uguale allo spessore, dentro zero. Solo
+        dove la stampa sta fuori dalla piega - lo spigolo che si vede, come
+        gli angoli del frontalino -: dove sta dentro (gli angoli della
+        schiena) il cartone vero fa lo spigolo vivo sulla stampa, e il tondo
+        sta dietro.
+
+        Per ogni piega dritta fra due pannelli piatti dello stesso pezzo, una
+        striscia larga `w` per parte (t * tan(giro / 2), al massimo t * pi/2)
+        si toglie dai due pannelli e diventa una piega tonda (`Curva`), che
+        parte tangente all'uno e arriva tangente all'altro."""
+        from collections import Counter
+        t = self.t
+        gruppi = {}
+        for p in self.grezzi:
+            gruppi.setdefault((p["nome"], id(p["pezzo"])), []).append(p)
+        for (nome, _), pannelli in list(gruppi.items()):
+            piatti = [p for p in pannelli if p.get("curva") is None]
+            pezzo = pannelli[0]["pezzo"]
+            for linea in getattr(pezzo, "linee_piega", []):
+                P, Q = np.asarray(linea[0], float), np.asarray(linea[-1], float)
+                L = float(np.hypot(*(Q - P)))
+                if L < 10.0:
+                    continue
+                u = (Q - P) / L
+                if min(abs(u[0]), abs(u[1])) > 0.02:                 # solo le dritte
+                    continue
+                n = np.array([-u[1], u[0]])
+                ss = np.arange(3.0, L - 3.0, 4.0)
+                coppie = []
+                for s_ in ss:
+                    c = P + u * s_
+                    a, b = self._di(piatti, c + n * 2.5), self._di(piatti, c - n * 2.5)
+                    if a is not None and b is not None and a is not b:
+                        coppie.append((a, b, s_))
+                if len(coppie) < 2:
+                    continue
+                (ia, ib), _ = Counter((id(a), id(b)) for a, b, _ in coppie).most_common(1)[0]
+                A = next(a for a, b, _ in coppie if id(a) == ia)
+                B = next(b for a, b, _ in coppie if id(b) == ib)
+                s_ok = [s_ for a, b, s_ in coppie if id(a) == ia and id(b) == ib]
+                TA, TB = A["A"] @ n, B["A"] @ (-n)
+                if np.linalg.norm(TA) < 1e-9 or np.linalg.norm(TB) < 1e-9:
+                    continue
+                TA, TB = TA / np.linalg.norm(TA), TB / np.linalg.norm(TB)
+                # La stampa fuori: la faccia stampata di ognuno guarda via
+                # da dove va l'altro. A 180 gradi le facce sono parallele e
+                # la direzione non lo dice: allora conta da che parte sta
+                # l'altro pannello, che deve stare dietro la stampa.
+                na, nb = -A["d"], -B["d"]
+                if abs(na @ TB) > 0.3 or abs(nb @ TA) > 0.3:
+                    fuori = na @ TB < -0.3 and nb @ TA < -0.3
+                else:
+                    c = P + u * float(np.median(s_ok))
+                    pa = A["P0"] + (c + n * 2.5 - A["o"]) @ A["A"].T
+                    pb = B["P0"] + (c - n * 2.5 - B["o"]) @ B["A"].T
+                    ca = A["P0"] + (c - A["o"]) @ A["A"].T
+                    cb = B["P0"] + (c - B["o"]) @ B["A"].T
+                    fuori = (pb - ca) @ A["d"] > 0.3 and (pa - cb) @ B["d"] > 0.3
+                if not fuori:
+                    continue                                         # stampa dentro, o piatta
+                giro = float(np.arccos(np.clip(-TA @ TB, -1.0, 1.0)))
+                if giro < np.radians(20):
+                    continue
+                w = t * min(np.tan(giro / 2), np.pi / 2)
+                self._striscia(nome, pezzo, A, B, P, u, n, min(s_ok) - 4.0, max(s_ok) + 4.0,
+                               w, giro, -TA, TB)
+
+    def _striscia(self, nome, pezzo, A, B, P, u, n, s0, s1, w, giro, avanti, dopo):
+        """La striscia tonda della piega fra A (dalla parte di `n`) e B."""
+        from scipy import ndimage
+        G = self.G
+        lim = w + 0.5 / G.px
+
+        def taglia(p, verso):
+            h, wd = p["masc"].shape
+            X0, Y0 = p["scarto"]
+            jj, ii = np.meshgrid(np.arange(wd), np.arange(h))
+            x, y = G.a_mm(X0 + jj + 0.5, Y0 + ii + 0.5)
+            q = np.stack([x - P[0], y - P[1]], -1)
+            sig, s_ = (q @ n) * verso, q @ u
+            return p["masc"] & (sig < lim) & (s_ >= s0) & (s_ <= s1)
+
+        ta, tb = taglia(A, 1.0), taglia(B, -1.0)
+        if ta.sum() < 5 or tb.sum() < 5:
+            return
+        (ax, ay), (bx, by) = A["scarto"], B["scarto"]
+        ha, wa = A["masc"].shape
+        hb, wb = B["masc"].shape
+        X0, Y0 = min(ax, bx), min(ay, by)
+        X1, Y1 = max(ax + wa, bx + wb), max(ay + ha, by + hb)
+        M = np.zeros((Y1 - Y0, X1 - X0), bool)
+        resto = np.zeros_like(M)
+        M[ay - Y0:ay - Y0 + ha, ax - X0:ax - X0 + wa] |= ta
+        M[by - Y0:by - Y0 + hb, bx - X0:bx - X0 + wb] |= tb
+        resto[ay - Y0:ay - Y0 + ha, ax - X0:ax - X0 + wa] |= A["masc"] & ~ta
+        resto[by - Y0:by - Y0 + hb, bx - X0:bx - X0 + wb] |= B["masc"] & ~tb
+        A["masc"] = A["masc"] & ~ta
+        B["masc"] = B["masc"] & ~tb
+        A["vicini"] = A.get("vicini", np.zeros_like(ta)) | ta
+        B["vicini"] = B.get("vicini", np.zeros_like(tb)) | tb
+        rq = pezzo.riquadro
+
+        def A3(q):
+            return A["P0"] + (q - A["o"]) @ A["A"].T
+
+        def B3(q):
+            return B["P0"] + (q - B["o"]) @ B["A"].T
+
+        def geo(lx, ly):
+            q = np.array([lx + rq[0], ly + rq[1]], float)
+            d = q - P
+            sig, s_ = float(d @ n), float(d @ u)
+            if sig >= w:
+                return A3(q), A["d"]
+            if sig <= -w:
+                return B3(q), B["d"]
+            tau = (w - sig) / (2 * w)
+            EA, EB = A3(P + u * s_ + n * w), B3(P + u * s_ - n * w)
+            r = np.linalg.norm(EB - EA) / (2 * np.sin(giro / 2))
+            hh = 4.0 / 3.0 * np.tan(giro / 4) * r
+            C = (EA, EA + avanti * hh, EB - dopo * hh, EB)
+            m = 1 - tau
+            pos = m ** 3 * C[0] + 3 * m * m * tau * C[1] + 3 * m * tau * tau * C[2] + tau ** 3 * C[3]
+            d1 = 3 * (m * m * (C[1] - C[0]) + 2 * m * tau * (C[2] - C[1]) + tau * tau * (C[3] - C[2]))
+            d2 = 6 * (m * (C[2] - 2 * C[1] + C[0]) + tau * (C[3] - 2 * C[2] + C[1]))
+            T = d1 / max(np.linalg.norm(d1), 1e-12)
+            N = d2 - (d2 @ T) * T
+            if np.linalg.norm(N) < 1e-9:                             # dritta: il cartone di prima
+                N = (m * A["d"] + tau * B["d"])
+                N = N - (N @ T) * T
+            if N @ (A["d"] if tau < 0.5 else B["d"]) < 0:
+                N = -N
+            return pos, N / max(np.linalg.norm(N), 1e-12)
+
+        asse = 0 if abs(u[0]) < 0.5 else 1                           # piega lungo y: gira in x
+        self.pannello(pezzo, M, (X0, Y0), lambda lx, ly: geo(lx, ly)[0],
+                      Curva(lambda lx, ly: geo(lx, ly)[1], asse), nome)
+        self.grezzi[-1]["vicini"] = resto & ndimage.binary_dilation(M, iterations=2)
+        self.tonde.append((nome, float(np.degrees(giro)), float(s1 - s0)))
+
     # --- le compenetrazioni
 
     def _dentro(self, p, X, margine):
@@ -355,9 +512,9 @@ class Montaggio:
         """Dove un pannello entra nello spessore di un pannello di un'altra
         parte, chi viene dopo nell'ordine `prima(p)` (piu' basso cede) perde
         quei pixel: un intaglio, come la feritoia che il cartone avrebbe.
-        Senza, nel modello due cartoni stanno nello stesso posto. Le pieghe
-        tonde non si intagliano: sono strisce di pochi mm sul bordo, e le
-        regole le tengono fuori dalle altre parti (`intersezioni` lo
+        Senza, nel modello due cartoni stanno nello stesso posto. Una piega
+        tonda cede come gli altri; non fa intagliare nessuno (non ha una
+        mappa affine), e le regole la tengono fuori (`intersezioni` lo
         controlla)."""
         from scipy import ndimage
         G, t = self.G, self.t
@@ -366,26 +523,27 @@ class Montaggio:
         ordine = sorted(self.grezzi, key=lambda p: rango[id(p)])
         for k, b in enumerate(ordine):              # b cede a chi viene prima
             lob, hib = ingombri[id(b)]
-            if b.get("curva") is not None:
-                continue
+            punti_b = None
             for a in ordine[:k]:
                 if a["nome"] == b["nome"] or a.get("curva") is not None:
                     continue
                 loa, hia = ingombri[id(a)]
                 if np.any(hia < lob - 0.1) or np.any(hib < loa - 0.1):
                     continue
-                ii, jj = np.nonzero(b["masc"] & ~b["via"])
-                if not len(ii):
-                    break
-                X0, Y0 = b["scarto"]
-                xy = np.stack(G.a_mm(X0 + jj + 0.5, Y0 + ii + 0.5), 1)
-                P = self._in3d(b, xy)
+                if punti_b is None:
+                    ii, jj = np.nonzero(b["masc"])
+                    if not len(ii):
+                        break
+                    X0, Y0 = b["scarto"]
+                    xy = np.stack(G.a_mm(X0 + jj + 0.5, Y0 + ii + 0.5), 1)
+                    punti_b = (ii, jj, self._in3d(b, xy), self._dir(b, xy))
+                ii, jj, P, Db = punti_b
                 vicini = np.all((P > loa - t) & (P < hia + t), 1)
                 if not vicini.any():
                     continue
                 colpiti = np.zeros(len(P), bool)
                 for f in (0.12, 0.5, 0.88):
-                    X = P[vicini] + b["d"] * (t * f)
+                    X = P[vicini] + Db[vicini] * (t * f)
                     colpiti[np.nonzero(vicini)[0]] |= self._dentro(a, X, margine)
                 if colpiti.sum() < 3:
                     continue
@@ -418,6 +576,25 @@ class Montaggio:
         X0, Y0 = p["scarto"]
         albero, pieghe = self._linee(pezzo)
         intaglio = ndimage.binary_dilation(p["via"], iterations=1)
+        # dove il pannello continua in una piega tonda (`arrotonda`): li' il
+        # bordo non si aggancia e non ha spessore, e' una cucitura
+        vicini = p.get("vicini")
+        dv = ndimage.distance_transform_edt(~vicini) if vicini is not None and vicini.any() \
+            else None
+
+        def cucito(xy):
+            if dv is None:
+                return np.zeros(len(xy), bool)
+            X, Y = G.a_pixel(xy[:, 0], xy[:, 1])
+            X, Y = X - X0, Y - Y0
+            hh, ww = dv.shape
+            best = np.full(len(xy), np.inf)
+            for di in (-1, 0):
+                for dj in (-1, 0):
+                    i = np.clip(np.floor(Y).astype(int) + di, 0, hh - 1)
+                    j = np.clip(np.floor(X).astype(int) + dj, 0, ww - 1)
+                    best = np.minimum(best, dv[i, j])
+            return best <= 1.0
         h, w = masc.shape
         anelli = []
         for an in F.contorni(masc):
@@ -431,6 +608,7 @@ class Montaggio:
                     i = np.clip(an[:, 1].astype(int) + di, 0, h - 1)
                     j = np.clip(an[:, 0].astype(int) + dj, 0, w - 1)
                     fermo |= intaglio[i, j]
+            fermo |= cucito(mm)
             agg = F.aggancia(mm, None, toll=2.5, albero=albero)
             mm = np.where(fermo[:, None], mm, agg)
             mm = F.semplifica(_senza_doppi(mm), 0.05)
@@ -499,6 +677,7 @@ class Montaggio:
             a, b = an, np.roll(an, -1, axis=0)
             su_piega = (_distanza(a, pieghe) < 0.15) & (_distanza(b, pieghe) < 0.15) \
                 & (_distanza((a + b) / 2, pieghe) < 0.15)
+            su_piega |= cucito(a) & cucito(b) & cucito((a + b) / 2)
             lungo = np.hypot(*(b - a).T) > 1e-6
             k = np.nonzero(~su_piega & lungo)[0]
             if not len(k):
@@ -568,6 +747,7 @@ class Montaggio:
         per pezzo, coi suoi triangoli di fila (`exporters.write_glb_mesh`).
         Prima toglie le compenetrazioni (`risolvi`, nell'ordine `prima`)."""
         if not self.pannelli:
+            self.arrotonda()
             if prima is not None:
                 self.risolvi(prima)
             for p in self.grezzi:

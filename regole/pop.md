@@ -96,6 +96,11 @@ prova: lo Space non lo costruisce, il PDF va in coda.
   uno strato suo, si toglie tutto lo strato, con le quote e i triangoli di
   orientamento; se non ce l'ha, o lo strato ha anche la grafica, solo i
   tracciati che stanno sulle linee dei tagli e delle pieghe.
+- **Le note si tolgono.** Dal proprietario: «le note rosa vanno tolte». Lo
+  strato delle note (le zone rosa della colla e di quello che non si
+  stampa, le scritte dei pezzi) non e' stampa: si toglie dal PDF come il DT
+  (`fustella.NOTE`, dal nome dello strato). Dove non c'e' grafica resta il
+  cartone bianco, come sul fondello.
 - **I triangoli di orientamento** non sono tagli (`fustella._triangolo`).
 - **I contorni morbidi.** Dal proprietario: «i tracciati sono seghettati.
   Usa le curve di bezier». Il bordo di ogni pannello e' quello del PDF: le
@@ -116,6 +121,16 @@ prova: lo Space non lo costruisce, il PDF va in coda.
   quarto di giro fra il davanti e i lati della testata. Fuori la stampa,
   dentro il raggio meno lo spessore. La testata appoggia sopra la cima
   tonda.
+- **Anche le pieghe semplici, con la stessa curvatura.** Dal proprietario:
+  «le curvature delle pieghe teniamo queste anche per gli altri». Una piega
+  semplice fra due pannelli piatti diventa tonda, raggio fuori uguale allo
+  spessore (`Montaggio.arrotonda`): gli angoli del frontalino e del
+  riempitivo, il fondo dei fianchi, le alette e le linguette dei ripiani,
+  il bordo davanti del fondello (a 180 gradi). Solo dove la stampa sta
+  fuori dalla piega, lo spigolo che si vede: dove sta dentro (gli angoli
+  della schiena, le alette del divisorio) il cartone vero fa lo spigolo
+  vivo sulla stampa, e resta vivo. La curvatura e' una regola del POP:
+  vale anche per i materiali che verranno.
 - **La prefustella incisa.** Dal proprietario: «il lato del crowner ha le
   fustelle incise come i pack ... (prefustella stampata)». Sui lati della
   testata l'arco e le diagonali non tagliano e non piegano: sono solchi a V
