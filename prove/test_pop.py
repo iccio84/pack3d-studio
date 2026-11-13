@@ -176,3 +176,63 @@ class FustellaPop(unittest.TestCase):
             mo.pannello(p, np.ones((60, 60), bool), (0, 0),
                         lambda lx, ly: (lx, 0.0, min(lx, 30.0)), (0, 1, 0), "storto")
         self.assertIn("non e' piatto", str(e.exception))
+
+
+class PiegheEIncisioniPop(unittest.TestCase):
+    """Le pieghe tonde, lo spessore dalle pieghe doppie e la prefustella
+    incisa dell'espositore."""
+
+    def test_la_piega_tonda_unisce_i_due_pannelli(self):
+        import numpy as np
+        from pack3d.pop import espositore as E
+        t = 4.0
+        # il bordo davanti di un fianco: dal pannello esterno (x = -2t,
+        # cartone verso +x) alla parete interna (x = 0, cartone verso -x)
+        punto, curva = E.piega_tonda((-t, 0.0, 300.0), (-1, 0, 0), (0, 0, 1), t, np.pi,
+                                     lambda lx, ly: lx / 8.0, lambda lx, ly: (0.0, ly, 0.0), 0)
+        self.assertIsInstance(curva, E.Curva)
+        np.testing.assert_allclose(punto(0.0, 5.0), (-2 * t, 5.0, 300.0), atol=1e-9)
+        np.testing.assert_allclose(punto(8.0, 5.0), (0.0, 5.0, 300.0), atol=1e-9)
+        np.testing.assert_allclose(punto(4.0, 5.0), (-t, 5.0, 300.0 + t), atol=1e-9)
+        np.testing.assert_allclose(curva.dentro(0.0, 0.0), (1, 0, 0), atol=1e-9)
+        np.testing.assert_allclose(curva.dentro(8.0, 0.0), (-1, 0, 0), atol=1e-9)
+
+    def test_lo_spessore_dalle_pieghe_doppie(self):
+        from pack3d.pop import espositore as E
+        m = {"fsx_piega": (313, 321), "fsx_cima": (75, 83), "fdx_piega": (244, 252),
+             "fdx_cima": (75, 83), "ripiano_sup": {"pieghe_v": [40, 415, 421]},
+             "ripiano_inf": {"pieghe_v": [383, 389, 764]}, "div_v": [77.5, 82.5]}
+        self.assertEqual(E.spessore(m), 4.0)
+
+    def test_la_prefustella_e_un_taglio_dentro(self):
+        from pack3d.pop import fustella as F
+        bordo = [[(0, 0), (100, 0), (100, 60), (0, 60), (0, 0)]]
+        arco = [[(30, 20), (40, 15), (50, 20)]]
+        p = F.Pezzo((0.0, 0.0, 100.0, 60.0), tagli=bordo + arco)
+        interni = F.tagli_interni(p)
+        self.assertEqual(len(interni), 1)
+        self.assertIs(interni[0], arco[0])
+
+    def test_il_solco_scende_sulla_linea(self):
+        import numpy as np
+        from pack3d.pop import fustella as F
+        linea = [np.array([[0.0, 0.0], [10.0, 0.0]])]
+        pr = F.profondita_solco(np.array([[5.0, 0.0], [5.0, 0.25], [5.0, 2.0]]),
+                                linea, 1.0, 0.9)
+        self.assertAlmostEqual(pr[0], 0.9, places=3)
+        self.assertAlmostEqual(pr[1], 0.45, places=2)
+        self.assertEqual(pr[2], 0.0)
+        # i campioni del solco: la linea e i due bordi, piu' fitti della larghezza
+        s = F.solchi(linea, 1.0, 0.35)
+        self.assertTrue(np.any(np.isclose(s[:, 1], 0.5)) and np.any(np.isclose(s[:, 1], -0.5)))
+
+    def test_un_taglio_dentro_non_fa_esplodere_i_triangoli(self):
+        import numpy as np
+        from pack3d.pop import fustella as F
+        # un pannello con una fessura larga zero: i due bordi sulla stessa
+        # linea non si spezzano all'infinito
+        anello = np.array([[0, 0], [100, 0], [100, 50], [60, 50], [60, 20],
+                           [60, 50], [0, 50]], float)
+        pts, tri = F.triangola([anello])
+        self.assertLess(len(tri), 2000)
+        self.assertGreater(len(tri), 0)

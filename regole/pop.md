@@ -104,6 +104,25 @@ prova: lo Space non lo costruisce, il PDF va in coda.
 - **Lo spessore col colore della grafica.** Dal proprietario: «fai in modo
   che gli spessori siano arancioni (o comunque in linea con la grafica)».
   Il bordo tagliato prende il colore della stampa a 3 mm dal bordo.
+- **Lo spessore dalle pieghe doppie.** Le due cordonature di una piega a
+  180 gradi stanno a due spessori: la mediana di quelle dei fianchi, dei
+  ripiani e del divisorio, divisa per due (`espositore.spessore`). Sul primo
+  PDF 4 mm, onda EB; prima era fisso a 6, troppo (dal proprietario: «fare
+  gli spessori piu' bassi»).
+- **Le pieghe tonde.** Dal proprietario: «simulando la piega del cartone
+  (bordi arrotondati)». Le pieghe doppie diventano archi
+  (`espositore.piega_tonda`): mezzo giro sul bordo davanti dei fianchi, in
+  cima ai fianchi, sul davanti dei ripiani e sul dorso del divisorio; un
+  quarto di giro fra il davanti e i lati della testata. Fuori la stampa,
+  dentro il raggio meno lo spessore. La testata appoggia sopra la cima
+  tonda.
+- **La prefustella incisa.** Dal proprietario: «il lato del crowner ha le
+  fustelle incise come i pack ... (prefustella stampata)». Sui lati della
+  testata l'arco e le diagonali non tagliano e non piegano: sono solchi a V
+  nella faccia stampata (largo 1 mm, profondo 0,9), con la grafica dentro,
+  come l'apertura a strappo degli astucci e dei vassoi
+  (`incisioni.maglia_incisa`). Sono i tagli che non toccano il contorno
+  (`fustella.tagli_interni`) e le pieghe oblique.
 - **Nessuna compenetrazione fra parti diverse.** Dal proprietario: «evita
   intersezioni tra le diverse parti». Dove due cartoni starebbero nello
   stesso posto, quello che viene dopo nell'ordine (`espositore.ORDINE`: il
@@ -113,5 +132,5 @@ prova: lo Space non lo costruisce, il PDF va in coda.
 - **Da verificare col proprietario**: il fondo della colonna di sinistra e'
   il fondello (largo quanto l'interno, con la feritoia del divisorio), non
   un terzo ripiano; il frontalino sta sul davanti dei ripiani; i piedi
-  della testata entrano nei fianchi e non si vedono; le orecchie della
-  testata sono piatte.
+  della testata entrano nei fianchi e non si vedono; i lati della testata
+  sono piatti, con la prefustella incisa.

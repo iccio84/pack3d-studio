@@ -579,3 +579,139 @@ def aggancia(anello, linee, toll=3.0, albero=None):
     vicino = d <= toll
     fuori[vicino] = albero.data[k[vicino]]
     return fuori
+
+
+# ---------------------------------------------------------------------------
+# Triangolare un pannello: il contorno, i punti dentro, i solchi
+
+def triangola(anelli, extra=None, griglia=None, giri=14, minimo=0.2):
+    """(punti Nx2, triangoli Mx3) del poligono: il primo anello e' il
+    contorno, gli altri i buchi (pari-dispari, il verso non conta). Come
+    `ballotin.triangola`, che il POP usa e non cambia, con in piu' i punti
+    `extra` (i campioni dei solchi delle incisioni) e una griglia dentro
+    solo se si chiede. I lati del contorno che Delaunay non tiene si
+    spezzano a meta' finche' ci sono tutti; si tengono i triangoli col
+    baricentro dentro."""
+    from scipy.spatial import Delaunay, cKDTree
+    from ..ballotin import _pulisci, dentro
+    anelli = [_pulisci(np.asarray(a, float)) for a in anelli]
+    anelli = [a for a in anelli if len(a) >= 3]
+    if not anelli:
+        return np.zeros((0, 2)), np.zeros((0, 3), int)
+    lati, pts = [], []
+    for an in anelli:
+        base = len(pts)
+        pts.extend(an)
+        lati.extend((base + i, base + (i + 1) % len(an)) for i in range(len(an)))
+    pts = np.array(pts)
+    lo, hi = pts.min(0), pts.max(0)
+    bordo = cKDTree(_campiona([np.vstack([a, a[:1]]) for a in anelli], 0.2))
+    aggiunti = []
+    if griglia:
+        xs = np.arange(lo[0] + griglia / 2, hi[0], griglia)
+        ys = np.arange(lo[1] + griglia / 2, hi[1], griglia)
+        if len(xs) and len(ys):
+            aggiunti.append(np.stack(np.meshgrid(xs, ys), -1).reshape(-1, 2))
+    if extra is not None and len(extra):
+        aggiunti.append(np.asarray(extra, float))
+    if aggiunti:
+        g = np.vstack(aggiunti)
+        g = g[dentro(g, anelli)]
+        if len(g):
+            d, _ = bordo.query(g)
+            g = g[d > 0.12]
+            if len(g):
+                pts = np.vstack([pts, np.unique(np.round(g / 1e-3).astype(np.int64), axis=0) * 1e-3])
+    m = 10.0
+    cornice = np.array([[lo[0] - m, lo[1] - m], [hi[0] + m, lo[1] - m],
+                        [hi[0] + m, hi[1] + m], [lo[0] - m, hi[1] + m]])
+    pts = np.vstack([pts, cornice])
+    for _ in range(giri):
+        tri = Delaunay(pts).simplices
+        presenti = set()
+        for a, b, c in tri:
+            presenti.update(((min(a, b), max(a, b)), (min(b, c), max(b, c)),
+                             (min(c, a), max(c, a))))
+        # un lato piu' corto di `minimo` non si spezza piu': i due bordi di
+        # un taglio dentro il pannello stanno sulla stessa linea, e quel lato
+        # Delaunay non lo tiene mai - spezzato a ogni giro, un pannello
+        # arrivava a centomila triangoli
+        mancano = [(u, v) for u, v in lati if (min(u, v), max(u, v)) not in presenti
+                   and np.hypot(*(pts[u] - pts[v])) > minimo]
+        if not mancano:
+            break
+        nuovi, punti = [], []
+        for u, v in mancano:
+            k = len(pts) + len(punti)
+            punti.append((pts[u] + pts[v]) / 2)
+            nuovi += [(u, k), (k, v)]
+        via = set(mancano)
+        lati = [l for l in lati if l not in via] + nuovi
+        pts = np.vstack([pts, np.array(punti)])
+    tri = Delaunay(pts).simplices
+    tri = tri[dentro(pts[tri].mean(1), anelli)]
+    usati, nuovo = np.unique(tri, return_inverse=True)
+    return pts[usati], nuovo.reshape(tri.shape)
+
+
+def infittisci(anello, passo):
+    """Un anello chiuso con un punto almeno ogni `passo` mm."""
+    a = np.asarray(anello, float)
+    out = []
+    for p, q in zip(a, np.roll(a, -1, axis=0)):
+        k = max(1, int(np.ceil(np.hypot(*(q - p)) / passo)))
+        out.extend(p + (q - p) * (np.arange(k) / k)[:, None])
+    return np.array(out)
+
+
+def solchi(linee, larghezza, passo):
+    """I campioni dei solchi delle `linee` (polilinee in mm): la linea e i
+    suoi due bordi a `larghezza / 2`, ogni `passo` mm, piu' le punte. Piu'
+    fitti della larghezza: un triangolo non scavalca il solco."""
+    a = larghezza / 2.0
+    out = []
+    for pl in linee:
+        p = _campiona([pl], passo)
+        if len(p) < 2:
+            continue
+        t = np.gradient(p, axis=0)
+        t /= np.maximum(np.hypot(*t.T), 1e-12)[:, None]
+        n = np.stack([-t[:, 1], t[:, 0]], 1)
+        out += [p, p + n * a, p - n * a, p[:1] - t[:1] * a, p[-1:] + t[-1:] * a]
+    return np.vstack(out) if out else np.zeros((0, 2))
+
+
+def profondita_solco(xy, linee, larghezza, profondita):
+    """Quanto scende il cartone nei punti `xy`: `profondita` sulla linea, a
+    V fino a zero a `larghezza / 2`; sotto un quinto e' zero (i bordi del
+    solco a fior di faccia, come `incisioni.maglia_incisa`)."""
+    from scipy.spatial import cKDTree
+    if not linee or not len(xy):
+        return np.zeros(len(xy))
+    albero = cKDTree(_campiona(linee, 0.05))
+    d, _ = albero.query(xy)
+    p = profondita * np.clip(1.0 - d / (larghezza / 2.0), 0.0, 1.0)
+    p[p < 0.2 * profondita] = 0.0
+    return p
+
+
+def tagli_interni(pezzo, distanza=2.0):
+    """I tagli del pezzo che stanno dentro il cartone senza toccarne il
+    contorno: tutti i loro punti a piu' di `distanza` mm da fuori."""
+    from scipy import ndimage
+    G = Griglia(pezzo.riquadro, 1.0)
+    disegno, (X0, Y0) = G._disegna(pezzo.tagli, pezzo.riquadro)
+    lab, _ = ndimage.label(~disegno)
+    bordo = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    fuori = np.isin(lab, bordo)
+    dist = ndimage.distance_transform_edt(~fuori)
+    h, w = dist.shape
+    out = []
+    for pl in pezzo.tagli:
+        p = _campiona([pl], 0.5)
+        X, Y = G.a_pixel(p[:, 0], p[:, 1])
+        i = np.clip(np.round(Y - Y0).astype(int), 0, h - 1)
+        j = np.clip(np.round(X - X0).astype(int), 0, w - 1)
+        if dist[i, j].min() > distanza:
+            out.append(pl)
+    return out

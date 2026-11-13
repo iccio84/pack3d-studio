@@ -29,7 +29,10 @@ montato.
 La grafica e' quella del PDF senza il disegno tecnico
 (`fustella.resa_senza_dt`); i contorni seguono le curve del PDF, lo spessore
 prende il colore della stampa, e due parti non stanno mai nello stesso posto
-(`Montaggio.risolvi`, `intersezioni`): regole/pop.md, *Come si costruisce*.
+(`Montaggio.risolvi`, `intersezioni`). Lo spessore viene dalle pieghe doppie
+(`spessore`), le pieghe doppie sono tonde (`piega_tonda`), e la prefustella
+dei lati della testata e' incisa come un solco: regole/pop.md, *Come si
+costruisce*.
 """
 from __future__ import annotations
 
@@ -38,7 +41,7 @@ import numpy as np
 from . import fustella as F
 
 PX_MM = 1.0              # pixel per mm della griglia e della texture
-SPESSORE = 6.0           # mm: cartone onda EB, quattro strati fanno 584 - 559
+SPESSORE = 4.0           # mm, se le pieghe doppie non lo dicono (`spessore`)
 
 
 # ---------------------------------------------------------------------------
@@ -168,9 +171,59 @@ def misure(ruoli, t=SPESSORE):
     return m
 
 
+def spessore(m):
+    """Lo spessore del cartone dalle pieghe doppie delle pieghe a 180 gradi -
+    il bordo davanti e la cima dei fianchi, il davanti dei ripiani, le
+    alette del divisorio: le due cordonature stanno a due spessori l'una
+    dall'altra. La mediana, fra 2 e 8 mm. Sull'espositore del primo PDF:
+    8, 8, 8, 8, 6, 6, 5 mm -> 4 mm (cartone onda EB)."""
+    d = []
+    for lato in ("sx", "dx"):
+        for k in ("f%s_piega" % lato, "f%s_cima" % lato):
+            a, b = m[k]
+            d.append(b - a)
+    for k in ("ripiano_sup", "ripiano_inf"):
+        v = m[k]["pieghe_v"]
+        d.append(v[2] - v[1] if k == "ripiano_sup" else v[1] - v[0])
+    d.append(m["div_v"][1] - m["div_v"][0])
+    d = [x for x in d if 2.0 < x < 20.0]
+    return float(np.clip(np.median(d) / 2.0, 2.0, 8.0)) if d else SPESSORE
+
+
 # ---------------------------------------------------------------------------
 # Il montaggio: per ogni pannello, dove va il suo punto (x, y del foglio, mm
 # locali del pezzo) e da che parte e' il cartone non stampato
+
+class Curva:
+    """Il cartone di un pannello piegato ad arco, la piega arrotondata:
+    `dentro(lx, ly)` e' la direzione del cartone in ogni punto del foglio, e
+    `asse` quello del foglio lungo cui l'arco gira (0: x, 1: y; l'altro e'
+    la linea della piega)."""
+
+    def __init__(self, dentro, asse):
+        self.dentro, self.asse = dentro, asse
+
+
+def piega_tonda(c, e0, e1, r, giro, s, lungo, asse):
+    """(punto, Curva): la regola di una piega arrotondata. Il foglio gira
+    attorno alla linea per `c` (piu' `lungo(lx, ly)`, lo spostamento lungo
+    la piega), con raggio `r` - la faccia stampata, fuori -, da `e0` (s = 0)
+    verso `e1`, per l'angolo `giro`; `s(lx, ly)` dice a che punto dell'arco
+    sta un punto del foglio. Dentro, il raggio e' `r` meno lo spessore."""
+    c, e0, e1 = (np.asarray(v, float) for v in (c, e0, e1))
+
+    def ang(lx, ly):
+        return giro * min(max(s(lx, ly), 0.0), 1.0)
+
+    def punto(lx, ly):
+        a = ang(lx, ly)
+        return c + np.asarray(lungo(lx, ly), float) + r * (e0 * np.cos(a) + e1 * np.sin(a))
+
+    def dentro(lx, ly):
+        a = ang(lx, ly)
+        return -(e0 * np.cos(a) + e1 * np.sin(a))
+    return punto, Curva(dentro, asse)
+
 
 class Montaggio:
     """La maglia di tutti i pezzi, sulla griglia della texture.
@@ -178,6 +231,9 @@ class Montaggio:
     `pannello` mette da parte i pannelli, `array` li stende: prima toglie le
     compenetrazioni fra parti diverse (`risolvi`), poi fa la maglia di
     ognuno (`_maglia`)."""
+
+    PASSO_PIEGA = 0.8           # mm fra due file di vertici lungo una piega tonda
+    SOLCO = (1.0, 0.9)          # larghezza e profondita' del solco di un'incisione, mm
 
     def __init__(self, griglia, t=SPESSORE):
         self.G = griglia
@@ -189,16 +245,29 @@ class Montaggio:
         self.intagli = []
         self._cache = {}
 
-    def pannello(self, pezzo, masc, scarto, punto, dentro, nome):
+    def pannello(self, pezzo, masc, scarto, punto, dentro, nome, incisioni=None):
         """Un pannello: `punto(lx, ly)` porta un punto del foglio, in mm
         locali del pezzo, sulla faccia stampata; `dentro` e' la direzione
-        del cartone. `punto` e' affine: ogni pannello e' piatto."""
+        del cartone. Un pannello piatto ha `punto` affine e `dentro` fisso;
+        una piega arrotondata ha `dentro` una `Curva`. `incisioni` sono le
+        linee (mm della pagina) incise come solchi nella faccia stampata."""
         from scipy import ndimage
         G = self.G
-        d = np.asarray(dentro, float)
-        d = d / np.linalg.norm(d)
         X0, Y0 = scarto
         o = np.array(G.a_mm(X0, Y0), float)
+        p = dict(nome=nome, pezzo=pezzo, masc=np.asarray(masc, bool).copy(), scarto=scarto,
+                 o=o, punto=punto, via=np.zeros(masc.shape, bool),
+                 incisioni=[np.asarray(l, float) for l in (incisioni or [])])
+        if isinstance(dentro, Curva):
+            ii, jj = np.nonzero(masc)
+            k = max(1, len(ii) // 400)
+            xy = np.stack(G.a_mm(X0 + jj[::k] + 0.5, Y0 + ii[::k] + 0.5), 1)
+            p.update(curva=dentro.asse, dentro_f=dentro.dentro)
+            p["campioni"] = (self._in3d(p, xy), self._dir(p, xy))
+            self.grezzi.append(p)
+            return
+        d = np.asarray(dentro, float)
+        d = d / np.linalg.norm(d)
         # La mappa affine si misura nel punto piu' interno del pannello: il
         # ritaglio sborda di un paio di pixel oltre le pieghe, e le regole
         # sono a tratti (min, abs) - misurata sull'angolo del ritaglio, un
@@ -224,17 +293,28 @@ class Montaggio:
             if scarto_max > 0.5:
                 raise ValueError("%s: il pannello non e' piatto (scarto %.1f mm, %s)"
                                  % (nome, scarto_max, _dove((masc, scarto), pezzo, G)))
-        self.grezzi.append(dict(nome=nome, pezzo=pezzo, masc=np.asarray(masc, bool).copy(),
-                                scarto=scarto, o=o, P0=P0, A=A, d=d,
-                                via=np.zeros(masc.shape, bool)))
-
-    # --- le compenetrazioni
+        p.update(curva=None, P0=P0, A=A, d=d)
+        self.grezzi.append(p)
 
     @staticmethod
     def _in3d(p, xy):
         """I punti `xy` (mm della pagina) del pannello `p` sulla sua faccia
-        stampata."""
-        return p["P0"] + (xy - p["o"]) @ p["A"].T
+        stampata (senza i solchi)."""
+        if p.get("curva") is None:
+            return p["P0"] + (xy - p["o"]) @ p["A"].T
+        pz = p["pezzo"]
+        return np.array([p["punto"](*pz.locale(x, y)) for x, y in xy], float).reshape(-1, 3)
+
+    @staticmethod
+    def _dir(p, xy):
+        """La direzione del cartone nei punti `xy` del pannello `p`."""
+        if p.get("curva") is None:
+            return np.tile(p["d"], (len(xy), 1))
+        pz = p["pezzo"]
+        D = np.array([p["dentro_f"](*pz.locale(x, y)) for x, y in xy], float).reshape(-1, 3)
+        return D / np.maximum(np.linalg.norm(D, axis=1), 1e-12)[:, None]
+
+    # --- le compenetrazioni
 
     def _dentro(self, p, X, margine):
         """Quali punti 3D `X` stanno dentro lo spessore e il contorno del
@@ -260,6 +340,10 @@ class Montaggio:
 
     def _ingombro(self, p):
         G, t = self.G, self.t
+        if p.get("curva") is not None:
+            P, D = p["campioni"]
+            P = np.concatenate([P, P + D * t])
+            return P.min(0), P.max(0)
         h, w = p["masc"].shape
         X0, Y0 = p["scarto"]
         ang = np.array([G.a_mm(X0 + a, Y0 + b) for a in (0, w) for b in (0, h)])
@@ -271,7 +355,10 @@ class Montaggio:
         """Dove un pannello entra nello spessore di un pannello di un'altra
         parte, chi viene dopo nell'ordine `prima(p)` (piu' basso cede) perde
         quei pixel: un intaglio, come la feritoia che il cartone avrebbe.
-        Senza, nel modello due cartoni stanno nello stesso posto."""
+        Senza, nel modello due cartoni stanno nello stesso posto. Le pieghe
+        tonde non si intagliano: sono strisce di pochi mm sul bordo, e le
+        regole le tengono fuori dalle altre parti (`intersezioni` lo
+        controlla)."""
         from scipy import ndimage
         G, t = self.G, self.t
         rango = {id(p): prima(p) for p in self.grezzi}
@@ -279,8 +366,10 @@ class Montaggio:
         ordine = sorted(self.grezzi, key=lambda p: rango[id(p)])
         for k, b in enumerate(ordine):              # b cede a chi viene prima
             lob, hib = ingombri[id(b)]
+            if b.get("curva") is not None:
+                continue
             for a in ordine[:k]:
-                if a["nome"] == b["nome"]:
+                if a["nome"] == b["nome"] or a.get("curva") is not None:
                     continue
                 loa, hia = ingombri[id(a)]
                 if np.any(hia < lob - 0.1) or np.any(hib < loa - 0.1):
@@ -322,9 +411,8 @@ class Montaggio:
         qualche millimetro dal bordo, non quello del cartone grezzo."""
         from scipy import ndimage
         from scipy.spatial import cKDTree
-        from ..ballotin import triangola
         G, t = self.G, self.t
-        pezzo, masc, nome, d = p["pezzo"], p["masc"], p["nome"], p["d"]
+        pezzo, masc, nome = p["pezzo"], p["masc"], p["nome"]
         if masc.sum() < 20:
             return
         X0, Y0 = p["scarto"]
@@ -350,7 +438,21 @@ class Montaggio:
                 anelli.append(mm)
         if not anelli:
             return
-        pts, tri = triangola(anelli, bordo=1e9, griglia=1e9)
+        curva = p.get("curva")
+        larg, prof_max = self.SOLCO
+        if curva is not None:
+            # La piega tonda gira lungo un asse del foglio: i vertici fitti
+            # in quel verso (PASSO_PIEGA), radi lungo la piega - la si
+            # triangola con l'altro asse schiacciato 25 volte.
+            sc = np.ones(2)
+            sc[1 - curva] = 1.0 / 25.0
+            fitti = [F.infittisci(an * sc, self.PASSO_PIEGA) for an in anelli]
+            pts, tri = F.triangola(fitti, griglia=self.PASSO_PIEGA)
+            pts = pts / sc
+            anelli = [an / sc for an in fitti]
+        else:
+            extra = F.solchi(p["incisioni"], larg, 0.35) if p["incisioni"] else None
+            pts, tri = F.triangola(anelli, extra=extra)
         if not len(tri):
             return
 
@@ -361,14 +463,31 @@ class Montaggio:
             X, Y = G.a_pixel(xy[:, 0], xy[:, 1])
             return np.stack([X / G.W, Y / G.H * self.q], 1)
 
-        # le due facce
-        P = a3d(pts)
-        n = np.cross(P[tri[:, 1]] - P[tri[:, 0]], P[tri[:, 2]] - P[tri[:, 0]])
-        tri = np.where(((n @ d) > 0)[:, None], tri[:, ::-1], tri)    # la stampa guarda fuori
-        Vs = [P, P + d * t]
-        UVs = [uv(pts), np.tile([[0.5, self.vI]], (len(pts), 1))]
-        Ts = [tri, tri[:, ::-1] + len(pts)]
+        def scende(xy):
+            return F.profondita_solco(xy, p["incisioni"], larg, prof_max) \
+                if p["incisioni"] else np.zeros(len(xy))
+
+        # le due facce; nei solchi la faccia stampata scende nel cartone
+        P, D = a3d(pts), self._dir(p, pts)
+        pr = scende(pts)
+        Ps = P + D * pr[:, None]
+        n = np.cross(Ps[tri[:, 1]] - Ps[tri[:, 0]], Ps[tri[:, 2]] - Ps[tri[:, 0]])
+        dm = D[tri].mean(1)
+        tri = np.where(((n * dm).sum(1) > 0)[:, None], tri[:, ::-1], tri)  # la stampa guarda fuori
+        U = uv(pts)
+        nel_solco = (pr[tri] > 0).any(1)
+        Vs = [Ps, P + D * t]
+        UVs = [U, np.tile([[0.5, self.vI]], (len(pts), 1))]
+        Ts = [tri[~nel_solco], tri[:, ::-1] + len(pts)]
         base = 2 * len(pts)
+        if nel_solco.any():
+            # le pareti del solco a facce piatte, un vertice per triangolo:
+            # l'ombra disegna il taglio, e dentro il solco c'e' la stampa
+            Tg = tri[nel_solco]
+            Vs.append(Ps[Tg].reshape(-1, 3))
+            UVs.append(U[Tg].reshape(-1, 2))
+            Ts.append(base + np.arange(Tg.size).reshape(-1, 3))
+            base += Tg.size
         # lo spessore: il colore e' quello della grafica a 3 mm dal bordo
         stretta = ndimage.binary_erosion(masc, iterations=3)
         if not stretta.any():
@@ -385,6 +504,8 @@ class Montaggio:
             if not len(k):
                 continue
             A, B = a3d(a[k]), a3d(b[k])
+            DA, DB = self._dir(p, a[k]), self._dir(p, b[k])
+            At, Bt = A + DA * scende(a[k])[:, None], B + DB * scende(b[k])[:, None]
             # verso fuori: lontano dal cartone. Gli anelli di `contorni` hanno
             # il cartone a destra (y in giu': a destra di (dx, dy) c'e'
             # (-dy, dx)), e agganciarli e semplificarli non cambia il verso
@@ -398,7 +519,7 @@ class Montaggio:
             ua = uv(np.stack(G.a_mm(X0 + jj[ia] + 0.5, Y0 + ii[ia] + 0.5), 1))
             ub = uv(np.stack(G.a_mm(X0 + jj[ib] + 0.5, Y0 + ii[ib] + 0.5), 1))
             q = len(k)
-            V4 = np.concatenate([A, B, B + d * t, A + d * t])
+            V4 = np.concatenate([At, Bt, B + DB * t, A + DA * t])
             U4 = np.concatenate([ua, ub, ub, ua])
             i0 = base + np.arange(q)
             quad = np.stack([i0, i0 + q, i0 + 2 * q, i0 + 3 * q], 1)
@@ -484,7 +605,7 @@ def intersezioni(mo, passo=3.0, margine=0.6, dettaglio=False):
         if not len(ii):
             continue
         xy = np.stack(G.a_mm(X0 + jj * k + 0.5, Y0 + ii * k + 0.5), 1)
-        M = mo._in3d(p, xy) + p["d"] * (t / 2)
+        M = mo._in3d(p, xy) + mo._dir(p, xy) * (t / 2)
         r = _dove((p["masc"], p["scarto"]), p["pezzo"], G)
         lo, hi = mo._ingombro(p)
         info.append(dict(p=p, M=M, lo=lo - 1, hi=hi + 1,
@@ -492,7 +613,7 @@ def intersezioni(mo, passo=3.0, margine=0.6, dettaglio=False):
     trovate = {}
     for a in info:
         for b in info:
-            if a["p"]["nome"] == b["p"]["nome"]:
+            if a["p"]["nome"] == b["p"]["nome"] or b["p"].get("curva") is not None:
                 continue
             if np.any(a["hi"] < b["lo"]) or np.any(b["hi"] < a["lo"]):
                 continue
@@ -550,7 +671,8 @@ def _ordine(t):
     def prima(p):
         nome = p["nome"]
         k = next((i for i, n in enumerate(ORDINE) if nome.startswith(n)), len(ORDINE))
-        pavimento = abs(p["d"][1]) > 0.99 and p["P0"][1] <= 3 * t + 0.5
+        pavimento = p.get("curva") is None and abs(p["d"][1]) > 0.99 \
+            and p["P0"][1] <= 3 * t + 0.5
         return (1 if pavimento else 0, k)
     return prima
 
@@ -584,14 +706,18 @@ def _dove(pannello_riq, pezzo, G):
     return a[0], a[1], b[0], b[1]
 
 
-def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
-    """Costruisce l'espositore montato in `uscita` (GLB). Torna gli avvisi."""
+def monta(pdf, uscita, t=None, px_mm=PX_MM):
+    """Costruisce l'espositore montato in `uscita` (GLB). Torna gli avvisi.
+    Lo spessore `t`, se non si dice, viene dalle pieghe doppie (`spessore`)."""
     from .. import exporters
     segni = []
     tagli, pieghe = F.tratti(pdf, segni)
     pezzi = F.pezzi(tagli, pieghe)
     ruoli = riconosci(pezzi, inchiostro(pdf, pezzi))
-    m = misure(ruoli, t)
+    m = misure(ruoli, SPESSORE)
+    if t is None:
+        t = spessore(m)
+    m["t"] = t
     usati = [p for k, p in ruoli.items()]
     zona = (min(p.riquadro[0] for p in usati) - 5, min(p.riquadro[1] for p in usati) - 5,
             max(p.riquadro[2] for p in usati) + 5, max(p.riquadro[3] for p in usati) + 5)
@@ -605,8 +731,8 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
     zf = t + (m["ripiano_inf"]["pieghe_v"][-1] - m["ripiano_inf"]["pieghe_v"][1])   # davanti dei ripiani
     avvisi = []
 
-    def stendi(ruolo, regola):
-        p = ruoli[ruolo]
+    def stendi(ruolo, regola, pezzo=None, incisioni=None):
+        p = pezzo or ruoli[ruolo]
         for pan in G.pannelli(p):
             masc, scarto = pan
             if masc.sum() < 20:
@@ -619,7 +745,8 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
             punto, dentro = fatto[:2]
             if len(fatto) > 2:                  # solo una parte del pannello
                 masc = _solo(masc, scarto, p, G, fatto[2])
-            mo.pannello(p, masc, scarto, punto, dentro, ruolo)
+            mo.pannello(p, masc, scarto, punto, dentro, ruolo,
+                        incisioni=incisioni(cx, cy) if incisioni else None)
 
     # --- i fianchi
     for lato in ("sx", "dx"):
@@ -655,14 +782,18 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
             if cy < c0:
                 return (lambda lx, ly: (x_int + verso * t, fondo - c1 - (c0 - ly), z_est(lx)),
                         (-verso, 0, 0))
-            if cy < c1 + 1 and r[3] < c1 + 2:                        # la piega della cima
-                return (lambda lx, ly: (x_est + verso * (c1 - ly) / (c1 - c0) * 3 * t,
-                                        fondo - c1, z_est(lx)), (0, -1, 0))
+            if cy < c1 + 1 and r[3] < c1 + 2:                        # la piega della cima, tonda
+                return piega_tonda((x_est + verso * 1.5 * t, fondo - c1, 0.0), (-verso, 0, 0),
+                                   (0, 1, 0), 1.5 * t, np.pi,
+                                   lambda lx, ly: (c1 - ly) / (c1 - c0),
+                                   lambda lx, ly: (0.0, 0.0, z_est(lx)), 1)
             if esterno:
                 return (lambda lx, ly: (x_est, fondo - ly, z_est(lx)), (verso, 0, 0))
-            if not interno:                                          # la piega davanti
-                return (lambda lx, ly: (x_est + verso * abs(lx - (a if sx else b)) / (b - a) * 2 * t,
-                                        fondo - ly, D), (0, 0, -1))
+            if not interno:                                          # la piega davanti, tonda
+                return piega_tonda(((x_est + x_int) / 2, 0.0, D), (-verso, 0, 0), (0, 0, 1),
+                                   t, np.pi,
+                                   lambda lx, ly: abs(lx - (a if sx else b)) / (b - a),
+                                   lambda lx, ly: (0.0, fondo - ly, 0.0), 0)
             # le feritoie dei ripiani restano nella parete: la linguetta del
             # ripiano ci passa davanti (ripiegata fuori, il cartone della
             # feritoia attraversava il ripiano)
@@ -706,8 +837,10 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
             return (lambda lx, ly: (xd - (dv[1] - lx), dH - ly, 2 * t), (0, 0, -1))
         if cx < d0:
             return (lambda lx, ly: (xd, dH - ly, zd - (d0 - lx)), (1, 0, 0))
-        if cx < d1:                                                  # il dorso
-            return (lambda lx, ly: (xd + (lx - d0) / (d1 - d0) * sp, dH - ly, zd), (0, 0, -1))
+        if cx < d1:                                                  # il dorso, tondo
+            return piega_tonda((xd + sp / 2, 0.0, zd), (-1, 0, 0), (0, 0, 1), sp / 2, np.pi,
+                               lambda lx, ly: (lx - d0) / (d1 - d0),
+                               lambda lx, ly: (0.0, dH - ly, 0.0), 0)
         if cx < dv[-3]:
             return (lambda lx, ly: (xd + sp, dH - ly, zd - (lx - d1)), (-1, 0, 0))
         return (lambda lx, ly: (xd + sp + (lx - dv[-1]), dH - ly, 2 * t), (0, 0, -1))
@@ -758,8 +891,11 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
                 return (lambda lx, ly: (x0 + ly - l0, Yc + 2 * t, z_sopra(lx)), (0, -1, 0))
             if sotto(cx):
                 return (lambda lx, ly: (x0 + ly - l0, Yc, z_sotto(lx)), (0, 1, 0))
-            return (lambda lx, ly: (x0 + ly - l0, Yc + abs(lx - p0) / max(p1 - p0, 1) * 2 * t, zf),
-                    (0, 0, -1))
+            # il davanti, tondo: dallo strato sotto a quello sopra
+            lato_sotto = p1 if nome == "ripiano_sup" else p0
+            return piega_tonda((0.0, Yc + t, zf), (0, -1, 0), (0, 0, 1), t, np.pi,
+                               lambda lx, ly: abs(lx - lato_sotto) / max(p1 - p0, 1),
+                               lambda lx, ly: (x0 + ly - l0, 0.0, 0.0), 0)
         return regola
 
     ff = m["fsx_fondo"]
@@ -790,22 +926,51 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
     # Sotto la piega del piede ci sono i piedi: entrano nella feritoia in
     # cima al fianco, dentro la doppia parete, e montati non si vedono. Nel
     # modello la doppia parete e' piena, e stavano dentro il fianco: non si
-    # stendono.
+    # stendono. La testata appoggia sulla cima tonda dei fianchi (alta 1,5
+    # spessori), e gira sui lati con due pieghe tonde.
+    sopra = H + 1.5 * t
+
     def regola_testata(cx, cy, r):
         if cy > tp:
             return None
-        y = lambda ly: H + (tp - ly)
+        y = lambda ly: sopra + (tp - ly)
         if cx < a0:
-            return (lambda lx, ly: (-t, y(ly), zt - (a0 - lx)), (1, 0, 0))
+            return (lambda lx, ly: (-t, y(ly), zt - t - (a0 - lx)), (1, 0, 0))
         if cx > b1:
-            return (lambda lx, ly: (Wi + t, y(ly), zt - (lx - b1)), (-1, 0, 0))
+            return (lambda lx, ly: (Wi + t, y(ly), zt - t - (lx - b1)), (-1, 0, 0))
         if cx < a1:
-            return (lambda lx, ly: (-t + (lx - a0) / (a1 - a0) * t, y(ly), zt), (0, 0, -1))
+            return piega_tonda((0.0, 0.0, zt - t), (-1, 0, 0), (0, 0, 1), t, np.pi / 2,
+                               lambda lx, ly: (lx - a0) / (a1 - a0),
+                               lambda lx, ly: (0.0, y(ly), 0.0), 0)
         if cx > b0:
-            return (lambda lx, ly: (Wi + (lx - b0) / (b1 - b0) * t, y(ly), zt), (0, 0, -1))
+            return piega_tonda((Wi, 0.0, zt - t), (0, 0, 1), (1, 0, 0), t, np.pi / 2,
+                               lambda lx, ly: (lx - b0) / (b1 - b0),
+                               lambda lx, ly: (0.0, y(ly), 0.0), 0)
         return (lambda lx, ly: ((lx - a1) / (b0 - a1) * Wi, y(ly), zt), (0, 0, -1))
 
-    stendi("testata", regola_testata)
+    # I lati della testata hanno la prefustella: l'arco col suo taglio e le
+    # diagonali. Dal proprietario: «il lato del crowner ha le fustelle incise
+    # come i pack ... (prefustella stampata)». Non dividono il lato e non lo
+    # piegano: sono solchi nella faccia stampata, con la grafica dentro, come
+    # l'apertura a strappo degli astucci (`incisioni.maglia_incisa`). Sono i
+    # tagli che non toccano il contorno e le pieghe oblique.
+    te = ruoli["testata"]
+    x_te = te.riquadro[0]
+    oblique = [pl for pl in te.pieghe
+               if abs(pl[0][0] - pl[-1][0]) >= 1.0 and abs(pl[0][1] - pl[-1][1]) >= 1.0]
+    interni = F.tagli_interni(te)
+    incise = oblique + interni
+    te_liscia = F.Pezzo(te.riquadro, [pl for pl in te.tagli if not any(pl is q for q in interni)],
+                        [pl for pl in te.pieghe if not any(pl is q for q in oblique)], te.nome)
+
+    def incisioni_testata(cx, cy):
+        lato = (lambda x: x - x_te < a0) if cx < a0 else (lambda x: x - x_te > b1) \
+            if cx > b1 else None
+        if lato is None:
+            return None
+        return [pl for pl in incise if all(lato(x) for x, _ in pl)]
+
+    stendi("testata", regola_testata, pezzo=te_liscia, incisioni=incisioni_testata)
 
     # --- il frontalino, davanti in basso fra i fianchi
     fr = ruoli["frontalino"]
@@ -872,6 +1037,8 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
         avvisi.append("%s: intagliato dove entrava in %s (%.0f mm2)" % (parte, contro, px / G.px ** 2))
     exporters.write_glb_mesh(V, UV, T, tex, uscita, tex_max=4096, parti=parti)
     avvisi.insert(0, "espositore: corpo %.0f x %.0f mm, alto %.0f (con la testata %.0f); "
-                     "ripiano superiore a %.0f mm, colonna di sinistra %.0f mm"
-                  % (Wi + 4 * t, D, H, H + tp, alto, m["colonna_sx"]))
+                     "ripiano superiore a %.0f mm, colonna di sinistra %.0f mm; cartone %.1f mm"
+                  % (Wi + 4 * t, D, H, sopra + tp, alto, m["colonna_sx"], t))
+    if incise:
+        avvisi.append("testata: %d linee della prefustella incise sui lati" % len(incise))
     return avvisi, m
