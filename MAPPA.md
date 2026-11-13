@@ -34,7 +34,7 @@ sono in GADGET.md.
   `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`); la sua
   immagine del prodotto la separa dal PDF `_separa_prodotto` (in
   `server.py`), all'inizio di `do_POST`, e va col caso (`blocchi_caso`).
-  I **materiali POP** (per ora il totem), dalla finestra «Crea materiali POP
+  I **materiali POP** (per ora il totem e l'espositore), dalla finestra «Crea materiali POP
   3D da PDF» (la pagina con `pop=1`), stanno in `pack3d/pop/`, e solo li'
   (regole/pop.md, *Il confine*): il registro e i tipi dichiarati li leggono
   da `pack3d.pop` (`MATERIALI_POP`, `NOMI_POP`, `analisi`, `COSTRUZIONI`); la

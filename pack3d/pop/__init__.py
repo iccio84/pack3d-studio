@@ -15,17 +15,22 @@ questo pacchetto e non lo nominano: il registro delle famiglie
 (`NOMI_POP`), la coda e la routine (`sezione_glam`). Un materiale nuovo
 entra qui, nella pagina (la sua voce) e in regole/pop.md.
 
-Per ora c'e' il totem. Il codice non lo sa ancora costruire: la sua lettura
-si ferma col motivo, e il caso va in coda col PDF (`server.caso_fermo`,
-CODA.md), da dove parte la famiglia.
+Per ora ci sono il totem e l'espositore. Il codice non li sa ancora
+costruire: la loro lettura si ferma col motivo, e il caso va in coda col PDF
+(`server.caso_fermo`, CODA.md), da dove parte la famiglia.
 """
 
 # I materiali che la finestra POP dichiara, col loro nome a parole per la
 # coda e per il controllo dell'AI (`famiglie.comune.NOMI_KIND` li prende da
 # qui, e cosi' `KIND_NOTI` e i sinonimi).
+# Il nome di un materiale non puo' essere un tipo o un sinonimo dei pack:
+# «espositore», per i pack, vuol dire vassoio (`comune.SINONIMI_KIND`), e
+# dichiararlo POP avrebbe cambiato strada ai pack. Per questo `espositore_pop`.
 NOMI_POP = {
     "totem": "totem (materiale POP: espositore da terra, un pannello piatto o "
              "curvato in piedi sulla sua base, anche con i popup)",
+    "espositore_pop": "espositore (materiale POP: una struttura da banco o da "
+                      "terra coi ripiani o i vani dove stanno i prodotti)",
 }
 MATERIALI_POP = tuple(NOMI_POP)
 
@@ -44,8 +49,9 @@ def analisi(pdfs, kind):
     """La lettura di un materiale POP: la riga «materiale POP» del registro
     passa da qui. Nessuno si sa ancora costruire: si ferma col motivo, e il
     caso va in coda col PDF."""
+    nome = NOMI_POP[kind].split(" (")[0]
     raise ValueError("%s: il codice non sa ancora costruirlo. Il caso va a chi "
-                     "corregge il codice, che parte dal tuo PDF" % kind)
+                     "corregge il codice, che parte dal tuo PDF" % nome)
 
 
 # Le finestre di Glam Lab dove arrivano i modelli: quella dei pack, e quella

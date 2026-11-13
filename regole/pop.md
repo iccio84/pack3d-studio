@@ -1,9 +1,9 @@
 # I materiali POP
 
-I materiali per il punto vendita: **totem**, e poi dondolini, strip, vele,
-angolari, portaprezzi, sticker. Si caricano dalla loro finestra di Glam,
-«Crea materiali POP 3D da PDF», e il codice sta in `pack3d/pop/`. Qui le loro
-regole, a parte da quelle dei pack.
+I materiali per il punto vendita: **totem** ed **espositori**, e poi
+dondolini, strip, vele, angolari, portaprezzi, sticker. Si caricano dalla
+loro finestra di Glam, «Crea materiali POP 3D da PDF», e il codice sta in
+`pack3d/pop/`. Qui le loro regole, a parte da quelle dei pack.
 
 ## Il confine
 
@@ -66,3 +66,19 @@ si costruisce*). Quello che sappiamo dal proprietario:
 Il totem curvo si costruisce come il fronte curvo della scatola a punta o il
 cono del tubo: un foglio piegato ad arco, nella sua casa (`pack3d/pop/`),
 che usa quei moduli senza cambiarli.
+
+## L'espositore
+
+Da banco o da terra: la struttura coi ripiani o i vani dove stanno i
+prodotti. Si comincia da qui (dal proprietario, 13 novembre 2026: «aggiungiamo
+oltre al pulsante totem anche il pulsante Espositore e poi iniziamo da
+quello»). Ancora da costruire: ogni PDF caricato e' un caso in coda.
+
+- **Il nome.** Per i pack «espositore» e' un sinonimo di vassoio
+  (`famiglie.comune.SINONIMI_KIND`): il materiale POP si chiama
+  `espositore_pop`, e sul pulsante «Espositore». Nessun materiale POP puo'
+  avere il nome di un tipo o di un sinonimo dei pack: lo controlla
+  `prove/test_pop.py`.
+- **Non e' il vassoio.** Il vassoio espositore e il display con plancia sono
+  pack (regole/vassoi.md): l'espositore POP ne puo' usare i moduli - la
+  fustella, la piegatura, il GLB - ma non li cambia (*Il confine*).

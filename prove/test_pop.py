@@ -63,6 +63,34 @@ class FinestraPop(unittest.TestCase):
         self.assertEqual(coda._con_sezione({}, "pop"), {"X-Model-Section": "pop"})
         self.assertEqual(coda._con_sezione({}, None), {})
 
+    def test_l_espositore(self):
+        from pack3d import pop
+        from pack3d.famiglie import comune
+        self.assertIn("espositore_pop", comune.KIND_NOTI)
+        self.assertEqual(comune.normalizza_kind("espositore_pop"), "espositore_pop")
+        self.assertIn("espositore (materiale POP", comune.dichiarazione("espositore_pop", 1))
+        with self.assertRaises(ValueError) as e:
+            pop.analisi(["espositore.pdf"], "espositore_pop")
+        self.assertTrue(str(e.exception).startswith("espositore: il codice non sa"))
+        self.assertEqual(pop.sezione_glam("espositore_pop"), "pop")
+        # per i pack «espositore» resta il vassoio
+        self.assertEqual(comune.normalizza_kind("espositore"), "vassoio")
+
+    def test_nessun_materiale_ha_il_nome_di_un_pack(self):
+        # un nome dei pack dichiarato POP cambierebbe strada ai pack
+        # (`famiglie.comune` non si importa, se succede)
+        from pack3d import pop
+        from pack3d.famiglie import comune
+        pack = set(comune.SINONIMI_PACK) | set(comune.SINONIMI_PACK.values())
+        self.assertFalse(set(pop.MATERIALI_POP) & pack)
+        self.assertIn("espositore", pack)
+
+    def test_la_pagina_ha_la_voce_espositore(self):
+        with open(os.path.join(QUI, "pack3d_studio.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        self.assertIn('data-f="espositore_pop"><b>Espositore</b>', html)
+        self.assertIn("espositore_pop: {nome: 'Espositore'", html)
+
     def test_la_pagina_ha_la_voce_totem(self):
         with open(os.path.join(QUI, "pack3d_studio.html"), encoding="utf-8") as fh:
             html = fh.read()
