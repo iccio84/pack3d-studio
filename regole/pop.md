@@ -48,9 +48,10 @@ lettura (`pop.analisi`) e diventa un caso, che chi l'ha caricato manda con
 
 ## Il totem
 
-Espositore da terra: un pannello in piedi sulla sua base. Ancora da
-costruire: ogni PDF caricato e' un caso in coda (CODA.md, *Un caso che non
-si costruisce*). Quello che sappiamo dal proprietario:
+Espositore da terra: un pannello in piedi sulla sua base. Il totem
+lenticolare si costruisce in prova (`pack3d/pop/totem.py`): lo Space non lo
+costruisce ancora, ogni PDF caricato e' un caso in coda (CODA.md, *Un caso
+che non si costruisce*). Quello che sappiamo dal proprietario:
 
 - **piatto o curvato.** Per il proprietario «lenticolare» vuol dire il
   **pannello curvato**, non la stampa lenticolare. La curva si legge dal PDF:
@@ -63,9 +64,42 @@ si costruisce*). Quello che sappiamo dal proprietario:
 - la sezione puo' avere una faccia curva e il retro piatto, o due facce
   curve: lo dice la fustella.
 
-Il totem curvo si costruisce come il fronte curvo della scatola a punta o il
-cono del tubo: un foglio piegato ad arco, nella sua casa (`pack3d/pop/`),
-che usa quei moduli senza cambiarli.
+### Il totem lenticolare (in prova)
+
+Dal proprietario (13 novembre 2026): «Ora proviamo un totem lenticolare: in
+allegato 2 pdf fronte e retro più un render di riferimento. I pannelli
+devono essere piegati in modo da essere curvo (la geometria non deve essere
+sfaccettata) e alla base ci deve essere una piattina in plastica bianca che
+permette al totem di stare su».
+
+- **Due PDF, fronte e retro.** Ognuno e' una pagina col pannello steso: il
+  contorno di taglio (il tracciato chiuso piu' grande del colore del
+  taglio, `fustella.contorni_di_taglio`) e, dentro, i contorni dei popup. Il
+  contorno del retro e' quello del fronte specchiato (sul primo caso
+  coincidono al centesimo): e' lo stesso pannello, stampato sulle due facce.
+- **Le curve del contorno da pdfium**, coi segmenti di Bezier veri
+  (`fustella._tracciati_pdfium`): pdfplumber ne appiattiva alcune, e la
+  punta dell'aletta spariva. Anche il taglio si toglie dalla grafica sui
+  punti della curva, non sui punti di controllo (`fustella._sul_dt`): con
+  quelli il contorno curvo restava, magenta, nella grafica.
+- **La curva.** Il pannello e' un cilindro: la sua larghezza stesa e'
+  l'arco, l'altezza resta dritta. Il fronte e' la faccia convessa, il retro
+  quella concava (si legge dritto da dietro: il foglio del retro e'
+  specchiato). La freccia, se il PDF non la dice, e' una scelta:
+  `totem.FRECCIA`, un sesto della larghezza circa, dal render di
+  riferimento (corda al 91% della larghezza): 100 mm su 580.
+- **Liscio, non sfaccettato**: una fila di vertici ogni 6 mm lungo l'arco
+  (`totem.PASSO_ARCO`) e le normali condivise.
+- **Le due facce**: due strati di 1,5 mm, uno per stampa, schiena contro
+  schiena (3 mm in tutto); i bordi col colore della loro grafica.
+- **I popup**: le sagome coi loro contorni, davanti alla faccia della loro
+  stampa a 12 mm (`totem.DISTANZA_POPUP`), spesse 2 mm, curve come il
+  pannello: sul retro concavo una sagoma piatta entrerebbe nel pannello ai
+  lati. Dietro ognuno un distanziale bianco. Sotto il popup il pannello e'
+  stampato come nel PDF.
+- **La piattina**: una lastra di plastica bianca spessa 6 mm che segue
+  l'arco sotto il pannello, larga 45 mm per parte, coi capi tondi; il
+  pannello ci sta sopra.
 
 ## L'espositore
 

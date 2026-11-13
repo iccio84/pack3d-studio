@@ -15,9 +15,10 @@ questo pacchetto e non lo nominano: il registro delle famiglie
 (`NOMI_POP`), la coda e la routine (`sezione_glam`). Un materiale nuovo
 entra qui, nella pagina (la sua voce) e in regole/pop.md.
 
-Per ora ci sono il totem e l'espositore. Il codice non li sa ancora
-costruire: la loro lettura si ferma col motivo, e il caso va in coda col PDF
-(`server.caso_fermo`, CODA.md), da dove parte la famiglia.
+Per ora ci sono il totem e l'espositore. Lo Space non li costruisce ancora:
+la loro lettura si ferma col motivo, e il caso va in coda col PDF
+(`server.caso_fermo`, CODA.md), da dove parte la famiglia. Le costruzioni
+in prova, dai PDF dei casi: `espositore.monta` e `totem.monta`.
 """
 
 # I materiali che la finestra POP dichiara, col loro nome a parole per la

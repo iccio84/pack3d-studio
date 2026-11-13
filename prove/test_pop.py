@@ -285,3 +285,120 @@ class PiegheSempliciPop(unittest.TestCase):
             self.assertTrue(F.NOTE.search(nome), nome)
         for nome in ("technical-drawing", "0101-italy.ITAL", "shared", "grafica"):
             self.assertFalse(F.NOTE.search(nome), nome)
+
+
+def _pdf_totem(percorso, colore, specchio=False):
+    """Un PDF finto di totem: una pagina 200 x 300 mm col pannello pieno di
+    `colore`, il suo contorno di taglio (con una punta in Bezier sopra, come
+    l'aletta) e un popup tondo, in magenta, solo contorno. Il retro ha il
+    contorno specchiato."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as R
+    PT = 72 / 25.4
+    W, H = 200.0, 300.0
+    doc = pdfium.PdfDocument.new()
+    pg = doc.new_page(W * PT, H * PT)
+
+    def X(x):
+        return (W - x if specchio else x) * PT
+
+    def Y(y):
+        return (H - y) * PT
+
+    def tracciato(punti, curve=(), riempi=None, chiudi=True):
+        h = R.FPDFPageObj_CreateNewPath(X(punti[0][0]), Y(punti[0][1]))
+        for p in punti[1:]:
+            if p in curve:
+                (a, b, c) = curve[p]
+                R.FPDFPath_BezierTo(h, X(a[0]), Y(a[1]), X(b[0]), Y(b[1]), X(c[0]), Y(c[1]))
+            else:
+                R.FPDFPath_LineTo(h, X(p[0]), Y(p[1]))
+        if chiudi:
+            R.FPDFPath_Close(h)
+        if riempi:
+            R.FPDFPageObj_SetFillColor(h, *riempi, 255)
+            R.FPDFPath_SetDrawMode(h, R.FPDF_FILLMODE_ALTERNATE, False)
+        else:
+            R.FPDFPageObj_SetStrokeColor(h, 237, 2, 140, 255)
+            R.FPDFPageObj_SetStrokeWidth(h, 1.0)
+            R.FPDFPath_SetDrawMode(h, 0, True)
+        R.FPDFPage_InsertObject(pg.raw, h)
+    # il pannello: da (50, 60) a (150, 260), con la punta sopra fra x 80 e 100
+    bordo = [(50, 60), (80, 60), "punta", (150, 60), (150, 260), (50, 260)]
+    pts = [(50, 60), (80, 60), (100, 60), (150, 60), (150, 260), (50, 260)]
+    curve = {(100, 60): ((85, 30), (95, 30), (100, 60))}
+    tracciato(pts, riempi=colore)
+    tracciato(pts, curve=curve)
+    del bordo
+    # il popup: un quadrato smussato dentro
+    tracciato([(80, 120), (120, 120), (120, 160), (80, 160)], riempi=(255, 255, 255))
+    tracciato([(80, 120), (120, 120), (120, 160), (80, 160)])
+    R.FPDFPage_GenerateContent(pg.raw)
+    doc.save(percorso)
+
+
+class TotemPop(unittest.TestCase):
+    """Il totem lenticolare (`pop.totem`) su PDF finti."""
+
+    def test_il_raggio_dalla_freccia(self):
+        import numpy as np
+        from pack3d.pop import totem
+        R = totem.raggio(580.0, 100.0)
+        self.assertAlmostEqual(R * (1 - np.cos(580.0 / (2 * R))), 100.0, places=3)
+
+    def test_il_contorno_tiene_le_curve(self):
+        import tempfile
+        from pack3d.pop import fustella as F, totem
+        with tempfile.TemporaryDirectory() as d:
+            pdf = os.path.join(d, "fronte.pdf")
+            _pdf_totem(pdf, (200, 30, 60))
+            tagli = F.contorni_di_taglio(pdf)
+            pannello, popup = totem.leggi(pdf)
+        # la punta in Bezier sale sopra il bordo: la curva, non la corda
+        self.assertLess(pannello[:, 1].min(), 50.0)
+        self.assertGreater(pannello[:, 1].min(), 35.0)
+        self.assertEqual(len(tagli), 2)
+        self.assertEqual(len(popup), 1)
+
+    def test_il_taglio_curvo_esce_dalla_grafica(self):
+        import tempfile
+        import numpy as np
+        from scipy.spatial import cKDTree
+        from pack3d.pop import fustella as F, totem
+        with tempfile.TemporaryDirectory() as d:
+            pdf = os.path.join(d, "fronte.pdf")
+            _pdf_totem(pdf, (200, 30, 60))
+            pannello, popup = totem.leggi(pdf)
+            linee = [np.vstack([a, a[:1]]) for a in [pannello] + popup]
+            _, sul_dt = F._oggetti(pdf, cKDTree(F._campiona(linee, 0.5)))
+        self.assertEqual(len(sul_dt), 2)            # il contorno con la punta e il popup
+
+    def test_un_totem_curvo_con_la_piattina(self):
+        import tempfile
+        import numpy as np
+        from pack3d import vista
+        from pack3d.pop import totem
+        with tempfile.TemporaryDirectory() as d:
+            f, r = os.path.join(d, "fronte.pdf"), os.path.join(d, "retro.pdf")
+            _pdf_totem(f, (200, 30, 60))
+            _pdf_totem(r, (30, 60, 200), specchio=True)
+            glb = os.path.join(d, "totem.glb")
+            avvisi, m = totem.monta(f, r, glb, freccia=20.0)
+            parti = {p["nome"]: p for p in vista.leggi_glb(glb)}
+        self.assertIn("totem: pannello 100 x", avvisi[0])
+        for nome in ("pannello_fronte", "pannello_retro", "popup_fronte_1", "popup_retro_1",
+                     "piattina", "distanziali"):
+            self.assertIn(nome, parti)
+        def verts(nome):                                     # mm, solo quelli della parte
+            q = parti[nome]
+            return q["verts"][np.unique(q["tris"])] * 1000.0
+        V = verts("pannello_fronte")
+        # curvo: il centro davanti, i lati indietro della freccia
+        self.assertAlmostEqual(V[:, 2].max(), 0.0, delta=0.5)
+        self.assertAlmostEqual(-V[:, 2].min(), 20.0 + 1.5, delta=2.0)
+        # liscio: tanti vertici lungo l'arco, non due spigoli
+        self.assertGreater(len(np.unique(np.round(V[:, 0], 0))), 15)
+        # in piedi sulla piattina
+        P = verts("piattina")
+        self.assertAlmostEqual(P[:, 1].max(), totem.PIATTINA_SPESSORE, delta=0.01)
+        self.assertAlmostEqual(V[:, 1].min(), totem.PIATTINA_SPESSORE, delta=0.5)

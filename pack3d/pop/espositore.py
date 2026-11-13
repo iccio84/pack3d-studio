@@ -198,10 +198,12 @@ class Curva:
     """Il cartone di un pannello piegato ad arco, la piega arrotondata:
     `dentro(lx, ly)` e' la direzione del cartone in ogni punto del foglio, e
     `asse` quello del foglio lungo cui l'arco gira (0: x, 1: y; l'altro e'
-    la linea della piega)."""
+    la linea della piega). `passo` e' la distanza fra due file di vertici
+    lungo l'arco (`Montaggio.PASSO_PIEGA` se non si dice): poco per una
+    piega di pochi mm, di piu' per un pannello curvo intero."""
 
-    def __init__(self, dentro, asse):
-        self.dentro, self.asse = dentro, asse
+    def __init__(self, dentro, asse, passo=None):
+        self.dentro, self.asse, self.passo = dentro, asse, passo
 
 
 def piega_tonda(c, e0, e1, r, giro, s, lungo, asse):
@@ -246,7 +248,8 @@ class Montaggio:
         self.tonde = []
         self._cache = {}
 
-    def pannello(self, pezzo, masc, scarto, punto, dentro, nome, incisioni=None):
+    def pannello(self, pezzo, masc, scarto, punto, dentro, nome, incisioni=None,
+                 spessore=None):
         """Un pannello: `punto(lx, ly)` porta un punto del foglio, in mm
         locali del pezzo, sulla faccia stampata; `dentro` e' la direzione
         del cartone. Un pannello piatto ha `punto` affine e `dentro` fisso;
@@ -259,11 +262,14 @@ class Montaggio:
         p = dict(nome=nome, pezzo=pezzo, masc=np.asarray(masc, bool).copy(), scarto=scarto,
                  o=o, punto=punto, via=np.zeros(masc.shape, bool),
                  incisioni=[np.asarray(l, float) for l in (incisioni or [])])
+        if spessore is not None:
+            p["t"] = float(spessore)
         if isinstance(dentro, Curva):
             ii, jj = np.nonzero(masc)
             k = max(1, len(ii) // 400)
             xy = np.stack(G.a_mm(X0 + jj[::k] + 0.5, Y0 + ii[::k] + 0.5), 1)
-            p.update(curva=dentro.asse, dentro_f=dentro.dentro)
+            p.update(curva=dentro.asse, dentro_f=dentro.dentro,
+                     passo=dentro.passo or self.PASSO_PIEGA)
             p["campioni"] = (self._in3d(p, xy), self._dir(p, xy))
             self.grezzi.append(p)
             return
@@ -569,7 +575,7 @@ class Montaggio:
         qualche millimetro dal bordo, non quello del cartone grezzo."""
         from scipy import ndimage
         from scipy.spatial import cKDTree
-        G, t = self.G, self.t
+        G, t = self.G, p.get("t", self.t)
         pezzo, masc, nome = p["pezzo"], p["masc"], p["nome"]
         if masc.sum() < 20:
             return
@@ -624,8 +630,8 @@ class Montaggio:
             # triangola con l'altro asse schiacciato 25 volte.
             sc = np.ones(2)
             sc[1 - curva] = 1.0 / 25.0
-            fitti = [F.infittisci(an * sc, self.PASSO_PIEGA) for an in anelli]
-            pts, tri = F.triangola(fitti, griglia=self.PASSO_PIEGA)
+            fitti = [F.infittisci(an * sc, p["passo"]) for an in anelli]
+            pts, tri = F.triangola(fitti, griglia=p["passo"])
             pts = pts / sc
             anelli = [an / sc for an in fitti]
         else:
@@ -716,6 +722,14 @@ class Montaggio:
         self.T.append(np.concatenate(Ts))
         self.parti.setdefault(nome, []).append(len(self.T) - 1)
         self.pannelli.append(p)
+
+    def solido(self, nome, V, UV, T):
+        """Una maglia gia' fatta (la piattina del totem, i distanziali dei
+        popup) nella parte `nome`."""
+        self.V.append(np.asarray(V, float))
+        self.UV.append(np.asarray(UV, float))
+        self.T.append(np.asarray(T, int))
+        self.parti.setdefault(nome, []).append(len(self.T) - 1)
 
     def _linee(self, pezzo):
         """(albero dei tagli e delle pieghe campionati fitti, pieghe come

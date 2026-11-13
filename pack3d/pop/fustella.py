@@ -370,26 +370,20 @@ def _strato(h):
 
 def _sul_dt(h, alto, albero, toll=0.6):
     """Un tracciato solo di contorno coi punti tutti sulle linee del disegno
-    tecnico (entro `toll` mm): un pezzo del DT."""
+    tecnico (entro `toll` mm): un pezzo del DT. I punti sono quelli della
+    curva (`_tracciati_pdfium`), non i punti di controllo delle Bezier, che
+    stanno fuori dalla linea: con quelli un contorno curvo restava nella
+    grafica."""
     import ctypes
     import pypdfium2.raw as R
     riemp, contorno = ctypes.c_int(), ctypes.c_int()
     R.FPDFPath_GetDrawMode(h, ctypes.byref(riemp), ctypes.byref(contorno))
     if riemp.value or not contorno.value:
         return False
-    m = R.FS_MATRIX()
-    R.FPDFPageObj_GetMatrix(h, ctypes.byref(m))
-    pts = []
-    for i in range(R.FPDFPath_CountSegments(h)):
-        sg = R.FPDFPath_GetPathSegment(h, i)
-        x, y = ctypes.c_float(), ctypes.c_float()
-        R.FPDFPathSegment_GetPoint(sg, ctypes.byref(x), ctypes.byref(y))
-        X = m.a * x.value + m.c * y.value + m.e
-        Y = m.b * x.value + m.d * y.value + m.f
-        pts.append((X * MM, (alto - Y) * MM))
-    if not pts:
+    tracciati = _tracciati_pdfium(h, alto)
+    if not tracciati:
         return False
-    d, _ = albero.query(np.array(pts))
+    d, _ = albero.query(np.vstack([a for a, _ in tracciati]))
     return bool(d.max() <= toll)
 
 
@@ -728,3 +722,88 @@ def tagli_interni(pezzo, distanza=2.0):
         if dist[i, j].min() > distanza:
             out.append(pl)
     return out
+
+
+def _tracciati_pdfium(h, alto):
+    """Le polilinee (mm, y in giu') di un tracciato di pdfium, coi segmenti
+    di Bezier campionati (`_bezier`): una per ogni sotto-tracciato, con
+    `chiuso` se il PDF lo chiude."""
+    import ctypes
+    import pypdfium2.raw as R
+    m = R.FS_MATRIX()
+    R.FPDFPageObj_GetMatrix(h, ctypes.byref(m))
+
+    def pt(sg):
+        x, y = ctypes.c_float(), ctypes.c_float()
+        R.FPDFPathSegment_GetPoint(sg, ctypes.byref(x), ctypes.byref(y))
+        X = m.a * x.value + m.c * y.value + m.e
+        Y = m.b * x.value + m.d * y.value + m.f
+        return np.array([X, Y])
+    out, cur, chiuso = [], [], False
+    n = R.FPDFPath_CountSegments(h)
+    i = 0
+    while i < n:
+        sg = R.FPDFPath_GetPathSegment(h, i)
+        tipo = R.FPDFPathSegment_GetType(sg)
+        if tipo == R.FPDF_SEGMENT_MOVETO:
+            if len(cur) > 1:
+                out.append((cur, chiuso))
+            cur, chiuso = [pt(sg)], False
+        elif tipo == R.FPDF_SEGMENT_BEZIERTO and i + 2 < n and cur:
+            c1 = pt(sg)
+            c2 = pt(R.FPDFPath_GetPathSegment(h, i + 1))
+            sg3 = R.FPDFPath_GetPathSegment(h, i + 2)
+            p3 = pt(sg3)
+            cur.extend(_bezier(cur[-1], c1, c2, p3))
+            if R.FPDFPathSegment_GetClose(sg3):
+                chiuso = True
+            i += 2
+        else:
+            cur.append(pt(sg))
+        if R.FPDFPathSegment_GetClose(sg):
+            chiuso = True
+        i += 1
+    if len(cur) > 1:
+        out.append((cur, chiuso))
+    return [(np.array([(x * MM, (alto - y) * MM) for x, y in c]), k) for c, k in out]
+
+
+def contorni_di_taglio(pdf):
+    """I tracciati chiusi del taglio di un pezzo senza pieghe (un totem, un
+    popup): fra le linee solo di contorno, il gruppo (colore e spessore)
+    che ha il tracciato chiuso piu' grande, coi suoi tracciati chiusi dal
+    piu' grande. In mm, y verso il basso. Le curve di Bezier dal PDF, con
+    pdfium: pdfplumber ne appiattiva alcune, e la punta di un'aletta
+    spariva."""
+    import ctypes
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as R
+    gruppi = defaultdict(list)
+    doc = pdfium.PdfDocument(pdf)
+    pg = doc[0]
+    alto = pg.get_size()[1]
+    for i in range(R.FPDFPage_CountObjects(pg.raw)):
+        h = R.FPDFPage_GetObject(pg.raw, i)
+        if R.FPDFPageObj_GetType(h) != R.FPDF_PAGEOBJ_PATH:
+            continue
+        riemp, contorno = ctypes.c_int(), ctypes.c_int()
+        R.FPDFPath_GetDrawMode(h, ctypes.byref(riemp), ctypes.byref(contorno))
+        if riemp.value or not contorno.value:
+            continue
+        c = [ctypes.c_uint() for _ in range(4)]
+        R.FPDFPageObj_GetStrokeColor(h, *[ctypes.byref(v) for v in c])
+        w = ctypes.c_float()
+        R.FPDFPageObj_GetStrokeWidth(h, ctypes.byref(w))
+        chiave = (tuple(v.value for v in c[:3]), round(w.value, 1))
+        for a, chiuso in _tracciati_pdfium(h, alto):
+            if chiuso or np.hypot(*(a[0] - a[-1])) <= 1.0:
+                gruppi[chiave].append(a)
+    pg.close()
+    doc.close()
+
+    def area(a):
+        return float(np.prod(a.max(0) - a.min(0)))
+    if not gruppi:
+        raise ValueError("nel PDF non c'e' un contorno di taglio chiuso")
+    chiave = max(gruppi, key=lambda k: max(area(a) for a in gruppi[k]))
+    return sorted(gruppi[chiave], key=area, reverse=True)
