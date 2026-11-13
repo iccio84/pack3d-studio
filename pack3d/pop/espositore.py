@@ -250,7 +250,8 @@ def _dove(pannello_riq, pezzo, G):
 def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
     """Costruisce l'espositore montato in `uscita` (GLB). Torna gli avvisi."""
     from .. import exporters
-    tagli, pieghe = F.tratti(pdf)
+    segni = []
+    tagli, pieghe = F.tratti(pdf, segni)
     pezzi = F.pezzi(tagli, pieghe)
     ruoli = riconosci(pezzi, inchiostro(pdf, pezzi))
     m = misure(ruoli, t)
@@ -259,7 +260,9 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM):
             max(p.riquadro[2] for p in usati) + 5, max(p.riquadro[3] for p in usati) + 5)
     G = F.Griglia(zona, px_mm)
     mo = Montaggio(G, t)
-    tex = mo.texture(_steso(pdf, G))
+    # i triangoli di orientamento non sono del disegno tecnico ne' della
+    # stampa: via anche dalla grafica
+    tex = mo.texture(F.cancella(_steso(pdf, G), G, segni))
 
     Wi, D, H = m["Wi"], m["D"], m["H"]
     zf = t + (m["ripiano_inf"]["pieghe_v"][-1] - m["ripiano_inf"]["pieghe_v"][1])   # davanti dei ripiani

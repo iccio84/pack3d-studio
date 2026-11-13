@@ -63,11 +63,12 @@ def _polilinea(o):
     return [[tuple(p) for p in o.get("pts") or []]]
 
 
-def tratti(pdf):
+def tratti(pdf, segni=None):
     """`(tagli, pieghe)`: polilinee in mm, y verso il basso, dal colore del
     disegno tecnico. E' il colore (con lo spessore) che ha sia linee continue
     sia tratteggiate, e piu' lunghezza di tutti: i tagli sono le continue, le
-    cordonature le tratteggiate."""
+    cordonature le tratteggiate. I triangoli chiusi non sono tagli
+    (`_triangolo`): se `segni` e' una lista, ci finiscono loro."""
     import pdfplumber
     gruppi = defaultdict(lambda: {"continue": [], "tratteggiate": []})
     with pdfplumber.open(pdf) as doc:
@@ -95,7 +96,22 @@ def tratti(pdf):
                          "servono le linee continue (tagli) e tratteggiate (pieghe) "
                          "dello stesso colore")
     chiave = max(candidati)[1]
-    return gruppi[chiave]["continue"], gruppi[chiave]["tratteggiate"]
+    tagli = [pl for pl in gruppi[chiave]["continue"] if not _triangolo(pl)]
+    if segni is not None:
+        segni.extend(pl for pl in gruppi[chiave]["continue"] if _triangolo(pl))
+    return tagli, gruppi[chiave]["tratteggiate"]
+
+
+def _triangolo(pl):
+    """Un triangolo chiuso: il segno sul pezzo (il verso dell'onda, il lato
+    di stampa), disegnato col colore dei tagli ma non e' un taglio. Dal
+    proprietario: «Elimina tutti i fori triangolari (nel pdf ci sono ma non
+    sono parte del dt quindi non vanno considerati)». Tagliato, lasciava un
+    foro a triangolo in ogni pezzo."""
+    a = np.array(pl, float)
+    if len(a) < 4 or float(np.hypot(*(a[0] - a[-1]))) > 0.5:
+        return False
+    return len(np.unique(np.round(a, 1), axis=0)) == 3
 
 
 @dataclass
@@ -320,3 +336,31 @@ class Griglia:
             a, b, c, d = ys.min(), ys.max() + 1, xs.min(), xs.max() + 1
             fuori.append((pieno[a:b, c:d], (X0 + c, Y0 + a)))
         return fuori
+
+
+def cancella(steso, griglia, polilinee, spessore_mm=3.0):
+    """Lo steso senza le `polilinee` (i segni che non si stampano): i loro
+    pixel prendono il colore che hanno intorno, la media dei vicini fuori
+    dal segno."""
+    from PIL import Image, ImageDraw
+    from scipy import ndimage
+    if not polilinee:
+        return steso
+    m = Image.new("L", steso.size, 0)
+    d = ImageDraw.Draw(m)
+    # largo almeno 3 pixel piu' il tratto: alla scala del modello (1 px/mm)
+    # un tratto di 1,8 mm sfumato ne prende tre, e coprirne due lasciava il
+    # triangolo ancora disegnato
+    w = int(np.ceil(spessore_mm * griglia.px)) + 2
+    for pl in polilinee:
+        d.line([griglia.a_pixel(x, y) for x, y in pl], fill=255, width=w, joint="curve")
+    segno = np.asarray(m) > 0
+    a = np.asarray(steso.convert("RGB"), float)
+    fuori = (~segno).astype(float)
+    lato = 4 * w + 1
+    peso = ndimage.uniform_filter(fuori, lato)
+    out = a.copy()
+    for c in range(3):
+        media = ndimage.uniform_filter(a[:, :, c] * fuori, lato) / np.maximum(peso, 1e-6)
+        out[:, :, c][segno] = media[segno]
+    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
