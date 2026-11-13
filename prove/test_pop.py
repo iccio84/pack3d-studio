@@ -102,3 +102,77 @@ class FinestraPop(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FustellaPop(unittest.TestCase):
+    """La fustella e il montaggio dell'espositore (`pop.fustella`,
+    `pop.espositore`) su pezzi finti: niente PDF dei clienti."""
+
+    def test_i_contorni_hanno_il_cartone_a_destra(self):
+        import numpy as np
+        from pack3d.pop import fustella as F
+        m = np.zeros((8, 10), bool)
+        m[1:7, 1:9] = True
+        m[3:5, 4:6] = False                         # un foro
+        anelli = F.contorni(m)
+        self.assertEqual(len(anelli), 2)
+        for an in anelli:
+            a, b = an[0], an[1]
+            e = b - a
+            p = (a + b) / 2 + np.array([-e[1], e[0]]) * 0.5
+            self.assertTrue(m[int(np.floor(p[1])), int(np.floor(p[0]))])
+
+    def test_le_curve_restano_curve_e_i_gradini_spariscono(self):
+        import numpy as np
+        from pack3d.pop import fustella as F
+        # un cerchio di raggio 50 campionato fitto: semplificato resta un
+        # cerchio entro 0,05 mm, con abbastanza punti da sembrare tondo
+        t = np.linspace(0, 2 * np.pi, 2000, endpoint=False)
+        cerchio = np.stack([50 * np.cos(t), 50 * np.sin(t)], 1)
+        s = F.semplifica(cerchio, 0.05)
+        self.assertGreater(len(s), 40)
+        self.assertLess(np.abs(np.hypot(*s.T) - 50).max(), 0.06)
+        # i gradini di un bordo di pixel finiscono sulla linea vera
+        gradini = np.array([[x, 10.0 + (x % 2) * 0.8] for x in range(20)], float)
+        su = F.aggancia(gradini, [[(0.0, 10.4), (30.0, 10.4)]], toll=2.0)
+        self.assertEqual(len(su), len(gradini))
+        self.assertLess(np.abs(su[:, 1] - 10.4).max(), 1e-9)
+
+    def test_due_parti_che_si_incrociano_si_intagliano(self):
+        import numpy as np
+        from PIL import Image
+        from pack3d.pop import espositore as E, fustella as F
+        G = F.Griglia((0.0, 0.0, 100.0, 100.0), 1.0)
+        mo = E.Montaggio(G, 6.0)
+        mo.texture(Image.new("RGB", (G.W, G.H), "orange"))
+        masc = np.ones((60, 60), bool)
+        a = F.Pezzo((0.0, 0.0, 60.0, 60.0), nome="a")
+        b = F.Pezzo((0.0, 0.0, 60.0, 60.0), nome="b")
+        # un ripiano a y = 50 e una parete che lo attraversa a x = 30
+        mo.pannello(a, masc, (0, 0), lambda lx, ly: (lx, 50.0, ly), (0, 1, 0), "ripiano")
+        mo.pannello(b, masc, (0, 0), lambda lx, ly: (30.0, 20.0 + ly, lx), (1, 0, 0), "parete")
+        V, UV, T, parti = mo.array(lambda p: 0 if p["nome"] == "ripiano" else 1)
+        self.assertEqual(E.intersezioni(mo), [])
+        self.assertTrue(any(n == "parete" and contro == "ripiano"
+                            for n, contro, _ in mo.intagli))
+        # la parete e' in due pezzi, sopra e sotto il ripiano
+        Vp = V[np.unique(T[parti[1][1]:parti[1][2]])]
+        self.assertFalse(np.any((Vp[:, 1] > 50.5) & (Vp[:, 1] < 55.5)))
+        # senza l'ordine resta la compenetrazione, e il controllo la trova
+        mo2 = E.Montaggio(G, 6.0)
+        mo2.texture(Image.new("RGB", (G.W, G.H), "orange"))
+        mo2.pannello(a, masc, (0, 0), lambda lx, ly: (lx, 50.0, ly), (0, 1, 0), "ripiano")
+        mo2.pannello(b, masc, (0, 0), lambda lx, ly: (30.0, 20.0 + ly, lx), (1, 0, 0), "parete")
+        mo2.array()
+        self.assertEqual(len(E.intersezioni(mo2)), 1)
+
+    def test_un_pannello_storto_si_ferma(self):
+        import numpy as np
+        from pack3d.pop import espositore as E, fustella as F
+        G = F.Griglia((0.0, 0.0, 100.0, 100.0), 1.0)
+        mo = E.Montaggio(G, 6.0)
+        p = F.Pezzo((0.0, 0.0, 60.0, 60.0))
+        with self.assertRaises(ValueError) as e:
+            mo.pannello(p, np.ones((60, 60), bool), (0, 0),
+                        lambda lx, ly: (lx, 0.0, min(lx, 30.0)), (0, 1, 0), "storto")
+        self.assertIn("non e' piatto", str(e.exception))

@@ -30,9 +30,17 @@ MM = 25.4 / 72.0
 PEZZO_MIN = 150.0
 
 
-def _bezier(p0, p1, p2, p3, passi=10):
-    t = np.linspace(0.0, 1.0, passi + 1)[1:, None]
+# un punto della curva ogni tanto, in mm: le curve dei pezzi (le orecchie
+# della testata, l'arco del frontalino) devono restare morbide anche da vicino
+PASSO_CURVA = 1.5
+
+
+def _bezier(p0, p1, p2, p3, passi=None):
     p0, p1, p2, p3 = (np.array(p, float) for p in (p0, p1, p2, p3))
+    if passi is None:
+        lungo = (np.hypot(*(p1 - p0)) + np.hypot(*(p2 - p1)) + np.hypot(*(p3 - p2))) * MM
+        passi = max(4, int(np.ceil(lungo / PASSO_CURVA)))
+    t = np.linspace(0.0, 1.0, passi + 1)[1:, None]
     pts = ((1 - t) ** 3) * p0 + 3 * ((1 - t) ** 2) * t * p1 + 3 * (1 - t) * t * t * p2 + t ** 3 * p3
     return [tuple(p) for p in pts]
 
@@ -265,6 +273,7 @@ class Griglia:
         un passaggio di quattro millimetri fra i due pannelli."""
         from PIL import Image, ImageDraw
         X0, Y0 = origine
+        self._ultime_pieghe = []
         h, w = pieno.shape
         im = Image.new("1", (w, h), 0)
         d = ImageDraw.Draw(im)
@@ -299,6 +308,7 @@ class Griglia:
                     fine = c
                 capi.append(fine)
             d.line([tuple(capi[0]), tuple(capi[1])], fill=1, width=1)
+            self._ultime_pieghe.append([self.a_mm(*(c + (X0, Y0))) for c in capi])
         return np.array(im, bool)
 
     def pannelli(self, pezzo):
@@ -312,6 +322,7 @@ class Griglia:
         pieno = ~np.isin(lab, list(bordo))          # col contorno e i tagli dentro
         dentro = ~tagli & pieno
         pieghe = self._linee_di_piega(pezzo, pieno, (X0, Y0))
+        pezzo.linee_piega = list(self._ultime_pieghe)
         # il cartone: dentro i tagli, cioe' quello che il bordo non raggiunge.
         # Lungo una piega del cartone spesso il disegno alterna tratti di
         # piega e brevi tagli (taglio-cordone): fra un tratto e l'altro
@@ -338,29 +349,233 @@ class Griglia:
         return fuori
 
 
-def cancella(steso, griglia, polilinee, spessore_mm=3.0):
-    """Lo steso senza le `polilinee` (i segni che non si stampano): i loro
-    pixel prendono il colore che hanno intorno, la media dei vicini fuori
-    dal segno."""
-    from PIL import Image, ImageDraw
+# ---------------------------------------------------------------------------
+# La grafica senza il disegno tecnico
+
+def _strato(h):
+    """Il nome dello strato (contenuto facoltativo, /OC) di un oggetto della
+    pagina di pdfium, o None se non sta in uno strato."""
+    import ctypes
+    import pypdfium2.raw as R
+    for i in range(R.FPDFPageObj_CountMarks(h)):
+        mk = R.FPDFPageObj_GetMark(h, i)
+        buf = (ctypes.c_ushort * 512)()
+        n = ctypes.c_ulong()
+        if R.FPDFPageObjMark_GetParamStringValue(mk, b"Title", buf, 1024, ctypes.byref(n)):
+            return bytes(buf)[:n.value].decode("utf-16-le").rstrip("\x00")
+    return None
+
+
+def _sul_dt(h, alto, albero, toll=0.6):
+    """Un tracciato solo di contorno coi punti tutti sulle linee del disegno
+    tecnico (entro `toll` mm): un pezzo del DT."""
+    import ctypes
+    import pypdfium2.raw as R
+    riemp, contorno = ctypes.c_int(), ctypes.c_int()
+    R.FPDFPath_GetDrawMode(h, ctypes.byref(riemp), ctypes.byref(contorno))
+    if riemp.value or not contorno.value:
+        return False
+    m = R.FS_MATRIX()
+    R.FPDFPageObj_GetMatrix(h, ctypes.byref(m))
+    pts = []
+    for i in range(R.FPDFPath_CountSegments(h)):
+        sg = R.FPDFPath_GetPathSegment(h, i)
+        x, y = ctypes.c_float(), ctypes.c_float()
+        R.FPDFPathSegment_GetPoint(sg, ctypes.byref(x), ctypes.byref(y))
+        X = m.a * x.value + m.c * y.value + m.e
+        Y = m.b * x.value + m.d * y.value + m.f
+        pts.append((X * MM, (alto - Y) * MM))
+    if not pts:
+        return False
+    d, _ = albero.query(np.array(pts))
+    return bool(d.max() <= toll)
+
+
+def _rendi(pg, griglia):
+    PT = 1.0 / MM
+    W, Hh = pg.get_size()
+    x0, y0, x1, y1 = griglia.zona
+    im = pg.render(scale=griglia.px / PT,
+                   crop=(x0 * PT, Hh - y1 * PT, W - x1 * PT, y0 * PT)).to_pil()
+    return im.convert("RGB").resize((griglia.W, griglia.H))
+
+
+def resa_senza_dt(pdf, griglia, tagli, linee, quota=0.03):
+    """La pagina resa sulla griglia, senza il disegno tecnico: tagli,
+    cordonature, quote, triangoli di orientamento. Non si ritocca la grafica
+    (un ritocco attorno ai segni rovinava i loghi e i testi vicini): si
+    tolgono gli OGGETTI del DT dal PDF prima di renderlo.
+
+    Il DT e' lo strato (contenuto facoltativo) dove stanno le sue linee: si
+    toglie tutto lo strato, con le quote e i segni, se toglierlo cambia meno
+    di `quota` del cartone dentro i tagli - cioe' se nello strato non c'e'
+    la grafica. Se non c'e' uno strato, o nello strato c'e' anche la grafica,
+    si tolgono solo i tracciati che stanno sulle linee del DT. `linee` sono
+    tutte (tagli, pieghe, segni), in mm; `tagli` servono per sapere dov'e'
+    il cartone."""
     from scipy import ndimage
-    if not polilinee:
-        return steso
-    m = Image.new("L", steso.size, 0)
-    d = ImageDraw.Draw(m)
-    # largo almeno 3 pixel piu' il tratto: alla scala del modello (1 px/mm)
-    # un tratto di 1,8 mm sfumato ne prende tre, e coprirne due lasciava il
-    # triangolo ancora disegnato
-    w = int(np.ceil(spessore_mm * griglia.px)) + 2
+    from scipy.spatial import cKDTree
+    albero = cKDTree(_campiona(linee, 0.5))
+    # il cartone: dentro i tagli, quello che dal bordo non si raggiunge
+    disegno, (X0, Y0) = griglia._disegna(tagli, griglia.zona)
+    lab, _ = ndimage.label(~disegno)
+    bordo = np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]]))
+    cartone = np.zeros((griglia.H, griglia.W), bool)
+    c = ~np.isin(lab, bordo)
+    h, w = cartone.shape
+    ys, xs = slice(max(0, -Y0), min(c.shape[0], h - Y0)), slice(max(0, -X0), min(c.shape[1], w - X0))
+    cartone[ys.start + Y0:ys.stop + Y0, xs.start + X0:xs.stop + X0] = c[ys, xs]
+    cartone = ndimage.binary_erosion(cartone, iterations=3)
+
+    strati, sul_dt = _oggetti(pdf, albero)
+    tutta = np.asarray(_senza(pdf, griglia, ()), int)
+    via = {i for i, _ in sul_dt}
+    for nome in sorted({n for _, n in sul_dt if n is not None}):
+        senza = np.asarray(_senza(pdf, griglia, strati[nome]), int)
+        cambiati = (np.abs(tutta - senza).sum(-1) > 30) & cartone
+        if cambiati.sum() <= quota * max(1, cartone.sum()):
+            via.update(strati[nome])
+    return _senza(pdf, griglia, via)
+
+
+def _oggetti(pdf, albero):
+    """({strato: [indici]}, [(indice, strato)] dei tracciati sul DT): gli
+    oggetti della pagina, per indice nell'ordine di pdfium."""
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument(pdf)
+    pg = doc[0]
+    alto = pg.get_size()[1]
+    strati, sul_dt = {}, []
+    for i, o in enumerate(pg.get_objects(max_depth=0)):
+        nome = _strato(o.raw)
+        strati.setdefault(nome, []).append(i)
+        if o.type == 2 and _sul_dt(o.raw, alto, albero):          # 2: un tracciato
+            sul_dt.append((i, nome))
+    del o
+    pg.close()
+    doc.close()
+    return strati, sul_dt
+
+
+def _senza(pdf, griglia, indici):
+    """La pagina resa sulla griglia senza gli oggetti `indici`."""
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument(pdf)
+    pg = doc[0]
+    if indici:
+        oggetti = list(pg.get_objects(max_depth=0))
+        for i in sorted(indici):
+            pg.remove_obj(oggetti[i])
+        del oggetti
+    im = _rendi(pg, griglia)
+    pg.close()
+    doc.close()
+    return im
+
+
+# ---------------------------------------------------------------------------
+# Il contorno di un pannello, con le curve vere del PDF
+
+def contorni(masc):
+    """Gli anelli del contorno di una maschera, in pixel (x, y) sui bordi dei
+    pixel: un anello per ogni bordo chiuso, il cartone a destra di chi lo
+    percorre. Sono a gradini: `aggancia` li porta sulle linee vere."""
+    m = np.pad(np.asarray(masc, bool), 1)
+    dentro = m[1:-1, 1:-1]
+    i, j = np.nonzero(dentro)
+    uscite = {}
+
+    def lato(a, b):
+        uscite.setdefault(a, []).append(b)
+
+    for di, dj, da, db in ((-1, 0, (0, 0), (1, 0)), (0, 1, (1, 0), (1, 1)),
+                           (1, 0, (1, 1), (0, 1)), (0, -1, (0, 1), (0, 0))):
+        fuori = ~m[1 + i + di, 1 + j + dj]
+        for ii, jj in zip(i[fuori], j[fuori]):
+            lato((jj + da[0], ii + da[1]), (jj + db[0], ii + db[1]))
+    anelli = []
+    while uscite:
+        inizio = next(iter(uscite))
+        anello = [inizio]
+        prec = None
+        cur = inizio
+        while True:
+            lista = uscite.get(cur)
+            if not lista:
+                break
+            if len(lista) > 1 and prec is not None:
+                # a un incrocio (due pixel in diagonale) si gira a destra:
+                # il cartone resta da una parte sola e gli anelli non si toccano
+                dx0, dy0 = cur[0] - prec[0], cur[1] - prec[1]
+
+                def svolta(b):
+                    dx1, dy1 = b[0] - cur[0], b[1] - cur[1]
+                    return -(dx0 * dy1 - dy0 * dx1)
+                lista.sort(key=svolta)
+            nxt = lista.pop()
+            if not lista:
+                del uscite[cur]
+            prec, cur = cur, nxt
+            if cur == inizio:
+                break
+            anello.append(cur)
+        if len(anello) >= 4:
+            anelli.append(np.array(anello, float))
+    return anelli
+
+
+def _campiona(polilinee, passo=0.25):
+    """I punti delle polilinee, uno ogni `passo` mm."""
+    pts = []
     for pl in polilinee:
-        d.line([griglia.a_pixel(x, y) for x, y in pl], fill=255, width=w, joint="curve")
-    segno = np.asarray(m) > 0
-    a = np.asarray(steso.convert("RGB"), float)
-    fuori = (~segno).astype(float)
-    lato = 4 * w + 1
-    peso = ndimage.uniform_filter(fuori, lato)
-    out = a.copy()
-    for c in range(3):
-        media = ndimage.uniform_filter(a[:, :, c] * fuori, lato) / np.maximum(peso, 1e-6)
-        out[:, :, c][segno] = media[segno]
-    return Image.fromarray(np.clip(out, 0, 255).astype(np.uint8))
+        a = np.asarray(pl, float)
+        for p, q in zip(a[:-1], a[1:]):
+            n = max(1, int(np.ceil(np.hypot(*(q - p)) / passo)))
+            t = np.linspace(0.0, 1.0, n + 1)[:, None]
+            pts.append(p + (q - p) * t)
+    return np.vstack(pts) if pts else np.zeros((0, 2))
+
+
+def _douglas(a, tol):
+    """Douglas-Peucker su un tratto aperto."""
+    if len(a) < 3:
+        return a
+    p, q = a[0], a[-1]
+    d = q - p
+    L = float(np.hypot(*d))
+    if L < 1e-9:
+        dist = np.hypot(*(a - p).T)
+    else:
+        dist = np.abs(d[0] * (a[:, 1] - p[1]) - d[1] * (a[:, 0] - p[0])) / L
+    k = int(np.argmax(dist))
+    if dist[k] <= tol:
+        return np.array([p, q])
+    return np.vstack([_douglas(a[:k + 1], tol)[:-1], _douglas(a[k:], tol)])
+
+
+def semplifica(anello, tol=0.15):
+    """Un anello chiuso con meno punti: via quelli che stanno sulla linea
+    dei vicini entro `tol` mm. Le curve tengono i loro punti."""
+    a = np.asarray(anello, float)
+    if len(a) < 4:
+        return a
+    # si parte dal punto piu' lontano dal primo, cosi' i due tratti sono buoni
+    k = int(np.argmax(np.hypot(*(a - a[0]).T)))
+    uno = _douglas(np.vstack([a[:k + 1]]), tol)
+    due = _douglas(np.vstack([a[k:], a[:1]]), tol)
+    return np.vstack([uno[:-1], due[:-1]])
+
+
+def aggancia(anello, linee, toll=3.0, albero=None):
+    """Ogni punto dell'anello sul punto piu' vicino delle `linee` (campionate
+    fitte), se e' entro `toll` mm: i gradini dei pixel tornano sulle curve
+    del PDF. Torna un punto per punto: quelli finiti uno sull'altro li
+    toglie chi chiama."""
+    from scipy.spatial import cKDTree
+    if albero is None:
+        albero = cKDTree(_campiona(linee))
+    d, k = albero.query(anello)
+    fuori = anello.copy()
+    vicino = d <= toll
+    fuori[vicino] = albero.data[k[vicino]]
+    return fuori

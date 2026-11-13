@@ -82,3 +82,36 @@ quello»). Ancora da costruire: ogni PDF caricato e' un caso in coda.
 - **Non e' il vassoio.** Il vassoio espositore e il display con plancia sono
   pack (regole/vassoi.md): l'espositore POP ne puo' usare i moduli - la
   fustella, la piegatura, il GLB - ma non li cambia (*Il confine*).
+
+### Come si costruisce (in prova, `pack3d/pop/espositore.py`)
+
+Dal PDF della fustella: i pezzi si riconoscono dalle pieghe e dalla stampa,
+e ognuno si piega e si monta con le misure che legge (`misure`). Ancora in
+prova: lo Space non lo costruisce, il PDF va in coda.
+
+- **La grafica senza il disegno tecnico.** Dal proprietario: «Elimina il dt
+  senza intaccare la grafica». Non si ritocca l'immagine (un ritocco attorno
+  ai segni rovinava i loghi e i testi vicini): si tolgono dal PDF gli
+  OGGETTI del DT prima di renderlo (`fustella.resa_senza_dt`). Se il DT ha
+  uno strato suo, si toglie tutto lo strato, con le quote e i triangoli di
+  orientamento; se non ce l'ha, o lo strato ha anche la grafica, solo i
+  tracciati che stanno sulle linee dei tagli e delle pieghe.
+- **I triangoli di orientamento** non sono tagli (`fustella._triangolo`).
+- **I contorni morbidi.** Dal proprietario: «i tracciati sono seghettati.
+  Usa le curve di bezier». Il bordo di ogni pannello e' quello del PDF: le
+  curve di Bezier campionate ogni 1,5 mm (`fustella.PASSO_CURVA`), non i
+  gradini dei pixel della maschera.
+- **Lo spessore col colore della grafica.** Dal proprietario: «fai in modo
+  che gli spessori siano arancioni (o comunque in linea con la grafica)».
+  Il bordo tagliato prende il colore della stampa a 3 mm dal bordo.
+- **Nessuna compenetrazione fra parti diverse.** Dal proprietario: «evita
+  intersezioni tra le diverse parti». Dove due cartoni starebbero nello
+  stesso posto, quello che viene dopo nell'ordine (`espositore.ORDINE`: il
+  corpo, il divisorio, i ripiani, la testata, il riempitivo, il frontalino,
+  il fondello; le alette sul pavimento per ultime) si intaglia, come la
+  feritoia vera. `espositore.intersezioni` controlla il modello fatto.
+- **Da verificare col proprietario**: il fondo della colonna di sinistra e'
+  il fondello (largo quanto l'interno, con la feritoia del divisorio), non
+  un terzo ripiano; il frontalino sta sul davanti dei ripiani; i piedi
+  della testata entrano nei fianchi e non si vedono; le orecchie della
+  testata sono piatte.
