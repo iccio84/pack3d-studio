@@ -145,8 +145,8 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 **La finestra dei materiali POP.** La stessa pagina con `pop=1`
 nell'indirizzo - in Glam, «Crea materiali POP 3D da PDF» - chiede «Che tipo
 di materiale POP intendi realizzare?» e ha le voci dei materiali per il punto
-vendita. Per ora **Totem**: il PDF del totem, e parte da solo. Il codice non
-lo sa ancora costruire: la lettura si ferma e il caso va in coda
+vendita. Per ora **Totem** ed **Espositore**: il PDF, e parte da solo. Il
+codice non li sa ancora costruire: la lettura si ferma e il caso va in coda
 (`pack3d/pop/`, GLAM.md, sezione 10).
 
 Le famiglie da un PDF solo partono appena il PDF c'e'. Se la lettura o la
@@ -600,6 +600,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Il confine
   - La finestra
   - Il totem
+  - L'espositore
 
 **`regole/casi.md`** - i casi calibrati e le assunzioni non verificate
 

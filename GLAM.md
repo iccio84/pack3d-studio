@@ -439,7 +439,7 @@ Glam, **«Crea materiali POP 3D da PDF»**, accanto a «Costruisci modello 3D da
 PDF». È la stessa pagina dello Space, con **`pop=1`** nell'indirizzo
 dell'iframe (`.../api/public/pack3d?api=...&casi=1&pop=1`): la stessa
 interfaccia, con le voci dei materiali al posto di quelle dei pack. Per ora
-c'è **Totem**.
+ci sono **Totem** ed **Espositore**.
 
 Il codice i materiali POP non li sa ancora costruire: un totem caricato si
 ferma alla lettura e diventa un **caso** (`pack3d/pop/`), che chi

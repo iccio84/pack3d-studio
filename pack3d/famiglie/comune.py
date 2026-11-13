@@ -103,7 +103,14 @@ SINONIMI_KIND = {"cartotecnico": "carton", "astuccio": "carton",
                  # o avvolto tutto (l'ovetto), vedi `analisi_incarto_dichiarato`
                  "incarto": "incarto", "incarti": "incarto",
                  "wrapping": "incarto", "wrapper": "incarto"}
-# i materiali POP, dalla loro finestra: li dice il loro pacchetto (`pack3d.pop`)
+# i sinonimi dei soli pack, prima dei materiali POP
+SINONIMI_PACK = dict(SINONIMI_KIND)
+# I materiali POP, dalla loro finestra: li dice il loro pacchetto
+# (`pack3d.pop`). Un nome dei pack non puo' essere un materiale POP: gli
+# cambierebbe strada («espositore», per i pack, e' il vassoio).
+_SCONTRI = sorted(set(MATERIALI_POP) & (set(SINONIMI_PACK) | set(SINONIMI_PACK.values())))
+if _SCONTRI:
+    raise ImportError("materiali POP coi nomi dei pack: %s" % ", ".join(_SCONTRI))
 SINONIMI_KIND.update({k: k for k in MATERIALI_POP})
 
 

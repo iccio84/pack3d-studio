@@ -587,6 +587,7 @@
     </div>
     <div class="carte" id="carte-pop" role="group" aria-label="Materiale POP" hidden>
       <button type="button" data-f="totem"><b>Totem</b><span>Espositore da terra: pannello piatto o curvato, anche con i popup</span></button>
+      <button type="button" data-f="espositore_pop"><b>Espositore</b><span>Da banco o da terra, coi ripiani o i vani per i prodotti</span></button>
     </div>
   </div>
 
@@ -2798,9 +2799,15 @@ const FAMIGLIE = {
                + 'in piedi sulla sua base, anche con i popup (le sagome in rilievo applicate '
                + 'davanti). Carica il PDF del totem.',
           slot: ['Il PDF del totem']},
+  // «espositore» nei pack vuol dire vassoio: il materiale POP ha un nome suo
+  espositore_pop: {nome: 'Espositore',
+                   descr: 'Espositore per il punto vendita, da banco o da terra: la struttura '
+                        + 'coi ripiani o i vani dove stanno i prodotti. Carica il PDF '
+                        + 'dell\u2019espositore.',
+                   slot: ['Il PDF dell\u2019espositore']},
 };
 // queste partono da sole appena c'e' il PDF: nessun'altra domanda prima
-const DA_SOLE = ['flowpack', 'pouch', 'vassoio', 'totem'];
+const DA_SOLE = ['flowpack', 'pouch', 'vassoio', 'totem', 'espositore_pop'];
 // la famiglia scelta, astuccio o scatola, e i PDF caricati, uno per posto
 let famiglia = null, carto = null, slots = [], slotAttivo = -1;
 // come si chiude l'incarto: 'pieghe' o 'avvolto'
