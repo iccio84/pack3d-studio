@@ -148,6 +148,50 @@ TECNICI_MIN = 8
 PAGINE_GUARDATE = 10
 
 
+def _tratti_tecnici(pdf, i):
+    """Quanti tratti tecnici ha la pagina `i`: lunghi almeno 20 pt, dritti o
+    curvi, non piu' spessi di 2 pt (`TECNICI_MIN`)."""
+    from . import dieline
+    try:
+        t = dieline.tratti(pdf, i)
+    except Exception:
+        return 0
+    dritti = sum(1 for _k, _c, a, b, st in t.segmenti
+                 if b - a > 20.0 and (st[0] or 0.0) <= 2.0)
+    # e le curve: il lid di un cono e' un disco
+    curve = sum(1 for k, st, o in t.oggetti
+                if k == "curve" and (st[0] or 0.0) <= 2.0
+                and max(o.get("x1", 0) - o.get("x0", 0),
+                        o.get("bottom", 0) - o.get("top", 0)) > 20.0)
+    return dritti + curve
+
+
+def pagina_foto(pdf):
+    """L'indice della pagina che e' una foto della tavola (`solo_immagine`),
+    o None.
+
+    La prima, se lo e'. Se no una delle pagine dopo, ma solo quando la prima
+    non ha il disegno (`TECNICI_MIN`): davanti alla foto ci puo' essere una
+    copertina, come davanti a un PDF vettoriale (`_pagina_col_dt`). Il display
+    T1x10 del caso 54a998aa3b con una copertina davanti non si rifaceva
+    vettoriale - si guardava solo la copertina, che ha un bordo e un titolo -
+    e si fermava con «questa fustella ne ha 1 e 1» (`prove/parco.py
+    varianti`, 15 novembre 2026)."""
+    if solo_immagine(pdf, 0):
+        return 0
+    try:
+        import pypdf
+        n = len(pypdf.PdfReader(pdf).pages)
+    except Exception:
+        return None
+    if n < 2 or _tratti_tecnici(pdf, 0) >= TECNICI_MIN:
+        return None
+    for i in range(1, min(n, PAGINE_GUARDATE)):
+        if solo_immagine(pdf, i):
+            return i
+    return None
+
+
 def _pagina_col_dt(pdf, n):
     """L'indice della pagina col disegno: la prima, se ha i suoi tratti; se
     no quella che ne ha di piu'.
@@ -161,26 +205,10 @@ def _pagina_col_dt(pdf, n):
     di sempre non cambiano strada, e le altre si contano solo quando la
     prima ne ha pochi. Allora vince la pagina che ne ha di piu' - non una
     soglia: il lid del cono T1 ha sei tratti in tutto, un disco e due assi."""
-    from . import dieline
-
-    def tratti(i):
-        try:
-            t = dieline.tratti(pdf, i)
-        except Exception:
-            return 0
-        dritti = sum(1 for _k, _c, a, b, st in t.segmenti
-                     if b - a > 20.0 and (st[0] or 0.0) <= 2.0)
-        # e le curve: il lid di un cono e' un disco
-        curve = sum(1 for k, st, o in t.oggetti
-                    if k == "curve" and (st[0] or 0.0) <= 2.0
-                    and max(o.get("x1", 0) - o.get("x0", 0),
-                            o.get("bottom", 0) - o.get("top", 0)) > 20.0)
-        return dritti + curve
-
-    primi = tratti(0)
+    primi = _tratti_tecnici(pdf, 0)
     if primi >= TECNICI_MIN:
         return 0
-    conti = [(tratti(i), -i) for i in range(1, min(n, PAGINE_GUARDATE))]
+    conti = [(_tratti_tecnici(pdf, i), -i) for i in range(1, min(n, PAGINE_GUARDATE))]
     if not conti:
         return 0
     piu, meno_i = max(conti)

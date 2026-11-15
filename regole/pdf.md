@@ -64,6 +64,22 @@ l'errore di sopra. Il display del caso pero' ancora non si costruisce: e' un
 display a scatola col fondo attaccato al fianco, non al retro, e coi fianchi
 diversi, che `scatola_plancia` non legge (issue del caso).
 
+**La foto girata o dietro una copertina si legge uguale.** Il giro delle
+varianti del parco (`prove/parco.py varianti`, 15 novembre 2026) ha trovato
+due difetti sul display T1x10 del caso 54a998aa3b. Girata di un quarto la
+foto si scalava sulla sua altezza: `larghezza_fustella` e' la quota piu'
+esterna del DT, cioe' il LATO LUNGO dell'ingombro della fustella, comunque
+stia il foglio, e la scala si prende da quello. E la foto girata si rendeva
+piu' fitta di quanto e' - i pixel dell'immagine stanno nel suo verso, la
+pagina nell'altro - e coi suoi pixel piu' piccoli la lettura dei tratti
+cambiava: la risoluzione si misura lato lungo con lato lungo. Con una
+copertina davanti la foto non si rifaceva vettoriale, perche' si guardava
+solo la prima pagina: `artwork.pagina_foto` prende la prima pagina se e' una
+foto, e se no la prima foto delle pagine dopo, ma solo quando la prima non
+ha il disegno (`TECNICI_MIN` tratti), come `_pagina_col_dt` per i PDF
+vettoriali. Il T1x10 chiuso e il suo riempimento ora si costruiscono girati,
+con la copertina e con la miniatura.
+
 **La foto si pulisce dalla penna.** I tratti rifatti vettoriali la
 costruzione li toglie come ogni DT, ma la penna resta nei pixel della foto:
 sul display T1x10 le linee ciano stavano sui bordi della texture, e la

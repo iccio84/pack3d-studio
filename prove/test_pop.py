@@ -436,3 +436,24 @@ class TotemPop(unittest.TestCase):
             avvisi = costruisci((), glb)
             self.assertTrue(os.path.getsize(glb) > 1000)
         self.assertTrue(avvisi[0].startswith("totem: due pannelli"))
+
+    def test_la_pagina_aperta_rende_uguale(self):
+        """`fustella._Pagina`: con la pagina aperta, l'oggetto spostato fuori
+        e rimesso con la sua matrice, la resa e' uguale al pixel a quella
+        del PDF riaperto senza l'oggetto; e rimesso, la pagina torna intera."""
+        import tempfile
+        import numpy as np
+        from pack3d.pop import fustella as F
+        with tempfile.TemporaryDirectory() as d:
+            f = os.path.join(d, "fronte.pdf")
+            _pdf_totem(f, (200, 30, 60))
+            G = F.Griglia((0.0, 0.0, 120.0, 220.0), 1.0)
+            intera = np.asarray(F._senza(f, G, []))
+            pagina = F._Pagina(f)
+            try:
+                for i in range(len(pagina.oggetti)):
+                    self.assertTrue(np.array_equal(np.asarray(pagina.senza(G, [i])),
+                                                   np.asarray(F._senza(f, G, [i]))), i)
+                self.assertTrue(np.array_equal(np.asarray(pagina.senza(G, [])), intera))
+            finally:
+                pagina.chiudi()
