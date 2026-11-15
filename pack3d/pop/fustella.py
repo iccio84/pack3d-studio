@@ -464,6 +464,48 @@ def _oggetti(pdf, albero):
     return strati, sul_dt
 
 
+class _Pagina:
+    """La pagina di un PDF aperta una volta, per renderla molte volte senza
+    questo o quell'oggetto (`senza`).
+
+    Riaperto a ogni resa il totem costava un secondo e mezzo per resa - la
+    decodifica delle immagini della pagina - e la grafica dei popup ne chiede
+    centinaia (`oggetti_dentro`): quasi cinque minuti, e sullo Space il proxy
+    taglia la costruzione a cinque minuti. Con la pagina aperta pdfium tiene
+    le immagini decodificate e una resa costa un decimo. Un oggetto non si
+    toglie: si sposta fuori dalla pagina e poi si rimette con la sua matrice
+    di prima, esatta, cosi' resta al suo posto anche nell'ordine di chi sta
+    sopra a chi. Resa uguale al pixel a quella senza l'oggetto."""
+
+    FUORI = 1.0e5
+
+    def __init__(self, pdf):
+        import pypdfium2 as pdfium
+        self.doc = pdfium.PdfDocument(pdf)
+        self.pg = self.doc[0]
+        self.oggetti = list(self.pg.get_objects(max_depth=0))
+
+    def senza(self, griglia, indici):
+        import pypdfium2.raw as R
+        prima = []
+        for i in sorted(set(indici)):
+            h = self.oggetti[i].raw
+            m = R.FS_MATRIX()
+            R.FPDFPageObj_GetMatrix(h, m)
+            prima.append((h, m))
+            R.FPDFPageObj_Transform(h, 1, 0, 0, 1, self.FUORI, self.FUORI)
+        try:
+            return _rendi(self.pg, griglia)
+        finally:
+            for h, m in prima:
+                R.FPDFPageObj_SetMatrix(h, m)
+
+    def chiudi(self):
+        del self.oggetti
+        self.pg.close()
+        self.doc.close()
+
+
 def _senza(pdf, griglia, indici):
     """La pagina resa sulla griglia senza gli oggetti `indici`."""
     import pypdfium2 as pdfium
@@ -853,21 +895,26 @@ def oggetti_dentro(pdf, contorni, quota=0.7, px_mm=0.5):
     dentro = ndimage.binary_dilation(np.array(im, bool), iterations=max(1, int(3 * px_mm)))
     # A giri: un oggetto coperto da un altro uguale (il contorno sotto il
     # riempimento) non cambia niente finche' c'e' quello sopra; tolto quello,
-    # al giro dopo si vede, e si toglie anche lui.
-    out = []
-    for _ in range(4):
-        base = np.asarray(_senza(pdf, G, out), np.int16)
-        nuovi = []
-        for i in cand:
-            if i in out:
-                continue
-            cambia = np.abs(base - np.asarray(_senza(pdf, G, out + [i]), np.int16)).sum(-1) > 20
-            n = int(cambia.sum())
-            if n and (cambia & dentro).sum() >= quota * n:
-                nuovi.append(i)
-        if not nuovi:
-            break
-        out += nuovi
+    # al giro dopo si vede, e si toglie anche lui. Le rese sono centinaia: la
+    # pagina resta aperta (`_Pagina`).
+    pagina = _Pagina(pdf)
+    try:
+        out = []
+        for _ in range(4):
+            base = np.asarray(pagina.senza(G, out), np.int16)
+            nuovi = []
+            for i in cand:
+                if i in out:
+                    continue
+                cambia = np.abs(base - np.asarray(pagina.senza(G, out + [i]), np.int16)).sum(-1) > 20
+                n = int(cambia.sum())
+                if n and (cambia & dentro).sum() >= quota * n:
+                    nuovi.append(i)
+            if not nuovi:
+                break
+            out += nuovi
+    finally:
+        pagina.chiudi()
     return sorted(out)
 
 
