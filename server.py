@@ -36,7 +36,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
     sys.exit("Manca una libreria (%s).\n"
              "Installa con:  pip install -r requirements.txt" % e.name)
 
-from pack3d import coda, controllo, gelato, statistiche, strati, verifica, versione
+from pack3d import coda, controllo, gelato, pop, statistiche, strati, verifica, versione
 from pack3d import lettura as lettura_pdf
 from pack3d import lavoratori
 from pack3d import stato
@@ -961,7 +961,11 @@ class Handler(BaseHTTPRequestHandler):
                 if kind == "riempimento" and len(pdfs) != 2:
                     return self._send(400, "Riempimento: carica due PDF, il "
                                            "vassoio e il pack (CU)")
-                if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento"):
+                if kind == "totem" and len(pdfs) != 2:
+                    return self._send(400, "Totem: carica due PDF, il pannello "
+                                           "del fronte e quello del retro")
+                if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento",
+                                                  "totem"):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")
@@ -985,6 +989,18 @@ class Handler(BaseHTTPRequestHandler):
                         blocchi_caso, nomi_caso, verdetto, None, ctx)
                     verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
                     return self._send(200, json.dumps(verdetto, ensure_ascii=False))
+                if pop.e_pop(kind) and self.path.startswith("/api/analyze"):
+                    # un materiale POP si legge dal suo pacchetto, con TUTTI
+                    # i suoi PDF: il totem ne ha due, il fronte e il retro
+                    # (`pack3d.pop.analisi`)
+                    try:
+                        letto = pop.analisi(pdfs, kind)
+                    except Exception as e:
+                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
+                                                      blocchi_caso)
+                        return self._send(500, errore, controllo=verdetto)
+                    statistiche.conta("lettura", dichiarato=kind, letto=letto.get("kind"))
+                    return self._send(200, json.dumps(letto))
                 if kind == "riempimento" and self.path.startswith("/api/analyze"):
                     try:
                         letto = analisi_riempimento(pdfs, cu)
@@ -1045,6 +1061,7 @@ class Handler(BaseHTTPRequestHandler):
                         info = (analisi_incarto_dichiarato(pdf, chiusura)
                                 if kind == "incarto"
                                 else analisi_riempimento(pdfs, cu) if kind == "riempimento"
+                                else pop.analisi(pdfs, kind) if pop.e_pop(kind)
                                 else analisi_coppa(pdfs, kind)
                                 if in_piu_pezzi(kind, pdfs)
                                 else analyze_pdf(pdf, kind))

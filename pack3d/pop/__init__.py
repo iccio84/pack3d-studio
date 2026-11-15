@@ -15,9 +15,11 @@ questo pacchetto e non lo nominano: il registro delle famiglie
 (`NOMI_POP`), la coda e la routine (`sezione_glam`). Un materiale nuovo
 entra qui, nella pagina (la sua voce) e in regole/pop.md.
 
-Per ora ci sono il totem e l'espositore. Il codice non li sa ancora
-costruire: la loro lettura si ferma col motivo, e il caso va in coda col PDF
-(`server.caso_fermo`, CODA.md), da dove parte la famiglia.
+Ci sono il totem e l'espositore, e lo Space li costruisce: `analisi` legge
+il PDF (o i due PDF del totem, fronte e retro) e `COSTRUZIONI` porta le loro
+costruzioni, `espositore.monta` e `totem.monta`, nel registro delle
+famiglie. Un PDF che non si legge si ferma col motivo, e il caso va in coda
+col PDF (`server.caso_fermo`, CODA.md).
 """
 
 # I materiali che la finestra POP dichiara, col loro nome a parole per la
@@ -34,24 +36,114 @@ NOMI_POP = {
 }
 MATERIALI_POP = tuple(NOMI_POP)
 
-# Le costruzioni dei materiali POP, come `famiglie.registro.COSTRUZIONI`: per
-# il materiale letto (`info["kind"]`) la funzione che prepara la costruzione.
-# Il registro le aggiunge alle sue. Ancora nessuna.
-COSTRUZIONI = {}
-
-
 def e_pop(kind):
     """Il tipo dichiarato e' un materiale POP."""
     return kind in NOMI_POP
 
 
+def _analisi_espositore(pdfs):
+    from . import espositore as E, fustella as F
+    if len(pdfs) != 1:
+        raise ValueError("espositore: carica un PDF solo, la fustella "
+                         "dell'espositore")
+    pdf = pdfs[0]
+    tagli, pieghe = F.tratti(pdf, [])
+    pezzi = F.pezzi(tagli, pieghe)
+    ruoli = E.riconosci(pezzi, E.inchiostro(pdf, pezzi))
+    mancano = [r for r in ("fianco_sx", "fianco_dx", "schiena") if r not in ruoli]
+    if mancano:
+        raise ValueError("espositore: nella fustella non trovo %s - il caso va "
+                         "a chi corregge il codice, che parte dal tuo PDF"
+                         % ", ".join(r.replace("_", " ") for r in mancano))
+    m = E.misure(ruoli, E.SPESSORE)
+    return dict(kind="espositore_pop", title="Espositore POP",
+                meta=["espositore POP: %s" % ", ".join(
+                          sorted(r.replace("_", " ") for r in ruoli)),
+                      "corpo %.0f x %.0f mm, alto %.0f mm"
+                      % (m["Wi"], m["D"], m["H"])])
+
+
+def _analisi_totem(pdfs):
+    import numpy as np
+    from . import totem as T
+    if len(pdfs) != 2:
+        raise ValueError("totem: carica due PDF, il pannello del fronte e "
+                         "quello del retro")
+    meta = ["totem POP: due pannelli curvi, il retro girato di 180 gradi, "
+            "sulla base ovale"]
+    for nome, pdf in zip(("fronte", "retro"), pdfs):
+        pann, popup = T.leggi(pdf)
+        w, h = np.ptp(pann, axis=0)
+        meta.append("%s: pannello %.0f x %.0f mm, %s" % (
+            nome, w, h, "%d popup" % len(popup) if popup else "senza popup"))
+    return dict(kind="totem", title="Totem POP", meta=meta)
+
+
 def analisi(pdfs, kind):
-    """La lettura di un materiale POP: la riga «materiale POP» del registro
-    passa da qui. Nessuno si sa ancora costruire: si ferma col motivo, e il
-    caso va in coda col PDF."""
+    """La lettura di un materiale POP, dai suoi PDF: `{kind, title, meta}`
+    come le famiglie dei pack. Un PDF che non si legge si ferma col motivo,
+    e il caso va in coda col PDF."""
+    if kind == "totem":
+        return _analisi_totem(list(pdfs))
+    if kind == "espositore_pop":
+        return _analisi_espositore(list(pdfs))
     nome = NOMI_POP[kind].split(" (")[0]
     raise ValueError("%s: il codice non sa ancora costruirlo. Il caso va a chi "
                      "corregge il codice, che parte dal tuo PDF" % nome)
+
+
+def _rifinito(prepara):
+    """La costruzione di `prepara` col GLB rifatto da `primitive.rifinisci`,
+    come quelle dei pack (`registro._vertici_separati`, che il POP non
+    importa: il registro importa il POP): ogni primitiva coi suoi vertici,
+    perche' KeyShot mostri la texture. Mai un errore."""
+    import functools
+
+    @functools.wraps(prepara)
+    def prepara_e_rifinisci(r, info):
+        costruisci = prepara(r, info)
+
+        def costruisci_e_rifinisci(lastre, uscita):
+            import os
+            import traceback
+            avvisi = costruisci(lastre, uscita)
+            if os.path.exists(uscita):
+                try:
+                    from .. import primitive
+                    primitive.rifinisci(uscita)
+                except Exception:                   # noqa: BLE001
+                    traceback.print_exc()
+            return avvisi
+        return costruisci_e_rifinisci
+    return prepara_e_rifinisci
+
+
+@_rifinito
+def _costruisci_espositore(r, info):
+    from . import espositore
+
+    def costruisci(lastre, uscita):
+        avvisi, _m = espositore.monta(r.pdfs[0], uscita)
+        return list(avvisi)
+    return costruisci
+
+
+@_rifinito
+def _costruisci_totem(r, info):
+    from . import totem
+
+    def costruisci(lastre, uscita):
+        avvisi, _m = totem.monta(r.pdfs[0], r.pdfs[1], uscita)
+        return list(avvisi)
+    return costruisci
+
+
+# Le costruzioni dei materiali POP, come `famiglie.registro.COSTRUZIONI`: per
+# il materiale letto (`info["kind"]`) la funzione che prepara la costruzione,
+# `costruisci(lastre, uscita)` che torna gli avvisi. Il registro le aggiunge
+# alle sue.
+COSTRUZIONI = {"espositore_pop": _costruisci_espositore,
+               "totem": _costruisci_totem}
 
 
 # Le finestre di Glam Lab dove arrivano i modelli: quella dei pack, e quella

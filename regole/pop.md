@@ -41,16 +41,20 @@ Il repository e' diviso in tre parti (`prove/confini.py`):
 
 La pagina dello Space con `pop=1` nell'indirizzo (GLAM.md, sezione 10):
 chiede «Che tipo di materiale POP intendi realizzare?» e ha le voci dei
-materiali. Un materiale che il codice non sa ancora costruire si ferma alla
-lettura (`pop.analisi`) e diventa un caso, che chi l'ha caricato manda con
-«Invia il caso». Il modello corretto torna nella finestra POP di Glam
-(`X-Model-Section: pop`).
+materiali. Lo Space costruisce il totem e l'espositore: `pop.analisi` legge
+i PDF del materiale - tutti, il totem ne ha due - e `pop.COSTRUZIONI` porta
+le costruzioni nel registro delle famiglie (dal 15 novembre 2026, chiesto
+dal proprietario: «aggiorna le 2 famiglie»). Un PDF che non si legge, o un
+materiale che il codice non sa ancora costruire, si ferma alla lettura e
+diventa un caso, che chi l'ha caricato manda con «Invia il caso». Il modello
+torna nella finestra POP di Glam (`X-Model-Section: pop`).
 
 ## Il totem
 
-Espositore da terra: un pannello in piedi sulla sua base. Ancora da
-costruire: ogni PDF caricato e' un caso in coda (CODA.md, *Un caso che non
-si costruisce*). Quello che sappiamo dal proprietario:
+Espositore da terra: un pannello in piedi sulla sua base. Il totem
+lenticolare lo costruisce lo Space (`pack3d/pop/totem.py`): la pagina
+chiede due PDF, il pannello del fronte e quello del retro, e con un PDF solo
+il totem si ferma e lo dice. Quello che sappiamo dal proprietario:
 
 - **piatto o curvato.** Per il proprietario «lenticolare» vuol dire il
   **pannello curvato**, non la stampa lenticolare. La curva si legge dal PDF:
@@ -63,9 +67,46 @@ si costruisce*). Quello che sappiamo dal proprietario:
 - la sezione puo' avere una faccia curva e il retro piatto, o due facce
   curve: lo dice la fustella.
 
-Il totem curvo si costruisce come il fronte curvo della scatola a punta o il
-cono del tubo: un foglio piegato ad arco, nella sua casa (`pack3d/pop/`),
-che usa quei moduli senza cambiarli.
+### Il totem lenticolare
+
+Dal proprietario (13 novembre 2026): «Ora proviamo un totem lenticolare: in
+allegato 2 pdf fronte e retro più un render di riferimento. I pannelli
+devono essere piegati in modo da essere curvo (la geometria non deve essere
+sfaccettata) e alla base ci deve essere una piattina in plastica bianca che
+permette al totem di stare su».
+
+Poi (15 novembre 2026): «Il totem deve essere composto dai 2 pannelli
+piegati allo stesso modo, uno poi va girato di 180 gradi in modo che diventi
+il retro dell'altro formando così una struttura unica di forma ellittica
+(visto dall'alto). Ovviamente geometricamente devono essere separati. La
+parte posteriore di ogni singolo pannello va bianca. Inoltre ogni volta che
+riconosci un popup elimina l'elemento grafico dalla struttura in modo che
+rimanga solo nel popup. Il popup va più spesso e non va mai piegato»; «il
+basamento deve essere ovale in modo da ospitare fronte e retro»; la colata
+«come per i pack, in quadricromia (ombra nera e non ciano)».
+
+- **Due PDF, due pannelli.** Ognuno e' una pagina col pannello steso: il
+  contorno di taglio (il tracciato chiuso piu' grande del colore del
+  taglio, `fustella.contorni_di_taglio`, con le Bezier vere di pdfium) e,
+  dentro, i contorni dei popup.
+- **Curvi uguali, il retro girato.** Ogni pannello e' un cilindro con la
+  stampa fuori (la larghezza stesa e' l'arco); il retro e' lo stesso girato
+  di 180 gradi: da sopra un'ellisse. I bordi dei due archi stanno a 1 mm
+  (`totem.FESSURA`): due pezzi, mai compenetrati. Il dietro di ogni pannello
+  e' bianco. Lisci: una fila di vertici ogni 6 mm lungo l'arco.
+- **La freccia**, se il PDF non la dice, e' una scelta (`totem.FRECCIA`, un
+  sesto della larghezza, dal render di riferimento).
+- **I popup** sono piatti, mai piegati, spessi 5 mm (`totem.SPESSORE_POPUP`),
+  a 12 mm dal pannello nel loro punto di mezzo, perpendicolari al raggio, con
+  un distanziale bianco. La loro grafica esce dal pannello: gli oggetti del
+  PDF col centro dentro il contorno del popup (`fustella.oggetti_dentro`) si
+  tolgono dalla resa del pannello e restano su quella del popup.
+- **In quadricromia.** La grafica si rende con la resa dei pack
+  (`strati.rendi`), che simula la sovrastampa: l'ombra della colata esce
+  nera, non ciano come con pdfium (`fustella.resa_quadricromia`). Il taglio,
+  le note e la grafica dei popup si tolgono confrontando le rese di pdfium.
+- **La base**: un ovale di plastica bianca spesso 6 mm che contiene i due
+  pannelli con 40 mm attorno; i pannelli ci stanno sopra.
 
 ## L'espositore
 
@@ -82,3 +123,71 @@ quello»). Ancora da costruire: ogni PDF caricato e' un caso in coda.
 - **Non e' il vassoio.** Il vassoio espositore e il display con plancia sono
   pack (regole/vassoi.md): l'espositore POP ne puo' usare i moduli - la
   fustella, la piegatura, il GLB - ma non li cambia (*Il confine*).
+
+### Come si costruisce (`pack3d/pop/espositore.py`)
+
+Dal PDF della fustella: i pezzi si riconoscono dalle pieghe e dalla stampa,
+e ognuno si piega e si monta con le misure che legge (`misure`). Lo Space lo
+costruisce da un PDF solo; se nella fustella non ci sono i due fianchi e lo
+schienale la lettura si ferma, e il PDF va in coda.
+
+- **La grafica senza il disegno tecnico.** Dal proprietario: «Elimina il dt
+  senza intaccare la grafica». Non si ritocca l'immagine (un ritocco attorno
+  ai segni rovinava i loghi e i testi vicini): si tolgono dal PDF gli
+  OGGETTI del DT prima di renderlo (`fustella.resa_senza_dt`). Se il DT ha
+  uno strato suo, si toglie tutto lo strato, con le quote e i triangoli di
+  orientamento; se non ce l'ha, o lo strato ha anche la grafica, solo i
+  tracciati che stanno sulle linee dei tagli e delle pieghe.
+- **Le note si tolgono.** Dal proprietario: «le note rosa vanno tolte». Lo
+  strato delle note (le zone rosa della colla e di quello che non si
+  stampa, le scritte dei pezzi) non e' stampa: si toglie dal PDF come il DT
+  (`fustella.NOTE`, dal nome dello strato). Dove non c'e' grafica resta il
+  cartone bianco, come sul fondello.
+- **I triangoli di orientamento** non sono tagli (`fustella._triangolo`).
+- **I contorni morbidi.** Dal proprietario: «i tracciati sono seghettati.
+  Usa le curve di bezier». Il bordo di ogni pannello e' quello del PDF: le
+  curve di Bezier campionate ogni 1,5 mm (`fustella.PASSO_CURVA`), non i
+  gradini dei pixel della maschera.
+- **Lo spessore col colore della grafica.** Dal proprietario: «fai in modo
+  che gli spessori siano arancioni (o comunque in linea con la grafica)».
+  Il bordo tagliato prende il colore della stampa a 3 mm dal bordo.
+- **Lo spessore dalle pieghe doppie.** Le due cordonature di una piega a
+  180 gradi stanno a due spessori: la mediana di quelle dei fianchi, dei
+  ripiani e del divisorio, divisa per due (`espositore.spessore`). Sul primo
+  PDF 4 mm, onda EB; prima era fisso a 6, troppo (dal proprietario: «fare
+  gli spessori piu' bassi»).
+- **Le pieghe tonde.** Dal proprietario: «simulando la piega del cartone
+  (bordi arrotondati)». Le pieghe doppie diventano archi
+  (`espositore.piega_tonda`): mezzo giro sul bordo davanti dei fianchi, in
+  cima ai fianchi, sul davanti dei ripiani e sul dorso del divisorio; un
+  quarto di giro fra il davanti e i lati della testata. Fuori la stampa,
+  dentro il raggio meno lo spessore. La testata appoggia sopra la cima
+  tonda.
+- **Anche le pieghe semplici, con la stessa curvatura.** Dal proprietario:
+  «le curvature delle pieghe teniamo queste anche per gli altri». Una piega
+  semplice fra due pannelli piatti diventa tonda, raggio fuori uguale allo
+  spessore (`Montaggio.arrotonda`): gli angoli del frontalino e del
+  riempitivo, il fondo dei fianchi, le alette e le linguette dei ripiani,
+  il bordo davanti del fondello (a 180 gradi). Solo dove la stampa sta
+  fuori dalla piega, lo spigolo che si vede: dove sta dentro (gli angoli
+  della schiena, le alette del divisorio) il cartone vero fa lo spigolo
+  vivo sulla stampa, e resta vivo. La curvatura e' una regola del POP:
+  vale anche per i materiali che verranno.
+- **La prefustella incisa.** Dal proprietario: «il lato del crowner ha le
+  fustelle incise come i pack ... (prefustella stampata)». Sui lati della
+  testata l'arco e le diagonali non tagliano e non piegano: sono solchi a V
+  nella faccia stampata (largo 1 mm, profondo 0,9), con la grafica dentro,
+  come l'apertura a strappo degli astucci e dei vassoi
+  (`incisioni.maglia_incisa`). Sono i tagli che non toccano il contorno
+  (`fustella.tagli_interni`) e le pieghe oblique.
+- **Nessuna compenetrazione fra parti diverse.** Dal proprietario: «evita
+  intersezioni tra le diverse parti». Dove due cartoni starebbero nello
+  stesso posto, quello che viene dopo nell'ordine (`espositore.ORDINE`: il
+  corpo, il divisorio, i ripiani, la testata, il riempitivo, il frontalino,
+  il fondello; le alette sul pavimento per ultime) si intaglia, come la
+  feritoia vera. `espositore.intersezioni` controlla il modello fatto.
+- **Da verificare col proprietario**: il fondo della colonna di sinistra e'
+  il fondello (largo quanto l'interno, con la feritoia del divisorio), non
+  un terzo ripiano; il frontalino sta sul davanti dei ripiani; i piedi
+  della testata entrano nei fianchi e non si vedono; i lati della testata
+  sono piatti, con la prefustella incisa.
