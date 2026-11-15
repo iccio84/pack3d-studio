@@ -249,7 +249,7 @@ class Montaggio:
         self._cache = {}
 
     def pannello(self, pezzo, masc, scarto, punto, dentro, nome, incisioni=None,
-                 spessore=None):
+                 spessore=None, uv_dentro=None):
         """Un pannello: `punto(lx, ly)` porta un punto del foglio, in mm
         locali del pezzo, sulla faccia stampata; `dentro` e' la direzione
         del cartone. Un pannello piatto ha `punto` affine e `dentro` fisso;
@@ -264,6 +264,8 @@ class Montaggio:
                  incisioni=[np.asarray(l, float) for l in (incisioni or [])])
         if spessore is not None:
             p["t"] = float(spessore)
+        if uv_dentro is not None:                  # la faccia senza stampa: questo colore
+            p["uv_dentro"] = np.asarray(uv_dentro, float)
         if isinstance(dentro, Curva):
             ii, jj = np.nonzero(masc)
             k = max(1, len(ii) // 400)
@@ -661,7 +663,7 @@ class Montaggio:
         U = uv(pts)
         nel_solco = (pr[tri] > 0).any(1)
         Vs = [Ps, P + D * t]
-        UVs = [U, np.tile([[0.5, self.vI]], (len(pts), 1))]
+        UVs = [U, np.tile(p.get("uv_dentro", np.array([0.5, self.vI]))[None], (len(pts), 1))]
         Ts = [tri[~nel_solco], tri[:, ::-1] + len(pts)]
         base = 2 * len(pts)
         if nel_solco.any():

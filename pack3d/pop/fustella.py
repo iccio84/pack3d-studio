@@ -807,3 +807,71 @@ def contorni_di_taglio(pdf):
         raise ValueError("nel PDF non c'e' un contorno di taglio chiuso")
     chiave = max(gruppi, key=lambda k: max(area(a) for a in gruppi[k]))
     return sorted(gruppi[chiave], key=area, reverse=True)
+
+
+def oggetti_dentro(pdf, contorni, quanto=2.0):
+    """Gli indici degli oggetti della pagina che stanno dentro uno dei
+    `contorni` (mm): il centro dentro il contorno, e non piu' grandi di
+    `quanto` volte il suo riquadro (un fondo che copre la pagina non e' suo).
+    Sono la grafica di un popup: dal pannello si toglie, resta sul popup."""
+    import ctypes
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as R
+    from ..ballotin import dentro
+    out = []
+    doc = pdfium.PdfDocument(pdf)
+    pg = doc[0]
+    alto = pg.get_size()[1]
+    riq = [(c.min(0), c.max(0)) for c in contorni]
+    for i in range(R.FPDFPage_CountObjects(pg.raw)):
+        h = R.FPDFPage_GetObject(pg.raw, i)
+        v = [ctypes.c_float() for _ in range(4)]
+        R.FPDFPageObj_GetBounds(h, *[ctypes.byref(x) for x in v])
+        l, b, r, t = (x.value for x in v)
+        x0, x1, y0, y1 = l * MM, r * MM, (alto - t) * MM, (alto - b) * MM
+        c = np.array([[(x0 + x1) / 2, (y0 + y1) / 2]])
+        for cont, (lo, hi) in zip(contorni, riq):
+            if (x1 - x0) * (y1 - y0) <= quanto * float(np.prod(hi - lo)) and dentro(c, [cont])[0]:
+                out.append(i)
+                break
+    pg.close()
+    doc.close()
+    return out
+
+
+def resa_quadricromia(pdf, griglia, linee, togli=()):
+    """La pagina resa sulla griglia come in stampa: la resa dei pack
+    (`strati.rendi`), che simula la sovrastampa - l'ombra della colata nera e
+    non ciano, come la quadricromia; pdfium la sovrastampa non la fa. Poi, dove
+    la pagina senza il disegno tecnico (`linee`, i tagli), senza le note e
+    senza gli oggetti `togli` e' diversa da quella intera, i pixel si
+    prendono da lei: il taglio e la grafica dei popup escono dal pannello."""
+    from scipy import ndimage
+    from scipy.spatial import cKDTree
+    from .. import strati
+    PT = 1.0 / MM
+    x0, y0, x1, y1 = griglia.zona
+    try:
+        base = strati.rendi(pdf, 0, griglia.px / PT, strati.GRAFICA,
+                            riquadro=(x0 * PT, y0 * PT, x1 * PT, y1 * PT))
+        base = np.asarray(base.convert("RGB").resize((griglia.W, griglia.H)), np.uint8).copy()
+    except Exception:                                    # senza la resa dei pack: pdfium
+        base = None
+    strati_pg, sul_dt = _oggetti(pdf, cKDTree(_campiona(linee, 0.5)))
+    via = {i for i, _ in sul_dt} | set(togli)
+    for nome, indici in strati_pg.items():
+        if nome and NOTE.search(nome):
+            via.update(indici)
+    pulita = np.asarray(_senza(pdf, griglia, via), np.uint8)
+    if base is None:
+        return Image_da(pulita)
+    intera = np.asarray(_senza(pdf, griglia, ()), np.int16)
+    diverso = np.abs(intera - pulita.astype(np.int16)).sum(-1) > 20
+    diverso = ndimage.binary_dilation(diverso, iterations=1)
+    base[diverso] = pulita[diverso]
+    return Image_da(base)
+
+
+def Image_da(a):
+    from PIL import Image
+    return Image.fromarray(np.asarray(a, np.uint8))

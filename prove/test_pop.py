@@ -373,7 +373,7 @@ class TotemPop(unittest.TestCase):
             _, sul_dt = F._oggetti(pdf, cKDTree(F._campiona(linee, 0.5)))
         self.assertEqual(len(sul_dt), 2)            # il contorno con la punta e il popup
 
-    def test_un_totem_curvo_con_la_piattina(self):
+    def test_un_totem_di_due_pannelli_sulla_base_ovale(self):
         import tempfile
         import numpy as np
         from pack3d import vista
@@ -385,20 +385,30 @@ class TotemPop(unittest.TestCase):
             glb = os.path.join(d, "totem.glb")
             avvisi, m = totem.monta(f, r, glb, freccia=20.0)
             parti = {p["nome"]: p for p in vista.leggi_glb(glb)}
-        self.assertIn("totem: pannello 100 x", avvisi[0])
+        self.assertIn("totem: due pannelli 100 x", avvisi[0])
         for nome in ("pannello_fronte", "pannello_retro", "popup_fronte_1", "popup_retro_1",
-                     "piattina", "distanziali"):
+                     "base", "distanziali"):
             self.assertIn(nome, parti)
+
         def verts(nome):                                     # mm, solo quelli della parte
             q = parti[nome]
             return q["verts"][np.unique(q["tris"])] * 1000.0
-        V = verts("pannello_fronte")
-        # curvo: il centro davanti, i lati indietro della freccia
-        self.assertAlmostEqual(V[:, 2].max(), 0.0, delta=0.5)
-        self.assertAlmostEqual(-V[:, 2].min(), 20.0 + 1.5, delta=2.0)
-        # liscio: tanti vertici lungo l'arco, non due spigoli
-        self.assertGreater(len(np.unique(np.round(V[:, 0], 0))), 15)
-        # in piedi sulla piattina
-        P = verts("piattina")
-        self.assertAlmostEqual(P[:, 1].max(), totem.PIATTINA_SPESSORE, delta=0.01)
-        self.assertAlmostEqual(V[:, 1].min(), totem.PIATTINA_SPESSORE, delta=0.5)
+        F_, R_ = verts("pannello_fronte"), verts("pannello_retro")
+        # due archi uguali, uno girato: davanti e dietro, separati
+        self.assertGreater(F_[:, 2].min(), 0.0)
+        self.assertLess(R_[:, 2].max(), 0.0)
+        self.assertAlmostEqual(F_[:, 2].max(), -R_[:, 2].min(), delta=0.5)
+        self.assertAlmostEqual(F_[:, 2].max() - F_[:, 2].min(), 20.0 + 3.0, delta=2.5)
+        # lisci: tanti vertici lungo l'arco
+        self.assertGreater(len(np.unique(np.round(F_[:, 0], 0))), 15)
+        # il popup e' piatto e spesso SPESSORE_POPUP
+        P = verts("popup_fronte_1")
+        c = P - P.mean(0)
+        sv = np.linalg.svd(c, compute_uv=False)
+        self.assertAlmostEqual(sv[2] / np.sqrt(len(P)) * 2, totem.SPESSORE_POPUP, delta=1.0)
+        # in piedi sulla base ovale, che li contiene tutti e due
+        B = verts("base")
+        self.assertAlmostEqual(B[:, 1].max(), totem.BASE_SPESSORE, delta=0.01)
+        self.assertAlmostEqual(F_[:, 1].min(), totem.BASE_SPESSORE, delta=0.5)
+        self.assertGreater(B[:, 2].max(), F_[:, 2].max() + 20)
+        self.assertLess(B[:, 2].min(), R_[:, 2].min() - 20)

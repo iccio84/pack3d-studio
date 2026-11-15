@@ -1,27 +1,35 @@
 """
-Il totem lenticolare: un pannello curvo stampato fronte e retro, i popup
-staccati davanti alle due facce, la piattina di plastica bianca sotto.
+Il totem lenticolare: due pannelli curvi uguali, uno girato di 180 gradi
+dietro l'altro - da sopra un'ellisse -, i popup piatti davanti, la base
+ovale di plastica bianca sotto.
 
-Dal proprietario: «Per lenticolare intendo un pannello curvato», «I pannelli
+Dal proprietario: «Per lenticolare intendo un pannello curvato»; «I pannelli
 devono essere piegati in modo da essere curvo (la geometria non deve essere
-sfaccettata) e alla base ci deve essere una piattina in plastica bianca che
-permette al totem di stare su» (regole/pop.md, *Il totem*).
+sfaccettata) e alla base ci deve essere una piattina in plastica bianca»;
+«Il totem deve essere composto dai 2 pannelli piegati allo stesso modo, uno
+poi va girato di 180 gradi in modo che diventi il retro dell'altro formando
+così una struttura unica di forma ellittica (visto dall'alto). Ovviamente
+geometricamente devono essere separati. La parte posteriore di ogni singolo
+pannello va bianca. Inoltre ogni volta che riconosci un popup elimina
+l'elemento grafico dalla struttura in modo che rimanga solo nel popup. Il
+popup va più spesso e non va mai piegato»; «il basamento deve essere ovale
+in modo da ospitare fronte e retro»; la colata «in quadricromia (ombra nera
+e non ciano)» (regole/pop.md, *Il totem lenticolare*).
 
-- **Due PDF, fronte e retro.** Ognuno ha il pannello col suo contorno di
-  taglio e, dentro, i contorni dei popup. Il contorno del retro e' quello
-  del fronte specchiato: lo stesso pannello, stampato sulle due facce. Il
-  fronte e' la faccia convessa, il retro quella concava.
-- **La curva.** Il pannello steso e' l'arco: la sua larghezza e' la
-  lunghezza dell'arco, e l'altezza resta dritta (un cilindro). La freccia,
-  se il PDF non la dice, e' una scelta: `FRECCIA`, dal render di
-  riferimento. Liscia: i vertici fitti lungo l'arco e le normali condivise.
-- **I popup**: le sagome coi loro contorni di taglio, davanti alla faccia
-  della loro stampa, alla distanza `DISTANZA_POPUP`, curve come il pannello
-  (sul retro concavo una sagoma piatta entrerebbe nel pannello ai lati),
-  con un distanziale dietro.
-- **La piattina**: una lastra di plastica bianca che segue l'arco sotto il
-  pannello, larga `PIATTINA_MARGINE` per parte e coi capi tondi; il pannello
-  ci sta sopra.
+- **Due PDF, due pannelli**: il fronte e il retro, ognuno col suo contorno di
+  taglio e, dentro, i contorni dei popup. Ognuno si curva uguale (un
+  cilindro: la larghezza stesa e' l'arco) con la stampa fuori; il retro e'
+  girato di 180 gradi. I bordi dei due archi si guardano a `FESSURA` mm: due
+  pezzi, mai compenetrati. Il dietro di ogni pannello e' bianco.
+- **La freccia**, se il PDF non la dice, e' una scelta: `FRECCIA`.
+- **Liscio**: una fila di vertici ogni `PASSO_ARCO` mm lungo l'arco, le
+  normali condivise.
+- **I popup**: piatti, spessi `SPESSORE_POPUP`, a `DISTANZA_POPUP` dal
+  pannello nel loro punto di mezzo, col distanziale; la loro grafica esce
+  dal pannello (`fustella.oggetti_dentro`) e resta solo su di loro.
+- **La grafica in quadricromia**: `fustella.resa_quadricromia`.
+- **La base**: un ovale di plastica bianca che contiene le due curve con
+  `BASE_MARGINE` mm attorno, spesso `BASE_SPESSORE`.
 """
 from __future__ import annotations
 
@@ -30,12 +38,13 @@ import numpy as np
 from . import fustella as F
 
 PX_MM = 2.0                 # pixel per mm della texture: il totem e' quasi tutto grafica
-SPESSORE = 3.0              # mm, il pannello (due facce stampate di 1,5)
-SPESSORE_POPUP = 2.0        # mm
-DISTANZA_POPUP = 12.0       # mm fra il pannello e il retro di un popup
+SPESSORE = 3.0              # mm, un pannello
+SPESSORE_POPUP = 5.0        # mm: un popup e' piu' spesso del pannello
+DISTANZA_POPUP = 12.0       # mm fra il pannello e il retro di un popup, nel suo mezzo
 FRECCIA = 100.0 / 580.0     # freccia dell'arco / larghezza del pannello, dal render
-PIATTINA_SPESSORE = 6.0     # mm
-PIATTINA_MARGINE = 45.0     # mm attorno al piede del pannello
+FESSURA = 1.0               # mm fra i bordi dei due pannelli
+BASE_SPESSORE = 6.0         # mm
+BASE_MARGINE = 40.0         # mm attorno ai due pannelli
 PASSO_ARCO = 6.0            # mm fra due file di vertici lungo l'arco
 DISTANZIALE = 40.0          # mm, il lato del distanziale di un popup
 POPUP_MIN = 400.0           # mm2: sotto, un tracciato chiuso non e' un popup
@@ -75,106 +84,145 @@ def monta(fronte, retro, uscita, freccia=None, t=SPESSORE, px_mm=PX_MM):
     from .. import exporters
     from .espositore import Curva, Montaggio
 
-    pf, popf = leggi(fronte)
-    pr, popr = leggi(retro)
-    larg = float(pf[:, 0].max() - pf[:, 0].min())
-    alto = float(pf[:, 1].max() - pf[:, 1].min())
-    f = larg * (FRECCIA if freccia is None else freccia / larg)
+    lati = []
+    for pdf in (fronte, retro):
+        pann, popup = leggi(pdf)
+        lati.append(dict(pdf=pdf, pann=pann, popup=popup))
+    larg = float(lati[0]["pann"][:, 0].max() - lati[0]["pann"][:, 0].min())
+    alto = max(float(l["pann"][:, 1].max() - l["pann"][:, 1].min()) for l in lati)
+    f = larg * FRECCIA if freccia is None else float(freccia)
     R = raggio(larg, f)
+    phi = larg / (2 * R)
+    # il fronte ha l'asse dell'arco a z = zs - R; il suo bordo dentro sta a
+    # z = FESSURA / 2, il retro e' lo stesso girato di 180 gradi
+    zs = FESSURA / 2 + R - (R - t) * np.cos(phi)
 
-    # La texture: le due pagine affiancate, fronte e retro, con in mezzo
-    # una striscia bianca (la piattina e i distanziali). Le coordinate del
-    # retro si spostano nella griglia unica.
+    # La texture: per ogni lato la pagina del pannello (senza la grafica dei
+    # popup) e quella dei popup, affiancate; in fondo una striscia bianca (il
+    # dietro dei pannelli, la base, i distanziali).
     margine = 5.0
-    zf = (pf[:, 0].min() - margine, min(pf[:, 1].min(), pr[:, 1].min()) - margine,
-          pf[:, 0].max() + margine, max(pf[:, 1].max(), pr[:, 1].max()) + margine)
-    zr = (pr[:, 0].min() - margine, zf[1], pr[:, 0].max() + margine, zf[3])
-    Gf, Gr = F.Griglia(zf, px_mm), F.Griglia(zr, px_mm)
+    y0 = min(l["pann"][:, 1].min() for l in lati) - margine
+    y1 = max(l["pann"][:, 1].max() for l in lati) + margine
+    rese, x = [], 0.0
+    for l in lati:
+        zona = (l["pann"][:, 0].min() - margine, y0, l["pann"][:, 0].max() + margine, y1)
+        chiusi = [np.vstack([a, a[:1]]) for a in [l["pann"]] + l["popup"]]
+        togli = F.oggetti_dentro(l["pdf"], l["popup"]) if l["popup"] else []
+        Gz = F.Griglia(zona, px_mm)
+        for chi, via in (("pann", togli), ("popup", [])):
+            if chi == "popup" and not l["popup"]:
+                continue
+            rese.append((F.resa_quadricromia(l["pdf"], Gz, chiusi, via), x))
+            l["dx_" + chi] = x - zona[0]                 # foglio -> griglia unica
+            x += zona[2] - zona[0] + 10.0
     bianco = 20.0
-    dx = (zf[2] - zf[0]) + bianco - (zr[0] - zf[0])          # retro -> griglia unica
-    G = F.Griglia((zf[0], zf[1], zf[2] + bianco + (zr[2] - zr[0]), zf[3]), px_mm)
-    chiusi = lambda ls: [np.vstack([a, a[:1]]) for a in ls]
-    sf = F.resa_senza_dt(fronte, Gf, chiusi([pf] + popf), chiusi([pf] + popf))
-    sr = F.resa_senza_dt(retro, Gr, chiusi([pr] + popr), chiusi([pr] + popr))
+    G = F.Griglia((0.0, y0, x + bianco, y1), px_mm)
     steso = Image.new("RGB", (G.W, G.H), "white")
-    steso.paste(sf, (0, 0))
-    steso.paste(sr, (int(round((zf[2] - zf[0] + bianco) * px_mm)), 0))
-    mo = Montaggio(G, t / 2)
+    for im, xx in rese:
+        steso.paste(im, (int(round(xx * px_mm)), 0))
+    mo = Montaggio(G, t)
     tex = mo.texture(steso)
-    x_bianco = zf[2] + bianco / 2
-    uv_bianco = np.array([G.a_pixel(x_bianco, zf[1] + 2)[0] / G.W,
-                          G.a_pixel(x_bianco, zf[1] + 2)[1] / G.H * mo.q])
+    X, Y = G.a_pixel(x + bianco / 2, y0 + 2.0)
+    uv_bianco = np.array([X / G.W, Y / G.H * mo.q])
+    piede = max(l["pann"][:, 1].max() for l in lati)
+    h0 = BASE_SPESSORE
 
-    xc_f = (pf[:, 0].min() + pf[:, 0].max()) / 2
-    xc_r = (pr[:, 0].min() + pr[:, 0].max()) / 2 + dx
-    piede = pf[:, 1].max()                                   # il bordo in basso, sul foglio
-    h0 = PIATTINA_SPESSORE
+    def gira(P, retro):
+        """Il retro e' il fronte girato di 180 gradi attorno alla verticale."""
+        P = np.array(P, float)
+        return P * np.array([-1.0, 1.0, -1.0]) if retro else P
 
-    def cilindro(rr, verso, xc, specchio):
-        """(punto, Curva): la faccia stampata a raggio `rr`, il cartone
-        verso l'asse (verso -1) o fuori (+1); sul retro il foglio e'
-        specchiato."""
-        def ang(x):
-            s = (x - xc) * (-1.0 if specchio else 1.0)
-            return s / R
-
-        def punto(x, y):
-            a = ang(x)
-            return np.array([rr * np.sin(a), h0 + (piede - y), rr * np.cos(a) - R])
-
-        def dentro(x, y):
-            a = ang(x)
-            return np.array([np.sin(a), 0.0, np.cos(a)]) * verso
-        return punto, dentro
-
-    def stendi(contorno, nome, rr, verso, xc, specchio, spessore, sposta=0.0):
-        a = _sposta(contorno, (sposta, 0.0))
+    def stendi(contorno, nome, dx, punto, dentro, curva, spessore):
+        a = np.asarray(contorno, float) + (dx, 0.0)
         pz = F.Pezzo((*a.min(0), *a.max(0)), tagli=[np.vstack([a, a[:1]])], nome=nome)
-        punto, dentro = cilindro(rr, verso, xc, specchio)
         rq = pz.riquadro
         for masc, scarto in G.pannelli(pz):
             if masc.sum() < 50:
                 continue
-            mo.pannello(pz, masc, scarto,
-                        lambda lx, ly, punto=punto: punto(lx + rq[0], ly + rq[1]),
-                        Curva(lambda lx, ly, dentro=dentro: dentro(lx + rq[0], ly + rq[1]), 0,
-                              passo=PASSO_ARCO),
-                        nome, spessore=spessore)
-        return pz
+            pp = (lambda lx, ly, punto=punto: punto(lx + rq[0] - dx, ly + rq[1]))
+            dd = (lambda lx, ly, dentro=dentro: dentro(lx + rq[0] - dx, ly + rq[1]))
+            mo.pannello(pz, masc, scarto, pp, Curva(dd, 0, passo=PASSO_ARCO) if curva else dd(0, 0),
+                        nome, spessore=spessore, uv_dentro=uv_bianco)
 
-    th = t / 2
-    tp = SPESSORE_POPUP
-    d = DISTANZA_POPUP
-    stendi(pf, "pannello_fronte", R, -1.0, xc_f, False, th)
-    stendi(pr, "pannello_retro", R - t, 1.0, xc_r, True, th, sposta=dx)
+    d, tp = DISTANZA_POPUP, SPESSORE_POPUP
     distanziali = []
-    for i, a in enumerate(popf):
-        stendi(a, "popup_fronte_%d" % (i + 1), R + d + tp, -1.0, xc_f, False, tp)
-        distanziali.append((a, R, R + d, xc_f, False))
-    for i, a in enumerate(popr):
-        stendi(a, "popup_retro_%d" % (i + 1), R - t - d - tp, 1.0, xc_r, True, tp, sposta=dx)
-        distanziali.append((_sposta(a, (dx, 0.0)), R - t - d, R - t, xc_r, True))
+    for k, l in enumerate(lati):
+        retro = k == 1
+        xc = (l["pann"][:, 0].min() + l["pann"][:, 0].max()) / 2
 
-    # la piattina: una lastra lungo l'arco, sotto il pannello
-    s0 = (pf[:, 0].min() - xc_f) / R
-    s1 = (pf[:, 0].max() - xc_f) / R
-    Rm = R - t / 2
-    V, T = _piattina(Rm, s0, s1, PIATTINA_MARGINE, h0, R)
-    mo.solido("piattina", V, np.tile(uv_bianco, (len(V), 1)), T)
-    # i distanziali dei popup, al baricentro di ognuno
-    for k, (a, r0, r1, xc, specchio) in enumerate(distanziali):
-        cx, cy = a.mean(0)
-        th0 = (cx - xc) * (-1.0 if specchio else 1.0) / R
-        V, T = _settore(r0, r1, th0, DISTANZIALE / 2 / R, h0 + piede - cy, DISTANZIALE, R)
+        def punto(xp, yp, xc=xc, retro=retro):
+            a = (xp - xc) / R
+            return gira((R * np.sin(a), h0 + piede - yp, R * np.cos(a) - R + zs), retro)
+
+        def dentro(xp, yp, xc=xc, retro=retro):
+            a = (xp - xc) / R
+            return gira((-np.sin(a), 0.0, -np.cos(a)), retro)
+        nome = "pannello_" + ("retro" if retro else "fronte")
+        stendi(l["pann"], nome, l["dx_pann"], punto, dentro, True, t)
+        # i popup: piatti, perpendicolari al raggio nel loro mezzo
+        for i, a in enumerate(l["popup"]):
+            cx, cy = (a.min(0) + a.max(0)) / 2
+            ac = (cx - xc) / R
+            n = np.array([np.sin(ac), 0.0, np.cos(ac)])          # fuori
+            tg = np.array([np.cos(ac), 0.0, -np.sin(ac)])
+            O = np.array([0.0, 0.0, zs - R])
+
+            def pp(xp, yp, cx=cx, n=n, tg=tg, O=O, retro=retro):
+                P = O + n * (R + d + tp) + tg * (xp - cx) + np.array([0.0, h0 + piede - yp, 0.0])
+                return gira(P, retro)
+            nd = gira(-n, retro)
+            stendi(a, "popup_%s_%d" % ("retro" if retro else "fronte", i + 1), l["dx_popup"],
+                   pp, lambda xp, yp, nd=nd: nd, False, tp)
+            distanziali.append((O, n, tg, h0 + piede - cy, retro))
+
+    # la base ovale: contiene i due archi, col margine
+    a_ = np.linspace(-phi, phi, 200)
+    arco = np.stack([R * np.sin(a_), R * np.cos(a_) - R + zs], 1)
+    pts = np.vstack([arco, -arco])
+    A = float(np.abs(pts[:, 0]).max()) + BASE_MARGINE
+    B = BASE_MARGINE
+    for _ in range(200):                                       # il minimo che li contiene
+        if np.all(_dentro_di(pts, A, B, BASE_MARGINE)):
+            break
+        B += 2.0
+    g = np.linspace(0, 2 * np.pi, 240, endpoint=False)
+    V, T = _estrudi(np.stack([A * np.cos(g), B * np.sin(g)], 1), 0.0, h0)
+    mo.solido("base", V, np.tile(uv_bianco, (len(V), 1)), T)
+    for O, n, tg, y, retro in distanziali:
+        c = O + n * R
+        V, T = _scatola(c - n * 1.0, n, tg, DISTANZIALE, d + 1.0, y)
+        V = gira(V, retro)
         mo.solido("distanziali", V, np.tile(uv_bianco, (len(V), 1)), T)
 
     V, UV, T, parti = mo.array()
     exporters.write_glb_mesh(V, UV, T, tex, uscita, tex_max=4096, parti=parti)
-    avvisi = ["totem: pannello %.0f x %.0f mm, curvo con raggio %.0f mm (freccia %.0f, "
-              "corda %.0f); %d popup davanti e %d dietro, a %.0f mm; piattina bianca "
-              "di %.0f mm" % (larg, alto, R, f, 2 * R * np.sin(larg / (2 * R)), len(popf),
-                              len(popr), d, h0)]
-    return avvisi, dict(larghezza=larg, altezza=alto, raggio=R, freccia=f)
+    corda = 2 * R * np.sin(phi)
+    avvisi = ["totem: due pannelli %.0f x %.0f mm curvi con raggio %.0f mm (freccia %.0f, "
+              "corda %.0f), il retro girato: da sopra un'ellisse di %.0f x %.0f mm; %d popup "
+              "davanti e %d dietro, spessi %.0f mm a %.0f mm; base ovale %.0f x %.0f mm"
+              % (larg, alto, R, f, corda, corda, 2 * zs, len(lati[0]["popup"]),
+                 len(lati[1]["popup"]), tp, d, 2 * A, 2 * B)]
+    return avvisi, dict(larghezza=larg, altezza=alto, raggio=R, freccia=f, base=(2 * A, 2 * B))
+
+
+def _dentro_di(pts, A, B, m):
+    """Se ogni punto sta nell'ellisse (A, B) con almeno `m` mm di margine."""
+    g = np.linspace(0, 2 * np.pi, 720, endpoint=False)
+    e = np.stack([A * np.cos(g), B * np.sin(g)], 1)
+    from scipy.spatial import cKDTree
+    dist, _ = cKDTree(e).query(pts)
+    r = (pts[:, 0] / A) ** 2 + (pts[:, 1] / B) ** 2
+    return (r <= 1.0) & (dist >= m - 0.5)
+
+
+def _scatola(base, n, tg, lato, prof, y):
+    """Un distanziale: un parallelepipedo che parte da `base` lungo `n` per
+    `prof` mm, largo `lato` lungo `tg` e alto `lato` attorno a y."""
+    p = np.array([base + tg * s for s in (-lato / 2, lato / 2)])
+    q = p + n * prof
+    pianta = np.array([[p[0][0], p[0][2]], [p[1][0], p[1][2]], [q[1][0], q[1][2]],
+                       [q[0][0], q[0][2]]])
+    return _estrudi(pianta, y - lato / 2, y + lato / 2)
 
 
 def _anello(r0, r1, a0, a1, n, R):
@@ -218,26 +266,3 @@ def _estrudi(pianta, y0, y1):
         T.append(t2)
         base += 4
     return np.concatenate(V), np.concatenate(T)
-
-
-def _piattina(Rm, a0, a1, m, h, R):
-    """La piattina: la fascia fra Rm - m e Rm + m lungo l'arco da a0 ad a1,
-    coi capi tondi (mezzi cerchi di raggio m), spessa h."""
-    est, inn = _anello(Rm - m, Rm + m, a0, a1, 160, R)
-    capi = []
-    for a, verso in ((a1, 1.0), (a0, -1.0)):
-        c = np.array([Rm * np.sin(a), Rm * np.cos(a) - R])
-        rad = np.array([np.sin(a), np.cos(a)])               # dal centro dell'arco in fuori
-        tan = np.array([np.cos(a), -np.sin(a)]) * verso      # oltre il capo
-        g = np.linspace(0, np.pi, 24)[1:-1]
-        capi.append(c + m * (np.outer(np.cos(g), rad) + np.outer(np.sin(g), tan)))
-    pianta = np.vstack([est, capi[0], inn[::-1], capi[1][::-1]])
-    return _estrudi(pianta, 0.0, h)
-
-
-def _settore(r0, r1, a, da, y, alto, R):
-    """Un distanziale: il settore fra i raggi r0 e r1, attorno all'angolo
-    `a` (+- da), alto `alto` attorno a y."""
-    est, inn = _anello(r0, r1, a - da, a + da, 6, R)
-    pianta = np.vstack([est, inn[::-1]])
-    return _estrudi(pianta, y - alto / 2, y + alto / 2)
