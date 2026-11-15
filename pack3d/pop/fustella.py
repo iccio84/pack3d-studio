@@ -851,14 +851,24 @@ def oggetti_dentro(pdf, contorni, quota=0.7, px_mm=0.5):
     for c in contorni:
         d.polygon([G.a_pixel(x, y) for x, y in c], fill=1)
     dentro = ndimage.binary_dilation(np.array(im, bool), iterations=max(1, int(3 * px_mm)))
-    intera = np.asarray(_senza(pdf, G, ()), np.int16)
+    # A giri: un oggetto coperto da un altro uguale (il contorno sotto il
+    # riempimento) non cambia niente finche' c'e' quello sopra; tolto quello,
+    # al giro dopo si vede, e si toglie anche lui.
     out = []
-    for i in cand:
-        cambia = np.abs(intera - np.asarray(_senza(pdf, G, [i]), np.int16)).sum(-1) > 20
-        n = int(cambia.sum())
-        if n and (cambia & dentro).sum() >= quota * n:
-            out.append(i)
-    return out
+    for _ in range(4):
+        base = np.asarray(_senza(pdf, G, out), np.int16)
+        nuovi = []
+        for i in cand:
+            if i in out:
+                continue
+            cambia = np.abs(base - np.asarray(_senza(pdf, G, out + [i]), np.int16)).sum(-1) > 20
+            n = int(cambia.sum())
+            if n and (cambia & dentro).sum() >= quota * n:
+                nuovi.append(i)
+        if not nuovi:
+            break
+        out += nuovi
+    return sorted(out)
 
 
 def resa_quadricromia(pdf, griglia, linee, togli=()):
