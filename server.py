@@ -892,9 +892,13 @@ class Handler(BaseHTTPRequestHandler):
                     from pack3d import artwork, foto
                     try:
                         for k, p in enumerate(pdfs):
-                            if artwork.solo_immagine(p):
+                            # la foto puo' stare dopo una copertina
+                            # (`artwork.pagina_foto`)
+                            pagina = artwork.pagina_foto(p)
+                            if pagina is not None:
                                 nuovo = os.path.join(td, "vett%d.pdf" % k)
-                                foto.vettoriale(p, nuovo, float(larga))
+                                foto.vettoriale(p, nuovo, float(larga),
+                                                page_no=pagina)
                                 pdfs[k] = nuovo
                     except ValueError as e:
                         return self._send(400, "PDF-foto: %s" % e)
