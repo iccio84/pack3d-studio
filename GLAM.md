@@ -441,10 +441,11 @@ dell'iframe (`.../api/public/pack3d?api=...&casi=1&pop=1`): la stessa
 interfaccia, con le voci dei materiali al posto di quelle dei pack. Per ora
 ci sono **Totem** ed **Espositore**.
 
-Il codice i materiali POP non li sa ancora costruire: un totem caricato si
-ferma alla lettura e diventa un **caso** (`pack3d/pop/`), che chi
-l'ha caricato manda con «Invia il caso» come ogni caso nuovo. Da lì parte la
-famiglia (CODA.md, *Un caso che non si costruisce*).
+Il codice costruisce il **totem** (due PDF: il pannello del fronte e quello
+del retro) e l'**espositore** (un PDF, la fustella). Un PDF che non si legge
+si ferma alla lettura e diventa un **caso** (`pack3d/pop/`), che chi l'ha
+caricato manda con «Invia il caso» come ogni caso nuovo (CODA.md, *Un caso
+che non si costruisce*).
 
 Tutto quello che fa la finestra dei pack, la finestra POP lo fa uguale:
 `pack3d:built` con texture e template, `pack3d:caso`, `pack3d:chiudi`, i
