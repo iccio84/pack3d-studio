@@ -41,17 +41,20 @@ Il repository e' diviso in tre parti (`prove/confini.py`):
 
 La pagina dello Space con `pop=1` nell'indirizzo (GLAM.md, sezione 10):
 chiede «Che tipo di materiale POP intendi realizzare?» e ha le voci dei
-materiali. Un materiale che il codice non sa ancora costruire si ferma alla
-lettura (`pop.analisi`) e diventa un caso, che chi l'ha caricato manda con
-«Invia il caso». Il modello corretto torna nella finestra POP di Glam
-(`X-Model-Section: pop`).
+materiali. Lo Space costruisce il totem e l'espositore: `pop.analisi` legge
+i PDF del materiale - tutti, il totem ne ha due - e `pop.COSTRUZIONI` porta
+le costruzioni nel registro delle famiglie (dal 15 novembre 2026, chiesto
+dal proprietario: «aggiorna le 2 famiglie»). Un PDF che non si legge, o un
+materiale che il codice non sa ancora costruire, si ferma alla lettura e
+diventa un caso, che chi l'ha caricato manda con «Invia il caso». Il modello
+torna nella finestra POP di Glam (`X-Model-Section: pop`).
 
 ## Il totem
 
 Espositore da terra: un pannello in piedi sulla sua base. Il totem
-lenticolare si costruisce in prova (`pack3d/pop/totem.py`): lo Space non lo
-costruisce ancora, ogni PDF caricato e' un caso in coda (CODA.md, *Un caso
-che non si costruisce*). Quello che sappiamo dal proprietario:
+lenticolare lo costruisce lo Space (`pack3d/pop/totem.py`): la pagina
+chiede due PDF, il pannello del fronte e quello del retro, e con un PDF solo
+il totem si ferma e lo dice. Quello che sappiamo dal proprietario:
 
 - **piatto o curvato.** Per il proprietario «lenticolare» vuol dire il
   **pannello curvato**, non la stampa lenticolare. La curva si legge dal PDF:
@@ -64,7 +67,7 @@ che non si costruisce*). Quello che sappiamo dal proprietario:
 - la sezione puo' avere una faccia curva e il retro piatto, o due facce
   curve: lo dice la fustella.
 
-### Il totem lenticolare (in prova)
+### Il totem lenticolare
 
 Dal proprietario (13 novembre 2026): «Ora proviamo un totem lenticolare: in
 allegato 2 pdf fronte e retro più un render di riferimento. I pannelli
@@ -121,11 +124,12 @@ quello»). Ancora da costruire: ogni PDF caricato e' un caso in coda.
   pack (regole/vassoi.md): l'espositore POP ne puo' usare i moduli - la
   fustella, la piegatura, il GLB - ma non li cambia (*Il confine*).
 
-### Come si costruisce (in prova, `pack3d/pop/espositore.py`)
+### Come si costruisce (`pack3d/pop/espositore.py`)
 
 Dal PDF della fustella: i pezzi si riconoscono dalle pieghe e dalla stampa,
-e ognuno si piega e si monta con le misure che legge (`misure`). Ancora in
-prova: lo Space non lo costruisce, il PDF va in coda.
+e ognuno si piega e si monta con le misure che legge (`misure`). Lo Space lo
+costruisce da un PDF solo; se nella fustella non ci sono i due fianchi e lo
+schienale la lettura si ferma, e il PDF va in coda.
 
 - **La grafica senza il disegno tecnico.** Dal proprietario: «Elimina il dt
   senza intaccare la grafica». Non si ritocca l'immagine (un ritocco attorno

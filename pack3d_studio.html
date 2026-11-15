@@ -2792,13 +2792,12 @@ const FAMIGLIE = {
             slot: ['Il PDF dello steso (il foglio aperto)',
                    'L\u2019immagine del prodotto da incartare'],
             tipi: ['pdf', 'img']},
-  // i materiali POP, nella finestra con pop=1: il codice non li sa ancora
-  // costruire, e il caso va in coda col PDF (pack3d/pop/)
+  // i materiali POP, nella finestra con pop=1 (pack3d/pop/)
   totem: {nome: 'Totem',
-          descr: 'Espositore da terra per il punto vendita: un pannello piatto o curvato, '
-               + 'in piedi sulla sua base, anche con i popup (le sagome in rilievo applicate '
-               + 'davanti). Carica il PDF del totem.',
-          slot: ['Il PDF del totem']},
+          descr: 'Espositore da terra per il punto vendita: due pannelli curvati, il fronte '
+               + 'e il retro, sulla base ovale, anche con i popup (le sagome in rilievo '
+               + 'applicate davanti). Carica il PDF del fronte e quello del retro.',
+          slot: ['Il PDF del pannello del fronte', 'Il PDF del pannello del retro']},
   // «espositore» nei pack vuol dire vassoio: il materiale POP ha un nome suo
   espositore_pop: {nome: 'Espositore',
                    descr: 'Espositore per il punto vendita, da banco o da terra: la struttura '

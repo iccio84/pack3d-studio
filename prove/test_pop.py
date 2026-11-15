@@ -31,9 +31,10 @@ class FinestraPop(unittest.TestCase):
     def test_la_lettura_si_ferma_e_il_caso_va_in_coda(self):
         from pack3d import pop
         from pack3d.famiglie import registro
+        # il totem vuole i due pannelli: con un PDF solo si ferma e lo dice
         with self.assertRaises(ValueError) as e:
             pop.analisi(["totem.pdf"], "totem")
-        self.assertIn("totem: il codice non sa ancora costruirlo", str(e.exception))
+        self.assertIn("totem: carica due PDF", str(e.exception))
         # la riga del registro passa da li', e nessuna famiglia dei pack
         # vale per un materiale POP
         righe = [f for f in registro.RICONOSCIMENTO if "totem" in f.dichiarate]
@@ -70,8 +71,9 @@ class FinestraPop(unittest.TestCase):
         self.assertEqual(comune.normalizza_kind("espositore_pop"), "espositore_pop")
         self.assertIn("espositore (materiale POP", comune.dichiarazione("espositore_pop", 1))
         with self.assertRaises(ValueError) as e:
-            pop.analisi(["espositore.pdf"], "espositore_pop")
-        self.assertTrue(str(e.exception).startswith("espositore: il codice non sa"))
+            pop.analisi(["a.pdf", "b.pdf"], "espositore_pop")
+        self.assertTrue(str(e.exception).startswith("espositore: carica un PDF solo"))
+        self.assertIn("espositore_pop", pop.COSTRUZIONI)
         self.assertEqual(pop.sezione_glam("espositore_pop"), "pop")
         # per i pack «espositore» resta il vassoio
         self.assertEqual(comune.normalizza_kind("espositore"), "vassoio")
@@ -412,3 +414,25 @@ class TotemPop(unittest.TestCase):
         self.assertAlmostEqual(F_[:, 1].min(), totem.BASE_SPESSORE, delta=0.5)
         self.assertGreater(B[:, 2].max(), F_[:, 2].max() + 20)
         self.assertLess(B[:, 2].min(), R_[:, 2].min() - 20)
+
+    def test_lo_space_legge_e_costruisce_il_totem(self):
+        """La lettura dai due PDF (`pop.analisi`) e la costruzione dal
+        registro delle famiglie (`registro.COSTRUZIONI`), come le chiama lo
+        Space: il GLB esce, con gli avvisi del totem."""
+        import tempfile
+        from types import SimpleNamespace
+        from pack3d import pop
+        from pack3d.famiglie import registro
+        with tempfile.TemporaryDirectory() as d:
+            f, r = os.path.join(d, "fronte.pdf"), os.path.join(d, "retro.pdf")
+            _pdf_totem(f, (200, 30, 60))
+            _pdf_totem(r, (30, 60, 200), specchio=True)
+            info = pop.analisi([f, r], "totem")
+            self.assertEqual(info["kind"], "totem")
+            self.assertTrue(any(m.startswith("fronte: pannello 100 x") for m in info["meta"]))
+            glb = os.path.join(d, "out.glb")
+            costruisci = registro.COSTRUZIONI[info["kind"]](
+                SimpleNamespace(pdf=f, pdfs=[f, r]), info)
+            avvisi = costruisci((), glb)
+            self.assertTrue(os.path.getsize(glb) > 1000)
+        self.assertTrue(avvisi[0].startswith("totem: due pannelli"))
