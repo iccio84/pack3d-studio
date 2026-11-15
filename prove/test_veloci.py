@@ -835,6 +835,68 @@ class QuoteFuoriDallaFustella(unittest.TestCase):
         self.assertEqual(sorted(con), sorted(tenuti))
         self.assertEqual(sorted(dl._largest_cluster(tenuti)), sorted(tenuti))
 
+    def test_il_crocino_di_registro_e_un_segno(self):
+        """`dieline._segni_fuori` a gruppi: i due bracci incrociati di un
+        crocino di registro si toccano fra loro, ma non toccano nessun tratto
+        lungo e tutti insieme sono piccoli: e' un segno. Sotto lo steso faceva
+        da ponte verso la quota della larghezza, che entrava nella fustella."""
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        mm = 1.0 / dl.PT2MM
+        # il crocino sotto lo steso come sul T1x36: bracci di 7 mm incrociati,
+        # il piu' vicino a 12 mm dal bordo, oltre il distacco dei gruppi
+        yc = 200.0 + 15.5 * mm
+        registro = [("H", yc, 150.0 - 3.5 * mm, 150.0 + 3.5 * mm, st),
+                    ("V", 150.0, yc - 3.5 * mm, yc + 3.5 * mm, st)]
+        # la quota della larghezza, 7 mm piu' in la' del crocino
+        yq = yc + 3.5 * mm + 7 * mm
+        quota = [("H", yq, 10.0, 140.0, st), ("H", yq, 160.0, 290.0, st)]
+        con = dl._largest_cluster(corpo + registro + quota)
+        self.assertEqual(sorted(con), sorted(corpo))
+        # due tratti corti di una linguetta attaccata al corpo restano
+        linguetta = [("V", 40.0, 200.0, 215.0, st), ("H", 215.0, 40.0, 55.0, st)]
+        self.assertEqual(sorted(dl._largest_cluster(corpo + linguetta)),
+                         sorted(corpo + linguetta))
+
+    def test_la_legenda_attaccata_non_e_fustella(self):
+        """`dieline._legenda_attaccata`: un riquadro appoggiato sotto lo
+        steso, coi lati che partono dal bordo e le scritte dentro, non e'
+        fustella; e tolto lui la quota disegnata piu' in la' torna fuori. Lo
+        stesso riquadro senza scritte e' un'aletta e resta."""
+        import numpy as np
+        from pack3d import dieline as dl
+        st = (0.5, "(0, 0, 0)")
+        corpo = ([("H", y, 0.0, 300.0, st) for y in (0.0, 100.0, 200.0)]
+                 + [("V", x, 0.0, 200.0, st) for x in (0.0, 150.0, 300.0)])
+        mm = 1.0 / dl.PT2MM
+        legenda = [("V", 0.0, 200.0, 200.0 + 22 * mm, st),
+                   ("V", 150.0, 200.0, 200.0 + 22 * mm, st),
+                   ("H", 200.0 + 22 * mm, 0.0, 150.0, st)]
+        quota = [("H", 200.0 + 31 * mm, 10.0, 140.0, st),
+                 ("H", 200.0 + 31 * mm, 160.0, 290.0, st)]
+        scritte = np.array([(10.0 + 4 * k, 200.0 + 8 * mm) for k in range(12)])
+        con = dl._largest_cluster(corpo + legenda + quota, lettere=scritte)
+        self.assertEqual(sorted(con), sorted(corpo))
+        # senza scritte il riquadro resta: puo' essere un'aletta
+        senza = dl._largest_cluster(corpo + legenda, lettere=np.zeros((0, 2)))
+        self.assertEqual(sorted(senza), sorted(corpo + legenda))
+        # il pannello del fronte di un astuccio, sotto il corpo, con le
+        # scritte della grafica e l'aletta attaccata oltre, resta tutto: e
+        # resta anche con la sua finestra dentro e senza l'aletta
+        pannello = [("V", 0.0, 200.0, 200.0 + 30 * mm, st),
+                    ("V", 150.0, 200.0, 200.0 + 30 * mm, st),
+                    ("H", 200.0 + 30 * mm, 0.0, 150.0, st)]
+        aletta = [("V", 0.0, 200.0 + 30 * mm, 200.0 + 34 * mm, st),
+                  ("V", 150.0, 200.0 + 30 * mm, 200.0 + 34 * mm, st),
+                  ("H", 200.0 + 34 * mm, 0.0, 150.0, st)]
+        finestra = [("V", 30.0, 200.0 + 8 * mm, 200.0 + 20 * mm, st),
+                    ("V", 120.0, 200.0 + 8 * mm, 200.0 + 20 * mm, st)]
+        for tutti in (corpo + pannello + aletta, corpo + pannello + finestra):
+            con = dl._largest_cluster(tutti, lettere=scritte)
+            self.assertEqual(sorted(con), sorted(tutti))
+
     def test_la_cornice_non_e_l_altra_vista(self):
         """Un gruppo lungo quanto la fustella che la racchiude e' la cornice
         della tavola, non la vista di dentro: anche se sotto ha piu' grafica."""
@@ -1257,6 +1319,54 @@ class GdaVuota(unittest.TestCase):
         self.assertLess(pezzo.min(axis=2).max(), 236)
         self.assertGreater(pezzo[..., 0].min(), 200)
         self.assertTrue((pezzo[::1, :, 0] < 220).any())
+
+
+class FotoGirata(unittest.TestCase):
+    """`pack3d.foto` su un PDF-foto girato o dietro una copertina."""
+
+    @staticmethod
+    def _foto(cartella, nome, girata=False, copertina=False):
+        from PIL import Image, ImageDraw
+        im = Image.new("RGB", (900, 420), "white")
+        g = ImageDraw.Draw(im)
+        for x in (50, 300, 600, 850):
+            g.line([(x, 60), (x, 360)], fill=(0, 170, 230), width=2)
+        for y in (60, 210, 360):
+            g.line([(50, y), (850, y)], fill=(0, 170, 230), width=2)
+        if girata:
+            im = im.transpose(Image.ROTATE_90)
+        f = os.path.join(cartella, nome)
+        im.save(f, "PDF", resolution=72.0)
+        if copertina:
+            import pypdf
+            cop = _pdf(cartella, [(20, 20, 580, 20), (20, 580, 580, 580)])
+            w = pypdf.PdfWriter()
+            w.append(cop)
+            w.append(f)
+            f = os.path.join(cartella, "con_copertina.pdf")
+            with open(f, "wb") as fh:
+                w.write(fh)
+        return f
+
+    def test_la_scala_viene_dal_lato_lungo(self):
+        """La larghezza della fustella aperta e' il lato lungo: girata di un
+        quarto, la foto si scala uguale (prima si scalava sull'altezza)."""
+        from pack3d import foto
+        with tempfile.TemporaryDirectory() as td:
+            dritta = foto.vettoriale(self._foto(td, "a.pdf"), os.path.join(td, "va.pdf"), 400.0)
+            girata = foto.vettoriale(self._foto(td, "b.pdf", girata=True),
+                                     os.path.join(td, "vb.pdf"), 400.0)
+        self.assertAlmostEqual(dritta, 0.5, delta=0.01)
+        self.assertAlmostEqual(girata, dritta, delta=0.005)
+
+    def test_la_foto_dietro_la_copertina(self):
+        """`artwork.pagina_foto`: la foto e' la seconda pagina se la prima e'
+        una copertina senza disegno; un PDF vettoriale non e' una foto."""
+        from pack3d import artwork
+        with tempfile.TemporaryDirectory() as td:
+            self.assertEqual(artwork.pagina_foto(self._foto(td, "a.pdf")), 0)
+            self.assertEqual(artwork.pagina_foto(self._foto(td, "b.pdf", copertina=True)), 1)
+            self.assertIsNone(artwork.pagina_foto(_pdf(td, GRIGLIA)))
 
 
 class FondoATetto(unittest.TestCase):

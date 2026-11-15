@@ -16,7 +16,8 @@ non usa per righe lunghe. Questo modulo la ritrova e ne rifa' i tratti:
 3. la scala: una foto non sa quanto e' grande il foglio (il PDF dice 72 ppi
    anche quando la foto e' a 150). La misura la da' chi conosce il pack: la
    larghezza della fustella aperta, la quota piu' esterna del DT
-   (`larghezza_fustella`, in mm). Senza, la foto non si legge e l'errore lo
+   (`larghezza_fustella`, in mm): il lato lungo dell'ingombro, comunque la
+   foto stia girata. Senza, la foto non si legge e l'errore lo
    dice;
 4. il PDF nuovo: la stessa foto, scalata alla misura vera, e sopra i tratti
    della fustella con la penna della foto. Da qui in poi e' un PDF come gli
@@ -436,7 +437,10 @@ def vettoriale(pdf_in, pdf_out, larghezza_mm, page_no=0):
         for o in pagina.get_objects(max_depth=3):
             try:
                 w, h = o.get_px_size()
-                scala = max(scala, w / pw, h / ph)
+                # lato lungo con lato lungo: una foto girata sulla pagina
+                # (/Rotate, o la matrice dell'immagine) ha i pixel nel suo
+                # verso, e w / pw la rendeva piu' fitta di quanto e'
+                scala = max(scala, max(w, h) / max(pw, ph), min(w, h) / min(pw, ph))
             except Exception:
                 continue
         rgb = np.asarray(pagina.render(scale=min(scala, 4.0)).to_pil().convert("RGB"))
@@ -445,8 +449,13 @@ def vettoriale(pdf_in, pdf_out, larghezza_mm, page_no=0):
     linee, tinta = tratti_della_foto(rgb)
     if not linee:
         raise ValueError("nella foto non c'e' una fustella")
-    xs = np.concatenate([p[:, 0] for p in linee])
-    largo_px = float(xs.max() - xs.min())
+    # La larghezza della fustella aperta e' la quota piu' esterna del DT: il
+    # lato LUNGO dell'ingombro, comunque stia il foglio. Presa in orizzontale,
+    # il display T1x10 girato di un quarto sulla tavola si scalava sulla sua
+    # altezza - 0,26 mm per pixel invece di 0,17 - e non si leggeva piu'
+    # (`prove/parco.py varianti`, 15 novembre 2026).
+    tutti = np.vstack(linee)
+    largo_px = float(np.ptp(tutti, axis=0).max())
     mm_px = larghezza_mm / largo_px
     # i pixel della resa -> punti del PDF nuovo
     f = mm_px * MM2PT

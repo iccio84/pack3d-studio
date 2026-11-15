@@ -145,13 +145,21 @@ un'altra penna (regole/verifiche.md, *La penna vera*). Nella penna vera:
   viste stanno una accanto all'altra, mai una dentro l'altra: un gruppo che
   racchiude il piu' lungo e' la cornice (`racchiude`). Le 45 letture del
   parco restano uguali;
-- **la legenda attaccata al vassoio e' un limite dichiarato.** Un riquadro
-  chiuso contro il disegno, nella penna del taglio, a guardare le linee e'
-  un'aletta: il suo lato aggiunge una fascia, e la griglia dell'espositore -
-  cinque colonne e tre fasce esatte - non torna. Leggerlo come legenda
-  vorrebbe dire leggere le scritte. La costruzione si ferma e lo dice: non
-  esce un modello sbagliato. Sul display T1x40 e sui due riempimenti KMS, in
-  `parco/varianti.json`;
+- **la legenda attaccata si legge dalle scritte** (`dieline._legenda_attaccata`,
+  dal 15 novembre 2026). Un riquadro appoggiato a un lato dello steso, nella
+  penna del taglio - due lati che partono dal bordo e il fondo che li chiude
+  - non e' fustella se ha dentro almeno `LEGENDA_LETTERE` caratteri di testo
+  vivo, nessun altro tratto, niente attaccato oltre il fondo, e tolto lui il
+  disegno non va oltre il bordo da cui parte. Sul coperchio del display
+  T1x36 la legenda faceva la parete sud di 182 mm invece di 146, e tirava
+  dentro anche la quota della larghezza disegnata piu' in la'; tolta lei, la
+  quota torna un gruppo a se' e resta fuori. Il pannello del fronte di un
+  astuccio ha le scritte della grafica ma anche le sue righe dentro, o
+  l'aletta attaccata oltre: resta fustella (l'astuccio T8 del parco). Un
+  riquadro CHIUSO contro il disegno, coi quattro lati, resta un limite
+  dichiarato: a guardare le linee e' un'aletta, e la costruzione si ferma e
+  lo dice (il display T1x40 e i due riempimenti KMS, in
+  `parco/varianti.json`);
 - **i segni di stampa non sono fustella** (`dieline._segni_fuori`). I
   crocini di taglio e di registro di una tavola pronta per la tipografia,
   nella penna del taglio come li mette il CAD della fustella, stanno a tre
@@ -163,7 +171,13 @@ un'altra penna (regole/verifiche.md, *La penna vera*). Nella penna vera:
   da quello che la regola delle alette rimette dentro, perche' un crocino
   accanto a un lato e' contenuto in un asse e attaccato nell'altro, come
   un'aletta. Le 45 letture del parco restano uguali, e la variante coi segni
-  (`prove/parco.py varianti --varianti segni`) e' 45 su 45.
+  (`prove/parco.py varianti --varianti segni`) e' 45 su 45. Un segno puo'
+  essere fatto di piu' tratti corti che si toccano fra loro - il crocino di
+  registro ha i due bracci incrociati -: conta il gruppo, non piu' grande di
+  `SEGNO_MAX_MM` e senza tratti lunghi attaccati. E i segni fuori dal corpo
+  si tolgono prima di raggruppare il resto: sotto il coperchio del display
+  T1x36 un crocino faceva da ponte fra lo steso e la quota della larghezza,
+  e la parete sud veniva 182 mm invece di 146.
 
 **Il controllo che lo dice**: la misura dell'impronta va confrontata con il
 riquadro della fustella, che viene dai vettori. Se ballano di piu' di 2 mm il

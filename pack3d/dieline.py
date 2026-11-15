@@ -596,7 +596,7 @@ def _quote_fuori(segs, numeri, tol=3.0):
 SEGNO_MAX_MM = 12.0
 
 
-def _segni_fuori(segs, tol=3.0):
+def _segni_fuori(segs, tol=3.0, riquadro=None):
     """Gli indici, in `segs`, dei segni di stampa attaccati alla fustella.
 
     I crocini di taglio e di registro, nella penna del taglio come li mette il
@@ -606,7 +606,20 @@ def _segni_fuori(segs, tol=3.0):
     cinque fasce invece di tre. Un segno e' corto (`SEGNO_MAX_MM`), ha tutti
     e due i capi liberi - non tocca nessun altro tratto - e sta tutto fuori
     dal riquadro del resto del disegno. Una linea della fustella e' attaccata
-    al disegno almeno da un capo, o ci sta dentro."""
+    al disegno almeno da un capo, o ci sta dentro.
+
+    Un segno puo' essere fatto di piu' tratti corti che si toccano fra loro:
+    il crocino di registro ha i due bracci incrociati, e ognuno toccava
+    l'altro - nessuno dei due era libero, e restavano nella fustella.
+    Sul coperchio del display T1x36 coi segni di stampa i crocini sotto lo
+    steso tiravano dentro anche la quota della larghezza, e la parete sud
+    veniva 182 mm invece di 146 (`prove/parco.py varianti`, 15 novembre
+    2026). Allora conta il GRUPPO: tratti corti che si toccano solo fra loro,
+    non piu' grandi tutti insieme di `SEGNO_MAX_MM`, e nessuno attaccato a un
+    tratto lungo.
+
+    Con `riquadro` (x0, y0, x1, y1) il segno deve stare fuori da lui invece
+    che dal riquadro del resto dei tratti dati."""
     import numpy as np
     n = len(segs)
     if n < 2:
@@ -619,25 +632,184 @@ def _segni_fuori(segs, tol=3.0):
     if not corti.any():
         return set()
 
-    def attaccato(i, px, py):
+    lunghi = ~corti
+
+    def attaccato(i, px, py, a_chi):
         d = np.hypot(px - np.clip(px, xa, xb), py - np.clip(py, ya, yb))
         d[i] = np.inf
-        return bool((d <= tol).any())
-    liberi = [i for i in np.flatnonzero(corti)
-              if not attaccato(i, A[i, 0], A[i, 1]) and not attaccato(i, A[i, 2], A[i, 3])]
+        return bool((d[a_chi] <= tol).any())
+    # i gruppi di tratti corti che si toccano (i riquadri a `tol`)
+    ic = [int(i) for i in np.flatnonzero(corti)]
+    padre = {i: i for i in ic}
+
+    def radice(i):
+        while padre[i] != i:
+            padre[i] = padre[padre[i]]
+            i = padre[i]
+        return i
+    for k, i in enumerate(ic):
+        for j in ic[k + 1:]:
+            if (xa[j] <= xb[i] + tol and xa[i] <= xb[j] + tol
+                    and ya[j] <= yb[i] + tol and ya[i] <= yb[j] + tol):
+                padre[radice(i)] = radice(j)
+    gruppi = {}
+    for i in ic:
+        gruppi.setdefault(radice(i), []).append(i)
+    liberi = []
+    lato = SEGNO_MAX_MM / PT2MM
+    for g in gruppi.values():
+        if (xb[g].max() - xa[g].min() > lato + 1e-6
+                or yb[g].max() - ya[g].min() > lato + 1e-6):
+            continue
+        if any(attaccato(i, A[i, 0], A[i, 1], lunghi)
+               or attaccato(i, A[i, 2], A[i, 3], lunghi) for i in g):
+            continue
+        liberi.extend(g)
     if not liberi:
         return set()
-    resto = np.ones(n, bool)
-    resto[liberi] = False
-    if not resto.any():
-        return set()
-    x0, x1 = xa[resto].min() - tol, xb[resto].max() + tol
-    y0, y1 = ya[resto].min() - tol, yb[resto].max() + tol
+    if riquadro is not None:
+        x0, y0, x1, y1 = riquadro
+        x0, y0, x1, y1 = x0 - tol, y0 - tol, x1 + tol, y1 + tol
+    else:
+        resto = np.ones(n, bool)
+        resto[liberi] = False
+        if not resto.any():
+            return set()
+        x0, x1 = xa[resto].min() - tol, xb[resto].max() + tol
+        y0, y1 = ya[resto].min() - tol, yb[resto].max() + tol
     return {int(i) for i in liberi
             if xb[i] < x0 or xa[i] > x1 or yb[i] < y0 or ya[i] > y1}
 
 
-def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
+# Quante lettere fanno una legenda: "LEGENDA", "taglio", "cordonatura" ne
+# hanno molte di piu'; una sigla sola su un'aletta non arriva qui
+LEGENDA_LETTERE = 4
+
+
+def lettere(pdf_path, page_no=0):
+    """I centri dei caratteri di testo vivo della pagina, in punti, nel telaio
+    dei tratti (x da sinistra, y dall'alto): un array `(n, 2)`."""
+    import numpy as np
+    import pypdfium2 as pdfium
+    doc = pdfium.PdfDocument(pdf_path)
+    try:
+        page = doc[page_no]
+        mx0, _my0, _mx1, my1 = page.get_mediabox()
+        tp = page.get_textpage()
+        out = []
+        for i in range(tp.count_chars()):
+            try:
+                l, b, r, t = tp.get_charbox(i)
+            except Exception:
+                continue
+            if r - l <= 0 and t - b <= 0:
+                continue
+            out.append(((l + r) / 2.0 - mx0, my1 - (b + t) / 2.0))
+        tp.close()
+    finally:
+        doc.close()
+    return np.array(out, float).reshape(-1, 2)
+
+
+def _dentro_il_riquadro(s, kf, a, b, lo_n, hi_n, tol):
+    """Se il tratto `s` sta dentro il riquadro (a, b lungo la linea lontana
+    `kf`, lo_n, hi_n attraverso), lontano almeno `tol` dai suoi lati."""
+    k, c, sa, sb, _st = s
+    if k == kf:
+        return lo_n + tol < c < hi_n - tol and sb > a + tol and sa < b - tol
+    return a + tol < c < b - tol and sb > lo_n + tol and sa < hi_n - tol
+
+
+def _attaccato_oltre(s, kf, c, a, b, sg, tol):
+    """Se il tratto `s` parte dalla linea lontana (quota `c`, da `a` a `b`,
+    nel verso `kf`) e va oltre, dalla parte `sg`."""
+    k, sc, sa, sb, _st = s
+    if k == kf:
+        return False
+    if not a - tol <= sc <= b + tol:
+        return False
+    vicino, lontano = (sa, sb) if sg > 0 else (sb, sa)
+    return abs(vicino - c) <= tol and (lontano - c) * sg > tol
+
+
+def _legenda_attaccata(segs, lettere, gap=25.0, tol=3.0):
+    """Gli indici, in `segs`, del riquadro di una legenda attaccato a un lato
+    della fustella, o un insieme vuoto.
+
+    Una legenda disegnata nella penna del taglio e appoggiata al bordo dello
+    steso - due lati che partono dal bordo e il fondo che li chiude, con le
+    scritte dentro - e' nel gruppo della fustella: il suo fondo diventava una
+    riga della griglia. Sul coperchio del display T1x36 la parete sud veniva
+    182 mm invece di 146, e la legenda tirava dentro anche la quota della
+    larghezza disegnata sotto (`prove/parco.py varianti`, 15 novembre 2026).
+
+    Il riquadro si riconosce cosi': una linea lontana, due tratti
+    perpendicolari che partono dai suoi capi e arrivano allo stesso punto
+    verso il disegno, almeno `LEGENDA_LETTERE` caratteri di testo vivo dentro,
+    e tolti quei tre tratti il gruppo piu' lungo che resta non va oltre il
+    punto di partenza dei lati. E dentro non c'e' nessun altro tratto, e
+    oltre la linea lontana non e' attaccato niente: il pannello del fronte
+    di un astuccio, con le scritte della grafica, la sua finestra dentro e
+    l'aletta del cielo attaccata oltre, non e' una legenda - senza queste due
+    condizioni l'astuccio T8 del parco non si risolveva piu'."""
+    import numpy as np
+    n = len(segs)
+    if n < 4 or lettere is None or not len(lettere):
+        return set()
+    lettere = np.asarray(lettere, float)
+    for kf, ks, sg in (("H", "V", 1), ("H", "V", -1), ("V", "H", 1), ("V", "H", -1)):
+        lati = [j for j in range(n) if segs[j][0] == ks]
+        for i in range(n):
+            k, c, a, b, _st = segs[i]
+            if k != kf:
+                continue
+
+            def lato(x):
+                for j in lati:
+                    _kj, cj, aj, bj, _sj = segs[j]
+                    lontano, vicino = (bj, aj) if sg > 0 else (aj, bj)
+                    if (abs(cj - x) <= tol and abs(lontano - c) <= tol
+                            and (c - vicino) * sg > 5 * tol):
+                        return j, vicino
+                return None
+            l1, l2 = lato(a), lato(b)
+            if not l1 or not l2 or l1[0] == l2[0] or abs(l1[1] - l2[1]) > tol:
+                continue
+            vicino = (l1[1] + l2[1]) / 2.0
+            lo_n, hi_n = sorted((vicino, c))
+            riquadro = {i, l1[0], l2[0]}
+            # dentro non c'e' disegno: un pannello della fustella ha le sue
+            # righe (una finestra, una cordonatura), la legenda solo scritte
+            if any(_dentro_il_riquadro(segs[j], kf, a, b, lo_n, hi_n, tol)
+                   for j in range(n) if j not in riquadro):
+                continue
+            # e oltre la linea lontana non c'e' niente attaccato: al pannello
+            # del fronte di un astuccio e' attaccata l'aletta del cielo
+            if any(_attaccato_oltre(segs[j], kf, c, a, b, sg, tol)
+                   for j in range(n) if j not in riquadro):
+                continue
+            if kf == "H":
+                X, Y = lettere[:, 0], lettere[:, 1]
+            else:
+                X, Y = lettere[:, 1], lettere[:, 0]
+            dentro = int(((X >= a) & (X <= b) & (Y >= lo_n) & (Y <= hi_n)).sum())
+            if dentro < LEGENDA_LETTERE:
+                continue
+            resto = [segs[j] for j in range(n) if j not in riquadro]
+            gruppi = _gruppi(resto, gap)
+            if not gruppi:
+                continue
+            g = max(gruppi, key=lambda g: sum(x[0][3] - x[0][2] for x in g))
+            estremi = [(cj, cj) if kj == kf else (aj, bj)
+                       for (kj, cj, aj, bj, _sj), _b in g]
+            oltre = (max(e[1] for e in estremi) if sg > 0
+                     else min(e[0] for e in estremi))
+            if (oltre - vicino) * sg <= tol:
+                return riquadro
+    return set()
+
+
+def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=(), lettere=None):
     """Isola il gruppo di segmenti spazialmente connesso piu' esteso: scarta
     cartigli, legende e disegni di riepilogo posti a lato della fustella.
 
@@ -684,6 +856,16 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     via = _segni_fuori([sg for sg, _ in main])
     if via:
         main = [x for i, x in enumerate(main) if i not in via]
+    # la legenda attaccata a un lato (`_legenda_attaccata`): tolta lei, quello
+    # che teneva attaccato al gruppo - una quota sotto - torna un gruppo a se',
+    # e lo giudica `inside` come gli altri
+    staccati = []
+    via = _legenda_attaccata([sg for sg, _ in main], lettere, gap)
+    if via:
+        resto = [sg for i, (sg, _) in enumerate(main) if i not in via]
+        parti = _gruppi(resto, gap)
+        main = max(parti, key=lung)
+        staccati = [g for g in parti if g is not main]
     mx0 = min(b[0] for _, b in main); my0 = min(b[1] for _, b in main)
     mx1 = max(b[2] for _, b in main); my1 = max(b[3] for _, b in main)
 
@@ -721,10 +903,21 @@ def _largest_cluster(segs, gap=25.0, dettaglio=None, numeri=()):
     # con le quote il fronte curvo, che si riconosce dalle alette, spariva.
     # Le linee del corpo non si toccano: una piega con la sua misura scritta
     # accanto resta piega.
-    altri = [g for g in groups.values() if g is not principale]
+    altri = [g for g in groups.values() if g is not principale] + staccati
     if numeri and altri:
         resto = _senza_quote([sg for g in altri for sg, _ in g], numeri)
         altri = _gruppi(resto, gap)
+    # I segni di stampa fuori dal corpo, prima di raggrupparli: un crocino di
+    # registro sotto lo steso faceva da ponte fra il corpo e la quota della
+    # larghezza, piu' in la', e `inside` tirava dentro tutte e due
+    # (`_segni_fuori` col riquadro del corpo).
+    if altri:
+        corpo = [sg for sg, _ in main]
+        fuori = [sg for g in altri for sg, _ in g]
+        via = _segni_fuori(corpo + fuori, riquadro=(mx0, my0, mx1, my1))
+        via = {i - len(corpo) for i in via if i >= len(corpo)}
+        if via:
+            altri = _gruppi([sg for i, sg in enumerate(fuori) if i not in via], gap)
     out = [sg for sg, _ in main]
     for g in altri:
         if inside(g):
@@ -853,8 +1046,12 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
                   for v, x, q, asse in _numeri(pdf_path, page_no)]
     except Exception:
         numeri = []
+    try:
+        caratteri = lettere(pdf_path, page_no)
+    except Exception:
+        caratteri = None
     segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
-        pdf_path, r, page_no), numeri=numeri)
+        pdf_path, r, page_no), numeri=numeri, lettere=caratteri)
     # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
     # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
     # guardando solo quello che sta sulla fustella.
