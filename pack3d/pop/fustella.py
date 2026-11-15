@@ -809,33 +809,55 @@ def contorni_di_taglio(pdf):
     return sorted(gruppi[chiave], key=area, reverse=True)
 
 
-def oggetti_dentro(pdf, contorni, quanto=2.0):
-    """Gli indici degli oggetti della pagina che stanno dentro uno dei
-    `contorni` (mm): il centro dentro il contorno, e non piu' grandi di
-    `quanto` volte il suo riquadro (un fondo che copre la pagina non e' suo).
-    Sono la grafica di un popup: dal pannello si toglie, resta sul popup."""
+def oggetti_dentro(pdf, contorni, quota=0.7, px_mm=0.5):
+    """Gli indici degli oggetti della pagina che sono la grafica dei popup
+    (`contorni`, mm): dal pannello si tolgono, restano sul popup.
+
+    Non basta il riquadro dell'oggetto: un'immagine col fondo trasparente (la
+    fetta, l'alone del logo) ha un riquadro molto piu' grande della figura, e
+    un tracciato di fondo puo' avere il centro dentro un popup. Si guarda dove
+    l'oggetto DIPINGE: la pagina resa senza di lui contro quella intera, a
+    bassa risoluzione. E' del popup se almeno `quota` di quello che cambia
+    sta dentro il suo contorno (con 3 mm di margine)."""
     import ctypes
     import pypdfium2 as pdfium
     import pypdfium2.raw as R
-    from ..ballotin import dentro
-    out = []
+    from PIL import Image, ImageDraw
+    from scipy import ndimage
+    tutti = np.vstack(contorni)
     doc = pdfium.PdfDocument(pdf)
     pg = doc[0]
     alto = pg.get_size()[1]
-    riq = [(c.min(0), c.max(0)) for c in contorni]
+    cand = []
     for i in range(R.FPDFPage_CountObjects(pg.raw)):
         h = R.FPDFPage_GetObject(pg.raw, i)
         v = [ctypes.c_float() for _ in range(4)]
         R.FPDFPageObj_GetBounds(h, *[ctypes.byref(x) for x in v])
         l, b, r, t = (x.value for x in v)
         x0, x1, y0, y1 = l * MM, r * MM, (alto - t) * MM, (alto - b) * MM
-        c = np.array([[(x0 + x1) / 2, (y0 + y1) / 2]])
-        for cont, (lo, hi) in zip(contorni, riq):
-            if (x1 - x0) * (y1 - y0) <= quanto * float(np.prod(hi - lo)) and dentro(c, [cont])[0]:
-                out.append(i)
+        for c in contorni:
+            lo, hi = c.min(0), c.max(0)
+            # un fondo molto piu' grande del popup non e' suo: non si prova
+            if x0 < hi[0] and x1 > lo[0] and y0 < hi[1] and y1 > lo[1] \
+                    and (x1 - x0) * (y1 - y0) <= 4.0 * float(np.prod(hi - lo)):
+                cand.append(i)
                 break
     pg.close()
     doc.close()
+    zona = (*(tutti.min(0) - 10), *(tutti.max(0) + 10))
+    G = Griglia(zona, px_mm)
+    im = Image.new("1", (G.W, G.H), 0)
+    d = ImageDraw.Draw(im)
+    for c in contorni:
+        d.polygon([G.a_pixel(x, y) for x, y in c], fill=1)
+    dentro = ndimage.binary_dilation(np.array(im, bool), iterations=max(1, int(3 * px_mm)))
+    intera = np.asarray(_senza(pdf, G, ()), np.int16)
+    out = []
+    for i in cand:
+        cambia = np.abs(intera - np.asarray(_senza(pdf, G, [i]), np.int16)).sum(-1) > 20
+        n = int(cambia.sum())
+        if n and (cambia & dentro).sum() >= quota * n:
+            out.append(i)
     return out
 
 
