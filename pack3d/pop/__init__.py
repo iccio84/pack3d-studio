@@ -19,8 +19,10 @@ Ci sono il totem e l'espositore, e lo Space li costruisce: `analisi` legge
 il PDF (o i due PDF del totem, fronte e retro; o i PDF dei pezzi
 dell'espositore, uno per pezzo) e `COSTRUZIONI` porta le loro costruzioni,
 `espositore.monta`, `ripiani.monta` e `totem.monta`, nel registro delle
-famiglie. Un PDF che non si legge si ferma col motivo, e il caso va in coda
-col PDF (`server.caso_fermo`, CODA.md).
+famiglie. Con un PDF solo coi pezzi tutti su una pagina, tagli neri e pieghe
+rosse, l'espositore e' quello a scaffale (`scaffale.monta`). Un PDF che non
+si legge si ferma col motivo, e il caso va in coda col PDF
+(`server.caso_fermo`, CODA.md).
 """
 
 # I materiali che la finestra POP dichiara, col loro nome a parole per la
@@ -52,6 +54,13 @@ def _analisi_espositore(pdfs):
                     meta=["espositore POP a ripiani da %d PDF: %s"
                           % (len(pdfs), ", ".join(sorted(letti)))])
     pdf = pdfs[0]
+    from . import scaffale
+    if scaffale.e_scaffale(pdf):
+        # tutti i pezzi su una pagina, tagli neri e pieghe rosse (`scaffale`)
+        letti = scaffale.leggi(pdf)[0]
+        return dict(kind="espositore_pop", title="Espositore POP",
+                    meta=["espositore POP a scaffale, tutti i pezzi su una pagina: %s"
+                          % ", ".join(sorted(letti))])
     tagli, pieghe = F.tratti(pdf, [])
     pezzi = F.pezzi(tagli, pieghe)
     ruoli = E.riconosci(pezzi, E.inchiostro(pdf, pezzi))
@@ -128,9 +137,12 @@ def _costruisci_espositore(r, info):
     from . import espositore
 
     def costruisci(lastre, uscita):
+        from . import scaffale
         if len(r.pdfs) > 1:
             from . import ripiani
             avvisi, _m = ripiani.monta(r.pdfs, uscita)
+        elif scaffale.e_scaffale(r.pdfs[0]):
+            avvisi, _m = scaffale.monta(r.pdfs[0], uscita)
         else:
             avvisi, _m = espositore.monta(r.pdfs[0], uscita)
         return list(avvisi)
