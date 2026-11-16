@@ -516,6 +516,19 @@ class RipianiPop(unittest.TestCase):
         self.assertEqual(len(nuove), 2)
         self.assertEqual(u.riquadro, (0.0, 0.0, 420.0, 400.0))
 
+    def test_la_pendenza_della_base_dai_bordi_del_fianco(self):
+        """`ripiani._pendenza`: il fronte della base pende quanto i bordi
+        lunghi del fianco (in cima e sul pavimento), non quanto la piega
+        obliqua, piu' ripida."""
+        import numpy as np
+        from pack3d.pop import ripiani as R
+        a = np.radians(25.0)
+        cima = [(300, 100), (300 - 250 * np.cos(a), 100 - 250 * np.sin(a))]
+        piede = [(300, 320), (300 - 350 * np.cos(a), 320 - 350 * np.sin(a))]
+        obliqua = [(190, 60), (150, 240)]
+        p = self._pezzo(1000, 400, tagli=[cima, piede], pieghe=[obliqua])
+        self.assertAlmostEqual(np.degrees(R._pendenza(p, 300.0, 700.0)), 25.0, places=3)
+
     def test_piu_pdf_che_non_fanno_un_espositore(self):
         """Due PDF dello stesso pezzo non sono un espositore: si ferma e lo dice."""
         import tempfile

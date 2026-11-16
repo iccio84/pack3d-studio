@@ -13,11 +13,11 @@ in un unica pagina o più pdf». I pezzi:
   fianco di fuori; la piega doppia e' lo spigolo davanti, e l'aletta con le
   asole torna dentro, contro l'ala della schiena;
 - la **base**: lo zoccolo davanti, col fronte inclinato e i fianchi che si
-  incollano sui laterali;
+  incollano sui laterali, fuori; sul suo cielo poggia il ripiano piu' basso;
 - il **ripiano**: un vassoio con le sponde e la fascetta davanti, ripetuto
   (`RIPIANI`) all'altezza delle asole dei laterali;
-- il **crowner**: in piedi sul cappello, la linguetta nella feritoia e i
-  fianchi ripiegati in avanti. Di un PDF di piu' pagine si prende la prima.
+- il **crowner**: dietro la cima della schiena, con le alette girate di 180
+  gradi dietro il pannello, di rinforzo. Di un PDF di piu' pagine si prende la prima.
 
 Ogni PDF si legge da solo (`fustella.tratti`, `fustella.pezzi`) e si mette
 nella tavola comune accanto agli altri, con la sua grafica: da li' il
@@ -134,14 +134,21 @@ def _vassoio(pz):
     return u
 
 
-def _inclinazione(p):
-    """L'angolo (radianti) della piega obliqua della base, dalla verticale."""
+def _pendenza(p, e0, e1):
+    """L'angolo (radianti) del fronte della base dalla verticale. I bordi
+    lunghi del fianco (quello in cima e quello sul pavimento) stanno in
+    orizzontale una volta montato: sul PDF fanno col fronte l'angolo del
+    fronte stesso, 25 gradi sulla base del caso. La piega obliqua no: e'
+    piu' ripida, e non da' la pendenza."""
     angoli = []
-    for pl in p.pieghe:
-        a, b = np.asarray(pl[0], float), np.asarray(pl[-1], float)
-        dx, dy = abs(b[0] - a[0]), abs(b[1] - a[1])
-        if dx >= 1.0 and dy >= 1.0 and dy > dx:
-            angoli.append(np.arctan2(dx, dy))
+    for pl in p.tagli:
+        a = np.asarray(pl, float)
+        for u, v in zip(a, a[1:]):
+            (ux, uy), (vx, vy) = p.locale(*u), p.locale(*v)
+            dx, dy = abs(vx - ux), abs(vy - uy)
+            fuori = max(ux, vx) <= e0 + 1.0 or min(ux, vx) >= e1 - 1.0
+            if fuori and np.hypot(dx, dy) > 100.0 and 0.1 < dy / max(dx, 1e-9) < 1.2:
+                angoli.append(np.arctan2(dy, dx))
     return float(np.median(angoli)) if angoli else 0.0
 
 
@@ -251,7 +258,12 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     if not fondi:
         raise ValueError("espositore a ripiani: nelle alette dei laterali non trovo le asole")
 
-    # --- la base: lo zoccolo davanti, col fronte inclinato
+    # --- la base: lo zoccolo davanti, col fronte inclinato. Il fianco e la
+    # sua aletta oltre la piega obliqua sono un trapezio solo, piatto sulla
+    # faccia stampata del laterale (il tratteggio in basso sul laterale e'
+    # la colla): il bordo in cima e quello sul pavimento in orizzontale, il
+    # bordo di fondo in verticale contro la schiena. Davanti allo spigolo
+    # del laterale resta il triangolo del fianco.
     bs = pezzi["base"][0]
     vb = _pieghe(bs, "V", 100.0)
     f0, f1 = vb[1], vb[2]                       # il fronte fra le pieghe di dentro
@@ -259,45 +271,28 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     hb = _pieghe(bs, "H", 100.0)
     ft, fb = hb[0], hb[-1]
     Ls = fb - ft
-    th = _inclinazione(bs)
+    th = _pendenza(bs, e0, e1)
     hz, run = Ls * np.cos(th), Ls * np.sin(th)
-    # il cielo dello zoccolo: il pannello sopra il fronte
-    dt = 0.0
-    for pan in G.pannelli(bs):
-        r = _dove(pan, bs, G)
-        if r[2] - r[0] > 0.5 * (f1 - f0) and r[3] <= ft + 2.0:
-            dt = max(dt, ft - r[1])
     xb = (f1 - f0) / 2.0
-    e = np.array([0.0, -hz / Ls, run / Ls])     # giu' lungo il fronte
-    q = np.array([0.0, run / Ls, hz / Ls])      # nel fianco, verso lo spigolo
-    # La piega obliqua del fianco e' dove l'aletta torna indietro e si
-    # incolla sul laterale (il tratteggio in basso sul laterale): cade sullo
-    # spigolo davanti dell'espositore. Lo zoccolo sta davanti, e il ripiano
-    # piu' basso dietro il suo cielo.
-    obliqua = [np.asarray(pl, float) for pl in bs.pieghe
-               if abs(pl[-1][0] - pl[0][0]) >= 1.0 and abs(pl[-1][1] - pl[0][1]) >= 1.0
-               and bs.locale(*np.asarray(pl, float).mean(0))[0] < e0]
-    if obliqua:
-        lx, ly = bs.locale(*np.vstack(obliqua).mean(0))
-        zc = dt + (ly - ft) * e[2] + (lx - e0) * q[2]
-        Zb = Dp - zc
-    else:
-        Zb = Dp
+    fc = (f0 + f1) / 2.0
+    Zb = Dp + t                                 # il cielo, davanti allo spigolo
+    su = np.array([0.0, np.cos(th), -np.sin(th)])    # su per il fronte
+    indietro = np.array([0.0, -np.sin(th), -np.cos(th)])  # nel fianco, via dal fronte
 
     def regola_base(px, py, r):
         if py > fb:
             return None                         # l'aletta sotto
         if f0 < px < f1:
-            if py < ft:                         # il cielo
-                return (lambda lx, ly: (lx - (f0 + f1) / 2.0, hz, Zb + dt - (ft - ly)),)
-            return (lambda lx, ly: (lx - (f0 + f1) / 2.0, hz - (ly - ft) * hz / Ls,
-                                    Zb + dt + (ly - ft) * run / Ls),)
+            if py < ft:                         # il cielo: ci poggia il ripiano piu' basso
+                return (lambda lx, ly: (lx - fc, hz, Zb - (ft - ly)),)
+            return (lambda lx, ly: (lx - fc, hz - (ly - ft) * np.cos(th),
+                                    Zb + (ly - ft) * np.sin(th)),)
         if px < e0:                             # il fianco di sinistra e la sua aletta
-            A = np.array([-xb, hz, Zb + dt])
-            return (lambda lx, ly: tuple(A + (ly - ft) * e + (lx - e0) * q),)
+            A = np.array([-xb, hz, Zb])
+            return (lambda lx, ly: tuple(A + (e0 - lx) * indietro + (ft - ly) * su),)
         if px > e1:
-            A = np.array([xb, hz, Zb + dt])
-            return (lambda lx, ly: tuple(A + (ly - ft) * e - (lx - e1) * q),)
+            A = np.array([xb, hz, Zb])
+            return (lambda lx, ly: tuple(A + (lx - e1) * indietro + (ft - ly) * su),)
         return None                             # gli spigoli, sottili
     stendi(bs, "base", regola_base)
 
@@ -317,6 +312,9 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     fondo = dietro - davanti
     Zr = t + fondo                              # il davanti del ripiano
     quote = sorted(fondi)[:ripiani]
+    # il ripiano piu' basso poggia sul cielo della base, se l'asola e' piu'
+    # bassa del cielo (l'asola e' alta 35 mm: il vassoio ci sta lo stesso)
+    quote[0] = max(quote[0], hz + t)
     for k, Yk in enumerate(quote):
         def regola_rip(px, py, r, Yk=Yk):
             if (r[2] - r[0]) < 60 and (r[3] - r[1]) < 60:
@@ -336,34 +334,42 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
             return (lambda lx, ly: (r1 - rc, Yk + (lx - r1), Zr - (ly - davanti)),)
         stendi(rp, "ripiano_%d" % (k + 1), regola_rip)
 
-    # --- il crowner: in piedi sul cappello, i fianchi piegati in avanti
+    # --- il crowner: dietro la cima della schiena, il piede del pannello al
+    # filo del corpo. Le alette sono girate di 180 gradi, di rinforzo (dal
+    # proprietario: «il crowner ha le alette girate di 180 gradi come
+    # rinforzo»): oltre le pieghe doppie (larghe quanto il cartone) si
+    # ripiegano piatte dietro il pannello, e la striscia oltre la piega a
+    # tratti si ripiega ancora, piatta dietro l'aletta. Da davanti si vede
+    # solo il pannello, come nel render del proprietario.
     cw = pezzi["crowner"][0]
     vc = _pieghe(cw, "V", 200.0)
-    g0, g1 = vc[0], vc[-1]                      # le pieghe di fuori
+    g0, g1 = vc[0], vc[-1]                      # le pieghe a tratti
     i0, i1 = vc[2], vc[-3]                      # il pannello davanti fra le pieghe doppie
     m0, m1 = vc[1], vc[-2]
     ccx = (i0 + i1) / 2.0
-    hcw = max(r[3] for r in [_dove(pan, cw, G) for pan in G.pannelli(cw)]
-              if r[2] - r[0] > 0.5 * cw.larghezza)        # il piede del pannello davanti
-    Zc = 6.0
-    Yc = Hs + t
+    # il piede del pannello: dove finiscono le pieghe doppie. Sotto c'e' la
+    # linguetta, che scende dietro la schiena
+    hcw = max(max(s, e) for a, v, s, e in cw.pieghe_dritte(minimo=200.0)
+              if a == "V" and min(abs(v - i0), abs(v - i1)) < 0.5)
+    Zc = -t
+    Yc = Hs
     fl = m0 - g0                                # il fianco del crowner
     xc = (i1 - i0) / 2.0
 
     def regola_crowner(px, py, r):
-        if py > hcw:
-            return None                         # la linguetta nella feritoia
+        if py > hcw + 10.0 and i0 < px < i1:
+            return None                         # la linguetta, dentro la feritoia
         Y = (lambda ly: Yc + (hcw - ly))
         if i0 < px < i1:
             return (lambda lx, ly: (lx - ccx, Y(ly), Zc),)
         if g0 < px < m0:
-            return (lambda lx, ly: (-xc, Y(ly), Zc + (m0 - lx)),)
+            return (lambda lx, ly: (-xc + (m0 - lx), Y(ly), Zc - t),)
         if px < g0:
-            return (lambda lx, ly: (-xc + (g0 - lx), Y(ly), Zc + fl),)
+            return (lambda lx, ly: (-xc + fl - (g0 - lx), Y(ly), Zc - 2 * t),)
         if m1 < px < g1:
-            return (lambda lx, ly: (xc, Y(ly), Zc + (lx - m1)),)
+            return (lambda lx, ly: (xc - (lx - m1), Y(ly), Zc - t),)
         if px > g1:
-            return (lambda lx, ly: (xc - (lx - g1), Y(ly), Zc + fl),)
+            return (lambda lx, ly: (xc - fl + (lx - g1), Y(ly), Zc - 2 * t),)
         return None                             # le pieghe doppie, sottili
     stendi(cw, "crowner", regola_crowner)
 
@@ -373,7 +379,7 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     exporters.write_glb_mesh(V, UV, T, tex, uscita, tex_max=4096, parti=parti)
     largo = 2 * (Xw + c / 2.0)
     misure = dict(larghezza=largo, profondita=Dp, altezza=Hs, ripiani=quote,
-                  base=(hz, dt, dt + run), crowner=hcw)
+                  base=(hz, run, th), crowner=hcw)
     avvisi = ["espositore a ripiani da %d PDF: %.0f x %.0f mm, alto %.0f (col crowner %.0f); "
               "%d ripiani a %s mm; zoccolo alto %.0f; cartone %.1f mm"
               % (len(pdfs), largo, Dp, Hs, Yc + hcw, len(quote),
