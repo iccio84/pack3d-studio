@@ -221,13 +221,18 @@ più PDF, uno per pezzo, è l'espositore da terra a ripiani:
   marchio; dentro resta senza stampa, e il risvolto del fronte si ripiega
   dentro. Sul PDF il risvolto e il resto sono due pezzi e i lati del fronte
   non hanno linee: si fa un pezzo solo, coi lati chiusi da due pieghe
-  (`_vassoio`). Dal proprietario: «il vassoio sembra bucato sugli spessori.
-  Deve essere un pezzo unico». Si monta tutto: la piega doppia in cima al
-  fronte è il cielo della fascetta, dal fronte al risvolto; le orecchie ai
-  lati del fronte (sul PDF manca il loro bordo in cima e di fianco, e si
-  chiude) girano indietro fuori dal fianco; il triangolo oltre la piega
-  obliqua del fianco si ribalta di 180 gradi dentro il fianco; le strisce
-  del piano davanti alle feritoie del risvolto sono piano;
+  (`_vassoio`), che dà le misure. Dal proprietario: «il vassoio sembra
+  bucato sugli spessori. Deve essere un pezzo unico», poi «il vassoio non va
+  bene. Vedo troppi fori e artefatti. Fai cartoncino spesso con angoli
+  smussati». Il vassoio non si stende più a pannelli: è un solido solo
+  (`_vassoio_solido`), chiuso, di cartoncino spesso (`SPESSORE_VASSOIO`,
+  4 mm), con gli angoli tondi in pianta (`RAGGIO_VASSOIO`, 10 mm) e lo
+  spigolo del fondo smussato (`SMUSSO_VASSOIO`, 4 mm). Le misure sono quelle
+  del PDF: il piano, la fascetta alta quanto il fronte, la sponda di dietro,
+  i fianchi che scendono in obliquo verso il fondo come sul PDF. Fuori la
+  grafica del PDF (la fascetta col marchio, i fianchi, il fondo), dentro il
+  cartone senza stampa. Il risvolto, le orecchie e gli angoli non si vedono
+  e non si fanno;
 - **la base**: lo zoccolo davanti, col fronte inclinato. Dal proprietario,
   col render di riferimento: «Crowner è basamento sono montati male». Il
   fianco e la sua aletta oltre la piega obliqua sono un trapezio solo,

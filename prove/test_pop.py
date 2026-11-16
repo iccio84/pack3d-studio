@@ -516,22 +516,30 @@ class RipianiPop(unittest.TestCase):
         self.assertEqual(len(nuove), 2)
         self.assertEqual(u.riquadro, (0.0, 0.0, 420.0, 400.0))
 
-    def test_l_orecchia_del_fronte_si_chiude(self):
-        """`ripiani._vassoio`: dell'orecchia a fianco del fronte il PDF ha
-        solo il bordo obliquo di sotto; si chiude in cima e di fianco."""
+    def test_il_vassoio_e_un_solido_chiuso(self):
+        """`ripiani._vassoio_solido`: il vassoio e' un pezzo solo, chiuso -
+        ogni spigolo della maglia sta fra due triangoli, anche dove il
+        fianco scende e la sponda di dietro resta alta."""
         import numpy as np
-        from pack3d.pop import fustella as F, ripiani as R
-        su = F.Pezzo((60.0, 0.0, 480.0, 63.0), tagli=[], pieghe=[
-            np.array([(60, 62.5), (480, 62.5)], float)])
-        giu = F.Pezzo((0.0, 100.0, 540.0, 400.0), tagli=[
-            np.array([(0, 103), (56, 117)], float), np.array([(540, 103), (484, 117)], float)],
-            pieghe=[np.array([(57, 119.5), (483, 119.5)], float),
-                    np.array([(57, 380), (483, 380)], float)])
-        u = R._vassoio([giu, su])
-        chiusi = [np.asarray(pl, float) for pl in u.tagli if len(pl) == 3]
-        self.assertEqual(len(chiusi), 2)
-        self.assertEqual(sorted(tuple(c[1]) for c in chiusi), [(0.0, 62.5), (540.0, 62.5)])
-        self.assertEqual(sorted(c[2][1] for c in chiusi), [103.0, 103.0])
+        from collections import Counter
+        from pack3d.pop import ripiani as R
+
+        def alto(lato, z):
+            return {0: 57.0, 2: 62.5}.get(lato, 57.0 if z > 70 else 5.0 + z / 2)
+        V, UV, T = R._vassoio_solido(alto, lambda lato, x, y, z: (0.0, 0.0),
+                                     0.0, -210.0, 210.0, 0.0, 280.0)
+        # i vertici uguali sono lo stesso punto: si uniscono per contare gli spigoli
+        chiave = {tuple(np.round(v, 4)): i for i, v in enumerate(V)}
+        uno = np.array([chiave[tuple(np.round(v, 4))] for v in V])
+        spigoli = Counter()
+        for a, b, c in uno[T]:
+            for e in ((a, b), (b, c), (c, a)):
+                if e[0] != e[1]:
+                    spigoli[tuple(sorted(e))] += 1
+        aperti = [e for e, k in spigoli.items() if k != 2]
+        self.assertEqual(aperti, [])
+        self.assertAlmostEqual(V[:, 1].min(), 0.0)
+        self.assertAlmostEqual(V[:, 0].max(), 210.0)
 
     def test_la_pendenza_della_base_dai_bordi_del_fianco(self):
         """`ripiani._pendenza`: il fronte della base pende quanto i bordi

@@ -15,7 +15,9 @@ in un unica pagina o più pdf». I pezzi:
 - la **base**: lo zoccolo davanti, col fronte inclinato e i fianchi che si
   incollano sui laterali, fuori; sul suo cielo poggia il ripiano piu' basso;
 - il **ripiano**: un vassoio con le sponde e la fascetta davanti, ripetuto
-  (`RIPIANI`) all'altezza delle asole dei laterali;
+  (`RIPIANI`) all'altezza delle asole dei laterali. E' un solido solo, di
+  cartoncino spesso con gli angoli tondi (`_vassoio_solido`), con le misure
+  e la grafica del PDF;
 - il **crowner**: dietro la cima della schiena, con le alette girate di 180
   gradi dietro il pannello, di rinforzo. Di un PDF di piu' pagine si prende la prima.
 
@@ -24,8 +26,7 @@ nella tavola comune accanto agli altri, con la sua grafica: da li' il
 montaggio e' quello del primo espositore (`espositore.Montaggio`). Quale
 pezzo e' quale lo dicono i pezzi del PDF (`_ruolo`), non il nome del file.
 Le alette nascoste (la linguetta in cima ai laterali, quelle sotto la
-schiena e la base) non si montano; il vassoio invece si monta tutto, un
-pezzo unico.
+schiena e la base) non si montano.
 """
 from __future__ import annotations
 
@@ -39,6 +40,12 @@ PX_MM = 2.0
 # ripiano sta fra le due alette dei laterali
 SPESSORE = 2.5
 RIPIANI = 4
+# il vassoio: cartoncino spesso, gli angoli tondi in pianta (raggio) e lo
+# spigolo del fondo smussato (dal proprietario: «Fai cartoncino spesso con
+# angoli smussati»)
+SPESSORE_VASSOIO = 4.0
+RAGGIO_VASSOIO = 10.0
+SMUSSO_VASSOIO = 4.0
 # un pannello piu' piccolo di cosi' (pixel) e' un ritaglio, non si monta
 MINIMO_PX = 200
 
@@ -132,17 +139,6 @@ def _vassoio(pz):
         for xa, xb in ((su.riquadro[0] + a[2], giu.riquadro[0] + b[2]),
                        (su.riquadro[0] + a[3], giu.riquadro[0] + b[3])):
             u.pieghe.append(np.array([(xa, ya), (xb, yb)], float))
-        # Le orecchie ai lati del fronte: sul PDF del caso il loro bordo in
-        # cima e quello di fianco non ci sono, c'e' solo quello obliquo di
-        # sotto. Si chiudono: in cima all'altezza del fronte, di fianco sul
-        # bordo del pezzo, fino al capo del taglio obliquo.
-        for xa, xr in ((su.riquadro[0] + a[2], r[0]), (su.riquadro[0] + a[3], r[2])):
-            capi = [q[1] for pl in u.tagli for q in np.asarray(pl, float)[[0, -1]]
-                    if abs(q[0] - xr) < 0.5 and ya + 1.0 < q[1] < yb]
-            if not capi or any(abs(q[1] - ya) < 1.0 and abs(q[0] - xr) < 0.5
-                               for pl in u.tagli for q in np.asarray(pl, float)):
-                continue
-            u.tagli.append(np.array([(xa, ya), (xr, ya), (xr, min(capi))], float))
     return u
 
 
@@ -162,6 +158,151 @@ def _pendenza(p, e0, e1):
             if fuori and np.hypot(dx, dy) > 100.0 and 0.1 < dy / max(dx, 1e-9) < 1.2:
                 angoli.append(np.arctan2(dy, dx))
     return float(np.median(angoli)) if angoli else 0.0
+
+
+def _sagoma(xa, xb, za, zb, R, passo=5.0, archi=10):
+    """Il giro del vassoio in pianta, un rettangolo con gli angoli tondi:
+    [(x, z, nx, nz, lato, arco)], dal davanti verso destra. `lato` 0 davanti,
+    1 destra, 2 dietro, 3 sinistra; `arco` l'angolo (None sui lati dritti)."""
+    giro = []
+
+    def dritto(P, Q, n, lato):
+        L = np.hypot(*(np.subtract(Q, P)))
+        for f in np.linspace(0.0, 1.0, max(2, int(np.ceil(L / passo)) + 1))[:-1]:
+            x, z = np.add(P, np.multiply(f, np.subtract(Q, P)))
+            giro.append((x, z, n[0], n[1], lato, None))
+
+    def tondo(C, a0, a1, lato):
+        for a in np.linspace(a0, a1, archi + 1)[:-1]:
+            n = (np.cos(a), np.sin(a))
+            giro.append((C[0] + R * n[0], C[1] + R * n[1], n[0], n[1], lato, a))
+
+    h = np.pi / 2
+    dritto((xa + R, zb), (xb - R, zb), (0, 1), 0)
+    tondo((xb - R, zb - R), h, 0.0, 0)
+    dritto((xb, zb - R), (xb, za + R), (1, 0), 1)
+    tondo((xb - R, za + R), 0.0, -h, 2)
+    dritto((xb - R, za), (xa + R, za), (0, -1), 2)
+    tondo((xa + R, za + R), -h, -2 * h, 2)
+    dritto((xa, za + R), (xa, zb - R), (-1, 0), 3)
+    tondo((xa + R, zb - R), -2 * h, -3 * h, 0)
+    return giro
+
+
+def _vassoio_solido(alto, mappa, Yk, xa, xb, za, zb, T=SPESSORE_VASSOIO,
+                    R=RAGGIO_VASSOIO, Rb=SMUSSO_VASSOIO, uv_dentro=(0.5, 0.5)):
+    """Il vassoio come un pezzo solo di cartoncino spesso `T`: il fondo a
+    `Yk`, le pareti fuori sul giro (`_sagoma`) e dentro a `T`, gli angoli
+    tondi di raggio `R`, lo spigolo del fondo smussato di raggio `Rb`.
+    `alto(lato, z)` e' l'altezza della parete; `mappa(lato, x, y, z)` porta
+    un punto della faccia di fuori nella texture (lato None: il fondo).
+    Torna (V, UV, T)."""
+    giro = _sagoma(xa, xb, za, zb, R)
+    # l'altezza: dove cambia di colpo (il fianco che scende e la sponda di
+    # dietro) il punto si raddoppia, e la testata chiude il gradino
+    righe = []
+    for k, (x, z, nx, nz, lato, a) in enumerate(giro):
+        h = alto(lato, z)
+        if righe and lato != righe[-1][4] and abs(h - righe[-1][6]) > 0.5:
+            righe.append((x, z, nx, nz, lato, a, righe[-1][6]))
+        righe.append((x, z, nx, nz, lato, a, max(h, T + 0.5)))
+    righe.append(righe[0])
+    if righe[-1][4] != righe[-2][4] and abs(righe[-1][6] - righe[-2][6]) > 0.5:
+        x, z, nx, nz, lato, a, _h = righe[-1]
+        righe.insert(-1, (x, z, nx, nz, lato, a, righe[-2][6]))
+    n = len(righe)
+    P = np.array([(r[0], r[1]) for r in righe])
+    N = np.array([(r[2], r[3]) for r in righe])
+    H = np.array([r[6] for r in righe])
+    # dove l'altezza cambia nello stesso punto, la colonna alta passa anche
+    # dall'altezza della bassa: le pareti e la testata si cuciono lati interi
+    Hm = H.copy()
+    for i in range(n - 1):
+        if np.hypot(*(P[i + 1] - P[i])) < 1e-6:
+            alta = i + 1 if H[i + 1] > H[i] else i
+            Hm[alta] = min(H[i], H[i + 1])
+    lati = [r[4] if r[5] is None else
+            (0 if abs(r[3]) >= abs(r[2]) and r[3] > 0 else
+             2 if abs(r[3]) >= abs(r[2]) else 1 if r[2] > 0 else 3) for r in righe]
+    Vs, UVs, Ts, base = [], [], [], 0
+
+    def nastro(colonne, uv, verso):
+        """Le colonne di punti (n x m) cucite in quadrilateri; `verso` la
+        direzione voluta delle normali, per triangolo."""
+        nonlocal base
+        C = np.asarray(colonne, float)
+        n_, m_ = C.shape[:2]
+        V = C.reshape(-1, 3)
+        idx = np.arange(n_ * m_).reshape(n_, m_)
+        a, b = idx[:-1, :-1].ravel(), idx[1:, :-1].ravel()
+        c, d = idx[1:, 1:].ravel(), idx[:-1, 1:].ravel()
+        tri = np.concatenate([np.stack([a, b, c], 1), np.stack([a, c, d], 1)])
+        nn = np.cross(V[tri[:, 1]] - V[tri[:, 0]], V[tri[:, 2]] - V[tri[:, 0]])
+        ok = np.linalg.norm(nn, axis=1) > 1e-9
+        dv = verso(V[tri].mean(1))
+        tri = np.where(((nn * dv).sum(1) < 0)[:, None], tri[:, ::-1], tri)[ok]
+        Vs.append(V)
+        UVs.append(np.asarray(uv, float).reshape(-1, 2))
+        Ts.append(tri + base)
+        base += len(V)
+
+    def tappo(anello, y, uv, su):
+        """Il fondo: il giro chiuso a ventaglio dal centro."""
+        nonlocal base
+        A = np.asarray(anello, float)
+        c = A.mean(0)
+        V = np.concatenate([[[c[0], y, c[1]]], np.stack([A[:, 0], np.full(len(A), y), A[:, 1]], 1)])
+        k = np.arange(1, len(A))
+        tri = np.stack([np.zeros(len(k), int), k, k + 1], 1)
+        nn = np.cross(V[tri[:, 1]] - V[tri[:, 0]], V[tri[:, 2]] - V[tri[:, 0]])
+        tri = np.where(((nn[:, 1] > 0) != su)[:, None], tri[:, ::-1], tri)
+        tri = tri[np.linalg.norm(nn, axis=1) > 1e-9]
+        Vs.append(V)
+        UVs.append(np.asarray(uv(V), float).reshape(-1, 2))
+        Ts.append(tri + base)
+        base += len(V)
+
+    # fuori: lo smusso del fondo e la parete
+    th = np.linspace(np.pi / 2, 0.0, 7)
+    col, uv = [], []
+    for i in range(n):
+        c3 = np.array([P[i, 0] - N[i, 0] * Rb, Yk + Rb, P[i, 1] - N[i, 1] * Rb])
+        pts = [c3 + np.array([N[i, 0] * np.cos(t_) * Rb, -np.sin(t_) * Rb, N[i, 1] * np.cos(t_) * Rb])
+               for t_ in th]
+        pts.append(np.array([P[i, 0], Yk + Hm[i], P[i, 1]]))
+        pts.append(np.array([P[i, 0], Yk + H[i], P[i, 1]]))
+        col.append(pts)
+        uv.append([mappa(None if t_ > np.pi / 4 else lati[i], *q)
+                   for t_, q in zip(list(th) + [0.0, 0.0], pts)])
+    centro = np.array([(xa + xb) / 2, Yk + 30.0, (za + zb) / 2])
+    nastro(col, uv, lambda X: X - centro)
+    # il fondo di fuori
+    anello = P - N * Rb
+    tappo(anello, Yk, lambda V: [mappa(None, *q) for q in V], su=False)
+    # dentro: le pareti e il fondo, senza stampa
+    Pi = P - N * T
+    col = [[np.array([Pi[i, 0], Yk + T, Pi[i, 1]]), np.array([Pi[i, 0], Yk + Hm[i], Pi[i, 1]]),
+            np.array([Pi[i, 0], Yk + H[i], Pi[i, 1]])] for i in range(n)]
+    nastro(col, np.tile(uv_dentro, (n * 3, 1)), lambda X: centro - X)
+    tappo(Pi, Yk + T, lambda V: np.tile(uv_dentro, (len(V), 1)), su=True)
+    # il bordo in cima, col colore della parete di fuori; dove l'altezza
+    # cambia di colpo, la testata del gradino guarda verso la parte bassa
+    for i in range(n - 1):
+        j = i + 1
+        o = [np.array([P[k, 0], Yk + H[k], P[k, 1]]) for k in (i, j)]
+        d = [np.array([Pi[k, 0], Yk + H[k], Pi[k, 1]]) for k in (i, j)]
+        if np.hypot(*(P[j] - P[i])) < 1e-6:
+            if abs(H[j] - H[i]) < 1e-6:
+                continue
+            alto_, basso = (j, i) if H[j] > H[i] else (i, j)
+            vicino = basso - 1 if basso < alto_ else basso + 1
+            vicino = min(max(vicino, 0), n - 1)
+            verso = np.array([P[vicino, 0] - P[basso, 0], 0.0, P[vicino, 1] - P[basso, 1]])
+        else:
+            verso = np.array([0.0, 1.0, 0.0])
+        uv = [[mappa(lati[k], *q) for q in (o[t_], d[t_])] for t_, k in enumerate((i, j))]
+        nastro([[o[0], d[0]], [o[1], d[1]]], uv, lambda X, v=verso: np.tile(v, (len(X), 1)))
+    return np.concatenate(Vs), np.concatenate(UVs), np.concatenate(Ts)
 
 
 def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None):
@@ -311,11 +452,10 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
         return None                             # gli spigoli, sottili
     stendi(bs, "base", regola_base)
 
-    # --- i ripiani: il vassoio, stampato fuori, un pezzo unico. Il piano, le
-    # sponde e il fronte col marchio; il risvolto del fronte si ripiega dentro. Sul PDF il
-    # risvolto e il resto sono due pezzi (i tagli non si chiudono) e i lati del
-    # fronte non hanno linee: si fa un pezzo solo, e i lati si chiudono con
-    # due pieghe fra i capi delle pieghe del risvolto e del piano.
+    # --- i ripiani: il vassoio, un solido solo di cartoncino spesso, con le
+    # misure e la grafica del PDF (`_vassoio_solido`). Sul PDF il risvolto e
+    # il resto sono due pezzi: uniti (`_vassoio`) danno le pieghe, cioe' le
+    # misure.
     rp = _vassoio(pezzi["ripiano"])
     vr = _pieghe(rp, "V", 100.0)
     hr = _pieghe(rp, "H", 100.0)
@@ -330,66 +470,44 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     # il ripiano piu' basso poggia sul cielo della base, se l'asola e' piu'
     # bassa del cielo (l'asola e' alta 35 mm: il vassoio ci sta lo stesso)
     quote[0] = max(quote[0], hz + t)
-    # le orecchie del fronte: le pieghe corte ai lati del fronte
-    orecchie = sorted(v for a_, v, s_, e_ in rp.pieghe_dritte(minimo=20.0)
-                      if a_ == "V" and e_ <= davanti + 1.0)
-    o0, o1 = (orecchie[0], orecchie[-1]) if orecchie else (r0, r1)
-    # gli angoli dei fianchi: il triangolo oltre la piega obliqua si ripiega
-    # di 180 gradi, dentro il fianco
-    oblique = {}
-    for pl in rp.pieghe:
-        P = np.array(rp.locale(*np.asarray(pl[0], float)))
-        Q = np.array(rp.locale(*np.asarray(pl[-1], float)))
-        if min(abs(Q - P)) >= 1.0:
-            oblique.setdefault(P[0] < rc, []).append((P, Q))
+    # le sponde: davanti la fascetta, dietro la sponda, ai fianchi la parete
+    # che scende verso il fondo (sul PDF il bordo di fuori del fianco finisce
+    # a `fine`, poi va giu' in obliquo fino alla piega di dietro)
+    sotto = rp.altezza
+    punti = np.array([rp.locale(*q) for pl in rp.tagli for q in np.asarray(pl, float)])
+    fianco = punti[(punti[:, 0] < r0 - 1.0) & (punti[:, 1] > davanti + 1.0) & (punti[:, 1] < dietro)]
+    hs = r0 - fianco[:, 0].min() if len(fianco) else sponda
+    bordo = fianco[np.abs(fianco[:, 0] - fianco[:, 0].min()) < 0.5] if len(fianco) else fianco
+    fine = bordo[:, 1].max() if len(bordo) else dietro
+    alte = {0: sponda, 2: sotto - dietro}
 
-    def specchio(lx, ly, sx):
-        """Il punto del triangolo ribaltato sulla piega obliqua."""
-        tratti = oblique.get(sx)
-        if not tratti:
-            return lx, ly
-        pts = np.array([q for pq in tratti for q in pq])
-        P, Q = pts[np.argmin(pts[:, 1])], pts[np.argmax(pts[:, 1])]
-        u = (Q - P) / np.linalg.norm(Q - P)
-        d = np.array([lx, ly]) - P
-        r_ = P + 2 * (d @ u) * u - d
-        return float(r_[0]), float(r_[1])
+    def alto(lato, z):
+        if lato in alte:
+            return alte[lato]
+        ly = davanti + (Zr - z)
+        if ly <= fine or dietro <= fine:
+            return hs
+        return hs * max(0.0, (dietro - ly) / (dietro - fine))
 
+    ox, oy = rp.riquadro[0], rp.riquadro[1]
     for k, Yk in enumerate(quote):
-        def regola_rip(px, py, r, Yk=Yk):
-            piccolo = (r[2] - r[0]) < 60 and (r[3] - r[1]) < 60
-            if py < risvolto:                   # il risvolto, dentro il fronte
-                return (lambda lx, ly: (lx - rc, Yk + sponda + t - (risvolto - ly), Zr - 2 * t),)
-            if py < cima_fronte and o0 < px < o1:
-                # la piega doppia in cima al fronte: il cielo della fascetta,
-                # dal fronte al risvolto
-                w = cima_fronte - risvolto
-                return (lambda lx, ly: (lx - rc, Yk + sponda + t,
-                                        Zr - 2 * t * (cima_fronte - ly) / w),)
-            if py < davanti:
-                if px < o0:                     # l'orecchia, girata fuori dal fianco
-                    return (lambda lx, ly: (r0 - rc - t, Yk + (davanti - ly), Zr - (o0 - lx)),)
-                if px > o1:
-                    return (lambda lx, ly: (r1 - rc + t, Yk + (davanti - ly), Zr - (lx - o1)),)
-                return (lambda lx, ly: (lx - rc, Yk + (davanti - ly), Zr),)    # il fronte
-            if r0 < px < r1:
-                if py > dietro:                 # la sponda di dietro
-                    return (lambda lx, ly: (lx - rc, Yk + (ly - dietro), Zr - fondo),)
-                return (lambda lx, ly: (lx - rc, Yk, Zr - (ly - davanti)),)    # il piano
-            if px < r0:
-                if piccolo:                     # l'angolo, ribaltato dentro il fianco
-                    def ang(lx, ly):
-                        mx, my = specchio(lx, ly, True)
-                        return (r0 - rc + 2 * t, Yk + (r0 - mx), Zr - (my - davanti))
-                    return (ang,)
-                return (lambda lx, ly: (r0 - rc, Yk + (r0 - lx), Zr - (ly - davanti)),)
-            if piccolo:
-                def ang(lx, ly):
-                    mx, my = specchio(lx, ly, False)
-                    return (r1 - rc - 2 * t, Yk + (mx - r1), Zr - (my - davanti))
-                return (ang,)
-            return (lambda lx, ly: (r1 - rc, Yk + (lx - r1), Zr - (ly - davanti)),)
-        stendi(rp, "ripiano_%d" % (k + 1), regola_rip)
+        def mappa(lato, x, y, z, Yk=Yk):
+            if lato is None:                    # il fondo
+                lx, ly = x + rc, davanti + (Zr - z)
+            elif lato == 0:                     # la fascetta col marchio
+                lx, ly = x + rc, davanti - (y - Yk)
+            elif lato == 2:                     # la sponda di dietro
+                lx, ly = x + rc, dietro + (y - Yk)
+            elif lato == 3:                     # il fianco sinistro
+                lx, ly = r0 - (y - Yk), davanti + (Zr - z)
+            else:                               # il fianco destro
+                lx, ly = r1 + (y - Yk), davanti + (Zr - z)
+            X, Y = G.a_pixel(lx + ox, ly + oy)
+            return (X / G.W, Y / G.H * mo.q)
+
+        V, UV, T = _vassoio_solido(alto, mappa, Yk, r0 - rc, r1 - rc, Zr - fondo, Zr,
+                                   uv_dentro=(0.5, mo.vI))
+        mo.solido("ripiano_%d" % (k + 1), V, UV, T)
 
     # --- il crowner: dietro la cima della schiena, il piede del pannello al
     # filo del corpo. Le alette sono girate di 180 gradi, di rinforzo (dal
