@@ -2802,8 +2802,8 @@ const FAMIGLIE = {
   espositore_pop: {nome: 'Espositore',
                    descr: 'Espositore per il punto vendita, da banco o da terra: la struttura '
                         + 'coi ripiani o i vani dove stanno i prodotti. Carica il PDF '
-                        + 'dell\u2019espositore.',
-                   slot: ['Il PDF dell\u2019espositore']},
+                        + 'dell\u2019espositore, o i PDF dei suoi pezzi tutti insieme.',
+                   slot: ['Il PDF dell\u2019espositore, o i PDF dei pezzi tutti insieme']},
 };
 // queste partono da sole appena c'e' il PDF: nessun'altra domanda prima
 const DA_SOLE = ['flowpack', 'pouch', 'vassoio', 'totem', 'espositore_pop'];
@@ -2826,6 +2826,8 @@ const soloFlowpack = () => document.querySelectorAll('#params .solo-flowpack');
 
 /** Che cosa va in ogni posto. */
 function nomiSlot(){
+  if (famiglia === 'espositore_pop' && slots.length > 1)
+    return slots.map((_, k) => 'Pezzo ' + (k + 1) + ' \u2014 il suo PDF');
   if (famiglia !== 'carton') return FAMIGLIE[famiglia].slot;
   if (carto === 'astuccio') return ['Il PDF dell’astuccio'];
   return slots.map((_, k) => 'Parte ' + (k + 1) + ' — il suo PDF');
@@ -2953,7 +2955,7 @@ function statoPasso(errore){
 function apriFile(k){
   slotAttivo = k;
   if (tipoSlot(k) === 'img'){ fileImgEl.click(); return; }
-  fileEl.multiple = famiglia === 'carton' && carto === 'scatola';
+  fileEl.multiple = (famiglia === 'carton' && carto === 'scatola') || famiglia === 'espositore_pop';
   fileEl.click();
 }
 
@@ -3004,6 +3006,21 @@ async function riceviFile(lista){
   if (inc && !chiusura){ statoPasso(true); return; }
   if (!slots.length){ statoPasso(true); return; }
   if (!backendUp){ setStatus(OFFLINE,'err'); return; }
+  // l'espositore arriva in un PDF o in un PDF per pezzo: tutti insieme, un
+  // posto per file. Un PDF solo su un espositore gia' a pezzi cambia quel
+  // pezzo, come negli altri posti
+  if (famiglia === 'espositore_pop' && files.every(isPdf)
+      && (files.length > 1 || slots.length <= 1)){
+    let tutti;
+    try{
+      tutti = await Promise.all(files.map(async f => ({name: f.name, buf: await f.arrayBuffer()})));
+    }catch(err){ setStatus(testoErrore(err), 'err'); return; }
+    slots = tutti;
+    disegnaPasso();
+    if (pronto()) return avanti();
+    statoPasso();
+    return;
+  }
   // ogni file nel posto del suo tipo (il PDF, o l'immagine del prodotto):
   // il primo nel posto scelto se e' del suo tipo, poi nei posti vuoti
   const vuoto = (t, da) => {
