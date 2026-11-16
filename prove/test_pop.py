@@ -516,6 +516,23 @@ class RipianiPop(unittest.TestCase):
         self.assertEqual(len(nuove), 2)
         self.assertEqual(u.riquadro, (0.0, 0.0, 420.0, 400.0))
 
+    def test_l_orecchia_del_fronte_si_chiude(self):
+        """`ripiani._vassoio`: dell'orecchia a fianco del fronte il PDF ha
+        solo il bordo obliquo di sotto; si chiude in cima e di fianco."""
+        import numpy as np
+        from pack3d.pop import fustella as F, ripiani as R
+        su = F.Pezzo((60.0, 0.0, 480.0, 63.0), tagli=[], pieghe=[
+            np.array([(60, 62.5), (480, 62.5)], float)])
+        giu = F.Pezzo((0.0, 100.0, 540.0, 400.0), tagli=[
+            np.array([(0, 103), (56, 117)], float), np.array([(540, 103), (484, 117)], float)],
+            pieghe=[np.array([(57, 119.5), (483, 119.5)], float),
+                    np.array([(57, 380), (483, 380)], float)])
+        u = R._vassoio([giu, su])
+        chiusi = [np.asarray(pl, float) for pl in u.tagli if len(pl) == 3]
+        self.assertEqual(len(chiusi), 2)
+        self.assertEqual(sorted(tuple(c[1]) for c in chiusi), [(0.0, 62.5), (540.0, 62.5)])
+        self.assertEqual(sorted(c[2][1] for c in chiusi), [103.0, 103.0])
+
     def test_la_pendenza_della_base_dai_bordi_del_fianco(self):
         """`ripiani._pendenza`: il fronte della base pende quanto i bordi
         lunghi del fianco (in cima e sul pavimento), non quanto la piega
