@@ -221,7 +221,13 @@ più PDF, uno per pezzo, è l'espositore da terra a ripiani:
   marchio; dentro resta senza stampa, e il risvolto del fronte si ripiega
   dentro. Sul PDF il risvolto e il resto sono due pezzi e i lati del fronte
   non hanno linee: si fa un pezzo solo, coi lati chiusi da due pieghe
-  (`_vassoio`);
+  (`_vassoio`). Dal proprietario: «il vassoio sembra bucato sugli spessori.
+  Deve essere un pezzo unico». Si monta tutto: la piega doppia in cima al
+  fronte è il cielo della fascetta, dal fronte al risvolto; le orecchie ai
+  lati del fronte (sul PDF manca il loro bordo in cima e di fianco, e si
+  chiude) girano indietro fuori dal fianco; il triangolo oltre la piega
+  obliqua del fianco si ribalta di 180 gradi dentro il fianco; le strisce
+  del piano davanti alle feritoie del risvolto sono piano;
 - **la base**: lo zoccolo davanti, col fronte inclinato. Dal proprietario,
   col render di riferimento: «Crowner è basamento sono montati male». Il
   fianco e la sua aletta oltre la piega obliqua sono un trapezio solo,
@@ -234,16 +240,24 @@ più PDF, uno per pezzo, è l'espositore da terra a ripiani:
   allo spigolo resta il triangolo del fianco. Il ripiano più basso poggia
   sul cielo quando l'asola è più bassa del cielo (sul caso 202 mm invece
   di 186: l'asola è alta 35 mm, il vassoio ci sta lo stesso);
+- **l'aletta in cima alla schiena**, con la feritoia: dal proprietario,
+  «anche la schiena ha la aletta che va dietro (quella superiore dove c'è
+  il crowner)». È girata di 180 gradi dietro la schiena, e fra le due resta
+  la tasca della linguetta del crowner;
 - **il crowner**: dietro la cima della schiena, il piede del pannello (dove
-  finiscono le pieghe doppie) al filo del corpo. Dal proprietario: «il
+  finiscono le pieghe doppie) al filo del corpo, il pannello nella tasca
+  fra la schiena e la sua aletta. Dal proprietario: «il
   crowner ha le alette girate di 180 gradi come rinforzo». La piega doppia
   è larga quanto il cartone: le alette si ripiegano piatte dietro il
-  pannello, e la striscia oltre la piega a tratti si ripiega ancora, piatta
-  dietro l'aletta. Da davanti si vede solo il pannello, come nel render del
+  pannello e abbracciano l'aletta della schiena, e la striscia oltre la
+  piega a tratti si ripiega ancora, piatta dietro l'aletta. Ogni strato ha
+  il suo spessore: pannello, aletta della schiena, alette del crowner,
+  strisce («Il crowner ha anche delle intersezioni sui lati della grafica»:
+  le alette stavano nello spessore del pannello). Da davanti si vede solo il pannello, come nel render del
   proprietario; la linguetta scende dietro la schiena;
 - **un contorno aperto** (il davanti del ripiano è una cordonatura, gli
   angoli hanno i tagli aperti) si chiude con le pieghe disegnate, solo
   quando dai soli tagli il cartone non c'è (`Griglia.pannelli`,
   `PIENO_MIN`): il primo espositore e il totem escono uguali al byte;
 - **le alette nascoste** (la linguetta in cima ai laterali, quelle sotto la
-  schiena e la base, gli angoli dei ripiani) non si montano.
+  schiena e la base) non si montano.

@@ -7,8 +7,8 @@ espositore è composto da più pdf. Può capitare che un espositore possa essere
 in un unica pagina o più pdf». I pezzi:
 
 - la **schiena**: il fondo e, ai lati, una striscia e un'ala che fanno il
-  fianco interno, con le asole dei ripiani; in cima il cappello, con la
-  feritoia del crowner;
+  fianco interno, con le asole dei ripiani; in cima l'aletta con la
+  feritoia del crowner, girata di 180 gradi dietro;
 - i **laterali**: due pezzi uguali e specchiati. La parte stampata e' il
   fianco di fuori; la piega doppia e' lo spigolo davanti, e l'aletta con le
   asole torna dentro, contro l'ala della schiena;
@@ -24,7 +24,8 @@ nella tavola comune accanto agli altri, con la sua grafica: da li' il
 montaggio e' quello del primo espositore (`espositore.Montaggio`). Quale
 pezzo e' quale lo dicono i pezzi del PDF (`_ruolo`), non il nome del file.
 Le alette nascoste (la linguetta in cima ai laterali, quelle sotto la
-schiena e la base, gli angoli dei ripiani) non si montano.
+schiena e la base) non si montano; il vassoio invece si monta tutto, un
+pezzo unico.
 """
 from __future__ import annotations
 
@@ -131,6 +132,17 @@ def _vassoio(pz):
         for xa, xb in ((su.riquadro[0] + a[2], giu.riquadro[0] + b[2]),
                        (su.riquadro[0] + a[3], giu.riquadro[0] + b[3])):
             u.pieghe.append(np.array([(xa, ya), (xb, yb)], float))
+        # Le orecchie ai lati del fronte: sul PDF del caso il loro bordo in
+        # cima e quello di fianco non ci sono, c'e' solo quello obliquo di
+        # sotto. Si chiudono: in cima all'altezza del fronte, di fianco sul
+        # bordo del pezzo, fino al capo del taglio obliquo.
+        for xa, xr in ((su.riquadro[0] + a[2], r[0]), (su.riquadro[0] + a[3], r[2])):
+            capi = [q[1] for pl in u.tagli for q in np.asarray(pl, float)[[0, -1]]
+                    if abs(q[0] - xr) < 0.5 and ya + 1.0 < q[1] < yb]
+            if not capi or any(abs(q[1] - ya) < 1.0 and abs(q[0] - xr) < 0.5
+                               for pl in u.tagli for q in np.asarray(pl, float)):
+                continue
+            u.tagli.append(np.array([(xa, ya), (xr, ya), (xr, min(capi))], float))
     return u
 
 
@@ -213,8 +225,11 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     def regola_schiena(px, py, r):
         if py > piede:
             return None                         # le alette sotto
-        if py < cima:                           # il cappello, piegato in avanti
-            return (lambda lx, ly: (lx - cx, Hs, cima - ly),)
+        if py < cima:
+            # l'aletta in cima, con la feritoia del crowner: girata di 180
+            # gradi dietro la schiena. Fra lei e la schiena resta la tasca
+            # dove scende la linguetta del crowner
+            return (lambda lx, ly: (lx - cx, Hs - (cima - ly), -3 * t),)
         if px < b0:                             # il fianco di sinistra
             return (lambda lx, ly: (-Xw, Hs - (ly - cima), b0 - lx),)
         if px > b1:
@@ -296,8 +311,8 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
         return None                             # gli spigoli, sottili
     stendi(bs, "base", regola_base)
 
-    # --- i ripiani: il vassoio, stampato fuori. Il piano, le sponde e il
-    # fronte col marchio; il risvolto del fronte si ripiega dentro. Sul PDF il
+    # --- i ripiani: il vassoio, stampato fuori, un pezzo unico. Il piano, le
+    # sponde e il fronte col marchio; il risvolto del fronte si ripiega dentro. Sul PDF il
     # risvolto e il resto sono due pezzi (i tagli non si chiudono) e i lati del
     # fronte non hanno linee: si fa un pezzo solo, e i lati si chiudono con
     # due pieghe fra i capi delle pieghe del risvolto e del piano.
@@ -315,22 +330,64 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
     # il ripiano piu' basso poggia sul cielo della base, se l'asola e' piu'
     # bassa del cielo (l'asola e' alta 35 mm: il vassoio ci sta lo stesso)
     quote[0] = max(quote[0], hz + t)
+    # le orecchie del fronte: le pieghe corte ai lati del fronte
+    orecchie = sorted(v for a_, v, s_, e_ in rp.pieghe_dritte(minimo=20.0)
+                      if a_ == "V" and e_ <= davanti + 1.0)
+    o0, o1 = (orecchie[0], orecchie[-1]) if orecchie else (r0, r1)
+    # gli angoli dei fianchi: il triangolo oltre la piega obliqua si ripiega
+    # di 180 gradi, dentro il fianco
+    oblique = {}
+    for pl in rp.pieghe:
+        P = np.array(rp.locale(*np.asarray(pl[0], float)))
+        Q = np.array(rp.locale(*np.asarray(pl[-1], float)))
+        if min(abs(Q - P)) >= 1.0:
+            oblique.setdefault(P[0] < rc, []).append((P, Q))
+
+    def specchio(lx, ly, sx):
+        """Il punto del triangolo ribaltato sulla piega obliqua."""
+        tratti = oblique.get(sx)
+        if not tratti:
+            return lx, ly
+        pts = np.array([q for pq in tratti for q in pq])
+        P, Q = pts[np.argmin(pts[:, 1])], pts[np.argmax(pts[:, 1])]
+        u = (Q - P) / np.linalg.norm(Q - P)
+        d = np.array([lx, ly]) - P
+        r_ = P + 2 * (d @ u) * u - d
+        return float(r_[0]), float(r_[1])
+
     for k, Yk in enumerate(quote):
         def regola_rip(px, py, r, Yk=Yk):
-            if (r[2] - r[0]) < 60 and (r[3] - r[1]) < 60:
-                return None                     # gli angoli
+            piccolo = (r[2] - r[0]) < 60 and (r[3] - r[1]) < 60
             if py < risvolto:                   # il risvolto, dentro il fronte
                 return (lambda lx, ly: (lx - rc, Yk + sponda + t - (risvolto - ly), Zr - 2 * t),)
-            if py < cima_fronte:
-                return None                     # la piega doppia in cima al fronte
-            if py < davanti:                    # il fronte, col marchio
-                return (lambda lx, ly: (lx - rc, Yk + (davanti - ly), Zr),)
+            if py < cima_fronte and o0 < px < o1:
+                # la piega doppia in cima al fronte: il cielo della fascetta,
+                # dal fronte al risvolto
+                w = cima_fronte - risvolto
+                return (lambda lx, ly: (lx - rc, Yk + sponda + t,
+                                        Zr - 2 * t * (cima_fronte - ly) / w),)
+            if py < davanti:
+                if px < o0:                     # l'orecchia, girata fuori dal fianco
+                    return (lambda lx, ly: (r0 - rc - t, Yk + (davanti - ly), Zr - (o0 - lx)),)
+                if px > o1:
+                    return (lambda lx, ly: (r1 - rc + t, Yk + (davanti - ly), Zr - (lx - o1)),)
+                return (lambda lx, ly: (lx - rc, Yk + (davanti - ly), Zr),)    # il fronte
             if r0 < px < r1:
                 if py > dietro:                 # la sponda di dietro
                     return (lambda lx, ly: (lx - rc, Yk + (ly - dietro), Zr - fondo),)
-                return (lambda lx, ly: (lx - rc, Yk, Zr - (ly - davanti)),)
+                return (lambda lx, ly: (lx - rc, Yk, Zr - (ly - davanti)),)    # il piano
             if px < r0:
+                if piccolo:                     # l'angolo, ribaltato dentro il fianco
+                    def ang(lx, ly):
+                        mx, my = specchio(lx, ly, True)
+                        return (r0 - rc + 2 * t, Yk + (r0 - mx), Zr - (my - davanti))
+                    return (ang,)
                 return (lambda lx, ly: (r0 - rc, Yk + (r0 - lx), Zr - (ly - davanti)),)
+            if piccolo:
+                def ang(lx, ly):
+                    mx, my = specchio(lx, ly, False)
+                    return (r1 - rc - 2 * t, Yk + (mx - r1), Zr - (my - davanti))
+                return (ang,)
             return (lambda lx, ly: (r1 - rc, Yk + (lx - r1), Zr - (ly - davanti)),)
         stendi(rp, "ripiano_%d" % (k + 1), regola_rip)
 
@@ -363,13 +420,13 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
         if i0 < px < i1:
             return (lambda lx, ly: (lx - ccx, Y(ly), Zc),)
         if g0 < px < m0:
-            return (lambda lx, ly: (-xc + (m0 - lx), Y(ly), Zc - t),)
+            return (lambda lx, ly: (-xc + (m0 - lx), Y(ly), Zc - 3 * t),)
         if px < g0:
-            return (lambda lx, ly: (-xc + fl - (g0 - lx), Y(ly), Zc - 2 * t),)
+            return (lambda lx, ly: (-xc + fl - (g0 - lx), Y(ly), Zc - 3 * t),)
         if m1 < px < g1:
-            return (lambda lx, ly: (xc - (lx - m1), Y(ly), Zc - t),)
+            return (lambda lx, ly: (xc - (lx - m1), Y(ly), Zc - 3 * t),)
         if px > g1:
-            return (lambda lx, ly: (xc - fl + (lx - g1), Y(ly), Zc - 2 * t),)
+            return (lambda lx, ly: (xc - fl + (lx - g1), Y(ly), Zc - 3 * t),)
         return None                             # le pieghe doppie, sottili
     stendi(cw, "crowner", regola_crowner)
 
