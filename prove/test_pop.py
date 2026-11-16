@@ -70,9 +70,7 @@ class FinestraPop(unittest.TestCase):
         self.assertIn("espositore_pop", comune.KIND_NOTI)
         self.assertEqual(comune.normalizza_kind("espositore_pop"), "espositore_pop")
         self.assertIn("espositore (materiale POP", comune.dichiarazione("espositore_pop", 1))
-        with self.assertRaises(ValueError) as e:
-            pop.analisi(["a.pdf", "b.pdf"], "espositore_pop")
-        self.assertTrue(str(e.exception).startswith("espositore: carica un PDF solo"))
+        # piu' PDF sono l'espositore a pezzi (`RipianiPop`)
         self.assertIn("espositore_pop", pop.COSTRUZIONI)
         self.assertEqual(pop.sezione_glam("espositore_pop"), "pop")
         # per i pack «espositore» resta il vassoio
@@ -457,3 +455,75 @@ class TotemPop(unittest.TestCase):
                 self.assertTrue(np.array_equal(np.asarray(pagina.senza(G, [])), intera))
             finally:
                 pagina.chiudi()
+
+
+class RipianiPop(unittest.TestCase):
+    """L'espositore a ripiani in piu' PDF (`pack3d.pop.ripiani`)."""
+
+    @staticmethod
+    def _pezzo(w, h, tagli=(), pieghe=()):
+        import numpy as np
+        from pack3d.pop import fustella as F
+        bordo = np.array([(0, 0), (w, 0), (w, h), (0, h), (0, 0)], float)
+        return F.Pezzo((0.0, 0.0, float(w), float(h)),
+                       tagli=[bordo] + [np.asarray(a, float) for a in tagli],
+                       pieghe=[np.asarray(a, float) for a in pieghe])
+
+    def test_che_pezzo_e(self):
+        from pack3d.pop import ripiani as R
+        P = self._pezzo
+        self.assertEqual(R._ruolo([P(940, 1380)]), "schiena")
+        self.assertEqual(R._ruolo([P(1100, 390)]), "base")
+        self.assertEqual(R._ruolo([P(650, 420)]), "crowner")
+        self.assertEqual(R._ruolo([P(490, 1320), P(490, 1320)]), "laterali")
+        self.assertEqual(R._ruolo([P(530, 360), P(420, 60)]), "ripiano")
+        with self.assertRaises(ValueError):
+            R._ruolo([P(10, 10)] * 3)
+
+    def test_l_asola_a_tratti_e_una(self):
+        """Un'asola disegnata in quattro tratti separati conta una volta."""
+        from pack3d.pop import ripiani as R
+        asola = [[(50, 100), (150, 100)], [(150, 100), (150, 135)],
+                 [(150, 135), (50, 135)], [(50, 135), (50, 100)]]
+        chiusa = [[(50, 300), (150, 300), (150, 335), (50, 335), (50, 300)]]
+        p = self._pezzo(220, 600, tagli=asola + chiusa)
+        self.assertEqual(R._asole(p, 0.0, 220.0), [135.0, 335.0])
+
+    def test_il_contorno_aperto_si_chiude_con_le_pieghe(self):
+        """`Griglia.pannelli`: un pezzo il cui bordo davanti e' una piega, coi
+        tagli aperti, ha i suoi pannelli lo stesso."""
+        import numpy as np
+        from pack3d.pop import fustella as F
+        tagli = [np.array([(0, 0), (0, 100), (200, 100), (200, 0)], float)]
+        pieghe = [np.array([(0, 0), (200, 0)], float), np.array([(0, 60), (200, 60)], float)]
+        p = F.Pezzo((0.0, 0.0, 200.0, 100.0), tagli=tagli, pieghe=pieghe)
+        G = F.Griglia((-5.0, -5.0, 205.0, 105.0), 1.0)
+        aree = sorted(int(m.sum()) for m, _ in G.pannelli(p))
+        self.assertEqual(len(aree), 2)
+        self.assertGreater(aree[0], 0.7 * 200 * 40)
+
+    def test_il_vassoio_in_un_pezzo(self):
+        """`ripiani._vassoio`: il risvolto e il resto del ripiano, due pezzi
+        sul PDF, diventano uno, coi lati del fronte chiusi da due pieghe."""
+        import numpy as np
+        from pack3d.pop import fustella as F, ripiani as R
+        su = F.Pezzo((10.0, 0.0, 410.0, 60.0), tagli=[], pieghe=[
+            np.array([(10, 57), (410, 57)], float)])
+        giu = F.Pezzo((0.0, 100.0, 420.0, 400.0), tagli=[], pieghe=[
+            np.array([(10, 120), (410, 120)], float), np.array([(10, 380), (410, 380)], float)])
+        u = R._vassoio([giu, su])
+        nuove = [pl for pl in u.pieghe if abs(pl[0][1] - 57) < 0.1 and abs(pl[1][1] - 120) < 0.1]
+        self.assertEqual(len(nuove), 2)
+        self.assertEqual(u.riquadro, (0.0, 0.0, 420.0, 400.0))
+
+    def test_piu_pdf_che_non_fanno_un_espositore(self):
+        """Due PDF dello stesso pezzo non sono un espositore: si ferma e lo dice."""
+        import tempfile
+        from pack3d import pop
+        with tempfile.TemporaryDirectory() as d:
+            a, b = os.path.join(d, "a.pdf"), os.path.join(d, "b.pdf")
+            _pdf_totem(a, (200, 30, 60))
+            _pdf_totem(b, (30, 60, 200))
+            with self.assertRaises(ValueError) as e:
+                pop.analisi([a, b], "espositore_pop")
+        self.assertIn("espositore", str(e.exception))

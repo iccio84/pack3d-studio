@@ -191,3 +191,47 @@ schienale la lettura si ferma, e il PDF va in coda.
   un terzo ripiano; il frontalino sta sul davanti dei ripiani; i piedi
   della testata entrano nei fianchi e non si vedono; i lati della testata
   sono piatti, con la prefustella incisa.
+
+### L'espositore in più PDF: a ripiani (`pack3d/pop/ripiani.py`)
+
+Dal proprietario (16 novembre 2026): «Questo espositore è composto da più
+pdf. Può capitare che un espositore possa essere in un unica pagina o più
+pdf». La pagina prende tutti i PDF insieme, nel posto dell'espositore, e lo
+Space li riceve tutti. Con un PDF solo l'espositore è quello di sopra; con
+più PDF, uno per pezzo, è l'espositore da terra a ripiani:
+
+- **quale pezzo è quale** lo dicono i pezzi del PDF, non il nome del file
+  (`_ruolo`): due pezzi uguali sono i laterali, due diversi il ripiano (il
+  vassoio e il suo risvolto), uno più alto che largo la schiena, uno largo
+  più del doppio dell'altezza la base, l'altro il crowner. Di un PDF di più
+  pagine si monta la prima: il crowner del caso ha tre grafiche, ed è stata
+  scelta del proprietario («Solo la prima pagina»);
+- **la tavola comune**: ogni PDF si legge da solo e si mette accanto agli
+  altri con la sua grafica, in quadricromia; da lì il montaggio è quello
+  del primo espositore (`espositore.Montaggio`);
+- **il fianco**: l'ala della schiena (la striscia e l'ala, il fianco
+  interno) sta fra la parte stampata del laterale, fuori, e la sua aletta
+  con le asole, dentro; la piega doppia del laterale è lo spigolo davanti.
+  La parte stampata a destra della piega è il fianco destro, a sinistra il
+  sinistro: così le bottiglie si leggono dritte da fuori;
+- **i ripiani**: tanti quanti ne dice il proprietario («si i ripiani sono 4»),
+  alle asole dell'aletta dei laterali: il piano poggia sul fondo
+  dell'asola. Un'asola disegnata a tratti separati conta una volta (`_asole`).
+  Il vassoio è stampato fuori: sotto il piano, sulle sponde e sul fronte col
+  marchio; dentro resta senza stampa, e il risvolto del fronte si ripiega
+  dentro. Sul PDF il risvolto e il resto sono due pezzi e i lati del fronte
+  non hanno linee: si fa un pezzo solo, coi lati chiusi da due pieghe
+  (`_vassoio`);
+- **la base**: lo zoccolo davanti, col fronte inclinato quanto la piega
+  obliqua del fianco (`_inclinazione`). Quella piega è dove l'aletta torna
+  indietro e si incolla sul laterale (il tratteggio in basso sul laterale):
+  cade sullo spigolo davanti, e il ripiano più basso sta dietro il cielo
+  dello zoccolo, senza intagli;
+- **il crowner**: in piedi sul cappello della schiena, la linguetta nella
+  feritoia, i fianchi piegati in avanti sul cappello;
+- **un contorno aperto** (il davanti del ripiano è una cordonatura, gli
+  angoli hanno i tagli aperti) si chiude con le pieghe disegnate, solo
+  quando dai soli tagli il cartone non c'è (`Griglia.pannelli`,
+  `PIENO_MIN`): il primo espositore e il totem escono uguali al byte;
+- **le alette nascoste** (la linguetta in cima ai laterali, quelle sotto la
+  schiena e la base, gli angoli dei ripiani) non si montano.
