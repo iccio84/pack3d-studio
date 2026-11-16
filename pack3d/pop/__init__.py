@@ -16,8 +16,9 @@ questo pacchetto e non lo nominano: il registro delle famiglie
 entra qui, nella pagina (la sua voce) e in regole/pop.md.
 
 Ci sono il totem e l'espositore, e lo Space li costruisce: `analisi` legge
-il PDF (o i due PDF del totem, fronte e retro) e `COSTRUZIONI` porta le loro
-costruzioni, `espositore.monta` e `totem.monta`, nel registro delle
+il PDF (o i due PDF del totem, fronte e retro; o i PDF dei pezzi
+dell'espositore, uno per pezzo) e `COSTRUZIONI` porta le loro costruzioni,
+`espositore.monta`, `ripiani.monta` e `totem.monta`, nel registro delle
 famiglie. Un PDF che non si legge si ferma col motivo, e il caso va in coda
 col PDF (`server.caso_fermo`, CODA.md).
 """
@@ -43,9 +44,13 @@ def e_pop(kind):
 
 def _analisi_espositore(pdfs):
     from . import espositore as E, fustella as F
-    if len(pdfs) != 1:
-        raise ValueError("espositore: carica un PDF solo, la fustella "
-                         "dell'espositore")
+    if len(pdfs) > 1:
+        # un PDF per pezzo: l'espositore a ripiani (`ripiani`)
+        from . import ripiani
+        letti = ripiani.leggi(pdfs)
+        return dict(kind="espositore_pop", title="Espositore POP",
+                    meta=["espositore POP a ripiani da %d PDF: %s"
+                          % (len(pdfs), ", ".join(sorted(letti)))])
     pdf = pdfs[0]
     tagli, pieghe = F.tratti(pdf, [])
     pezzi = F.pezzi(tagli, pieghe)
@@ -123,7 +128,11 @@ def _costruisci_espositore(r, info):
     from . import espositore
 
     def costruisci(lastre, uscita):
-        avvisi, _m = espositore.monta(r.pdfs[0], uscita)
+        if len(r.pdfs) > 1:
+            from . import ripiani
+            avvisi, _m = ripiani.monta(r.pdfs, uscita)
+        else:
+            avvisi, _m = espositore.monta(r.pdfs[0], uscita)
         return list(avvisi)
     return costruisci
 

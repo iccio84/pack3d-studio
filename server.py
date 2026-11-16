@@ -969,7 +969,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(400, "Totem: carica due PDF, il pannello "
                                            "del fronte e quello del retro")
                 if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento",
-                                                  "totem"):
+                                                  "totem", "espositore_pop"):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")

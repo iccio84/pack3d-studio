@@ -235,6 +235,12 @@ def pezzi(tagli, pieghe, tolleranza=1.0):
     return fuori
 
 
+# Un pezzo il cui cartone, letto dai soli tagli, e' meno di questa frazione
+# del suo riquadro ha il contorno aperto: fanno da bordo anche le pieghe
+# (`Griglia.pannelli`)
+PIENO_MIN = 0.15
+
+
 class Griglia:
     """La pagina in pixel (`px_mm` pixel per mm) sul riquadro `zona` (mm),
     coi tagli e le pieghe disegnati: la stessa griglia della texture."""
@@ -322,6 +328,17 @@ class Griglia:
         lab, n = ndimage.label(~tagli)
         bordo = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])))
         pieno = ~np.isin(lab, list(bordo))          # col contorno e i tagli dentro
+        if pieno.sum() < PIENO_MIN * pieno.size and pezzo.pieghe:
+            # Il contorno ha dei buchi dove il bordo e' una piega: sul ripiano
+            # dell'espositore a piu' PDF il davanti e' una cordonatura, e agli
+            # angoli i tagli restano aperti. Dal bordo il fuori entrava nel
+            # cartone, e del pezzo restavano solo i fori. Allora fanno da
+            # bordo anche le pieghe disegnate: solo in questo caso, i pezzi
+            # chiusi dai tagli non cambiano.
+            segni, _o = self._disegna(pezzo.pieghe, pezzo.riquadro)
+            lab, n = ndimage.label(~(tagli | segni))
+            bordo = set(np.unique(np.concatenate([lab[0], lab[-1], lab[:, 0], lab[:, -1]])))
+            pieno = ~np.isin(lab, list(bordo))
         dentro = ~tagli & pieno
         pieghe = self._linee_di_piega(pezzo, pieno, (X0, Y0))
         pezzo.linee_piega = list(self._ultime_pieghe)
