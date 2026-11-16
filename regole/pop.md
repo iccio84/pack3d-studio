@@ -266,3 +266,55 @@ più PDF, uno per pezzo, è l'espositore da terra a ripiani:
   `PIENO_MIN`): il primo espositore e il totem escono uguali al byte;
 - **le alette nascoste** (la linguetta in cima ai laterali, quelle sotto la
   schiena e la base) non si montano.
+
+### L'espositore a scaffale, tutti i pezzi su una pagina (`pack3d/pop/scaffale.py`)
+
+Dal proprietario (16 novembre 2026), con un PDF solo: «Genera questo
+espositore». Nessun render di riferimento («No, procedi tu»): i pezzi
+visibili si montano come si leggono dal PDF, e chi guarda il modello lo
+corregge. Il PDF ha tutti i pezzi su una pagina, ognuno col suo nome e la sua
+quantità, e un disegno tecnico diverso dagli altri espositori:
+
+- **i tagli neri e le pieghe rosse**, linee continue (`tratti`; il colore in
+  grigio, RGB o CMYK, `_tipo`). Una piega può essere disegnata a «L», due
+  lati di un rettangolo in un tratto solo: si spezza in tratti dritti
+  (`_dritti`). Un PDF col disegno tecnico degli altri espositori (le pieghe
+  tratteggiate del colore dei tagli) resta all'espositore di sopra, anche se
+  ha linee nere e rosse (`e_scaffale`);
+- **la scala**: la pagina del caso è 2,97 x 2,10 m, e ogni pezzo misura
+  0,5015 volte la sua scritta (le scritte sono curve, non testo: non si
+  leggono). Una pagina più grande di due A0 è in scala 1:2 (`scala`): le
+  misure vengono a meno di 5 mm dalle scritte;
+- **il tratteggio delle zone incollate** (arancio, verde acqua) non è stampa.
+  Sta negli stessi gruppi della grafica: togliendo i gruppi spariva anche il
+  marchio sulla fascetta dei ripiani. Si fa trasparente il tratto, in
+  memoria, insieme ai tagli e alle pieghe (`_Resa`); riscritta, la pagina
+  usciva nera.
+
+**Quale pezzo è quale** lo dice la forma (`riconosci`), non il nome: i
+fianchi sono i due pezzi grandi uguali con le pieghe lunghe; la schiena è
+alta quanto loro e stretta; il ripiano è il pezzo stampato con più pieghe
+orizzontali lunghe; il dekl è stampato, largo poco più della schiena e
+basso; il topper è stampato, senza pieghe e senza tratteggio (un pezzo tutto
+tratteggiato è un rinforzo, `_tratteggiati`). Il montaggio:
+
+- **il fianco** è a doppia parete: la faccia stampata fuori, la piega doppia
+  davanti (10 mm: lo spessore del fianco), la parete di dentro con le asole
+  dei ripiani; dietro, oltre l'ultima piega, la striscia che gira sul retro
+  della schiena, dove si avvita. La faccia stampata a destra della piega
+  doppia è il fianco destro;
+- **la schiena** sta dietro, alta quanto i fianchi (1434 mm sul caso);
+- **i ripiani**: uno per asola dei fianchi (5 sul caso, a 303 mm l'uno
+  dall'altro). L'asola è alta 11 mm, quanto il ripiano: il fondo stampato
+  sotto, il pannello di dietro girato di 180 gradi sopra il fondo e
+  stampato sopra (in mezzo i rinforzi, il tratteggio), la fascetta col
+  marchio che sale davanti. Le alette ai lati stanno nelle asole e non si
+  vedono;
+- **il dekl** chiude lo zoccolo sotto il ripiano più basso: le orecchie
+  contro i fianchi (i fori combaciano con quelli dei fianchi, dove si
+  avvita), il bordo in cima sotto il ripiano;
+- **il topper** sta dietro la schiena e sporge sopra; 100 mm, il fondo senza
+  marchio, stanno dietro la schiena;
+- **non si montano** i pezzi dentro le pareti (i rinforzi dei fianchi e dei
+  ripiani, le croci dello zoccolo), i tappi, i portaprezzi e la scatola di
+  trasporto.
