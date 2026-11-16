@@ -222,13 +222,24 @@ più PDF, uno per pezzo, è l'espositore da terra a ripiani:
   dentro. Sul PDF il risvolto e il resto sono due pezzi e i lati del fronte
   non hanno linee: si fa un pezzo solo, coi lati chiusi da due pieghe
   (`_vassoio`);
-- **la base**: lo zoccolo davanti, col fronte inclinato quanto la piega
-  obliqua del fianco (`_inclinazione`). Quella piega è dove l'aletta torna
-  indietro e si incolla sul laterale (il tratteggio in basso sul laterale):
-  cade sullo spigolo davanti, e il ripiano più basso sta dietro il cielo
-  dello zoccolo, senza intagli;
-- **il crowner**: in piedi sul cappello della schiena, la linguetta nella
-  feritoia, i fianchi piegati in avanti sul cappello;
+- **la base**: lo zoccolo davanti, col fronte inclinato. Dal proprietario,
+  col render di riferimento: «Crowner è basamento sono montati male». Il
+  fianco e la sua aletta oltre la piega obliqua sono un trapezio solo,
+  piatto sulla faccia stampata del laterale (il tratteggio in basso sul
+  laterale è la colla): montato, il bordo in cima e quello sul pavimento
+  stanno in orizzontale e il bordo di fondo in verticale, contro la
+  schiena. Per questo il fronte pende quanto quei bordi sul PDF (25 gradi
+  sul caso, `_pendenza`), non quanto la piega obliqua, che è più ripida.
+  Il cielo dello zoccolo sta davanti allo spigolo del laterale; davanti
+  allo spigolo resta il triangolo del fianco. Il ripiano più basso poggia
+  sul cielo quando l'asola è più bassa del cielo (sul caso 202 mm invece
+  di 186: l'asola è alta 35 mm, il vassoio ci sta lo stesso);
+- **il crowner**: dietro la cima della schiena, il piede del pannello (dove
+  finiscono le pieghe doppie) al filo del corpo. La piega doppia è larga
+  quanto il cartone: i fianchi si ripiegano piatti dietro il pannello, e la
+  striscia oltre la piega a tratti torna indietro dritta, a costola. Da
+  davanti si vede solo il pannello, come nel render del proprietario; la
+  linguetta scende dietro la schiena;
 - **un contorno aperto** (il davanti del ripiano è una cordonatura, gli
   angoli hanno i tagli aperti) si chiude con le pieghe disegnate, solo
   quando dai soli tagli il cartone non c'è (`Griglia.pannelli`,
