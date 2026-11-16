@@ -565,3 +565,82 @@ class RipianiPop(unittest.TestCase):
             with self.assertRaises(ValueError) as e:
                 pop.analisi([a, b], "espositore_pop")
         self.assertIn("espositore", str(e.exception))
+
+
+def _pdf_scaffale(percorso, lato_mm):
+    """Un PDF finto di espositore a scaffale: una pagina `lato_mm` x 600 mm
+    con un pannello rosso pieno, il suo taglio nero, una piega rossa e il
+    tratteggio arancio di una zona incollata sopra il pannello."""
+    import pypdfium2 as pdfium
+    import pypdfium2.raw as R
+    PT = 72 / 25.4
+    W, H = float(lato_mm), 600.0
+    doc = pdfium.PdfDocument.new()
+    pg = doc.new_page(W * PT, H * PT)
+
+    def tracciato(punti, riempi=None, tratto=None, chiudi=True):
+        h = R.FPDFPageObj_CreateNewPath(punti[0][0] * PT, (H - punti[0][1]) * PT)
+        for x, y in punti[1:]:
+            R.FPDFPath_LineTo(h, x * PT, (H - y) * PT)
+        if chiudi:
+            R.FPDFPath_Close(h)
+        if riempi:
+            R.FPDFPageObj_SetFillColor(h, *riempi, 255)
+            R.FPDFPath_SetDrawMode(h, R.FPDF_FILLMODE_ALTERNATE, False)
+        else:
+            R.FPDFPageObj_SetStrokeColor(h, *tratto, 255)
+            R.FPDFPageObj_SetStrokeWidth(h, 0.0)
+            R.FPDFPath_SetDrawMode(h, 0, True)
+        R.FPDFPage_InsertObject(pg.raw, h)
+    quadro = [(100, 100), (300, 100), (300, 400), (100, 400)]
+    tracciato(quadro, riempi=(230, 30, 40))
+    tracciato(quadro, tratto=(35, 31, 32))                         # il taglio
+    tracciato([(200, 100), (200, 400)], tratto=(238, 29, 35), chiudi=False)   # la piega
+    for k in range(0, 300, 10):                                      # il tratteggio
+        tracciato([(100, 100 + k), (300, 100 + k)], tratto=(245, 127, 33), chiudi=False)
+    R.FPDFPage_GenerateContent(pg.raw)
+    doc.save(percorso)
+
+
+class ScaffalePop(unittest.TestCase):
+    """L'espositore a scaffale, tutti i pezzi su una pagina
+    (`pack3d.pop.scaffale`)."""
+
+    def test_la_piega_a_elle_si_spezza(self):
+        """Una piega disegnata a «L», due lati di un rettangolo in un tratto,
+        diventa due tratti dritti: le pieghe dritte si trovano lato per lato."""
+        from pack3d.pop import scaffale
+        tratti = scaffale._dritti([(50, 164.5), (624.8, 164.5), (624.8, 45.1)])
+        self.assertEqual(len(tratti), 2)
+        self.assertEqual([len(t) for t in tratti], [2, 2])
+
+    def test_la_pagina_grande_e_in_scala(self):
+        """Una pagina piu' grande di due A0 e' disegnata in scala 1:2."""
+        import tempfile
+        from pack3d.pop import scaffale
+        with tempfile.TemporaryDirectory() as d:
+            grande, piccola = os.path.join(d, "g.pdf"), os.path.join(d, "p.pdf")
+            _pdf_scaffale(grande, 2972)
+            _pdf_scaffale(piccola, 841)
+            self.assertEqual(scaffale.scala(grande), 2.0)
+            self.assertEqual(scaffale.scala(piccola), 1.0)
+
+    def test_la_grafica_senza_tratteggio(self):
+        """La grafica del pezzo e' resa senza il tratteggio arancio delle
+        zone incollate e senza il disegno tecnico: il pannello e' rosso pieno."""
+        import tempfile
+        import numpy as np
+        from pack3d.pop import fustella as F, scaffale
+        with tempfile.TemporaryDirectory() as d:
+            pdf = os.path.join(d, "s.pdf")
+            _pdf_scaffale(pdf, 841)
+            tagli, pieghe, altre = scaffale.tratti(pdf)
+            self.assertTrue(tagli and pieghe and altre)
+            resa = scaffale._Resa(pdf)
+            try:
+                im = np.asarray(resa.rendi(F.Griglia((110, 110, 290, 390), 2.0)), int)
+            finally:
+                resa.chiudi()
+        arancio = (np.abs(im - (245, 127, 33)).sum(-1) < 60).mean()
+        self.assertLess(arancio, 0.001)
+        self.assertLess(np.abs(im - (230, 30, 40)).sum(-1).mean(), 15)
