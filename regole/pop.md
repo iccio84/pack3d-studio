@@ -235,11 +235,12 @@ più PDF, uno per pezzo, è l'espositore da terra a ripiani:
   sul cielo quando l'asola è più bassa del cielo (sul caso 202 mm invece
   di 186: l'asola è alta 35 mm, il vassoio ci sta lo stesso);
 - **il crowner**: dietro la cima della schiena, il piede del pannello (dove
-  finiscono le pieghe doppie) al filo del corpo. La piega doppia è larga
-  quanto il cartone: i fianchi si ripiegano piatti dietro il pannello, e la
-  striscia oltre la piega a tratti torna indietro dritta, a costola. Da
-  davanti si vede solo il pannello, come nel render del proprietario; la
-  linguetta scende dietro la schiena;
+  finiscono le pieghe doppie) al filo del corpo. Dal proprietario: «il
+  crowner ha le alette girate di 180 gradi come rinforzo». La piega doppia
+  è larga quanto il cartone: le alette si ripiegano piatte dietro il
+  pannello, e la striscia oltre la piega a tratti si ripiega ancora, piatta
+  dietro l'aletta. Da davanti si vede solo il pannello, come nel render del
+  proprietario; la linguetta scende dietro la schiena;
 - **un contorno aperto** (il davanti del ripiano è una cordonatura, gli
   angoli hanno i tagli aperti) si chiude con le pieghe disegnate, solo
   quando dai soli tagli il cartone non c'è (`Griglia.pannelli`,

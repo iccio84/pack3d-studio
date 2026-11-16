@@ -16,8 +16,8 @@ in un unica pagina o più pdf». I pezzi:
   incollano sui laterali, fuori; sul suo cielo poggia il ripiano piu' basso;
 - il **ripiano**: un vassoio con le sponde e la fascetta davanti, ripetuto
   (`RIPIANI`) all'altezza delle asole dei laterali;
-- il **crowner**: dietro la cima della schiena, coi fianchi ripiegati piatti
-  dietro il pannello. Di un PDF di piu' pagine si prende la prima.
+- il **crowner**: dietro la cima della schiena, con le alette girate di 180
+  gradi dietro il pannello, di rinforzo. Di un PDF di piu' pagine si prende la prima.
 
 Ogni PDF si legge da solo (`fustella.tratti`, `fustella.pezzi`) e si mette
 nella tavola comune accanto agli altri, con la sua grafica: da li' il
@@ -335,10 +335,12 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
         stendi(rp, "ripiano_%d" % (k + 1), regola_rip)
 
     # --- il crowner: dietro la cima della schiena, il piede del pannello al
-    # filo del corpo. I fianchi, oltre le pieghe doppie, si ripiegano piatti
-    # dietro il pannello (la piega doppia e' larga quanto il cartone), e la
-    # striscia oltre la piega a tratti torna indietro dritta, a costola: da
-    # davanti si vede solo il pannello, come nel render del proprietario.
+    # filo del corpo. Le alette sono girate di 180 gradi, di rinforzo (dal
+    # proprietario: «il crowner ha le alette girate di 180 gradi come
+    # rinforzo»): oltre le pieghe doppie (larghe quanto il cartone) si
+    # ripiegano piatte dietro il pannello, e la striscia oltre la piega a
+    # tratti si ripiega ancora, piatta dietro l'aletta. Da davanti si vede
+    # solo il pannello, come nel render del proprietario.
     cw = pezzi["crowner"][0]
     vc = _pieghe(cw, "V", 200.0)
     g0, g1 = vc[0], vc[-1]                      # le pieghe a tratti
@@ -363,11 +365,11 @@ def monta(pdfs, uscita, t=SPESSORE, px_mm=PX_MM, ripiani=RIPIANI, montaggio=None
         if g0 < px < m0:
             return (lambda lx, ly: (-xc + (m0 - lx), Y(ly), Zc - t),)
         if px < g0:
-            return (lambda lx, ly: (-xc + fl, Y(ly), Zc - t - (g0 - lx)),)
+            return (lambda lx, ly: (-xc + fl - (g0 - lx), Y(ly), Zc - 2 * t),)
         if m1 < px < g1:
             return (lambda lx, ly: (xc - (lx - m1), Y(ly), Zc - t),)
         if px > g1:
-            return (lambda lx, ly: (xc - fl, Y(ly), Zc - t - (lx - g1)),)
+            return (lambda lx, ly: (xc - fl + (lx - g1), Y(ly), Zc - 2 * t),)
         return None                             # le pieghe doppie, sottili
     stendi(cw, "crowner", regola_crowner)
 
