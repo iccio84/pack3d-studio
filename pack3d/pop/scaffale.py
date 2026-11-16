@@ -30,8 +30,10 @@ I pezzi che si vedono, riconosciuti dalla forma (`riconosci`), non dal nome:
   fianchi, e non si vedono;
 - il **dekl**: il frontale dello zoccolo sotto il ripiano piu' basso, le
   orecchie avvitate ai fianchi, il bordo in cima sotto il ripiano;
-- il **topper**: il pannello stampato in cima, dietro la schiena, che sporge
-  sopra.
+- il **topper**: il pannello stampato in cima, davanti alla schiena, cosi'
+  la grafica si vede (dal proprietario: «tira più in avanti il crowner in
+  modo che si possa vedere la grafica (davanti alla schiena)»). E' largo piu'
+  dello spazio fra le pareti di dentro dei fianchi: poggia sulla loro cima.
 
 I pezzi dentro le pareti (i rinforzi dei fianchi e dei ripiani, le croci
 dello zoccolo, i tappi, i portaprezzi) e la scatola di trasporto non si
@@ -384,6 +386,7 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM, montaggio=None):
     Zb = -2 * t                                       # il retro: la striscia dietro la schiena
     livelli = None
     profondo = None
+    cima_dentro = None                                # la cima della parete di dentro, dietro
     for r in ("fianco_a", "fianco_b"):
         p = pezzi[r]
         a, b, dietro, sx, asole = _fronte(p)
@@ -397,6 +400,12 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM, montaggio=None):
         # dritta da destra, il davanti a sinistra)
         d = 1.0 if sx else -1.0
         Xo = Xi + doppia
+        punti = np.vstack([np.asarray(pl, float) for pl in p.tagli]) - p.riquadro[:2]
+        dietro_dentro = (punti[:, 0] < a / 2.0) if sx else (punti[:, 0] > b + (p.larghezza - b) / 2.0)
+        alti = punti[dietro_dentro & (punti[:, 1] < 0.2 * p.altezza), 1]
+        if len(alti):
+            c = piede - alti.min()
+            cima_dentro = c if cima_dentro is None else max(cima_dentro, c)
         if livelli is None:
             livelli = []
             for pl in asole:
@@ -487,12 +496,13 @@ def monta(pdf, uscita, t=SPESSORE, px_mm=PX_MM, montaggio=None):
                 return (lambda lx, ly: (e1 - dc, c1 - ly, Zd - (lx - e1)),)
             stendi(dk, "dekl", regola_dekl)
 
-    # --- il topper: dietro la schiena, sporge sopra
+    # --- il topper: davanti alla schiena, sulla cima delle pareti di dentro
+    # dei fianchi (e' largo piu' dello spazio fra loro)
     if "topper" in pezzi:
         tp = pezzi["topper"]
-        Zt = Zb - t / 2.0
-        sotto = 100.0                                 # quanto sta dietro la schiena
-        Yt0 = Hc - sotto + tp.altezza
+        Zt = t + 0.5
+        piede_topper = (cima_dentro if cima_dentro is not None else Hc) + 0.5
+        Yt0 = piede_topper + tp.altezza
 
         def regola_topper(px, py, r):
             return (lambda lx, ly: (lx - tp.larghezza / 2.0, Yt0 - ly, Zt),)
