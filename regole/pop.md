@@ -313,8 +313,11 @@ tratteggiato è un rinforzo, `_tratteggiati`). Il montaggio:
 - **il dekl** chiude lo zoccolo sotto il ripiano più basso: le orecchie
   contro i fianchi (i fori combaciano con quelli dei fianchi, dove si
   avvita), il bordo in cima sotto il ripiano;
-- **il topper** sta dietro la schiena e sporge sopra; 100 mm, il fondo senza
-  marchio, stanno dietro la schiena;
+- **il topper** sta davanti alla schiena, così la grafica si vede (dal
+  proprietario: «tira più in avanti il crowner in modo che si possa vedere
+  la grafica (davanti alla schiena)»). È largo più dello spazio fra le pareti
+  di dentro dei fianchi (600 contro 592 mm sul caso): poggia sulla loro
+  cima dietro (1384 mm sul caso);
 - **non si montano** i pezzi dentro le pareti (i rinforzi dei fianchi e dei
   ripiani, le croci dello zoccolo), i tappi, i portaprezzi e la scatola di
   trasporto.
