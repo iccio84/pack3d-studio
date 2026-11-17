@@ -313,6 +313,62 @@ def linee_dt(pdf, page_no=0, pen=None):
     return _LINEE[chiave]
 
 
+_QUOTE = stato.per_lavoro({})
+
+
+def quote_dt(pdf, page_no=0, pen=None):
+    """Le linee di QUOTA del disegno tecnico, nel telaio di misura:
+    `[(kind, c, a, b)]`, quelle che un numero scritto accanto misura
+    (`dieline._quote_a_catena`), nelle penne del DT.
+
+    Servono a `dividi` per mandare nel DT i loro NUMERI anche quando stanno
+    dentro l'artwork: sul T2x25 la catena delle fasce del corpo (88, 100, 90,
+    100,5, 88) correva in verticale dentro il disegno, a 18 mm dal bordo del
+    fronte, e i suoi numeri azzurri finivano stampati su fronte, cielo e
+    retro."""
+    from .dieline import PT2MM, _quote_a_catena
+    from .quote import numeri as _numeri
+    from .tracciati import FILO, segmenti
+    st = os.stat(pdf)
+    chiave = (pdf, page_no, st.st_mtime_ns, st.st_size)
+    if chiave not in _QUOTE:
+        pen = penne(pdf, page_no) if pen is None else pen
+        segs, _w, _h = segmenti(pdf, page_no)
+        segs = [s for s in segs if s[4] in pen or s[4][0] <= FILO]
+        try:
+            nn = [((x if asse == 0 else q) / PT2MM, (q if asse == 0 else x) / PT2MM, v)
+                  for v, x, q, asse in _numeri(pdf, page_no)]
+        except Exception:
+            nn = []
+        _QUOTE.clear()
+        _QUOTE[chiave] = _quote_a_catena(segs, nn) if nn and segs else []
+    return _QUOTE[chiave]
+
+
+def _di_quota(o, m, testo, quote):
+    """Se il testo e' il numero di una quota del DT: solo cifre, col centro
+    accanto a una linea di quota (`QUOTA_ACCANTO_MM`), dentro la sua corsa, e
+    il valore e' la sua lunghezza. Il bollo «50 biscotti» del T2x25 sta a 4 mm
+    dalla catena delle quote, e resta: 50 non misura nessuna linea."""
+    from .dieline import PT2MM
+    from .flowpack import QUOTA_ACCANTO_MM
+    from .quote import NUMERO
+    t = testo.strip()
+    if not t or not NUMERO.fullmatch(t):
+        return False
+    v = float(t.replace(",", "."))
+    r = _riquadro(o, m)
+    if r is None:
+        return False
+    cx, cy = (r[0] + r[2]) / 2, (r[1] + r[3]) / 2
+    for k, c, a, b in quote:
+        su, lungo = (cy, cx) if k == "H" else (cx, cy)
+        if (abs(su - c) <= QUOTA_ACCANTO_MM / PT2MM and a <= lungo <= b
+                and abs(v - (b - a) * PT2MM) <= 1.5):
+            return True
+    return False
+
+
 def _velo(o, m, t, linee):
     """Se l'oggetto e' un velo tecnico: vedi VELO_TOLLERANZA."""
     import bisect
@@ -404,7 +460,7 @@ QUOTA_SEGNO = 0.25
 
 
 def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
-           linee=None):
+           linee=None, quote=()):
     """`(dt, contorni, grafica, dai_livelli, etichette, veli)`: gli oggetti
     nei due livelli.
 
@@ -451,6 +507,10 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
     Con `linee` - le linee del DT, vedi `linee_dt` - vanno nel DT anche i
     VELI: rettangoli semitrasparenti che ricalcano una cella del disegno.
     `veli` e' quanti.
+
+    Con `quote` - le linee di quota del DT, vedi `quote_dt` - va nel DT anche
+    il NUMERO di una quota dentro l'artwork: un testo di sole cifre accanto
+    alla linea che misura. Lo dice la linea, non il colore.
     """
     import pypdfium2.raw as raw
     from .techink import NOME_RISERVATA
@@ -462,7 +522,7 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
     # (oggetto, colore) tutti dentro un box tolto dove sotto non c'e'
     # grafica, e i colori delle didascalie scritte dentro uno di quei box
     dentro, tinte = [], set()
-    tp = raw.FPDFText_LoadPage(page.raw) if riservate else None
+    tp = raw.FPDFText_LoadPage(page.raw) if (riservate or quote) else None
 
     def nel_riservato(o, m, testo):
         """None fuori dai box tolti; "coperta" se sta solo in aree coperte;
@@ -507,6 +567,10 @@ def dividi(page, penne_dt, nomi_tecnici, stampato=None, riservate=(),
                 continue
             if (t == raw.FPDF_PAGEOBJ_TEXT and stampato is not None
                     and _fuori(o, m, stampato)):
+                dt.append(o)
+                continue
+            if (t == raw.FPDF_PAGEOBJ_TEXT and quote
+                    and _di_quota(o, m, _testo(o, tp), quote)):
                 dt.append(o)
                 continue
             if t == raw.FPDF_PAGEOBJ_PATH:
@@ -1223,7 +1287,7 @@ def _rendi(pdf, page_no, scala, livello, riquadro, trasparente, nomi_tecnici,
         page.set_cropbox(*page.get_mediabox())
         dt, contorni, grafica, dai_livelli, etichette, veli = dividi(
             page, pen, nomi, stampato, riservate(pdf),
-            linee_dt(pdf, page_no, pen))
+            linee_dt(pdf, page_no, pen), quote_dt(pdf, page_no, pen))
         CONTI.clear()
         CONTI.update(livelli=dai_livelli, etichette=etichette, veli=veli,
                      tratti=len(dt) - dai_livelli - etichette - veli,
