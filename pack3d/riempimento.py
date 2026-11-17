@@ -1068,7 +1068,7 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
 
 def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
             dall_alto=False, gradi=0.0, plancia_sul_fondo=False, tegola=0.0,
-            aperto=False):
+            aperto=False, gira=0.0):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -1077,7 +1077,9 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     tanto, o meno se non ci stanno (`inclina`). `tegola`: frontali, inclinati
     all'indietro di tanto, a tegola, e gonfiati fino al bordo (`a_tegola`).
     `aperto`: il contenitore e' un astuccio con l'apertura a strappo aperta,
-    e il vano e' il suo corpo (`corpo_aperto`)."""
+    e il vano e' il suo corpo (`corpo_aperto`). `gira`: ogni pezzo girato
+    di tanti gradi attorno alla verticale, sul suo centro - una scelta del
+    pack (180: il marchio dritto per chi guarda dall'altra parte)."""
     Jv, Bv = leggi(glb_vassoio)
     Jp, Bp = leggi(glb_prodotto)
     cosa = "l'astuccio" if rigido else "il flowpack"
@@ -1130,6 +1132,14 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     if not rigido:
         Vp, _, _ = adatta(Vp, None, p, d)
     poste = pose(vano, p, d, quanti, Vp)
+    if gira:
+        # prima di inclinarli: girati sul proprio centro attorno alla
+        # verticale, l'ingombro a 180 gradi e' lo stesso
+        a = math.radians(float(gira))
+        Ry = np.array([[math.cos(a), 0.0, math.sin(a)], [0.0, 1.0, 0.0],
+                       [-math.sin(a), 0.0, math.cos(a)]])
+        poste = [(Ry @ R_, t_) for R_, t_ in poste]
+        accorciato.append("girati di %.0f gradi attorno alla verticale" % float(gira))
     messi = 0.0
     if gradi and d.posa == "sdraiati":
         poste, messi = inclina(vano, p, poste, Vp, float(gradi))

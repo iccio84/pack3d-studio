@@ -543,4 +543,9 @@ Cards (caso 88976a700d) con 25 flowpack Kinder Cards T2, 5 x 5
   finestra, 5 per strato per il largo e 5 strati.
 - **Il piano e' il fondo intero**: i bordi del buco sulle pareti non sono un
   piano su cui poggiare (`vano.piano` veniva -22,5 invece di -44,1).
+- **Girati, se il pack lo chiede** (`gira`, scelta del pack): ogni pezzo
+  ruota sul proprio centro attorno alla verticale, prima di inclinarlo - a
+  180 gradi l'ingombro e' lo stesso. Sul T2x25 chi l'ha caricato li ha
+  chiesti girati di 180 (il marchio dritto per chi guarda dal davanti) e la
+  finestra aperta di 120 gradi invece di 60.
 
