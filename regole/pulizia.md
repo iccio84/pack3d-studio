@@ -191,6 +191,16 @@ e sul bordo resta quello che ci va: la grafica che gira sullo spigolo.
 Quello che si paga e' una passata sugli oggetti prima di rendere: da 0,1 a 0,3
 secondi, anche sui 32.757 percorsi del wafer da colazione.
 
+**I numeri delle quote dentro l'artwork** (`strati.quote_dt`, `_di_quota`).
+Un testo dentro l'artwork resta grafica, ma non il numero di una QUOTA: un
+testo di sole cifre, col centro a non piu' di 10 mm da una linea di quota del
+DT (una linea che un numero scritto accanto misura, `dieline._quote_a_catena`),
+dentro la sua corsa, e col valore uguale alla sua lunghezza (+-1,5 mm). Sul
+T2x25 la catena delle fasce (88, 100, 90, 100,5, 88) correva dentro il
+disegno, e 100,5, 100 e 90 uscivano azzurri su fronte, retro e cielo. Il
+bollo «50 biscotti» sta a 4 mm dalla catena e resta: 50 non misura nessuna
+linea. Lo dice la linea, non il colore.
+
 ### La texture e' HD di serie
 
 L'altra meta' di "ritagliata e sgranata" era la risoluzione. Sul piano Free di
