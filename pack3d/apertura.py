@@ -571,9 +571,14 @@ def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
     Rf = _rodrigues(asse, theta)
 
     # la posa: la faccia della cerniera guarda in alto (+y), e dalla cerniera
-    # la finestra viene verso chi guarda (+z)
-    ez = r / np.linalg.norm(r)
-    ey = n_c
+    # la finestra viene verso chi guarda (+z). Una ROTAZIONE: +z sta nel piano
+    # della faccia. Il baricentro della finestra ne esce quando la linguetta
+    # gira su un'altra faccia, e senza la proiezione la posa non era piu'
+    # ortonormale - il T2x25 Kinder Cards (caso 88976a700d) aperto usciva
+    # inclinato di 15 gradi e stretto del 4%, 260,4 mm invece di 270,8
+    ey = n_c / np.linalg.norm(n_c)
+    ez = r - (r @ ey) * ey
+    ez = ez / np.linalg.norm(ez)
     ex = np.cross(ey, ez)
     Rp = np.array([ex, ey, ez])
 
