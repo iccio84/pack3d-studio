@@ -29,11 +29,16 @@ def cu_riempimento(valore):
     return v
 
 
-def analisi_riempimento(pdfs, cu="flowpack"):
+def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
     """Il riempimento: un vassoio espositore - o un display - e il pack che ci
     va dentro, in due PDF in qualsiasi ordine. Il vassoio e' quello dei due
     che si legge come vassoio; l'altro si legge come `cu`, flowpack o
-    astuccio. Vedi `pack3d.riempimento`."""
+    astuccio. Vedi `pack3d.riempimento`.
+
+    `aperto` (l'opzione `apertura` del riempimento): il contenitore e' un
+    astuccio con l'apertura a strappo, che si costruisce aperto, e i pack
+    stanno nel suo corpo. Il contenitore e' il PDF dei due che si legge come
+    astuccio con l'apertura a strappo."""
     # il registro usa il riempimento: analyze_pdf si importa qui, non in testa
     from .registro import analyze_pdf
     if len(pdfs) != 2:
@@ -42,6 +47,14 @@ def analisi_riempimento(pdfs, cu="flowpack"):
     letti = []
     for k, p in enumerate(pdfs):
         try:
+            if aperto:
+                # l'astuccio contenitore: si legge come astuccio, e ha
+                # l'apertura a strappo da aprire
+                a = analyze_pdf(p, "carton", domande=True)
+                if not a.get("strappo"):
+                    raise ValueError("senza apertura a strappo")
+                letti.append(a)
+                continue
             letti.append(analyze_pdf(p, "vassoio"))
         except artwork.PdfImmagine:
             # una foto non e' ne' il vassoio ne' il pack: lo si dice, invece
@@ -61,6 +74,11 @@ def analisi_riempimento(pdfs, cu="flowpack"):
         forti = [k for k in vassoi if not letti[k].get("sagomato")]
         if len(forti) == 1:
             vassoi = forti
+    if aperto and len(vassoi) != 1:
+        raise ValueError("riempimento: dei due PDF %s" % (
+            "nessuno si legge come astuccio con l'apertura a strappo" if not vassoi else
+            "tutti e due si leggono come astucci con l'apertura a strappo: l'altro "
+            "deve essere il pack (CU)"))
     if len(vassoi) != 1:
         raise ValueError("riempimento: dei due PDF %s" % (
             "nessuno si legge come vassoio espositore" if not vassoi else
@@ -70,8 +88,9 @@ def analisi_riempimento(pdfs, cu="flowpack"):
     nome_cu = "astuccio" if cu == "carton" else "flowpack"
     # l'astuccio con le sue domande: l'apertura a strappo, se c'e'
     fp = analyze_pdf(pdfs[ifp], cu, domande=(cu == "carton"))
-    meta = (["riempimento: il vassoio e' il PDF %d, %s il PDF %d"
-             % (iv + 1, "l'astuccio" if cu == "carton" else "il flowpack", ifp + 1)]
+    meta = (["riempimento: %s e' il PDF %d, %s il PDF %d"
+             % ("l'astuccio aperto" if aperto else "il vassoio", iv + 1,
+                "l'astuccio" if cu == "carton" else "il flowpack", ifp + 1)]
             + ["vassoio: %s" % m for m in letti[iv].get("meta", [])[:3]]
             + ["%s: %s" % (nome_cu, m) for m in fp.get("meta", [])[:3]])
     out = dict(kind="riempimento", cu=cu,
@@ -81,6 +100,8 @@ def analisi_riempimento(pdfs, cu="flowpack"):
                meta=meta, vassoio=iv, flowpack=ifp,
                teeth_default=fp.get("teeth_default", 20),
                soft_default=fp.get("soft_default", "medio"))
+    if aperto:
+        out["contenitore"] = "carton"
     if cu == "carton" and fp.get("strappo"):
         out["strappo"] = fp["strappo"]
     return out
@@ -116,18 +137,25 @@ def per_fila_scelti(valore):
 
 def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
                       carta=None, incisioni=True, per_fila=None, dove_plancia=None,
-                      gradi=0.0, tegola=0.0):
+                      gradi=0.0, tegola=0.0, apertura=None, gira=0.0):
     """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
     famiglia, poi `quanti` pezzi messi nel vano (None: pieno). Il flowpack
     con `flowpack`, gli argomenti di `build_flowpack` dopo il PDF e il file
     d'uscita; l'astuccio (`info["cu"] == "carton"`) chiuso, con lo spessore
-    `carta` e la fustella dell'apertura a strappo se `incisioni`."""
+    `carta` e la fustella dell'apertura a strappo se `incisioni`. Se il
+    contenitore e' un astuccio (`info["contenitore"]`), si costruisce aperto
+    di `apertura` gradi, e i pack vanno nel suo corpo."""
     from pack3d import riempimento
     astuccio = info.get("cu") == "carton"
     with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
         gv = os.path.join(td, "vassoio.glb")
         gf = os.path.join(td, "pack.glb")
-        av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality, dove_plancia=dove_plancia)
+        aperto = info.get("contenitore") == "carton"
+        if aperto:
+            av_v = build_carton(pdfs[info["vassoio"]], gv, quality, carta=carta,
+                                apertura=apertura or 60)
+        else:
+            av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality, dove_plancia=dove_plancia)
         if astuccio:
             av_f = build_carton(pdfs[info["flowpack"]], gf, quality, carta=carta,
                                 incisioni=incisioni)
@@ -157,11 +185,12 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     glb, righe = riempimento.componi(glb_v, glb_f, quanti, rigido=astuccio,
                                      per_fila=per_fila, dall_alto=dall_alto,
                                      gradi=gradi, tegola=tegola,
-                                     plancia_sul_fondo=dove_plancia == "fondo")
+                                     plancia_sul_fondo=dove_plancia == "fondo",
+                                     aperto=aperto, gira=gira)
     # il vassoio e il pack in un'immagine sola: Glam ne mette una su tutto
     # il modello, e il template e' la sua tela (`pack3d.atlante`)
     glb, _zone = atlante.unisci(glb)
     with open(out_glb, "wb") as fh:
         fh.write(glb)
-    return (righe + ["vassoio: %s" % a for a in av_v]
+    return (righe + ["%s: %s" % ("astuccio aperto" if aperto else "vassoio", a) for a in av_v]
             + ["%s: %s" % ("astuccio" if astuccio else "flowpack", a) for a in av_f])

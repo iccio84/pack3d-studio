@@ -642,6 +642,17 @@ def tegola_scelta(opts):
     return min(max(g, 0.0), 60.0)
 
 
+def gira_scelta(opts):
+    """Di quanti gradi girare ogni pezzo del riempimento attorno alla
+    verticale, scelta del pack (0 di serie; 180: il marchio dritto per chi
+    guarda dall'altra parte)."""
+    try:
+        g = float(opts.get("gira", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    return g % 360.0
+
+
 @_vertici_separati
 def _costruisci_riempimento(r, info):
     if info.get("cu") == "carton":
@@ -649,7 +660,8 @@ def _costruisci_riempimento(r, info):
         def costruisci(lastre, uscita):
             return build_riempimento(r.pdfs, info, uscita, r.quanti, quality=r.q,
                                      carta=r.carta, incisioni=r.incisioni,
-                                     per_fila=r.per_fila)
+                                     per_fila=r.per_fila, apertura=r.apertura,
+                                     gira=gira_scelta(r.opts))
         return costruisci
     # un vassoio coi suoi flowpack: due costruzioni e un GLB solo, vedi
     # `pack3d.riempimento`
@@ -667,7 +679,8 @@ def _costruisci_riempimento(r, info):
              saldatura_scelta(opts), nello_spessore_scelto(opts),
              cromate_scelte(opts)), r.q,
             per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
-            gradi=inclina_scelta(opts), tegola=tegola_scelta(opts))
+            gradi=inclina_scelta(opts), tegola=tegola_scelta(opts),
+            carta=r.carta, apertura=r.apertura, gira=gira_scelta(opts))
     return costruisci
 
 

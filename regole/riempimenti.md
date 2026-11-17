@@ -521,3 +521,31 @@ sparivano dietro le pinne.
   `riempimento_nutella_biscuits_display` (172,9), che hanno la punta mezzo
   millimetro nel cartoncino: il parco del rilascio li ha visti.
 
+### Il contenitore puo' essere l'astuccio aperto
+
+Un riempimento con l'opzione `apertura` (gradi) ha per contenitore un
+astuccio con l'apertura a strappo, costruito aperto (regole/astucci.md,
+*L'apertura a strappo, aperta*): dei due PDF e' quello che si legge come
+astuccio con lo strappo, l'altro e' il pack. Il primo e' il T2x25 Kinder
+Cards (caso 88976a700d) con 25 flowpack Kinder Cards T2, 5 x 5
+(`riempimento_formato_t2x25_aperta`).
+
+- **Il vano e' il corpo** (`riempimento.corpo_aperto`): il GLB aperto e' un
+  pezzo solo, e il corpo finisce al piano pieno piu' alto - la faccia col
+  buco, che copre quasi tutto il largo e il profondo. La finestra sollevata
+  a nessuna quota copre il profondo. Con la finestra il vano veniva 258 x 118
+  x 176 mm invece di 268,8 x 98 x 89,7, e i pack stavano in piedi fuori
+  dalla scatola.
+- **Nessun pezzo sporge**: sopra c'e' la faccia col buco, e valgono solo le
+  pose che stanno sotto (intere, pinne comprese). Sul T2x25 il flowpack in
+  piedi e' alto 108 contro 89,7: i pack stanno sdraiati rispetto alla scena,
+  cioe' in piedi rispetto alla scatola - la faccia stampata verso la
+  finestra, 5 per strato per il largo e 5 strati.
+- **Il piano e' il fondo intero**: i bordi del buco sulle pareti non sono un
+  piano su cui poggiare (`vano.piano` veniva -22,5 invece di -44,1).
+- **Girati, se il pack lo chiede** (`gira`, scelta del pack): ogni pezzo
+  ruota sul proprio centro attorno alla verticale, prima di inclinarlo - a
+  180 gradi l'ingombro e' lo stesso. Sul T2x25 chi l'ha caricato li ha
+  chiesti girati di 180 (il marchio dritto per chi guarda dal davanti) e la
+  finestra aperta di 120 gradi invece di 60.
+
