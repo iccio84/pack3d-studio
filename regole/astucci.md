@@ -91,6 +91,25 @@ file (T6 aperto):
   carton` il 1 novembre 2026; succede a ogni PDF col gruppo della grafica
   ruotato, non solo alle prove.
 
+
+**Le cordonature tratteggiate, le penne delle quote e dei riquadri**
+(`dieline._tratteggi_uniti`, `_penne_fustella_pulite`). Sull'espositore
+T2x25 tre intrusi insieme: le pieghe a trattini da 20 mm con salti di 2,
+sotto il 5% della larghezza, non entravano nelle righe (retro e cielo una
+fascia sola da 194 mm); le quote in una penna loro, con una catena verticale
+dentro il disegno, facevano una colonna in piu' (larghezza 256,4 invece di
+271); una penna di rettangoli chiusi dentro i pannelli aveva il punteggio
+piu' alto. Le regole: un TRATTEGGIO REGOLARE (almeno 3 trattini lunghi
+uguali, +-10%, da 8 mm in su, salti veri da 0,5 a 3 mm uguali fra loro,
+trattino almeno 5 volte il salto) e' una linea sola per misurare le righe -
+le perforazioni da 2,5/1,5 mm restano come sono; una penna lunga per almeno
+l'80% in linee misurate da un numero scritto accanto (`_quote_a_catena`, che
+cerca la quota anche dentro una catena 89,5 + 271 + 89,5) e' una penna di
+quote; con almeno tre penne, una che non tocca le altre, chiusa su se stessa
+e tutta dentro il loro riquadro e' una penna di riquadri. Tolte, la soglia si
+rifa' sulle altre, e una penna sotto soglia che finisce per il 95% su tratti
+della fustella e' una cordonatura corta (i fianchi). Sul parco scattano solo
+sul T2x25: 271 x 100 x 90, le letture degli altri uguali.
 ### Quando il solutore non sa, deve dirlo
 
 `solve_carton` non prova a indovinare: **legge la sequenza delle fasce e
@@ -521,6 +540,22 @@ aprirla, il contorno e' la fila coi ponticelli colmati, senza taglio dal
 rovescio e quindi senza cartoncino sfogliato: la finestra si alza sulla piega
 col cielo, la linguetta gira sotto il fondo, la lunetta si spinge dentro. Sul
 T10: 37 trattini e la mezzaluna, 463 mm di contorno, cerniera di 144 mm.
+
+**Una perforazione disegnata come linea continua** (`incisioni._perforata_continua`,
+provata solo quando la ricerca a trattini non trova niente). Sull'espositore
+Kinder Cards T2x25 (271 x 100 x 90) la perforazione e' una linea continua
+nella penna delle pieghe: zero ponticelli e nessun taglio dal rovescio, e
+l'astuccio usciva senza solchi e, chiesto aperto, chiuso. Il contorno si
+riconosce dalla forma: due RAMI interni con un capo su una piega (un lato
+comune a due facce, mai un bordo libero) a piu' di 2,5 mm l'uno dall'altro,
+e l'altro capo libero; un solo tracciato del disegno - la punta della
+linguetta - con due vertici a non piu' di 2,5 mm dai capi liberi, piu'
+corto di ciascun ramo (senza questo, su due astucci del parco gli smussi
+agli angoli di una falda, uniti dal bordo, passavano per contorno); almeno
+80 mm in tutto. I tagli vicini non fanno la lunetta: la quota del triangolo
+«APRIRE QUI», appoggiata sul contorno, lo diventava. Sul T2x25: rami dalla
+piega cielo/fronte a x 347 e 525 mm, fino a 1,5 mm dalle tacche della
+linguetta; 6 tagli su fronte e falda del fondo, cerniera di 178 mm.
 
 ### L'apertura a strappo, aperta
 
