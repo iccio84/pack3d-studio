@@ -623,6 +623,20 @@ l'ha chiesto chi l'ha caricato, sdraiato, con la grafica della finestra
 capovolta vista dal lato stampato, l'interno di cartoncino non stampato e la
 cornice sfogliata. Come per i solchi, non cambia cosa e' un difetto.
 
+#### La posa e' una rotazione
+
+La scatola aperta si mette con la faccia della cerniera in alto (+y) e la
+finestra verso chi guarda (+z). Il verso +z viene dal baricentro della
+finestra chiusa, e va **proiettato sul piano della faccia**: quando la
+linguetta gira su un'altra faccia - sul T2x25 Kinder Cards (caso 88976a700d)
+scende per 24 mm sul fondo - il baricentro esce dal piano, e i tre assi della
+posa non erano piu' ortogonali. Il modello aperto usciva inclinato di 15
+gradi e stretto: corpo 260,4 x 96,2 mm invece di 270,8 x 100, le pareti di
+testa storte. Proiettato, il corpo e' quello del chiuso, 270,8 x 90,2 x 100.
+Il KCF Self Love aperto (`kcf_self_love_aperta`), con la linguetta corta,
+era storto di poco: l'ingombro passa da 95,4 a 95,0 mm, dentro la misura
+approvata.
+
 ### La colata si rimette con l'inchiostro del file
 
 **Adesso di solito non serve.** L'ombra della colata e' sempre un'immagine in

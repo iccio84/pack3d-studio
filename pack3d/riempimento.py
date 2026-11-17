@@ -217,10 +217,32 @@ class Vano:
         return self.x1 - self.x0, self.tetto - self.fondo, self.z1 - self.z0
 
 
-def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
+def corpo_aperto(V, tol=0.3):
+    """I vertici del CORPO di un astuccio aperto (`apertura`): la scatola
+    appoggiata, senza la finestra sollevata sulla cerniera. Il corpo finisce
+    al piano pieno piu' alto - la faccia col buco, che copre quasi tutto il
+    largo e il profondo della scatola; la finestra, inclinata, a nessuna
+    quota copre il profondo, e il suo bordo in cima e' una riga."""
+    lo, hi = V.min(0), V.max(0)
+    span = hi - lo
+    y = np.round(V[:, 1] / tol) * tol
+    for q in sorted(set(y), reverse=True):
+        P = V[np.abs(V[:, 1] - q) <= tol]
+        if (np.ptp(P[:, 0]) >= 0.8 * span[0] and np.ptp(P[:, 2]) >= 0.5 * span[2]
+                and np.ptp(P[:, 2]) >= 0.8 * np.ptp(V[V[:, 1] <= q + tol][:, 2])):
+            return V[V[:, 1] <= q + tol]
+    return V
+
+
+def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False,
+                   aperto=False):
     # del display conta la scatola: la plancia sta dietro, in alto, e non
     # contiene niente. Il fianco a soffietto si guarda dopo
     V = vertici(J, B, senza=("plancia", "soffietto"))
+    if aperto:
+        # l'astuccio aperto: il vano e' il corpo, la finestra sollevata non
+        # contiene niente (`corpo_aperto`)
+        V = corpo_aperto(V)
     lo, hi = V.min(0), V.max(0)
     # In pianta il vano lo chiudono le PARETI, cio' che si alza dal fondo:
     # un ritaglio rimasto steso sul piano non tiene niente. Sul vassoio T1x36
@@ -265,6 +287,11 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False):
     giu, su = V[m & (V[:, 1] < lo[1] + 0.25 * h)], V[m & mz & (V[:, 1] > lo[1] + 0.75 * h)]
     vano.piano = max(vano.fondo, float(giu[:, 1].max())) if len(giu) else vano.fondo
     vano.coperchio = min(vano.tetto, float(su[:, 1].min())) if len(su) else vano.tetto
+    vano.aperto = aperto
+    if aperto:
+        # nell'astuccio aperto il fondo e' la faccia su cui appoggia, intera:
+        # i bordi del buco sulle pareti non sono un piano
+        vano.piano, vano.coperchio = vano.fondo, vano.tetto
     return vano
 
 
@@ -496,6 +523,13 @@ def disposizioni(vano, p):
                           R, float(p.fronte))
         if d:
             out.append(d)
+    if getattr(vano, "aperto", False):
+        # nell'astuccio aperto sopra c'e' la faccia col buco: nessun pezzo
+        # sporge, valgono solo le pose che ci stanno sotto (`corpo_aperto`)
+        alto = vano.tetto - vano.fondo
+        out = [d for d in out
+               if _misura(p, int(np.argmax(np.abs(d.R[1]))))
+               <= alto]
     return out
 
 
@@ -1033,14 +1067,17 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
 # Il GLB composto
 
 def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
-            dall_alto=False, gradi=0.0, plancia_sul_fondo=False, tegola=0.0):
+            dall_alto=False, gradi=0.0, plancia_sul_fondo=False, tegola=0.0,
+            aperto=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
     neanche uno. `rigido`: il pack e' un astuccio, che non ha pinne da
     adattare e non si schiaccia. `gradi`: sdraiati, inclinati in avanti di
     tanto, o meno se non ci stanno (`inclina`). `tegola`: frontali, inclinati
-    all'indietro di tanto, a tegola, e gonfiati fino al bordo (`a_tegola`)."""
+    all'indietro di tanto, a tegola, e gonfiati fino al bordo (`a_tegola`).
+    `aperto`: il contenitore e' un astuccio con l'apertura a strappo aperta,
+    e il vano e' il suo corpo (`corpo_aperto`)."""
     Jv, Bv = leggi(glb_vassoio)
     Jp, Bp = leggi(glb_prodotto)
     cosa = "l'astuccio" if rigido else "il flowpack"
@@ -1050,7 +1087,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     if any(k in n for n in Jp.get("nodes", [])
            for k in ("matrix", "rotation", "translation", "scale")):
         raise ValueError("riempimento: il GLB del pack ha nodi trasformati")
-    vano = misura_vassoio(Jv, Bv, plancia_sul_fondo=plancia_sul_fondo)
+    vano = misura_vassoio(Jv, Bv, plancia_sul_fondo=plancia_sul_fondo, aperto=aperto)
     vano.dall_alto = dall_alto
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti

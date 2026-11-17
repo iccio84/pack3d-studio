@@ -649,7 +649,7 @@ def _costruisci_riempimento(r, info):
         def costruisci(lastre, uscita):
             return build_riempimento(r.pdfs, info, uscita, r.quanti, quality=r.q,
                                      carta=r.carta, incisioni=r.incisioni,
-                                     per_fila=r.per_fila)
+                                     per_fila=r.per_fila, apertura=r.apertura)
         return costruisci
     # un vassoio coi suoi flowpack: due costruzioni e un GLB solo, vedi
     # `pack3d.riempimento`
@@ -667,7 +667,8 @@ def _costruisci_riempimento(r, info):
              saldatura_scelta(opts), nello_spessore_scelto(opts),
              cromate_scelte(opts)), r.q,
             per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
-            gradi=inclina_scelta(opts), tegola=tegola_scelta(opts))
+            gradi=inclina_scelta(opts), tegola=tegola_scelta(opts),
+            carta=r.carta, apertura=r.apertura)
     return costruisci
 
 

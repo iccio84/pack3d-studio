@@ -1007,7 +1007,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, json.dumps(letto))
                 if kind == "riempimento" and self.path.startswith("/api/analyze"):
                     try:
-                        letto = analisi_riempimento(pdfs, cu)
+                        letto = analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta))
                     except Exception as e:
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                       blocchi_caso)
@@ -1064,7 +1064,7 @@ class Handler(BaseHTTPRequestHandler):
                         case = CASI.get(_sig(pdf))
                         info = (analisi_incarto_dichiarato(pdf, chiusura)
                                 if kind == "incarto"
-                                else analisi_riempimento(pdfs, cu) if kind == "riempimento"
+                                else analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
                                 else pop.analisi(pdfs, kind) if pop.e_pop(kind)
                                 else analisi_coppa(pdfs, kind)
                                 if in_piu_pezzi(kind, pdfs)
