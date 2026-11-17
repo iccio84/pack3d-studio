@@ -479,8 +479,16 @@ tutti escono identici al byte.
 - A V: largo 0,35 mm in superficie, profondo 0,22 mm sulla linea, e mai piu'
   di meta' dello spessore del cartoncino (vedi *Un astuccio ha uno spessore*):
   la faccia interna non si tocca.
-- Le pareti hanno la tinta della costa (`folding.TAGLIO`): sono cartoncino
-  tagliato. In un materiale suo, "solco".
+- Le pareti **tengono la grafica**: hanno la texture della faccia, con le
+  coordinate dei loro punti, nello stesso materiale della faccia; il taglio si
+  legge dall'ombra delle pareti, non da un colore. Prima avevano la tinta della
+  costa (`folding.TAGLIO`) in un materiale "solco", e sul T2x25 Kinder Cards
+  (caso 88976a700d, astuccio 271 x 100 x 90,2 mm) la finestra a strappo del
+  fronte usciva contornata da un filetto bianco largo 0,35 mm sopra il rosso e
+  la foto: respinto, "la fustella mantenga la grafica e non il filetto
+  bianco". Sul cartone stampato una perforazione chiusa non si vede bianca. La
+  tinta della costa resta dove il taglio si apre davvero (`apertura`: i bordi
+  della finestra sollevata). Le misure e le letture del parco non cambiano.
 - La faccia incisa si triangola con Delaunay sui campioni del solco - la linea
   e i suoi due bordi, ogni 0,15 mm - piu' i quattro angoli. I campioni sono
   piu' fitti della larghezza del solco: un triangolo che lo scavalcasse avrebbe

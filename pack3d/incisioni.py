@@ -24,8 +24,15 @@ Quali tagli, lo dice la fustella:
 - le spunte stesse non sono tagli.
 
 Il resto si incide: un solco a V largo `LARGHEZZA` e profondo `PROFONDITA`,
-mai piu' di meta' dello spessore del cartoncino. Le pareti del solco sono il
-cartoncino tagliato, e hanno la tinta della costa (`folding.TAGLIO`).
+mai piu' di meta' dello spessore del cartoncino.
+
+Il solco tiene la grafica: le sue pareti hanno la texture della faccia, con le
+stesse coordinate, e il taglio si legge dall'ombra, non da un colore. Col
+solco nella tinta della costa (`folding.TAGLIO`) la finestra a strappo del
+T2x25 Kinder Cards (caso 88976a700d) usciva contornata da un filetto bianco
+sopra la grafica, e chi l'ha caricato l'ha respinta: sul cartone stampato la
+perforazione non si vede bianca. La costa resta della tinta del cartoncino
+solo dove il taglio si apre (`apertura`).
 """
 from __future__ import annotations
 
