@@ -24,8 +24,15 @@ Quali tagli, lo dice la fustella:
 - le spunte stesse non sono tagli.
 
 Il resto si incide: un solco a V largo `LARGHEZZA` e profondo `PROFONDITA`,
-mai piu' di meta' dello spessore del cartoncino. Le pareti del solco sono il
-cartoncino tagliato, e hanno la tinta della costa (`folding.TAGLIO`).
+mai piu' di meta' dello spessore del cartoncino.
+
+Il solco tiene la grafica: le sue pareti hanno la texture della faccia, con le
+stesse coordinate, e il taglio si legge dall'ombra, non da un colore. Col
+solco nella tinta della costa (`folding.TAGLIO`) la finestra a strappo del
+T2x25 Kinder Cards (caso 88976a700d) usciva contornata da un filetto bianco
+sopra la grafica, e chi l'ha caricato l'ha respinta: sul cartone stampato la
+perforazione non si vede bianca. La costa resta della tinta del cartoncino
+solo dove il taglio si apre (`apertura`).
 """
 from __future__ import annotations
 
@@ -373,7 +380,7 @@ def perforata(pdf, panels, facce, page_no=0):
                     and (migliore is None or lunga > migliore[0])):
                 migliore = (lunga, fila, usati)
     if migliore is None:
-        return None
+        return _perforata_continua(percorsi, pezzi, quadri)
     _lunga, fila, usati = migliore
     catena = list(fila[0])
     for m in fila[1:]:
@@ -381,6 +388,56 @@ def perforata(pdf, panels, facce, page_no=0):
     vicini = [l for j, l in enumerate(pezzi) if j not in usati
               and _distanza_punto(l[0], catena) <= 1.5 and _distanza_punto(l[-1], catena) <= 1.5]
     return {"catena": catena, "pezzi": [list(m) for m in fila], "vicini": vicini}
+
+
+def _perforata_continua(percorsi, pezzi, quadri):
+    """La perforazione disegnata CONTINUA, senza trattini, o None: sul T2x25
+    i due rami partono dalla piega fra cielo e fronte, scendono nel fronte e
+    nella falda del fondo e si fermano a 1,5 mm dalle tacche della
+    linguetta, la cui punta e' il taglio del bordo libero.
+
+    Un RAMO e' una linea dentro le facce con un capo su una PIEGA - il lato
+    comune a due facce, mai un bordo libero - e l'altro su nessun lato. Due rami che partono dallo stesso lato, in punti diversi, fanno il
+    contorno se un tratto solo del disegno - la punta della linguetta,
+    anche se esce dalla faccia - passa con due suoi vertici a meno di PONTE
+    mm dai loro capi liberi, ed e' piu' corta di ciascun ramo; il contorno
+    intero e' lungo almeno PERFORATA_MIN mm. Gli smussi agli angoli di una
+    falda uniti dal contorno della fustella non sono rami e punta: la
+    "punta" sarebbe tutto il bordo della falda, piu' lunga dei rami. Due righe qualunque che partono da una piega (i
+    richiami di una quota) non hanno un tratto che le unisca capo a capo.
+    I tagli che toccano il contorno coi due capi qui non contano: senza
+    trattini a separarli, sono le quote disegnate sopra la finestra.
+    """
+    ponte = PONTE * MM
+    rami = []
+    for l in pezzi:
+        for capo in (0, -1):
+            lati = _sul_lato(l[capo], quadri)
+            # il capo sta su una piega: sul lato di due facce
+            if len({k for k, _l in lati}) >= 2 and not _sul_lato(l[-1 - capo], quadri):
+                rami.append((lati, l if capo == 0 else l[::-1]))
+    migliore = None
+    for i, (la, a) in enumerate(rami):
+        for lb, b in rami[i + 1:]:
+            if not la & lb or math.hypot(a[0][0] - b[0][0], a[0][1] - b[0][1]) <= ponte:
+                continue
+            for s in percorsi:
+                da = [math.hypot(q[0] - a[-1][0], q[1] - a[-1][1]) for q in s]
+                db = [math.hypot(q[0] - b[-1][0], q[1] - b[-1][1]) for q in s]
+                ia, ib = int(np.argmin(da)), int(np.argmin(db))
+                if ia == ib or da[ia] > ponte or db[ib] > ponte:
+                    continue
+                punta = list(s[ia:ib + 1]) if ia < ib else list(s[ib:ia + 1])[::-1]
+                if _lunghezza(punta) >= min(_lunghezza(a), _lunghezza(b)):
+                    continue        # la punta e' il pezzo corto del contorno
+                catena = list(a) + punta + list(b[::-1])
+                lunga = _lunghezza(catena) * PT2MM
+                if lunga >= PERFORATA_MIN and (migliore is None or lunga > migliore[0]):
+                    migliore = (lunga, catena, [list(a), punta, list(b)])
+    if migliore is None:
+        return None
+    _lunga, catena, linee = migliore
+    return {"catena": catena, "pezzi": linee, "vicini": []}
 
 
 def tagli(pdf, panels, facce, page_no=0):

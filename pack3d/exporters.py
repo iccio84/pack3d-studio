@@ -105,7 +105,7 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
     lamina o None])`, lo steso del PDF (`pack3d.steso`)
     - la texture e' quella sola: ogni faccia stampata ci arriva con la sua
     `f["telaio"]`, l'affine dalle UV della sua immagine a quelle dello steso,
-    e le facce di un colore solo (interno, taglio, solco) hanno un materiale
+    e le facce di un colore solo (interno, taglio) hanno un materiale
     di colore pieno, senza texture. Ogni faccia tiene il suo materiale, col
     suo nome."""
     if steso is not None:
@@ -178,23 +178,17 @@ def write_glb(faces, path, unit_scale=0.001, tex_quality=88, tex_max=2048,
             materials[-1]["normalTexture"] = {"index": len(textures) - 1}
         return len(materials) - 1
 
-    solco = None
     for f in faces:
         if f.get("maglia"):
-            # la faccia incisa (`incisioni.incidi`): la superficie con la sua
-            # texture, il solco con la tinta del cartoncino tagliato
+            # la faccia incisa (`incisioni.incidi`): la superficie e il solco
+            # con la stessa texture - il solco si legge dall'ombra delle sue
+            # pareti, la grafica resta intera e non c'e' un filetto bianco
+            # (incisioni, *Il solco tiene la grafica*)
             m = materiale(f["name"], f["tex"], f.get("normale"))
-            sup, inc = f["maglia"]
-            if sup is not None:
-                V, N, UV, T = sup
-                primitiva(np.asarray(V) * unit_scale, N, UV, T, m)
-            if inc is not None:
-                if solco is None:
-                    from PIL import Image
-                    from .folding import TAGLIO
-                    solco = materiale("solco", Image.new("RGB", (4, 4), TAGLIO))
-                V, N, UV, T = inc
-                primitiva(np.asarray(V) * unit_scale, N, UV, T, solco)
+            for parte in f["maglia"]:
+                if parte is not None:
+                    V, N, UV, T = parte
+                    primitiva(np.asarray(V) * unit_scale, N, UV, T, m)
             continue
         quad = np.array(f["quad"], np.float32) * unit_scale
         nrm = np.tile(_normal(f["quad"]).astype(np.float32), (4, 1))
@@ -241,7 +235,6 @@ def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
                      tela, normale, mr=None):
     """`write_glb` con lo steso: vedi la sua documentazione."""
     from PIL import Image
-    from .folding import TAGLIO
     from .steso import applica, lineare, uniforme
     buf = bytearray()
     views, accessors, prims, materials = [], [], [], []
@@ -304,7 +297,6 @@ def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
         materials.append(m)
         return len(materials) - 1
 
-    m_solco = None
     for f in faces:
         # sullo steso ogni faccia che ci ha il suo posto, anche se e' di un
         # colore solo (`steso.facce_sullo_steso`); le altre - l'interno, il
@@ -324,11 +316,9 @@ def _write_glb_steso(faces, path, unit_scale, tex_quality, tex_max, pellicola,
                 V, N, UV, T = sup
                 primitiva(np.asarray(V) * unit_scale, N, uv(UV), T, m)
             if inc is not None:
-                if m_solco is None:
-                    m_solco = materiale("solco", TAGLIO)
+                # il solco con la grafica della faccia, come nel GLB
                 V, N, UV, T = inc
-                primitiva(np.asarray(V) * unit_scale, N,
-                          np.zeros((len(UV), 2), np.float32), T, m_solco)
+                primitiva(np.asarray(V) * unit_scale, N, uv(UV), T, m)
             continue
         quad = np.array(f["quad"], np.float32) * unit_scale
         nrm = np.tile(_normal(f["quad"]).astype(np.float32), (4, 1))

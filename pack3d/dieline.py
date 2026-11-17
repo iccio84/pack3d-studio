@@ -1035,6 +1035,233 @@ def _colori(pdf_path, riq, page_no=0, dpi=50.0):
     return int(len(np.unique(q[:, 0] * 1024 + q[:, 1] * 32 + q[:, 2])))
 
 
+# Una linea tratteggiata, per contare come una piega sola: almeno tanti
+# trattini, tutti lunghi uguali (a meno di TRATTINO_UGUALE), ciascuno lungo
+# almeno TRATTINO_MIN_MM e almeno TRATTINO_SU_SALTO volte il salto, e i salti
+# veri (non tratti contigui) e uguali. Una perforazione - denti da 2,5 mm con
+# salti da 1,5 - non lo e', e nemmeno una linea spezzata in pezzi contigui.
+TRATTINI_MIN = 3
+TRATTINO_MIN_MM = 8.0
+TRATTINO_SU_SALTO = 5.0
+TRATTINO_UGUALE = 0.1
+SALTO_MIN_MM = 0.5
+
+
+def _tratteggio(pezzi, salto_mm):
+    """Se i pezzi `[(a, b)]`, ordinati, sono i trattini di una linea
+    tratteggiata regolare (vedi `TRATTINI_MIN` e seguenti)."""
+    if len(pezzi) < TRATTINI_MIN:
+        return False
+    lunghi = [(b - a) * PT2MM for a, b in pezzi]
+    salti = [(pezzi[i + 1][0] - pezzi[i][1]) * PT2MM for i in range(len(pezzi) - 1)]
+    # i due capi possono essere mozzati dal bordo della fascia
+    interni = lunghi[1:-1] or lunghi
+    lt = max(interni)
+    return (min(interni) >= (1 - TRATTINO_UGUALE) * lt
+            and lt >= TRATTINO_MIN_MM
+            and max(lunghi) <= (1 + TRATTINO_UGUALE) * lt
+            and min(salti) >= SALTO_MIN_MM and max(salti) <= salto_mm
+            and max(salti) - min(salti) <= 0.5
+            and lt >= TRATTINO_SU_SALTO * max(salti))
+
+
+def _tratteggi_uniti(segs, salto_mm=3.0):
+    """I tratti allineati di una linea tratteggiata, uniti in un tratto solo.
+
+    Una cordonatura disegnata a trattini e' una piega come una continua: sul
+    display T2x25 i trattini erano da 20 mm su una fascia larga 271, sotto il
+    5% del foglio, e le due pieghe del retro non entravano nelle righe: retro
+    e cielo si leggevano come una fascia sola da 194 mm. Qui si uniscono i
+    trattini della stessa penna, sulla stessa retta, con un salto fino a
+    `salto_mm`, solo se sono un tratteggio regolare (`_tratteggio`): una
+    perforazione o una linea spezzata in pezzi contigui restano com'erano, e
+    gli altri casi del parco si leggono come prima. Solo per misurare la
+    lunghezza delle righe, i segmenti restano quelli del disegno."""
+    salto = salto_mm / PT2MM
+    gruppi = {}
+    for kind, c, a, b, st in segs:
+        gruppi.setdefault((kind, round(c * 2) / 2, st), []).append((a, b, c))
+    out = []
+    for (kind, _, st), tr in gruppi.items():
+        tr.sort()
+        corse = [[tr[0]]]
+        for t in tr[1:]:
+            if t[0] - max(x[1] for x in corse[-1]) <= salto:
+                corse[-1].append(t)
+            else:
+                corse.append([t])
+        for corsa in corse:
+            if _tratteggio([(a, b) for a, b, _c in corsa], salto_mm):
+                out.append((kind, corsa[0][2], corsa[0][0],
+                            max(b for _a, b, _c in corsa), st))
+            else:
+                out.extend((kind, c, a, b, st) for a, b, c in corsa)
+    return out
+
+
+# Una catena di quote sulla stessa retta - fianco, corpo, fianco - e' spezzata
+# dai suoi numeri, scritti sulla linea: fra un pezzo e l'altro al piu' tanto,
+# in mm.
+QUOTA_SALTO_MM = 25.0
+# Una penna e' di quote se almeno questa frazione della sua lunghezza sono
+# linee di quota e richiami (`_penne_di_quote`).
+PENNA_DI_QUOTE = 0.8
+# Quanto vicino a una linea deve finire un tratto per toccarla, in mm.
+TOCCA_MM = 1.0
+
+
+def _quote_a_catena(segs, numeri, tol_mm=1.5):
+    """Le quote, anche quelle a catena: `[(kind, c, a, b)]`.
+
+    `flowpack._quote_estese` unisce tutti i tratti di una retta in una linea
+    sola: una catena di quote - 89,5 + 271 + 89,5 sulla stessa riga, o le
+    fasce del corpo una sotto l'altra - diventa una linea lunga quanto la
+    somma, e nessun numero la misura. Qui per ogni numero si cerca, fra i
+    tratti della stessa penna sulla retta accanto, una corsa di pezzi
+    consecutivi (salti fino a `QUOTA_SALTO_MM`, dove sta scritto il numero)
+    lunga quanto lui e che lo contiene."""
+    from .flowpack import QUOTA_ACCANTO_MM
+    righe = {}
+    for k, c, a, b, st in segs:
+        righe.setdefault((k, round(c / 3.0), st), []).append((a, b, c))
+    salto = QUOTA_SALTO_MM / PT2MM
+    out = set()
+    for x, y, v in numeri:
+        meglio = None
+        for (k, _q, _st), tr in righe.items():
+            tr = sorted(tr)
+            c = sum(t[2] for t in tr) / len(tr)
+            su, lungo = (y, x) if k == "H" else (x, y)
+            dd = abs(su - c)
+            if dd > QUOTA_ACCANTO_MM / PT2MM or (meglio and dd >= meglio[0]):
+                continue
+            for i in range(len(tr)):
+                a, b = tr[i][0], tr[i][1]
+                for j in range(i, len(tr)):
+                    if j > i:
+                        if tr[j][0] - b > salto:
+                            break
+                        b = max(b, tr[j][1])
+                    if a <= lungo <= b and abs(v - (b - a) * PT2MM) <= tol_mm:
+                        meglio = (dd, k, c, a, b)
+                        break
+                if meglio and meglio[0] == dd:
+                    break
+        if meglio:
+            out.add(meglio[1:])
+    return sorted(out)
+
+
+def _penne_di_quote(segs, numeri, tol=3.0):
+    """Le penne che disegnano solo quote: linee misurate da un numero scritto
+    accanto (`_quote_a_catena`) e i loro richiami, per almeno `PENNA_DI_QUOTE`
+    della loro lunghezza.
+
+    Chi mette le quote in una penna sua le mette anche DENTRO il disegno: sul
+    T2x25 la catena delle fasce del corpo correva in verticale a 18 mm dal
+    fianco destro, spezzata dai numeri, e la griglia la prendeva per una
+    colonna (il corpo largo 256 invece di 271); le quote fuori, coi richiami
+    lunghi fino al disegno, allargavano il riquadro. `_quote_fuori` toglie
+    solo quelle fuori, e solo coi richiami corti: qui si toglie la penna."""
+    quote = _quote_a_catena(segs, numeri)
+    if not quote:
+        return set()
+    tot, di_q = {}, {}
+    for k, c, a, b, st in segs:
+        tot[st] = tot.get(st, 0.0) + (b - a)
+        if any((k == kq and abs(c - cq) <= tol and a >= qa - tol and b <= qb + tol)
+               or (k != kq and min(abs(c - qa), abs(c - qb)) <= tol
+                   and a - tol <= cq <= b + tol)
+               for kq, cq, qa, qb in quote):
+            di_q[st] = di_q.get(st, 0.0) + (b - a)
+    return {st for st, L in tot.items()
+            if L > 0 and di_q.get(st, 0.0) >= PENNA_DI_QUOTE * L}
+
+
+def _capi(s):
+    k, c, a, b, _st = s
+    return ((c, a), (c, b)) if k == "V" else ((a, c), (b, c))
+
+
+def _distanza(p, s):
+    k, c, a, b, _st = s
+    lungo, su = (p[1], p[0]) if k == "V" else (p[0], p[1])
+    return ((su - c) ** 2 + max(a - lungo, 0.0, lungo - b) ** 2) ** 0.5
+
+
+def _quanto_tocca(segs, penna, altre, tol_mm=TOCCA_MM):
+    """La frazione dei capi dei tratti di `penna` che finiscono su un tratto
+    (diverso da loro) di una delle penne `altre`."""
+    tol = tol_mm / PT2MM
+    mie = [s for s in segs if s[4] == penna]
+    loro = [s for s in segs if s[4] in altre]
+    capi = [(p, m) for m in mie for p in _capi(m)]
+    if not capi:
+        return 0.0
+    n = sum(1 for p, m in capi
+            if any(s is not m and _distanza(p, s) <= tol for s in loro))
+    return n / len(capi)
+
+
+def _riquadro_segs(segs):
+    xs = [v for k, c, a, b, _ in segs for v in ((c,) if k == "V" else (a, b))]
+    ys = [v for k, c, a, b, _ in segs for v in ((c,) if k == "H" else (a, b))]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _penne_di_riquadri(segs, fustella, tol=3.0):
+    """Le penne della fustella che disegnano solo riquadri dentro i pannelli:
+    aree di stampa, di colla, di riserva.
+
+    Una cordonatura va da un taglio all'altro, e un taglio incontra le pieghe:
+    le penne della fustella si toccano. Un riquadro rientrato di qualche
+    millimetro in un pannello non tocca nessun'altra penna (nemmeno un capo su
+    cento), e' chiuso su se stesso (almeno meta' dei capi sui suoi stessi
+    tratti) e sta tutto dentro il riquadro delle altre. Sul T2x25 la penna
+    grigia delle aree di stampa era la piu' lunga di tutte e alzava la soglia
+    di `penne_di_fustella`."""
+    via = set()
+    if len(fustella) < 3:
+        return via
+    for st in fustella:
+        mie = [s for s in segs if s[4] == st]
+        altre = [s for s in segs if s[4] in fustella and s[4] != st]
+        if not mie or not altre:
+            continue
+        a, b = _riquadro_segs(mie), _riquadro_segs(altre)
+        dentro = (a[0] >= b[0] - tol and a[1] >= b[1] - tol
+                  and a[2] <= b[2] + tol and a[3] <= b[3] + tol)
+        if (dentro and _quanto_tocca(segs, st, fustella - {st}) < 0.02
+                and _quanto_tocca(segs, st, {st}) >= 0.5):
+            via.add(st)
+    return via
+
+
+def _penne_fustella_pulite(segs, numeri, page_w, page_h):
+    """`penne_di_fustella`, senza le penne di quote (`_penne_di_quote`) e di
+    riquadri (`_penne_di_riquadri`), se ce ne sono.
+
+    Tolte quelle, la soglia si rifa' sulle altre; e una penna che resta sotto
+    soglia ma i cui tratti finiscono TUTTI su tratti della fustella e' una
+    cordonatura corta (i fianchi e le alette di un astuccio su una penna sua),
+    e si tiene. Senza penne da togliere il risultato e' quello di
+    `penne_di_fustella`."""
+    fustella = penne_di_fustella(segs, page_w, page_h)
+    if not fustella:
+        return fustella
+    via = (_penne_di_quote([s for s in segs if s[4] in fustella], numeri)
+           if numeri else set())
+    via |= _penne_di_riquadri(segs, fustella - via)
+    if not via or not fustella - via:
+        return fustella
+    resto = [s for s in segs if s[4] not in via]
+    nuove = penne_di_fustella(resto, page_w, page_h) - via
+    for st in {s[4] for s in resto} - nuove:
+        if _quanto_tocca(resto, st, nuove) >= 0.95:
+            nuove.add(st)
+    return nuove
+
+
 def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     t = tratti(pdf_path, page_no)
     all_segs = list(t.segmenti)
@@ -1055,7 +1282,8 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
     # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
     # guardando solo quello che sta sulla fustella.
-    fustella = penne_di_fustella(segs, t.larghezza, t.altezza)
+    # Anche le penne di quote e di riquadri: `_penne_fustella_pulite`.
+    fustella = _penne_fustella_pulite(segs, numeri, t.larghezza, t.altezza)
     if fustella:
         segs = [s for s in segs if s[4] in fustella] or segs
 
@@ -1076,7 +1304,7 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     Wb, Hb = bx1 - bx0, by1 - by0
 
     vlong, hlong = [], []
-    for kind, c, a, b, st in segs:
+    for kind, c, a, b, st in _tratteggi_uniti(segs):
         L = b - a
         if kind == "V" and L > Hb * 0.05:
             vlong.append((c, L))
