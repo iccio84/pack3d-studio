@@ -1035,6 +1035,34 @@ def _colori(pdf_path, riq, page_no=0, dpi=50.0):
     return int(len(np.unique(q[:, 0] * 1024 + q[:, 1] * 32 + q[:, 2])))
 
 
+def _tratteggi_uniti(segs, salto_mm=3.0):
+    """I tratti allineati di una linea tratteggiata, uniti in un tratto solo.
+
+    Una cordonatura disegnata a trattini e' una piega come una continua: sul
+    display T2x25 i trattini erano da 20 mm su una fascia larga 271, sotto il
+    5% del foglio, e le due pieghe del retro non entravano nelle righe: retro
+    e cielo si leggevano come una fascia sola da 194 mm. Qui si uniscono i
+    trattini della stessa penna, sulla stessa retta, con un salto fino a
+    `salto_mm`; solo per misurare la lunghezza delle righe, i segmenti
+    restano quelli del disegno."""
+    salto = salto_mm / PT2MM
+    gruppi = {}
+    for kind, c, a, b, st in segs:
+        gruppi.setdefault((kind, round(c * 2) / 2, st), []).append((a, b, c))
+    out = []
+    for (kind, _, st), tr in gruppi.items():
+        tr.sort()
+        a0, b0, c0 = tr[0]
+        for a, b, c in tr[1:]:
+            if a - b0 <= salto:
+                b0 = max(b0, b)
+            else:
+                out.append((kind, c0, a0, b0, st))
+                a0, b0, c0 = a, b, c
+        out.append((kind, c0, a0, b0, st))
+    return out
+
+
 def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     t = tratti(pdf_path, page_no)
     all_segs = list(t.segmenti)
@@ -1076,7 +1104,7 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     Wb, Hb = bx1 - bx0, by1 - by0
 
     vlong, hlong = [], []
-    for kind, c, a, b, st in segs:
+    for kind, c, a, b, st in _tratteggi_uniti(segs):
         L = b - a
         if kind == "V" and L > Hb * 0.05:
             vlong.append((c, L))
