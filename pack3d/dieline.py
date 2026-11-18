@@ -1152,7 +1152,7 @@ def _quote_a_catena(segs, numeri, tol_mm=1.5):
     return sorted(out)
 
 
-def _penne_di_quote(segs, numeri, tol=3.0):
+def _penne_di_quote(segs, numeri, tol=3.0, quota=None):
     """Le penne che disegnano solo quote: linee misurate da un numero scritto
     accanto (`_quote_a_catena`) e i loro richiami, per almeno `PENNA_DI_QUOTE`
     della loro lunghezza.
@@ -1174,8 +1174,9 @@ def _penne_di_quote(segs, numeri, tol=3.0):
                    and a - tol <= cq <= b + tol)
                for kq, cq, qa, qb in quote):
             di_q[st] = di_q.get(st, 0.0) + (b - a)
+    soglia = PENNA_DI_QUOTE if quota is None else quota
     return {st for st, L in tot.items()
-            if L > 0 and di_q.get(st, 0.0) >= PENNA_DI_QUOTE * L}
+            if L > 0 and di_q.get(st, 0.0) >= soglia * L}
 
 
 def _capi(s):
@@ -1221,23 +1222,28 @@ def _penne_di_riquadri(segs, fustella, tol=3.0):
     grigia delle aree di stampa era la piu' lunga di tutte e alzava la soglia
     di `penne_di_fustella`."""
     via = set()
-    if len(fustella) < 3:
+    if len(fustella) < 2:
         return via
+    # con due penne sole il confronto si fa con tutte le penne tecniche: sul
+    # T2x12 la fustella era la penna verde delle pieghe e quella grigia delle
+    # aree di stampa, e il taglio nero, a tratti corti su una pagina larga un
+    # metro, restava sotto la soglia
+    confronto = fustella if len(fustella) >= 3 else {s[4] for s in segs}
     for st in fustella:
         mie = [s for s in segs if s[4] == st]
-        altre = [s for s in segs if s[4] in fustella and s[4] != st]
+        altre = [s for s in segs if s[4] in confronto and s[4] != st]
         if not mie or not altre:
             continue
         a, b = _riquadro_segs(mie), _riquadro_segs(altre)
         dentro = (a[0] >= b[0] - tol and a[1] >= b[1] - tol
                   and a[2] <= b[2] + tol and a[3] <= b[3] + tol)
-        if (dentro and _quanto_tocca(segs, st, fustella - {st}) < 0.02
+        if (dentro and _quanto_tocca(segs, st, confronto - {st}) < 0.02
                 and _quanto_tocca(segs, st, {st}) >= 0.5):
             via.add(st)
     return via
 
 
-def _penne_fustella_pulite(segs, numeri, page_w, page_h):
+def _penne_fustella_pulite(segs, numeri, page_w, page_h, tutti=None):
     """`penne_di_fustella`, senza le penne di quote (`_penne_di_quote`) e di
     riquadri (`_penne_di_riquadri`), se ce ne sono.
 
@@ -1251,6 +1257,14 @@ def _penne_fustella_pulite(segs, numeri, page_w, page_h):
         return fustella
     via = (_penne_di_quote([s for s in segs if s[4] in fustella], numeri)
            if numeri else set())
+    if numeri and tutti:
+        # una penna che per meta' e' quote misurate, contata su TUTTI i suoi
+        # tratti della pagina e non solo su quelli del gruppo: sul T2x12 con
+        # la finestra la catena dentro il disegno ha un 90 rimasto da un altro
+        # formato, e nel gruppo le quote vere (271, 272, 432) non c'erano
+        for st in fustella - via:
+            if _penne_di_quote([x for x in tutti if x[4] == st], numeri, quota=0.5):
+                via.add(st)
     via |= _penne_di_riquadri(segs, fustella - via)
     if not via or not fustella - via:
         return fustella
@@ -1259,6 +1273,41 @@ def _penne_fustella_pulite(segs, numeri, page_w, page_h):
     for st in {s[4] for s in resto} - nuove:
         if _quanto_tocca(resto, st, nuove) >= 0.95:
             nuove.add(st)
+    # il taglio: la penna che sta fuori dalle pieghe da tutti e due i lati
+    # (a sinistra e a destra, o sopra e sotto) e le copre per almeno meta'
+    # nell'altro verso: i fianchi e le alette. Sul T2x12 il contorno nero, a
+    # tratti corti su una pagina larga un metro, non passava la soglia, e
+    # senza di lui l'astuccio perdeva i fianchi; le quote sporgono da un
+    # lato solo
+    if nuove:
+        p0, q0, p1, q1 = _riquadro_segs([s for s in resto if s[4] in nuove])
+        tol = 3.0 / PT2MM
+        # le quote no: sopra e sotto il DT sporgono anche loro. Si
+        # riconoscono su tutti i loro tratti, anche fuori dal gruppo (sul
+        # T2x12 la catena dentro il disegno ha un 90 rimasto da un altro
+        # formato, ma il 271, il 272 e il 432 fuori misurano le loro linee)
+        di_quote = set()
+        for st in {s[4] for s in resto} - nuove:
+            loro = [x for x in (tutti or resto) if x[4] == st]
+            if numeri and _penne_di_quote(loro, numeri, quota=0.5):
+                di_quote.add(st)
+        for st in {s[4] for s in resto} - nuove - di_quote:
+            r = _riquadro_segs([s for s in resto if s[4] == st])
+            fuori_x = r[0] < p0 - tol and r[2] > p1 + tol
+            fuori_y = r[1] < q0 - tol and r[3] > q1 + tol
+            copre_x = min(r[2], p1) - max(r[0], p0) >= 0.5 * (p1 - p0)
+            copre_y = min(r[3], q1) - max(r[1], q0) >= 0.5 * (q1 - q0)
+            if (fuori_x and copre_y) or (fuori_y and copre_x):
+                nuove.add(st)
+        # e le pieghe corte su una penna loro, anche se non sono fra le
+        # penne tecniche (`tutti`, tutti i tratti della pagina): una penna
+        # sottile coi tratti che finiscono tutti sulla fustella. Sul T2x12
+        # le pieghe rosse dei fianchi, quattro tratti sotto i 52 mm che la
+        # soglia della pagina non vedeva: senza, i fianchi del retro non
+        # c'erano e fronte e retro si scambiavano
+        for st in {x[4] for x in (tutti or ())} - nuove - via:
+            if st[0] <= 1.2 and _quanto_tocca(tutti, st, nuove) >= 0.95:
+                nuove.add(st)
     return nuove
 
 
@@ -1283,9 +1332,12 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
     # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
     # guardando solo quello che sta sulla fustella.
     # Anche le penne di quote e di riquadri: `_penne_fustella_pulite`.
-    fustella = _penne_fustella_pulite(segs, numeri, t.larghezza, t.altezza)
+    fustella = _penne_fustella_pulite(segs, numeri, t.larghezza, t.altezza,
+                                      tutti=all_segs)
     if fustella:
-        segs = [s for s in segs if s[4] in fustella] or segs
+        gia = {s[4] for s in segs}
+        segs = ([s for s in segs if s[4] in fustella]
+                + [s for s in all_segs if s[4] in fustella and s[4] not in gia]) or segs
 
     bx0 = by0 = 1e9
     bx1 = by1 = -1e9
