@@ -31,7 +31,8 @@ sono in GADGET.md.
   `_analyze_pdf` prova le righe in ordine. Un pack che esce della famiglia
   sbagliata si guarda qui. `COSTRUZIONI` dice, per la famiglia letta, quale
   `build_*` si chiama e con quali scelte della pagina. La famiglia **Incarti** dichiarata dalla pagina passa da
-  `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`); la sua
+  `analisi_incarto_dichiarato` (la chiusura: `pieghe` o `avvolto`, che legge i
+  due PDF dell'uovo col collarino); la sua
   immagine del prodotto la separa dal PDF `_separa_prodotto` (in
   `server.py`), all'inizio di `do_POST`, e va col caso (`blocchi_caso`).
   I **materiali POP** (per ora il totem e l'espositore), dalla finestra «Crea materiali POP
@@ -45,7 +46,7 @@ sono in GADGET.md.
 - `pack3d/famiglie/`: `build_carton` (`astuccio`), `build_vassoio`,
   `build_plancia`, `build_scatola_plancia` (`vassoio`), `build_coppa`,
   `build_prisma` (`coppa`), `build_pouch`, `build_ballotin`, `build_punta`,
-  `build_tubo`, `build_incarto`, `build_riempimento` e `build_flowpack`: la
+  `build_tubo`, `build_incarto`, `build_uovo` (`incarto`), `build_riempimento` e `build_flowpack`: la
   **costruzione** di ogni famiglia, dal PDF al GLB.
 - `pack3d/lavoratori.py`: le analisi e le costruzioni in processi a parte,
   uno per lavoro, con la fila al posto del «Server occupato».
@@ -123,6 +124,7 @@ sono in GADGET.md.
 | scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `famiglie.coppa.build_prisma` |
 | flowpack | `flowpack.py`, `materiali.py` (alluminio, white plate, vernice) |
 | incarto a triangolo (film attorno a una barretta, testate ripiegate) | `incarto.py`, montato in `famiglie.incarto.build_incarto` |
+| incarto avvolto (l'uovo incartato col collarino, in due PDF) | `uovo.py`, montato in `famiglie.incarto.build_uovo` |
 | vassoio espositore | `vassoio.py` |
 | vassoio sagomato (pareti oblique o con incavi, il fondo fra quattro cordonature; si prova per ultimo) | `vassoio.riconosci_sagomato` |
 | display con plancia | `plancia.py` |

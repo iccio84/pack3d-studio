@@ -202,7 +202,7 @@ class RegistroDelleFamiglie(unittest.TestCase):
 
     def test_ogni_famiglia_letta_ha_la_sua_costruzione(self):
         for kind in ("coppa", "vassoio", "pouch", "ballotin", "punta", "incarto",
-                     "tubo", "carton", "riempimento", "flowpack"):
+                     "uovo", "tubo", "carton", "riempimento", "flowpack"):
             self.assertIn(kind, self.s.COSTRUZIONI)
 
     def _leggi(self, kind):
@@ -234,6 +234,68 @@ class RegistroDelleFamiglie(unittest.TestCase):
 
     def test_senza_dichiarazione_lo_stesso_foglio_va_al_flowpack(self):
         self.assertEqual(self._leggi(None), {"kind": "flowpack"})
+
+
+class UovoAvvolto(unittest.TestCase):
+    """L'incarto avvolto (`pack3d.uovo`): le viste del DT in ordine di
+    lettura, i due PDF in qualunque ordine, cosa dice quando ne manca uno, e
+    la chiusura in cima che non sposta niente sotto il ciuffo."""
+
+    def setUp(self):
+        from pack3d import uovo
+        self.u = uovo
+
+    def test_le_viste_del_dt_in_ordine_di_lettura(self):
+        u = self.u
+        # tre viste uguali, due nella prima riga e una sotto; ogni vista fatta
+        # di due pezzi del DT che si toccano, e le note fuori
+        pezzi = [((1060, 190, 1500, 1070), u.STRATO_DT), ((1500, 190, 1940, 1070), u.STRATO_DT),
+                 ((60, 1190, 940, 2070), u.STRATO_DT), ((60, 190, 500, 1070), u.STRATO_DT),
+                 ((505, 190, 940, 1070), u.STRATO_DT), ((0, 0, 3000, 100), u.STRATO_NOTE)]
+        pag = mock.Mock(ogg=[r for r, _ in pezzi], strato=[s for _, s in pezzi])
+        pag.riquadro = lambda r: r
+        self.assertEqual(u._viste(pag), [(60, 190, 940, 1070), (1060, 190, 1940, 1070),
+                                         (60, 1190, 940, 2070)])
+
+    def test_il_foglio_e_il_collarino_in_qualunque_ordine(self):
+        u = self.u
+        f = u.Foglio("f.pdf", [(60, 190, 940, 1070), (1060, 190, 1940, 1070)], 880.0)
+        c = u.Collarino("c.pdf", [(25, 8, 296, 224)] * 3, 264.2, 205.3)
+        letti = {"f.pdf": f, "c.pdf": c, "x.pdf": None}
+        with mock.patch.object(u, "leggi", side_effect=letti.get):
+            self.assertEqual(u.riconosci(["c.pdf", "f.pdf"]), (f, c))
+            self.assertEqual(u.riconosci(["f.pdf", "c.pdf"]), (f, c))
+            with self.assertRaises(ValueError) as e:
+                u.riconosci(["f.pdf"])
+            self.assertIn("manca il PDF del collarino", str(e.exception))
+            with self.assertRaises(ValueError) as e:
+                u.riconosci(["f.pdf", "x.pdf"])
+            self.assertIn("il PDF 2 non e' ne' il foglio ne' il collarino", str(e.exception))
+
+    def test_la_pagina_dichiara_l_avvolto_coi_due_pdf(self):
+        from pack3d.famiglie import incarto as fi
+        u = self.u
+        f = u.Foglio("f.pdf", [(60, 190, 940, 1070), (1060, 190, 1940, 1070)], 880.0)
+        c = u.Collarino("c.pdf", [(25, 8, 296, 224)] * 3, 264.2, 205.3)
+        with mock.patch.object(u, "riconosci", return_value=(f, c)) as r:
+            letto = fi.analisi_incarto_dichiarato("c.pdf", "avvolto", ["c.pdf", "f.pdf"])
+        r.assert_called_once_with(["c.pdf", "f.pdf"])
+        self.assertEqual(letto["kind"], "uovo")
+        self.assertIn("Incarto avvolto: l'uovo incartato col collarino", letto["meta"])
+        with self.assertRaises(ValueError):
+            fi.analisi_incarto_dichiarato("a.pdf", "pieghe", ["a.pdf", "b.pdf"])
+
+    def test_la_cima_si_chiude_senza_toccare_il_resto(self):
+        # z si scala dello stesso fattore a ogni altezza: sotto Y_STRINGE
+        # resta 1 (uovo e collarino non cambiano), poi scende sempre, fino a
+        # S_CIMA in cima, e non tocca mai zero (la deformazione si inverte)
+        u = self.u
+        y = np.linspace(-50.0, u.Y_CIMA + 50.0, 400)
+        s = u.stringi_z(y)
+        self.assertTrue(np.all(s[y <= u.Y_STRINGE] == 1.0))
+        self.assertTrue(np.all(np.diff(s) <= 0))
+        self.assertAlmostEqual(float(s[-1]), u.S_CIMA)
+        self.assertGreater(float(s.min()), 0.0)
 
 
 class LastreDiUnCasoCalibrato(unittest.TestCase):

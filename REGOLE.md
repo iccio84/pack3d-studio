@@ -140,7 +140,7 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 | **Cartotecnico** | **astuccio** (un solo elemento che si chiude da solo) o **scatola** (due o piu' elementi, per esempio base piu' coperchio); lo **spessore della carta**, da 1 a 3; l'astuccio un PDF, la scatola **di quante parti** e' fatta e poi **esattamente quei PDF**, uno per parte. Dopo lo studio, se l'astuccio ha un'**apertura a strappo**: chiuso - e allora se si vuole la **fustella dell'apertura modellata** - o aperto, e allora di **quanti gradi** si apre il coperchio. Se ha una finestra, la **pellicola** | passo `carto`, `parti`, `spessore`; pannelli `strappo` e `pellicola`; `pezzi`, `spessore`, `apertura`, `incisioni`, `pellicola` nell'intestazione |
 | **Vassoio** - contenitore espositivo per le CU, display con plancia compresi, realizzati vuoti | il PDF, e si costruisce | `build_vassoio`, `build_plancia` |
 | **Riempimenti** - TU: un vassoio o un display con dentro le CU | che cosa e' il **pack (CU)**: flowpack o astuccio, e dell'astuccio lo spessore della carta; due posti, il **pack (CU)** e il **vassoio o display**, e finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack, o - per l'astuccio con l'apertura a strappo - se se ne vuole la fustella modellata | `cu`, `analisi_riempimento`, `build_riempimento` |
-| **Incarti** - un foglio di carta, alluminio o plastica che avvolge un prodotto | come si **chiude**: **a pieghe** (le barrette) o **avvolto** (tipo l'ovetto); due posti, il **PDF dello steso** e l'**immagine del prodotto** da incartare (JPEG, PNG o WebP), e finche' non ci sono tutti e due non si procede. Poi si costruisce, senza altre domande | passo `incarto-scelta`; `chiusura` e `prodotto` nell'intestazione; `analisi_incarto_dichiarato`, `build_incarto` |
+| **Incarti** - un foglio di carta, alluminio o plastica che avvolge un prodotto | come si **chiude**: **a pieghe** (le barrette) o **avvolto** (l'uovo col collarino); a pieghe due posti, il **PDF dello steso** e l'**immagine del prodotto** da incartare (JPEG, PNG o WebP), avvolto tre, il **PDF del foglio**, quello del **collarino** e l'immagine; finche' non ci sono tutti non si procede. Poi si costruisce, senza altre domande | passo `incarto-scelta`; `chiusura` e `prodotto` nell'intestazione; `analisi_incarto_dichiarato`, `build_incarto`, `build_uovo` |
 
 **La finestra dei materiali POP.** La stessa pagina con `pop=1`
 nell'indirizzo - in Glam, «Crea materiali POP 3D da PDF» - chiede «Che tipo
@@ -565,11 +565,13 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Il lid
   - Il fronte senza il fondo giallo
 
-**`regole/incarti.md`** - l'incarto a triangolo
+**`regole/incarti.md`** - l'incarto a triangolo e l'uovo avvolto
 
 - L'incarto a triangolo
   - Gli incarti nella pagina
   - Cosa manca
+- L'uovo avvolto
+  - Cosa manca all'uovo
 
 **`regole/riempimenti.md`** - riempimenti
 
