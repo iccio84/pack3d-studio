@@ -244,7 +244,39 @@ def _attraversa(spunta, linea):
     return False
 
 
-def firma(pdf, panels, facce, page_no=0):
+def _tratti_per_penna(pdf, page_no=0):
+    """{penna: [sottopercorso]} dei tratti sottili della pagina, come
+    `_tratti_tecnici` ma con tutte le penne sottili non bianche e divisi per
+    penna: il taglio a vista e quello dal rovescio di un'apertura possono
+    stare su penne fuori dalle tecniche - sul T2x12 a strappo il verde e il
+    viola da 0,6 - e si toccano agli angoli: cuciti insieme diventavano un
+    taglio dal rovescio solo, e l'apertura non si trovava."""
+    import pypdfium2 as pdfium
+    from . import dieline, tracciati
+
+    segs, larga, alta = tracciati.segmenti(pdf, page_no)
+    penne = dieline._technical_pens(segs, larga, alta)
+    penne |= {s[4] for s in segs if s[4][0] <= 1.2 and s[4][1] != "(255, 255, 255)"}
+    if not penne:
+        return {}
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        page = doc[page_no]
+        pieni, tratti = [], []
+        tracciati._cammina(page, pieni, tratti)
+    finally:
+        doc.close()
+    out = {}
+    for sp, r, st in tratti:
+        if st not in penne or r is not None:
+            continue
+        punti = [(float(x), float(y)) for x, y in sp]
+        if len(punti) >= 2:
+            out.setdefault(st, []).append(punti)
+    return out
+
+
+def firma(pdf, panels, facce, page_no=0, larga=False):
     """(aperture, vicini, rovescio) dell'apertura a strappo, o None.
 
     `panels` sono i pannelli dell'astuccio risolto, `facce` i nomi di quelli
@@ -254,19 +286,31 @@ def firma(pdf, panels, facce, page_no=0):
     continuano; `vicini` i gruppi a un passo, come la mezzaluna per il dito;
     `rovescio` i tagli dal rovescio. Vedi `tagli` per come si riconosce.
     """
-    percorsi = _tratti_tecnici(pdf, page_no)
-    if not percorsi:
+    # `larga`: con tutte le penne sottili, ognuna per se' (`_tratti_per_penna`);
+    # si prova solo quando ne' la firma sulle penne tecniche ne' la
+    # perforazione trovano l'apertura, cosi' i casi di prima non cambiano
+    if larga:
+        per_penna = _tratti_per_penna(pdf, page_no)
+    else:
+        tecnici = _tratti_tecnici(pdf, page_no)
+        per_penna = {None: tecnici} if tecnici else {}
+    if not per_penna:
         return None
     quadri = [panels[n] for n in facce if n in panels]
     if not quadri:
         return None
     # i tratti che stanno dentro almeno una faccia, interi: le linee si cuciono
-    # sul foglio, attraverso le pieghe, e si tagliano alle facce solo alla fine
-    segmenti = [sg for sg in _segmenti(percorsi)
-                if any(_dentro_pannello(sg, p) is not None for p in quadri)]
-    if not segmenti:
+    # sul foglio, attraverso le pieghe, e si tagliano alle facce solo alla
+    # fine; ognuna con la sua penna
+    linee, penna = [], {}
+    for st, percorsi in per_penna.items():
+        segmenti = [sg for sg in _segmenti(percorsi)
+                    if any(_dentro_pannello(sg, p) is not None for p in quadri)]
+        for l in _catene(segmenti):
+            penna[id(l)] = st
+            linee.append(l)
+    if not linee:
         return None
-    linee = _catene(segmenti)
     corta = [len(l) == 2 and _lunghezza(l) < SPUNTA for l in linee]
     spunte = [l for l, c in zip(linee, corta) if c]
     resto = [l for l, c in zip(linee, corta) if not c]
@@ -281,6 +325,14 @@ def firma(pdf, panels, facce, page_no=0):
         return None
     vicini = [g for g in gruppi if not any(g is a for a in aperture)
               and any(_distanza_gruppi(g, a) <= VICINO * MM for a in aperture)]
+    # a un passo dall'apertura stanno anche le pieghe (che sono il bordo di
+    # una faccia) e le quote: un vicino e' un taglio della penna dell'apertura,
+    # dentro una faccia. Sul T2x12 l'apertura corre a 2 mm dalla piega del
+    # cielo, e senza questo si incidevano le pieghe e la linea di una quota
+    if larga:
+        sue = {penna.get(id(l)) for g in aperture for l in g}
+        vicini = [g for g in vicini
+                  if all(penna.get(id(l)) in sue and not _di_bordo(l, quadri) for l in g)]
     return aperture, vicini, rovescio
 
 
@@ -464,9 +516,14 @@ def tagli(pdf, panels, facce, page_no=0):
         # la perforazione si incide trattino per trattino: i ponticelli sono
         # cartone intero
         p = perforata(pdf, panels, facce, page_no)
-        if p is None:
+        larga = firma(pdf, panels, facce, page_no, larga=True) if p is None else None
+        if p is not None:
+            scelte = p["pezzi"] + p["vicini"]
+        elif larga is not None:
+            aperture, vicini, _rovescio = larga
+            scelte = [l for g in aperture + vicini for l in g]
+        else:
             return {}
-        scelte = p["pezzi"] + p["vicini"]
     out = {}
     for nome in facce:
         p = panels.get(nome)
