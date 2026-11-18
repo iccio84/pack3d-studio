@@ -607,7 +607,7 @@
     </div>
     <div id="incarto-scelta" class="carte due" role="group" aria-label="Come si chiude l'incarto" hidden>
       <button type="button" data-i="pieghe" aria-pressed="false"><b>A pieghe</b><span>Il foglio avvolge il prodotto e si chiude con le pieghe sulle testate. Esempio: le barrette</span></button>
-      <button type="button" data-i="avvolto" aria-pressed="false"><b>Avvolto</b><span>Il foglio avvolge tutto il prodotto, chiuso attorno a lui. Esempio: l&rsquo;ovetto con la sorpresa. Ancora da costruire: il caso va a chi corregge il codice</span></button>
+      <button type="button" data-i="avvolto" aria-pressed="false"><b>Avvolto</b><span>Il foglio avvolge tutto il prodotto e si raccoglie in un ciuffo, stretto da un collarino. Esempio: l&rsquo;uovo di Pasqua. Si caricano due PDF, il foglio e il collarino</span></button>
     </div>
     <div class="griglia" id="passo-campi" hidden>
       <div class="fld" id="parti-fld" hidden>
@@ -2788,10 +2788,16 @@ const FAMIGLIE = {
             descr: 'Un foglio di carta, alluminio o plastica che avvolge un prodotto: '
                  + 'si chiude con le pieghe (le barrette) o lo avvolge tutto (tipo l\u2019ovetto). '
                  + 'La misura finale del 3D dipende anche dal prodotto: oltre al PDF dello '
-                 + 'steso serve un\u2019immagine del prodotto da incartare.',
+                 + 'steso serve un\u2019immagine del prodotto da incartare; per l\u2019avvolto '
+                 + 'anche il PDF del collarino.',
             slot: ['Il PDF dello steso (il foglio aperto)',
                    'L\u2019immagine del prodotto da incartare'],
-            tipi: ['pdf', 'img']},
+            tipi: ['pdf', 'img'],
+            // avvolto (l'uovo col collarino): il foglio, il collarino e l'immagine
+            slotAvvolto: ['Il PDF del foglio (lo steso)',
+                          'Il PDF del collarino',
+                          'L\u2019immagine del prodotto da incartare'],
+            tipiAvvolto: ['pdf', 'pdf', 'img']},
   // i materiali POP, nella finestra con pop=1 (pack3d/pop/)
   totem: {nome: 'Totem',
           descr: 'Espositore da terra per il punto vendita: due pannelli curvati, il fronte '
@@ -2815,7 +2821,10 @@ const incartoSceltaEl = document.getElementById('incarto-scelta');
 const fileImgEl = document.getElementById('file-img');
 const isImg = f => /^image\/(jpeg|png|webp)$/.test(f.type) || /\.(jpe?g|png|webp)$/i.test(f.name);
 /** Che file va nel posto k: 'pdf', o 'img' per l'immagine del prodotto. */
-const tipoSlot = k => ((famiglia && FAMIGLIE[famiglia].tipi) || [])[k] || 'pdf';
+const tipoSlot = k => ((famiglia && (avvolto() ? FAMIGLIE[famiglia].tipiAvvolto
+                                               : FAMIGLIE[famiglia].tipi)) || [])[k] || 'pdf';
+/** L'incarto avvolto: due PDF, il foglio e il collarino, e l'immagine. */
+function avvolto(){ return famiglia === 'incarto' && chiusura === 'avvolto'; }
 // il pack (CU) del riempimento: 'flowpack' o 'carton' (l'astuccio); e, se
 // l'astuccio ha l'apertura a strappo, se se ne vuole la fustella modellata
 let cuScelta = null, cuIncisioni = null;
@@ -2828,6 +2837,7 @@ const soloFlowpack = () => document.querySelectorAll('#params .solo-flowpack');
 function nomiSlot(){
   if (famiglia === 'espositore_pop' && slots.length > 1)
     return slots.map((_, k) => 'Pezzo ' + (k + 1) + ' \u2014 il suo PDF');
+  if (avvolto()) return FAMIGLIE.incarto.slotAvvolto;
   if (famiglia !== 'carton') return FAMIGLIE[famiglia].slot;
   if (carto === 'astuccio') return ['Il PDF dell’astuccio'];
   return slots.map((_, k) => 'Parte ' + (k + 1) + ' — il suo PDF');
@@ -2877,7 +2887,15 @@ function scegliCarto(c){
 
 /** Come si chiude l'incarto: a pieghe (le barrette) o avvolto (l'ovetto). */
 function scegliChiusura(i){
+  // i posti cambiano (l'avvolto ha anche il collarino): i file gia' caricati
+  // restano, ognuno nel primo posto del suo tipo
+  const prima = slots.map((x, k) => x && {x, t: tipoSlot(k)}).filter(Boolean);
   chiusura = i;
+  slots = (avvolto() ? FAMIGLIE.incarto.slotAvvolto : FAMIGLIE.incarto.slot).map(() => null);
+  for (const {x, t} of prima){
+    const k = slots.findIndex((y, j) => !y && tipoSlot(j) === t);
+    if (k >= 0) slots[k] = x;
+  }
   disegnaPasso();
   statoPasso();
 }
@@ -2937,6 +2955,11 @@ function statoPasso(errore){
   let t;
   if (famiglia === 'carton' && !carto) t = 'Cartotecnico: astuccio o scatola?';
   else if (famiglia === 'incarto' && !chiusura) t = 'Incarti: si chiude a pieghe o \u00e8 avvolto?';
+  else if (avvolto() && mancano)
+    t = 'Incarti: carica ' + [!slots[0] ? 'il PDF del foglio' : '',
+                              !slots[1] ? 'il PDF del collarino' : '',
+                              !slots[2] ? 'l\u2019immagine del prodotto' : ''].filter(Boolean).join(', ')
+                             .replace(/, ([^,]*)$/, ' e $1');
   else if (famiglia === 'incarto' && mancano)
     t = 'Incarti: carica ' + [!slots[0] ? 'il PDF dello steso' : '',
                               !slots[1] ? 'l\u2019immagine del prodotto' : ''].filter(Boolean).join(' e ');
@@ -2998,7 +3021,8 @@ async function riceviFile(lista){
   }
   const inc = famiglia === 'incarto';
   if (!files.every(f => isPdf(f) || (inc && isImg(f)))){
-    setStatus(inc ? 'Solo il PDF dello steso e un\u2019immagine JPEG, PNG o WebP del prodotto'
+    setStatus(inc ? (avvolto() ? 'Solo i PDF del foglio e del collarino e un\u2019immagine JPEG, PNG o WebP del prodotto'
+                               : 'Solo il PDF dello steso e un\u2019immagine JPEG, PNG o WebP del prodotto')
                   : 'Solo file PDF', 'err');
     return;
   }
@@ -3050,7 +3074,7 @@ async function riceviFile(lista){
   }
   disegnaPasso();
   if (messi < letti.length && inc){
-    setStatus('Incarti: un PDF e un\u2019immagine. ' + (letti.length - messi)
+    setStatus('Incarti: ' + (avvolto() ? 'due PDF' : 'un PDF') + ' e un\u2019immagine. ' + (letti.length - messi)
               + (letti.length - messi === 1 ? ' file in pi\u00f9 non l\u2019ho preso' : ' file in pi\u00f9 non li ho presi'), 'err');
     return;
   }
