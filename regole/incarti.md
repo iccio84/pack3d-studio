@@ -138,23 +138,27 @@ solo dallo steso ma anche dal **prodotto**: per questo la pagina, oltre al
 PDF, chiede **l'immagine del prodotto da incartare**.
 
 - La pagina chiede prima come si chiude (`chiusura`: `pieghe` o `avvolto`),
-  poi mostra due posti, il PDF dello steso e l'immagine; il tasto del
-  secondo apre la scelta delle immagini. Un file trascinato va nel posto
+  poi mostra i posti: a pieghe il PDF dello steso e l'immagine; avvolto il
+  PDF del foglio, quello del collarino e l'immagine (cambiando la chiusura i
+  file gia' caricati restano, ognuno nel primo posto del suo tipo). Il tasto
+  del posto dell'immagine apre la scelta delle immagini. Un file trascinato va nel posto
   del suo tipo. L'immagine si rimpicciolisce a 1600 px sul lato lungo, in
   JPEG, come la foto della nota.
 - Il corpo della richiesta e' il PDF e poi l'immagine, di fila: `parti`
   ne da' le lunghezze e `prodotto` (`nome`, `tipo`) dice che l'ultimo
   pezzo e' l'immagine. Il server la separa subito (`_separa_prodotto`: deve
   essere davvero una JPEG, PNG o WebP, al massimo 12 MB). Senza immagine un
-  incarto si ferma con 400; un'immagine con un'altra famiglia pure.
+  incarto si ferma con 400; un'immagine con un'altra famiglia pure. Due PDF
+  li vuole solo l'avvolto: a pieghe due PDF si fermano con 400.
 - **A pieghe** si costruisce come l'incarto a triangolo; se il PDF non e'
-  un incarto a triangolo, si ferma e va in coda. **Avvolto** il codice non
-  lo sa ancora costruire: si ferma subito, e il caso va in coda col PDF e
-  l'immagine.
+  un incarto a triangolo, si ferma e va in coda. **Avvolto** si costruisce
+  l'uovo incartato col collarino (*L'uovo avvolto*, sotto); due PDF che non
+  sono il suo foglio e il suo collarino si fermano col messaggio che dice
+  cosa sa montare, e il caso va in coda coi PDF e l'immagine.
 - L'immagine **va col caso** (`prodotto_<nome>.jpg`, accanto al PDF) e nei
   dettagli tecnici c'e' una riga che la nomina, con le sue misure in pixel.
-  **Per ora la misura del modello la da' il DT**: l'immagine non entra
-  ancora nella costruzione.
+  **Per ora la misura del modello la da' il DT** (per l'uovo, il primo
+  caso): l'immagine non entra ancora nella costruzione.
 - Gli **incarti parzialmente scartati** (la barretta che esce dal foglio
   aperto) nella pagina non ci sono ancora: come chiederli si decide dopo,
   per esempio con un'immagine guida.
@@ -164,6 +168,108 @@ PDF, chiede **l'immagine del prodotto da incartare**.
 - Sul fondo il DT segna due pieghe diagonali per testata, dagli spigoli del
   fondo verso il mezzo: la carta li' e' piegata su se stessa. Il modello ha
   il fondo liscio.
-- L'incarto **avvolto** (l'ovetto) non si costruisce: va in coda.
+- L'incarto **avvolto** si costruisce solo com'e' l'uovo del primo caso:
+  vedi *L'uovo avvolto*, *Cosa manca all'uovo*.
 - L'immagine del prodotto non entra ancora nella misura del modello.
 - Gli incarti parzialmente scartati nella pagina.
+
+## L'uovo avvolto
+
+L'uovo di cioccolato incartato: il foglio quadrato di film lo avvolge tutto,
+si raccoglie sopra in un collo e si apre in un ciuffo; il collarino di
+cartoncino stringe il collo e gli fa sul davanti l'ovale col marchio. Il
+codice sta in `pack3d/uovo.py`, il montaggio in
+`famiglie.incarto.build_uovo`; dalla pagina si dichiara **Incarti**,
+chiuso **avvolto**, coi due PDF e l'immagine del prodotto. La lettura e'
+`dict(kind="uovo", title="Uovo incartato col collarino")`, la costruzione
+`"uovo"` in `COSTRUZIONI`. E' nato dal primo uovo incartato al latte
+(`uovo_incartato_latte` nel parco), arrivato coi due PDF e cinque foto del
+pack montato (davanti, i due fianchi, dietro, dall'alto), dal 18 novembre
+2026.
+
+**I due PDF**, in qualunque ordine (`uovo.riconosci`): ognuno dice da se'
+cos'e'. In tutti e due il DT sta nello strato `technical-drawing` e le note
+in `notes`, e il DT si ripete in piu' **viste**, una per lastra: i pezzi del
+DT che si toccano (a meno di 10 mm) fanno una vista, in ordine di lettura -
+per righe, poi da sinistra (`uovo._viste`).
+
+- **Il foglio**: almeno due viste quadrate uguali, di 880 mm (all'1 per
+  cento, `LATO_TOLL`). La prima e' la grafica, la seconda il **bianco**
+  (white plate): dove c'e' il bianco la stampa e' opaca, altrove resta a
+  vista il **film metallizzato** (PET argento). Le viste sono arrotondate
+  al mm. Le altre due viste del primo caso (l'argento e il dentro) non
+  servono: lo dice un avviso.
+- **Il collarino**: almeno tre viste uguali di 264,2 x 205,3 mm (entro 3
+  mm, `COLLARINO_MM`): la grafica, la **vernice lucida** e il **rilievo**.
+  La zona di ogni vista e' il suo DT allargato di 3 mm ai lati e di 5 sopra
+  e sotto; le lastre sono la zona della grafica spostata della loro vista,
+  al decimo di mm (le tre zone devono avere gli stessi pixel). L'**oro** e'
+  la lamina a freddo: si riconosce dal colore della grafica (`ORO`).
+- Le **note** del DT con un testo d'esempio (una zona arancione, una guida
+  fino al riquadro col testo) mettono il testo nella zona (`abbina`,
+  `grafica_vista`).
+
+**Il solido** (il fronte guarda +Z, la cima +Y, il fondo a Y = 0):
+
+- **L'uovo** ha la sagoma della foto di dietro (`SAGOMA`): appoggia sulla
+  valva con un fondo piatto (`BASE`, 15 mm, con lo spigolo tondo di 4) e si
+  allarga a cono fino alla pancia, poi si chiude sotto il collo; il foglio lo
+  segue con le pieghe schiacciate sull'uovo (`N_PIEGHE`). Il collo, l'anello
+  dove il foglio si raccoglie, sta a 182 mm (`Y_COLLO`), col foglio raccolto
+  di 39 mm di raggio (`COLLO`).
+- **Il ciuffo** e' il resto del foglio sopra il collo: quattro petali, il
+  davanti e il dietro coi contorni delle foto (`ARCO`, `ARCO_DIETRO`, la
+  profondita' `PROF_DAVANTI`, `PROF_DIETRO`) e i due di lato piu' bassi.
+  **Ogni colonna del foglio sta nel suo semipiano verticale** attorno
+  all'asse, con l'angolo che cresce nel giro: due colonne non si toccano
+  mai, e le pieghe e le grinze spostano i punti dentro il loro semipiano,
+  non piu' del raggio della curva. Il ciuffo parte da dentro il collarino,
+  che ne copre un pezzo, e sale dietro l'ovale (`Ostacoli`).
+- **In cima davanti e dietro si chiudono come mani giunte**: sopra 140 mm
+  dal collo (`Y_STRINGE`) z si scala dello stesso fattore a ogni altezza,
+  fino a 0,05 in cima (`S_CIMA`, `stringi_z`). E' una deformazione dello
+  spazio che si inverte, quindi non crea intersezioni, e visto di fronte il
+  ciuffo non cambia. Le punte grandi arrivano a circa 3 mm una dall'altra.
+- **Dentro il collo** un imbuto pieghettato copre il fondo dell'uovo (`tappo`):
+  dall'alto non si vede il vuoto.
+- **Il collarino e' di cartoncino rigido**: dritto, senza scalini, senza
+  curvare in alto. Il davanti dell'ovale e' una linea dritta che sale
+  indietro di 0,07 mm per mm (`PENDENZA`), il resto un cono; le braccia
+  escono dall'ovale all'altezza della fascia (`Y_FASCIA`) e girano attorno
+  al collo sulla fascia (`Y_BANDA`), sempre fuori dal foglio. Dove si
+  toccherebbero si schiaccia il ciuffo, mai il collarino.
+- **Nessuna compenetrazione**: il controllo delle intersezioni (una faccia
+  per superficie, i vertici saldati al micron) torna zero coppie.
+- **La texture** e' un atlante: la grafica del foglio, quella del collarino e
+  il rovescio del film (azzurro metallizzato, `DENTRO`); il rovescio sta
+  sugli stessi vertici della stampa, coi triangoli girati. I lembi di lato
+  mostrano fuori il rovescio, come nelle foto di fianco. La mappa di metallo
+  e ruvidezza porta il film metallizzato fuori dal bianco, la vernice
+  lucida e l'oro del collarino; la mappa delle normali le grinze fini del
+  film e il rilievo del collarino.
+
+**Le versioni**, dalle correzioni di chi aveva il pack: un uovo che non
+somigliava a un uovo di Pasqua; poi le foto («deve essere un uovo di
+pasqua»); il fondo stretto, perche' l'uovo appoggia su una valva («il fondo
+non puo' essere ovale»); niente intersezioni fra le superfici; il collarino
+piu' in alto, senza stringere in alto, col ciuffo che parte da dentro;
+il collarino senza scalini («al massimo schiaccia il fiocco»), rigido e
+dritto («essendo di cartoncino e' rigido»); il ciuffo chiuso, che dall'alto
+non mostri il buco. Per chiuderlo: una cupola (rifiutata, «torna alla
+versione precedente»), le punte verso il centro (che pizzicavano i petali
+su se stessi), le punte che si toccano tirate fino all'asse (in disordine:
+una V in mezzo al petalo davanti, «i petali si intersecano o comunque
+fanno casino»), e infine la chiusura in profondita' qui sopra, approvata
+come versione ufficiale.
+
+### Cosa manca all'uovo
+
+- La sagoma dell'uovo e quella del ciuffo vengono dalle foto del primo
+  caso: un uovo di un'altra misura, o un foglio che non e' di 880 mm, si
+  ferma e va in coda. L'immagine del prodotto non entra nella misura.
+- Un avvolto senza collarino (l'ovetto, una caramella) non si costruisce:
+  si ferma col messaggio di quello che il codice sa montare.
+- Le viste del foglio dopo il bianco (l'argento, il dentro) non si usano:
+  il rovescio e' una tinta piena.
+- Fra i petali restano fessure strette: nel modello a semipiani due petali
+  vicini non si sovrappongono.

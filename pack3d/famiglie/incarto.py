@@ -12,6 +12,7 @@ from .. import folding
 from .. import incarto
 from .. import lettura as lettura_pdf
 from .. import nero
+from .. import uovo
 from ..artwork import risoluzione
 from ..dieline import PT2MM
 from ..dieline import Panel
@@ -71,10 +72,23 @@ def build_incarto(pdf, out_glb, quality="hd", lastre_extra=(),
     return incarto.dichiara(p) + avvisi
 
 
+def build_uovo(pdfs, out_glb, quality="hd"):
+    """L'incarto avvolto: l'uovo incartato col collarino, dai due PDF - il
+    foglio e il collarino, in qualunque ordine. Vedi `pack3d.uovo`. La
+    texture e' un atlante: la grafica del foglio, quella del collarino e il
+    rovescio del film."""
+    foglio, collarino = uovo.riconosci(pdfs)
+    scrivi_lettura(out_glb, lambda: lettura_pdf.generica(
+        foglio.pdf, foglio.regione, "Incarto avvolto letto cosi'",
+        uovo.dichiara(foglio, collarino)))
+    _dpi, tmax = risoluzione(quality)
+    return uovo.costruisci(foglio, collarino, out_glb, tex_max=min(tmax, 4096))
+
+
 # Come si chiude l'incarto: "pieghe", il foglio attorno al prodotto e chiuso
 # con le pieghe sulle testate (le barrette, `pack3d.incarto`); "avvolto", il
-# foglio che avvolge tutto il prodotto (tipo l'ovetto), che il codice non sa
-# ancora costruire. Senza dichiarazione, a pieghe: e' quello che c'e'.
+# foglio che avvolge tutto il prodotto: per ora l'uovo incartato col
+# collarino (`pack3d.uovo`). Senza dichiarazione, a pieghe.
 CHIUSURE_INCARTO = {"pieghe": "pieghe", "a pieghe": "pieghe",
                     "piegato": "pieghe", "barretta": "pieghe",
                     "avvolto": "avvolto", "avviluppato": "avvolto",
@@ -92,14 +106,20 @@ def chiusura_incarto(valore):
     return v
 
 
-def analisi_incarto_dichiarato(pdf, chiusura):
+def analisi_incarto_dichiarato(pdf, chiusura, pdfs=None):
     """L'incarto dichiarato dalla pagina: a pieghe, il foglio della barretta
-    (`_analisi_incarto`); avvolto, tipo l'ovetto, non ancora. Si ferma con
-    l'errore che dice cosa manca, e il caso va in coda."""
+    (`_analisi_incarto`); avvolto, l'uovo incartato col collarino, dai due
+    PDF `pdfs` (`pack3d.uovo`). Si ferma con l'errore che dice cosa manca, e
+    il caso va in coda."""
     if chiusura == "avvolto":
-        raise ValueError("incarto avvolto (tipo l'ovetto): il codice non sa "
-                         "ancora costruirlo. Il caso va in coda col PDF e "
-                         "l'immagine del prodotto")
+        foglio, collarino = uovo.riconosci(list(pdfs or [pdf]))
+        return dict(kind="uovo", title="Uovo incartato col collarino",
+                    meta=uovo.dichiara(foglio, collarino) + foglio.avvisi
+                    + collarino.avvisi)
+    if pdfs is not None and len(pdfs) > 1:
+        raise ValueError("incarto a pieghe: un PDF solo, il foglio della "
+                         "barretta (due PDF solo per l'avvolto, il foglio e il "
+                         "collarino)")
     letto = _analisi_incarto(pdf, quarto=True)
     if letto is None:
         raise ValueError("incarto a pieghe: il DT non si legge come il foglio "

@@ -968,8 +968,13 @@ class Handler(BaseHTTPRequestHandler):
                 if kind == "totem" and len(pdfs) != 2:
                     return self._send(400, "Totem: carica due PDF, il pannello "
                                            "del fronte e quello del retro")
+                # l'incarto avvolto arriva in due PDF, il foglio e il collarino
+                if kind == "incarto" and len(pdfs) > 1 and chiusura != "avvolto":
+                    return self._send(400, "Incarti a pieghe: carica un PDF solo, "
+                                           "lo steso. Due PDF solo per l'avvolto: "
+                                           "il foglio e il collarino")
                 if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento",
-                                                  "totem", "espositore_pop"):
+                                                  "totem", "espositore_pop", "incarto"):
                     return self._send(400, "Piu' PDF insieme solo per un "
                                            "cartotecnico in piu' pezzi: per "
                                            "questa tipologia caricane uno")
@@ -1035,7 +1040,7 @@ class Handler(BaseHTTPRequestHandler):
                     # costruzione non parte mai. Va in coda da qui.
                     try:
                         if kind == "incarto":
-                            letto = analisi_incarto_dichiarato(pdf, chiusura)
+                            letto = analisi_incarto_dichiarato(pdf, chiusura, pdfs)
                             letto = dict(letto, meta=list(letto.get("meta") or [])
                                          + [riga_prodotto(prodotto, nome_prodotto)])
                         else:
@@ -1062,7 +1067,7 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_incarto_dichiarato(pdf, chiusura)
+                        info = (analisi_incarto_dichiarato(pdf, chiusura, pdfs)
                                 if kind == "incarto"
                                 else analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
                                 else pop.analisi(pdfs, kind) if pop.e_pop(kind)

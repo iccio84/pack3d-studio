@@ -71,9 +71,9 @@ combinazione funziona.
      e il vassoio o display; poi quanti pack mettere e le domande del
      flowpack, o la fustella dell'apertura a strappo dell'astuccio;
    - **Incarti**: come si chiude il foglio, a pieghe (le barrette) o
-     avvolto (tipo l'ovetto); il PDF dello steso e l'immagine del prodotto
-     da incartare (JPEG, PNG o WebP). L'avvolto il codice non lo costruisce
-     ancora: il caso va in coda col PDF e l'immagine.
+     avvolto (l'uovo col collarino); il PDF dello steso e l'immagine del
+     prodotto da incartare (JPEG, PNG o WebP), e per l'avvolto anche il PDF
+     del collarino.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.
