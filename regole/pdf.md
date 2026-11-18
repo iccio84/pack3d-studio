@@ -343,6 +343,14 @@ Il verso lo da' il **testo vivo** (`tracciati.verso_grafica`), e non il
 disegno tecnico, che sul file T6_base e' dritto proprio mentre la grafica e'
 capovolta:
 
+**Le cifre delle quote non votano.** Una cifra accanto a una linea di quota
+del DT (`strati.quote_dt`), dentro la sua corsa, e' disegno tecnico. Sul
+T2x25 Kinder Cards rifatto (caso 88976a700d) il fronte non aveva testo vivo:
+solo il «100.5» verticale della catena delle fasce, che corre dentro il
+disegno a 18 mm dal bordo. Votava 270 da solo, e il chiuso usciva in piedi
+(100 x 270,8 invece di 270,8 x 100) col marchio di traverso. Senza le quote
+il fronte non dice niente, e il modello e' quello di prima.
+
 - **astucci** (`artwork.astuccio_sulla_grafica`): ogni faccia che ha testo
   vota contro il verso che DEVE avere sul foglio (`VERSO_ATTESO`): il fronte e
   il cielo dritti; il retro e le falde del retro, su una fasciatura verticale,
