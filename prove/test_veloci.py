@@ -298,6 +298,24 @@ class UovoAvvolto(unittest.TestCase):
         self.assertGreater(float(s.min()), 0.0)
 
 
+class FianchiACromaPari(unittest.TestCase):
+    """`artwork._oltre_il_fondo`: il marchio conta, il fondo pieno e la
+    sfumatura no (T2x12 a strappo: i fianchi col marchio sono quelli a
+    vista)."""
+
+    def test_il_marchio_conta_il_fondo_no(self):
+        from PIL import Image, ImageDraw
+        from pack3d import artwork
+        fondo = Image.new("RGB", (90, 200), (230, 40, 40))
+        d = ImageDraw.Draw(fondo)
+        d.rectangle((0, 0, 40, 200), fill=(255, 255, 255))
+        marchio = fondo.copy()
+        ImageDraw.Draw(marchio).rectangle((50, 60, 85, 140), fill=(90, 50, 20))
+        ImageDraw.Draw(marchio).rectangle((55, 70, 80, 90), fill=(230, 200, 140))
+        self.assertLess(artwork._oltre_il_fondo(fondo), 0.01)
+        self.assertGreater(artwork._oltre_il_fondo(marchio), 0.02)
+
+
 class LastreDiUnCasoCalibrato(unittest.TestCase):
     """`artwork.lastre_fisse`: per nome, e per prefisso col `*`."""
 
