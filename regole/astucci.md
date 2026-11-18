@@ -128,6 +128,13 @@ L'astuccio usciva 279,6 x 100 x 44,8, i fianchi stirati del 15%. Le regole
   penne tecniche, se finiscono per il 95% sulla fustella.
 Adesso: 271 x 100 x 45, i fianchi da 46. Sui 28 cartotecnici del parco non
 cambia niente.
+Sul T2x12 con la finestra (`formato_t2x12_finestra`, stesso DT) la penna blu
+delle quote entrava nella fustella e faceva due colonne in piu' (252,5 di
+larghezza): la catena dentro il disegno ha un 90 rimasto da un altro
+formato, e nel gruppo della fustella le quote vere non c'erano. Una penna che
+per meta' e' quote misurate, contate su TUTTI i suoi tratti della pagina (il
+271, il 272 e il 432 fuori dal disegno), e' una penna di quote; e il taglio
+non si cerca fra le penne di quote.
 
 **I fianchi a vista, a croma pari** (`artwork.scegli_fianchi`). Sul T2x12
 tutte e due le fasce alte portano i fianchi, rossi tutti e due: la croma
@@ -598,9 +605,9 @@ agli angoli di una falda, uniti dal bordo, passavano per contorno); almeno
 piega cielo/fronte a x 347 e 525 mm, fino a 1,5 mm dalle tacche della
 linguetta; 6 tagli su fronte e falda del fondo, cerniera di 178 mm.
 
-**L'apertura su penne sottili, sul taglio dal rovescio** (`incisioni.firma`
-con `larga`, provata solo quando ne' la firma sulle penne tecniche ne' la
-perforazione trovano niente: i casi di prima non passano da qui). Sul T2x12
+**L'apertura sul taglio dal rovescio** (`incisioni.firma` con `larga`,
+provata quando la firma sulle penne tecniche non trova niente, PRIMA della
+perforazione). Sul T2x12
 a strappo il taglio a vista e' verde da 0,6 mm e quello dal rovescio, con le
 spunte, viola: due penne sottili fuori dalle tecniche, che si toccano agli
 angoli. Le linee si cuciono penna per penna (cucite insieme erano un taglio
@@ -612,14 +619,20 @@ vista, che corre sulla piega del fondo e sullo spigolo non si vedeva:
 alto»). Con lui i tagli dentro una faccia attaccati coi due capi - l'arco
 della tacca per il dito sul fianco -, non le pieghe, le quote o il taglio a
 vista che gli corre accanto. Sul T2x12: fronte sotto il cielo e sulla
-colata per tutta la larghezza, il fianco sinistro con l'arco.
+colata per tutta la larghezza, il fianco sinistro con l'arco. Viene prima
+della perforazione: sul T2x12 con la finestra e sul T2x25 la perforazione
+continua prendeva il taglio a vista, 3 mm fuori dalla linea viola; il T2x25
+e' stato aggiornato su richiesta del proprietario («aggiorna il t2x25»), e
+sul parco e' l'unico astuccio che cambia.
 
 **I segni del DT su penne sottili** (`strati.penne`, `_penne_accanto`). Le
 pieghe rosse e i tagli verde e viola dell'apertura del T2x12 restavano
 stampati sul modello: la texture spegne le penne del DT, e queste non lo
 erano. Adesso si spengono anche le penne sottili non bianche con nove
-decimi dei tratti a meno di 6 mm dal DT, prese a giri (una presa avvicina
-la prossima). E il «90» rimasto da un altro formato nella catena delle quote
+decimi dei tratti a meno di 6 mm dal DT, o coi capi dei tratti tutti sul DT
+(le pieghe rosse in cima ai fianchi, 46 mm fra due tagli), prese a giri (una
+presa avvicina la prossima). Sul display riempito coi biscotti cambia un
+dettaglio delle pinne del flowpack, 1.300 pixel su 44 milioni. E il «90» rimasto da un altro formato nella catena delle quote
 (`strati._di_quota`): un numero col centro sulla linea di quota, entro un
 mm, nella sua corsa o a un cm dai capi, e' del DT anche se non misura
 niente; piu' numeri in un testo valgono se uno misura la sua linea.
