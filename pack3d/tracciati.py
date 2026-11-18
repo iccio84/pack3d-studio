@@ -469,8 +469,30 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6,
     nella CARTA" sta a 303 gradi, e col suo corpo grande pesava piu' di tutto
     il testo dritto: arrotondata a 270, girava il fronte di un quarto. Vota
     solo chi sta entro `storto` gradi da un multiplo di 90.
+
+    Le cifre delle QUOTE non votano: una cifra accanto a una linea di quota
+    del disegno tecnico (`strati.quote_dt`), dentro la sua corsa, e' il
+    disegno tecnico, non la grafica. Sul T2x25 Kinder Cards rifatto (caso
+    88976a700d) il fronte non aveva testo vivo, solo il «100.5» verticale
+    della catena delle fasce che gli corre dentro: votava 270 da solo, e il
+    modello chiuso usciva in piedi col marchio di traverso.
     """
     import math
+    from .flowpack import QUOTA_ACCANTO_MM
+    from .dieline import PT2MM
+    try:
+        from .strati import quote_dt
+        quote = quote_dt(pdf_path, page_no)
+    except Exception:
+        quote = []
+    accanto = QUOTA_ACCANTO_MM / PT2MM
+
+    def di_quota(x, y):
+        for k, c, a0, b0 in quote:
+            su, lungo = (y, x) if k == "H" else (x, y)
+            if abs(su - c) <= accanto and a0 <= lungo <= b0:
+                return True
+        return False
     fuori = {}
     doc = pdfium.PdfDocument(pdf_path)
     try:
@@ -496,6 +518,9 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6,
                 area = max(1e-9, abs(dx - sx) * abs(su - giu))
                 quarto = int(round(math.degrees(ang) / 90.0))
                 if abs(math.degrees(ang) - 90.0 * quarto) > storto:
+                    continue
+                if (quote and chr(raw.FPDFText_GetUnicode(tp, i)) in "0123456789.,"
+                        and di_quota(x, y)):
                     continue
                 gradi = quarto * 90 % 360
                 for nome, (x0, y0, x1, y1) in riquadri.items():
