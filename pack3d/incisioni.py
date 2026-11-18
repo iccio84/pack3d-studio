@@ -520,8 +520,22 @@ def tagli(pdf, panels, facce, page_no=0):
         if p is not None:
             scelte = p["pezzi"] + p["vicini"]
         elif larga is not None:
-            aperture, vicini, _rovescio = larga
-            scelte = [l for g in aperture + vicini for l in g]
+            # l'apertura su penne sottili si incide sul taglio DAL ROVESCIO,
+            # la linea con le spunte: e' quella che il proprietario guarda
+            # («devi seguire la linea viola per modellare la fustella di
+            # apertura», T2x12 a strappo). Il taglio a vista corre sulla
+            # piega e sullo spigolo non si vedeva
+            aperture, vicini, rovescio = larga
+            # con lui i tagli dentro una faccia attaccati a lui coi due capi:
+            # l'arco della tacca per il dito sul fianco
+            altri = [l for g in aperture + vicini for l in g]
+            quadri = [panels[n] for n in facce if n in panels]
+            def attaccato(q):
+                return min(_distanza_punto(q, r) for r in rovescio) <= 1.5 * MM
+            scelte = list(rovescio) + [
+                l for l in altri if not _di_bordo(l, quadri)
+                and not _accanto(l, rovescio)
+                and attaccato(l[0]) and attaccato(l[-1])]
         else:
             return {}
     out = {}
