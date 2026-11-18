@@ -515,8 +515,11 @@ def tagli(pdf, panels, facce, page_no=0):
     else:
         # la perforazione si incide trattino per trattino: i ponticelli sono
         # cartone intero
-        p = perforata(pdf, panels, facce, page_no)
-        larga = firma(pdf, panels, facce, page_no, larga=True) if p is None else None
+        # prima la firma larga, che segue il taglio dal rovescio («devi
+        # seguire la linea viola»): sul T2x12 con la finestra la perforazione
+        # continua prendeva il taglio a vista, 3 mm fuori dalla linea viola
+        larga = firma(pdf, panels, facce, page_no, larga=True)
+        p = perforata(pdf, panels, facce, page_no) if larga is None else None
         if p is not None:
             scelte = p["pezzi"] + p["vicini"]
         elif larga is not None:

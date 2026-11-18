@@ -1152,7 +1152,7 @@ def _quote_a_catena(segs, numeri, tol_mm=1.5):
     return sorted(out)
 
 
-def _penne_di_quote(segs, numeri, tol=3.0):
+def _penne_di_quote(segs, numeri, tol=3.0, quota=None):
     """Le penne che disegnano solo quote: linee misurate da un numero scritto
     accanto (`_quote_a_catena`) e i loro richiami, per almeno `PENNA_DI_QUOTE`
     della loro lunghezza.
@@ -1174,8 +1174,9 @@ def _penne_di_quote(segs, numeri, tol=3.0):
                    and a - tol <= cq <= b + tol)
                for kq, cq, qa, qb in quote):
             di_q[st] = di_q.get(st, 0.0) + (b - a)
+    soglia = PENNA_DI_QUOTE if quota is None else quota
     return {st for st, L in tot.items()
-            if L > 0 and di_q.get(st, 0.0) >= PENNA_DI_QUOTE * L}
+            if L > 0 and di_q.get(st, 0.0) >= soglia * L}
 
 
 def _capi(s):
@@ -1256,6 +1257,14 @@ def _penne_fustella_pulite(segs, numeri, page_w, page_h, tutti=None):
         return fustella
     via = (_penne_di_quote([s for s in segs if s[4] in fustella], numeri)
            if numeri else set())
+    if numeri and tutti:
+        # una penna che per meta' e' quote misurate, contata su TUTTI i suoi
+        # tratti della pagina e non solo su quelli del gruppo: sul T2x12 con
+        # la finestra la catena dentro il disegno ha un 90 rimasto da un altro
+        # formato, e nel gruppo le quote vere (271, 272, 432) non c'erano
+        for st in fustella - via:
+            if _penne_di_quote([x for x in tutti if x[4] == st], numeri, quota=0.5):
+                via.add(st)
     via |= _penne_di_riquadri(segs, fustella - via)
     if not via or not fustella - via:
         return fustella
@@ -1273,7 +1282,16 @@ def _penne_fustella_pulite(segs, numeri, page_w, page_h, tutti=None):
     if nuove:
         p0, q0, p1, q1 = _riquadro_segs([s for s in resto if s[4] in nuove])
         tol = 3.0 / PT2MM
+        # le quote no: sopra e sotto il DT sporgono anche loro. Si
+        # riconoscono su tutti i loro tratti, anche fuori dal gruppo (sul
+        # T2x12 la catena dentro il disegno ha un 90 rimasto da un altro
+        # formato, ma il 271, il 272 e il 432 fuori misurano le loro linee)
+        di_quote = set()
         for st in {s[4] for s in resto} - nuove:
+            loro = [x for x in (tutti or resto) if x[4] == st]
+            if numeri and _penne_di_quote(loro, numeri, quota=0.5):
+                di_quote.add(st)
+        for st in {s[4] for s in resto} - nuove - di_quote:
             r = _riquadro_segs([s for s in resto if s[4] == st])
             fuori_x = r[0] < p0 - tol and r[2] > p1 + tol
             fuori_y = r[1] < q0 - tol and r[3] > q1 + tol

@@ -324,10 +324,19 @@ def _penne_accanto(segs, tec):
         for st in {x[4] for x in segs} - dentro:
             if st[0] > 1.2 or st[1] == "(255, 255, 255)":
                 continue
-            d, _i = albero.query(punti([x for x in segs if x[4] == st]))
+            mie = [x for x in segs if x[4] == st]
+            d, _i = albero.query(punti(mie))
             # quasi tutti: un pezzetto che finisce su un arco (gli archi non
             # sono fra i tratti dritti) non la tiene fuori
             if len(d) and float((d <= ACCANTO_DT).mean()) >= 0.9:
+                nuove.add(st)
+                continue
+            # o una piega: i tratti finiscono tutti sul DT (le pieghe rosse in
+            # cima ai fianchi del T2x12, lunghe 46 mm fra due tagli)
+            capi = np.array([q for k, c, a, b, _s in mie
+                             for q in (((c, a), (c, b)) if k == "V" else ((a, c), (b, c)))])
+            dc, _i = albero.query(capi)
+            if len(dc) and float((dc <= 1.5 * 72.0 / 25.4).mean()) >= 0.9:
                 nuove.add(st)
         if not nuove:
             return dentro - set(tec)
