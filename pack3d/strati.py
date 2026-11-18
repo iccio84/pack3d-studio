@@ -277,9 +277,61 @@ def penne(pdf, page_no=0):
     chiave = (pdf, page_no, st.st_mtime_ns, st.st_size)
     if chiave not in _PENNE:
         segs, larghezza, altezza = segmenti(pdf, page_no)
+        tec = set(_technical_pens(segs, larghezza, altezza))
         _PENNE.clear()
-        _PENNE[chiave] = frozenset(_technical_pens(segs, larghezza, altezza))
+        _PENNE[chiave] = frozenset(tec | _penne_accanto(segs, tec))
     return _PENNE[chiave]
+
+
+# Quanto vicino al DT, in punti, sta ogni tratto di una penna sottile che
+# del DT fa parte senza essere fra le penne tecniche (`_penne_accanto`).
+ACCANTO_DT = 6.0 * 72.0 / 25.4
+
+
+def _penne_accanto(segs, tec):
+    """Le penne sottili, non bianche e fuori dalle tecniche, che stanno
+    tutte a ridosso del DT: almeno nove decimi dei loro tratti a meno di ACCANTO_DT (6 mm) da un tratto
+    di una penna tecnica (o di una sottile dello stesso colore). Sono le
+    pieghe corte e i tagli dell'apertura su penne loro: sul T2x12 a strappo
+    le pieghe rosse, il taglio a vista verde da 0,6 e quello dal rovescio
+    viola, che la soglia della pagina larga un metro non vedeva e restavano
+    stampati sul modello."""
+    if not tec:
+        return set()
+    import numpy as np
+    from scipy.spatial import cKDTree
+    colori = {st[1] for st in tec}
+    base = set(tec) | {x[4] for x in segs if x[4][1] in colori and x[4][0] <= 1.2}
+
+    def punti(sel):
+        out = []
+        for k, c, a, b, _st in sel:
+            n = max(2, int((b - a) / 2.0) + 1)
+            t = np.linspace(a, b, n)
+            out.append(np.stack([np.full(n, c), t], 1) if k == "V"
+                       else np.stack([t, np.full(n, c)], 1))
+        return np.concatenate(out) if out else np.zeros((0, 2))
+
+    dentro = set(base)
+    # a giri: una penna presa avvicina la prossima (il viola dal rovescio sta
+    # accanto al verde a vista, le pieghe rosse fra i trattini della piega)
+    while True:
+        noti = punti([x for x in segs if x[4] in dentro])
+        if not len(noti):
+            return set()
+        albero = cKDTree(noti)
+        nuove = set()
+        for st in {x[4] for x in segs} - dentro:
+            if st[0] > 1.2 or st[1] == "(255, 255, 255)":
+                continue
+            d, _i = albero.query(punti([x for x in segs if x[4] == st]))
+            # quasi tutti: un pezzetto che finisce su un arco (gli archi non
+            # sono fra i tratti dritti) non la tiene fuori
+            if len(d) and float((d <= ACCANTO_DT).mean()) >= 0.9:
+                nuove.add(st)
+        if not nuove:
+            return dentro - set(tec)
+        dentro |= nuove
 
 
 # Un VELO tecnico: un rettangolo pieno e semitrasparente che copre esattamente
@@ -353,10 +405,13 @@ def _di_quota(o, m, testo, quote):
     from .dieline import PT2MM
     from .flowpack import QUOTA_ACCANTO_MM
     from .quote import NUMERO
-    t = testo.strip()
-    if not t or not NUMERO.fullmatch(t):
+    # piu' numeri nello stesso testo: sul T2x12 «100» e «90» della catena
+    # delle fasce stanno in un oggetto solo, col 90 rimasto da un altro
+    # formato; basta che uno misuri la sua linea, e tutti sono numeri
+    parti = testo.split()
+    if not parti or not all(NUMERO.fullmatch(t) for t in parti):
         return False
-    v = float(t.replace(",", "."))
+    valori = [float(t.replace(",", ".")) for t in parti]
     r = _riquadro(o, m)
     if r is None:
         return False
@@ -364,7 +419,15 @@ def _di_quota(o, m, testo, quote):
     for k, c, a, b in quote:
         su, lungo = (cy, cx) if k == "H" else (cx, cy)
         if (abs(su - c) <= QUOTA_ACCANTO_MM / PT2MM and a <= lungo <= b
-                and abs(v - (b - a) * PT2MM) <= 1.5):
+                and any(abs(v - (b - a) * PT2MM) <= 1.5 for v in valori)):
+            return True
+        # un numero col centro SULLA linea di quota (entro un millimetro),
+        # dentro la sua corsa o a un centimetro dai capi, e' della catena anche
+        # se non misura niente: sul T2x12 il «90» rimasto da un altro formato
+        # sta fra due tratti della catena, e finiva stampato sul cielo. Il
+        # bollo «50 biscotti» del T2x25 sta a 4 mm, e resta
+        if (abs(su - c) <= 1.0 / PT2MM
+                and a - 10.0 / PT2MM <= lungo <= b + 10.0 / PT2MM):
             return True
     return False
 
