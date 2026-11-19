@@ -53,26 +53,31 @@ combinazione funziona.
 
 ## Cosa fa l'interfaccia
 
-1. Per prima cosa la pagina chiede **che tipo di Pack/Riempimento** si vuole
-   realizzare: Flowpack, Pouch, Cartotecnico, Vassoio, Riempimenti, Incarti.
+1. Per prima cosa la pagina chiede **che tipo di Pack/Trade Unit** si vuole
+   realizzare: Flowpack, Pouch, Cartotecnico, Trade Unit, Incarti.
    Poi il passo della famiglia, con un posto per ogni PDF (solo PDF, tranne
    l'immagine del prodotto degli incarti):
    - **Flowpack**: il PDF, poi le domande obbligatorie - numero dei denti
      della zigrinatura, rigonfiamento, apertura delle pinne - la saldatura
      delle pinne (da 0, lisce, a 3, le righe delle ganasce piene) e la
      casella per dire se il film avvolge una scatola;
-   - **Pouch** e **Vassoio** (display compresi): il PDF, e il modello parte;
+   - **Pouch**: il PDF, e il modello parte;
    - **Cartotecnico**: astuccio o scatola e lo spessore della carta;
      l'astuccio un PDF, la scatola di quante parti e' fatta e un PDF per
      parte. Se l'astuccio ha un'apertura a strappo, chiuso (con o senza la
      fustella dell'apertura modellata) o aperto di quanti gradi; aperto, se
      lo si vuole vuoto o riempito, e riempito il tipo di riempimento (il pack
      che ci va dentro, flowpack o astuccio) e il PDF del pack da inserire,
-     poi quanti pack e le loro domande come nei Riempimenti; se il pack
+     poi quanti pack e le loro domande come nella Trade Unit piena; se il pack
      ha una finestra, se ci va la pellicola trasparente;
-   - **Riempimenti**: che cosa e' il pack (CU), flowpack o astuccio; il pack
-     e il vassoio o display; poi quanti pack mettere e le domande del
-     flowpack, o la fustella dell'apertura a strappo dell'astuccio;
+   - **Trade Unit** (TU): vassoio o display - il display ha la plancia,
+     quasi sempre ricavata dallo stesso DT - poi vuota o piena. Vuota, il
+     PDF del vassoio o del display, e il modello parte; piena, il pack (CU)
+     da inserire, flowpack o astuccio, e i due PDF, il contenitore e il
+     pack; poi quanti pack mettere e le domande del flowpack, o la fustella
+     dell'apertura a strappo dell'astuccio. Se la lettura non torna con la
+     scelta (display senza plancia, vassoio con la plancia) si ferma e lo
+     dice;
    - **Incarti**: come si chiude il foglio, a pieghe (le barrette) o
      avvolto (l'uovo col collarino); il PDF dello steso e l'immagine del
      prodotto da incartare (JPEG, PNG o WebP), e per l'avvolto anche il PDF
