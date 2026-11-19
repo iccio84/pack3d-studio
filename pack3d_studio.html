@@ -759,6 +759,7 @@
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="texture-btn" type="button" style="display:none">Scarica texture</button>
     <button id="lettura-btn" type="button" aria-expanded="false" aria-controls="lettura" hidden>Lettura del PDF</button>
+    <button id="modifica-btn" type="button" hidden title="Il modello va bene per il controllo, ma lo vuoi diverso: lo mandi alla routine con la descrizione di cosa cambiare">Chiedi una modifica</button>
     <button id="dettagli-btn" type="button" aria-expanded="false" aria-controls="dettagli" hidden>Dettagli tecnici</button>
     <button id="casi-btn" type="button" aria-expanded="false" aria-controls="casi">Casi</button>
     <button id="notifiche-btn" type="button" aria-expanded="false" aria-controls="notifiche">Notifiche</button>
@@ -1201,12 +1202,26 @@ let textureDi = null;       // il GLB da cui vengono
             ricomincia da capo. Accanto, appena e' pronta, Scarica texture,
             che invece lascia il modello dov'e'. */
 function setFase(f){
+  fase = f;
   dlBtn.style.display  = f === 'pronto' ? '' : 'none';
+  mostraModifica();
   annBtn.style.display = f === 'vuoto'  ? 'none' : '';
   texBtn.style.display = f === 'pronto' && textureGlb ? '' : 'none';
   if (f === 'pronto') preparaTexture();
 }
 let glbBlob = null, glbName = 'modello.glb', pending = null;
+let fase = 'vuoto';
+/* «Chiedi una modifica»: il modello e' passato, ma chi l'ha costruito lo
+   vuole diverso. Gli stessi PDF e le stesse opzioni vanno a `/api/segnala`
+   con `richiesta: 'modifica'`; il caso si prepara come quelli che il
+   controllo respinge, e parte quando lo conferma con la descrizione di cosa
+   cambiare: la routine lo modifica e lo riporta in Glam. */
+let ultimoModello = null, inModifica = false;
+const modificaBtn = document.getElementById('modifica-btn');
+function mostraModifica(){
+  modificaBtn.hidden = !(fase === 'pronto' && ultimoModello && !casoInAttesa);
+  modificaBtn.disabled = false;
+}
 const isPdf = f => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
 // di quante parti puo' essere una scatola: lo stesso tetto del campo `parti`
 const MAX_PEZZI = 8;
@@ -1512,6 +1527,7 @@ async function analyze(buf, opts){
 async function build(buf, name, opts){
   nascondiCaso();
   nascondiLettura();
+  ultimoModello = null;
   setStatus('Costruzione del modello…','busy');
   glbName = name.replace(/\.pdf$/i,'') + '.glb';
   let r;
@@ -1542,6 +1558,8 @@ async function build(buf, name, opts){
   // la lettura del PDF, accanto al modello: c'e' anche se il controllo l'ha
   // respinto, ed e' li' che si vede perche'
   mostraLettura(r.headers.get('X-Pack3d-Lettura'), buf, opts);
+  // gli stessi PDF e le stesse opzioni, per «Chiedi una modifica»
+  ultimoModello = {buf, opts};
   const attesa = r.headers.get('X-Pack3d-Verdetto');
   if (attesa){
     // Il modello e' gia' qui, il verdetto del controllo arriva dopo. Si
@@ -1746,6 +1764,8 @@ function mostraCaso(v, blob, tieniNota){
 const verificaEl = document.getElementById('verifica');
 
 function mostraVerifica(v){
+  // il caso e' gia' in coda: la modifica non si chiede due volte
+  if (v.in_coda){ ultimoModello = null; mostraModifica(); }
   // il dubbio puo' venire dalle verifiche, che misurano il modello, e non
   // dall'AI: allora lo si dice
   const chi = (v.verifiche && v.verifiche.length) ? 'Le verifiche hanno trovato un difetto'
@@ -1807,7 +1827,9 @@ function mostraInvio(v, tieni){
   casoInAttesa = v && v.in_attesa && v.codice ? v : null;
   invioEl.hidden = !casoInAttesa;
   if (casoInAttesa){
-    document.getElementById('invio-testo').textContent = v.esito === 'dubbio'
+    document.getElementById('invio-testo').textContent = v.modifica
+      ? 'Lo mandiamo alla routine, che lo modifica come scrivi qui sotto?'
+      : v.esito === 'dubbio'
       ? 'Lo mandiamo a chi lo controlla e, se serve, corregge il codice?'
       : 'Lo mandiamo a chi corregge il codice?';
     invioSi.disabled = invioNo.disabled = invioEmail.disabled = false;
@@ -1821,6 +1843,14 @@ function mostraInvio(v, tieni){
       document.getElementById('ai').insertBefore(invioEl, document.getElementById('ai-righe'));
     mostraNota(v, tieni);
   }
+  // la descrizione dice cosa cambiare, se e' una modifica
+  document.querySelector('label[for="nota-testo"]').textContent = casoInAttesa && casoInAttesa.modifica
+    ? 'Cosa va modificato nel modello (obbligatoria)'
+    : 'Descrivi il pack per chi lo corregge (obbligatoria)';
+  notaTesto.placeholder = casoInAttesa && casoInAttesa.modifica
+    ? 'Cosa cambiare e come deve venire. Per esempio: il coperchio aperto di 90 gradi, i pack girati col marchio verso il davanti'
+    : 'Com\u2019\u00e8 fatto, come si monta, cosa non torna nel modello. Per esempio: scatola esagonale, base e coperchio a calzare';
+  mostraModifica();
   aggiornaAI();
 }
 
@@ -1858,7 +1888,8 @@ invioSi.addEventListener('click', async () => {
   notaTesto.setAttribute('aria-invalid', String(corta));
   if (corta){
     // sotto il campo, non sotto i tasti: nel dialog di Glam si vede
-    esitoNota('Prima di mandarlo descrivi il pack: com’è fatto, come si monta, cosa non torna'
+    esitoNota(v.modifica ? 'Prima di mandarlo scrivi cosa va modificato nel modello e come deve venire.'
+              : 'Prima di mandarlo descrivi il pack: com’è fatto, come si monta, cosa non torna'
               + ' nel modello. Serve a chi lo corregge.', 'err');
     notaTesto.focus();
     return;
@@ -1889,6 +1920,9 @@ invioSi.addEventListener('click', async () => {
   v.in_attesa = false; v.in_coda = true;
   casoInAttesa = null;
   invioEl.hidden = true;
+  // la modifica di questo modello e' chiesta: una volta sola
+  if (v.modifica) ultimoModello = null;
+  mostraModifica();
   aggiungiCaso(v, nomeInGlam());
   notifica('«' + nomeInGlam() + '»: caso inviato. Lo segui nella finestra dei casi'
            + (email ? ', e ti scriviamo se ci serve un’informazione.' : '.'), v.codice);
@@ -1908,7 +1942,8 @@ invioSi.addEventListener('click', async () => {
   }
   else if (v.esito === 'dubbio') mostraVerifica(v);
   else {
-    verificaEl.textContent = 'Caso inviato (codice ' + v.codice + '): quando sarà corretto,'
+    verificaEl.textContent = 'Caso inviato (codice ' + v.codice + '): quando sarà '
+      + (v.modifica ? 'modificato,' : 'corretto,')
       + ' troverai il modello giusto in Glam Lab, nella sezione «' + GLAM_SEZIONE
       + '», cartella «' + GLAM_CARTELLA + '». ' + STIMA;
     verificaEl.classList.add('on');
@@ -1947,9 +1982,13 @@ invioNo.addEventListener('click', () => {
       'Caso cancellato: non lo mandiamo a nessuno. (Codice ' + v.codice + ')';
   }
   else {
-    verificaEl.textContent = 'Caso non inviato: il modello resta com’è, e nessuno lo riguarda.';
+    verificaEl.textContent = v.modifica
+      ? 'Modifica non chiesta: il modello resta com’è. Puoi chiederla di nuovo da Chiedi una modifica.'
+      : 'Caso non inviato: il modello resta com’è, e nessuno lo riguarda.';
     verificaEl.classList.add('on');
   }
+  mostraNota(null);
+  mostraModifica();
   aggiornaAI();
 });
 
@@ -2037,6 +2076,24 @@ function mostraLettura(gettone, buf, opts){
   letturaBtn.hidden = false;
   apriFinestra(letturaEl, letturaBtn, true);
 }
+modificaBtn.onclick = async () => {
+  const c = ultimoModello;
+  if (!c || casoInAttesa) return;
+  modificaBtn.disabled = true;
+  try{
+    const v = await (await post('/api/segnala', c.buf, Object.assign({}, c.opts, {richiesta: 'modifica'}))).json();
+    if (!v.codice || !v.in_attesa) throw new Error('il caso non si \u00e8 potuto preparare');
+    verificaEl.textContent = 'Vuoi modificare il modello: scrivi qui sotto cosa va cambiato e manda il caso '
+      + 'alla routine (codice ' + v.codice + '). Il modello che vedi lo puoi usare lo stesso.';
+    verificaEl.classList.add('on');
+    mostraInvio(v);
+    document.getElementById('ai').scrollIntoView({behavior: 'smooth', block: 'nearest'});
+    notaTesto.focus();
+  }catch(err){
+    modificaBtn.disabled = false;
+    setStatus('Richiesta di modifica non partita: ' + testoErrore(err), 'err');
+  }
+};
 letturaBtn.onclick = () => apriFinestra(letturaEl, letturaBtn, !letturaEl.classList.contains('on'));
 document.getElementById('lettura-chiudi').onclick = () => apriFinestra(letturaEl, letturaBtn, false);
 letturaSegnala.onclick = async () => {
