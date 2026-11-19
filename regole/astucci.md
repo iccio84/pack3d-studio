@@ -144,6 +144,14 @@ lati devono avere il logo»). A croma pari decide la faccia piu' povera di
 ogni coppia, quanta grafica ha oltre i suoi tre colori di fondo
 (`_oltre_il_fondo`): vince l'altra coppia se la sua e' piu' di 1,3 volte e
 di due punti.
+E se anche la grafica non decide, vincono i fianchi della fascia del fronte
+quando CONTINUANO la sua grafica sulla piega (`_continua_il_fronte`: la
+striscia di ogni fianco contro la piega uguale a quella del fronte, entro 18
+su 255). Sul T2x12 con la finestra le linguette ai lati del fronte e le
+alette del retro hanno la stessa stampa, e il codice restava sulle alette;
+dal proprietario: «hai preso le linguette sbagliate. Devono essere quelle ai
+lati del fronte che si sovrappongono poi alle altre alette. Ci deve essere
+continuita' della colata».
 
 **Gli spazi non votano il verso** (`tracciati.verso_grafica`). Sul retro del
 T2x12 l'unico testo vivo era la quota «100 90» della catena delle fasce: le
