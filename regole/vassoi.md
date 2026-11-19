@@ -402,9 +402,10 @@ riconosce da solo); la scelta si controlla con la lettura (`controllaTu`
 nella pagina): *Display con plancia* e *Display a scatola* sono display,
 *Vassoio espositore* - sagomato compreso - e' un vassoio. Se non torna ci si
 ferma e si dice di cambiare tipo, senza mettere il caso in coda: e' la
-scelta a non tornare, non la lettura. Nel parco, un file chiamato
-«Display» che si legge come vassoio espositore (senza plancia) per la
-pagina e' un vassoio.
+scelta a non tornare, non la lettura. Il nome del file non conta: il
+proprietario, «a decidere e' l'utente. Se sceglie display e' perche' sa che
+dovra' essere presente la plancia». Un file chiamato «Display» che si legge
+come vassoio espositore, senza plancia, scelto Display si ferma.
 
 ### Si riconosce dalla croce, non dalla grafica
 
