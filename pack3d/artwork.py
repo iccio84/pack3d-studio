@@ -1065,6 +1065,19 @@ def _croma(immagini):
     return somma / pixel if pixel else 0.0
 
 
+def _oltre_il_fondo(im):
+    """La parte di una texture che non e' dei suoi tre colori piu' comuni
+    (a 32 livelli per canale): il marchio, le scritte, una foto; il fondo
+    pieno, una sfumatura e i bordi no."""
+    import numpy as np
+    im = im.convert("RGB")
+    im.thumbnail((256, 256))
+    q = (np.asarray(im).astype(np.int32) // 32).reshape(-1, 3)
+    _v, n = np.unique(q[:, 0] * 64 + q[:, 1] * 8 + q[:, 2], return_counts=True)
+    n = np.sort(n)[::-1]
+    return float(1.0 - n[:3].sum() / n.sum()) if n.sum() else 0.0
+
+
 def scegli_fianchi(tex, panels, d, altri):
     """Fra le due coppie di fianchi di un astuccio chiuso, quella stampata.
 
@@ -1078,16 +1091,28 @@ def scegli_fianchi(tex, panels, d, altri):
     nostri = [tex[k] for k in altri if k in tex]
     a, b = _croma(nostri), _croma(altri.values())
     if not (b > a * 1.25 and b > a + 4.0):
-        return None
+        # A croma pari decide la faccia piu' povera di ogni coppia: quanta
+        # grafica ha oltre i suoi tre colori di fondo. Sul T2x12 i fianchi
+        # del retro sono rossi tutti e due, ma uno ha solo il fondo e la
+        # tacca per il dito, mentre quelli del fronte hanno il marchio tutti e
+        # due: e sono quelli a vista, come sul T2x25
+        ga = min((_oltre_il_fondo(im) for im in nostri), default=0.0)
+        gb = min((_oltre_il_fondo(im) for im in altri.values()), default=0.0)
+        if not (gb > ga * 1.3 and gb > ga + 0.02):
+            return None
+        perche = ("la faccia piu' povera ha grafica oltre il fondo per il %.0f%% "
+                  "contro il %.0f%%" % (100 * gb, 100 * ga))
+    else:
+        perche = "croma %.0f contro %.0f" % (b, a)
     prima = d.fianchi_su
     tex.update(altri)
     panels.update(d.fianchi_alt)
     d.fianchi_alt = {}
     d.fianchi_su = "front" if prima == "back" else "back"
     return ("fianchi presi dalla fascia del %s: quelli del %s sono alette "
-            "che finiscono dentro, non stampate (croma %.0f contro %.0f)"
+            "che finiscono dentro, non stampate (%s)"
             % ("fronte" if d.fianchi_su == "front" else "retro",
-               "retro" if prima == "back" else "fronte", b, a))
+               "retro" if prima == "back" else "fronte", perche))
 
 
 def verso_della_tavola(pdf, dt, page_no=0):

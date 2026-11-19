@@ -519,7 +519,14 @@ def verso_grafica(pdf_path, riquadri, page_no=0, minimo=3, quorum=0.6,
                 quarto = int(round(math.degrees(ang) / 90.0))
                 if abs(math.degrees(ang) - 90.0 * quarto) > storto:
                     continue
-                if (quote and chr(raw.FPDFText_GetUnicode(tp, i)) in "0123456789.,"
+                car = chr(raw.FPDFText_GetUnicode(tp, i))
+                # gli spazi e gli a capo non sono testo stampato: sul T2x12
+                # le cifre della quota che corre nel retro non votavano, ma lo
+                # spazio e l'a capo fra loro si', a zero gradi, e da soli
+                # facevano il verso del retro
+                if not car.strip():
+                    continue
+                if (quote and car in "0123456789.,"
                         and di_quota(x, y)):
                     continue
                 gradi = quarto * 90 % 360
