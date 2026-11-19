@@ -2082,5 +2082,36 @@ class ScatolaChiusa(unittest.TestCase):
 
 
 
+class AstuccioApertoRiempito(unittest.TestCase):
+    """L'astuccio con l'apertura a strappo, aperto, si puo' riempire: la
+    pagina chiede vuoto o riempito, il tipo di pack e il suo PDF, e la
+    pellicola scelta per la finestra arriva all'astuccio aperto."""
+
+    def test_la_pagina_chiede_vuoto_o_riempito(self):
+        qui = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(qui, "pack3d_studio.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        for pezzo in ('id="riempi-scelta"', 'data-r="0"', 'data-r="1"',
+                      'id="riempi-cu"', 'data-u="flowpack"', 'data-u="carton"',
+                      'id="file-cu"', "function riempiAstuccioAperto",
+                      "riempimentoAvanti(riempiCuScelto, extra)"):
+            self.assertIn(pezzo, html)
+
+    def test_la_pellicola_va_all_astuccio_aperto(self):
+        from pack3d.famiglie import riempimento as fr
+        chiamate = []
+
+        def finto_carton(pdf, uscita, quality, **kw):
+            chiamate.append(kw)
+            raise RuntimeError("basta cosi'")
+        info = {"contenitore": "carton", "cu": "flowpack", "vassoio": 0, "flowpack": 1}
+        with mock.patch.object(fr, "build_carton", finto_carton):
+            with self.assertRaises(RuntimeError):
+                fr.build_riempimento([b"a", b"b"], info, os.devnull, None, (),
+                                     apertura=120, pellicola=1)
+        self.assertEqual(chiamate[0]["apertura"], 120)
+        self.assertEqual(chiamate[0]["pellicola"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

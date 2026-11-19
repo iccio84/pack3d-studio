@@ -428,7 +428,7 @@
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
   #go, #strappo-go{width:100%;max-width:300px;margin:12px auto 0;display:block}
-  #spessore, #strappo-scelta, #pellicola-scelta, #gelato-scelta, #fustella-scelta, #cu-fustella{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore, #strappo-scelta, #pellicola-scelta, #gelato-scelta, #fustella-scelta, #cu-fustella, #riempi-scelta, #riempi-cu{display:flex;gap:8px;flex-wrap:wrap}
   #gelato-scelta .gusto::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;
     margin-right:7px;vertical-align:-1px;background:var(--gusto);box-shadow:0 0 0 1px rgba(0,0,0,.15)}
   #cu-fustella button[aria-pressed="true"],
@@ -436,6 +436,8 @@
   #pellicola-scelta button[aria-pressed="true"],
   #gelato-scelta button[aria-pressed="true"],
   #fustella-scelta button[aria-pressed="true"],
+  #riempi-scelta button[aria-pressed="true"],
+  #riempi-cu button[aria-pressed="true"],
   #strappo-scelta button[aria-pressed="true"]{border-color:color-mix(in oklab,var(--primary) 60%,transparent);
     background:color-mix(in oklab,var(--primary) 14%,transparent);color:var(--primary)}
   .hint{margin:12px auto 0;max-width:620px;text-align:center;font-size:10px;
@@ -673,6 +675,24 @@
       <label for="strappo-gradi">Di quanti gradi si apre il coperchio <b id="strappo-val"></b></label>
       <input id="strappo-gradi" type="number" min="1" max="180" step="1" value="60">
     </div>
+    <div class="fld" id="riempi-fld" hidden>
+      <label>L&rsquo;astuccio aperto: lo vuoi vuoto o riempito?</label>
+      <div id="riempi-scelta" role="group" aria-label="Astuccio aperto vuoto o riempito">
+        <button type="button" data-r="0" aria-pressed="false">Vuoto</button>
+        <button type="button" data-r="1" aria-pressed="false">Riempito</button>
+      </div>
+    </div>
+    <div class="fld" id="riempi-cu-fld" hidden>
+      <label>Il tipo di riempimento: che pack (CU) ci va dentro?</label>
+      <div id="riempi-cu" role="group" aria-label="Il pack (CU) dentro l'astuccio aperto">
+        <button type="button" data-u="flowpack" aria-pressed="false">Flowpack</button>
+        <button type="button" data-u="carton" aria-pressed="false">Astuccio</button>
+      </div>
+    </div>
+    <div class="fld" id="riempi-pdf-fld" hidden>
+      <ul id="riempi-slot" class="slot"><li><span class="cosa">Il PDF del pack da inserire</span><span class="nome" id="riempi-nome">nessun PDF</span><button type="button" id="riempi-carica">Carica PDF</button></li></ul>
+      <p class="note">Dopo Costruisci ti chiedo quanti pack mettere nell&rsquo;astuccio e, per il flowpack, le sue opzioni.</p>
+    </div>
     </div>
     <button id="strappo-go" class="primary">Costruisci</button>
   </div>
@@ -728,6 +748,7 @@
     <span class="tit">Strumenti</span>
     <input id="file" type="file" accept="application/pdf,.pdf" multiple hidden>
     <input id="file-img" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+    <input id="file-cu" type="file" accept="application/pdf,.pdf" hidden>
     <button id="download" class="primary" style="display:none">Scarica GLB</button>
     <button id="texture-btn" type="button" style="display:none">Scarica texture</button>
     <button id="lettura-btn" type="button" aria-expanded="false" aria-controls="lettura" hidden>Lettura del PDF</button>
@@ -1133,6 +1154,19 @@ const gradiFld = document.getElementById('gradi-fld');
 const strappoGradi = document.getElementById('strappo-gradi');
 const strappoVal = document.getElementById('strappo-val');
 let aperturaScelta = null, incisioniScelte = null;
+// L'astuccio aperto si puo' riempire: vuoto (0) o riempito (1), e se
+// riempito il pack (CU) che ci va dentro - flowpack o astuccio - col suo
+// PDF. Si costruisce come un riempimento il cui contenitore e' l'astuccio
+// aperto (regole/riempimenti.md, *Il contenitore puo' essere l'astuccio
+// aperto*).
+const riempiFld = document.getElementById('riempi-fld');
+const riempiScelta = document.getElementById('riempi-scelta');
+const riempiCuFld = document.getElementById('riempi-cu-fld');
+const riempiCu = document.getElementById('riempi-cu');
+const riempiPdfFld = document.getElementById('riempi-pdf-fld');
+const riempiSlot = document.getElementById('riempi-slot');
+const fileCuEl = document.getElementById('file-cu');
+let riempiAperto = null, riempiCuScelto = null, riempiPdf = null;
 // La pellicola delle finestre: se l'analisi trova una finestra, prima di
 // costruire si chiede se ci va la pellicola trasparente. Di solito c'e', ma
 // non sempre: lo dice chi carica il PDF, ogni volta.
@@ -3011,6 +3045,11 @@ async function riceviFile(lista){
     setStatus('GLB caricato dal disco',''); setMeta([]);
     return;
   }
+  // l'astuccio aperto riempito: il PDF trascinato e' il pack da inserire
+  if (strappoEl.classList.contains('on') && !riempiPdfFld.hidden){
+    if (files.length > 1){ setStatus('Il pack da inserire: un PDF solo','err'); return; }
+    return mettiPdfCu(files[0]);
+  }
   if (!famiglia){
     setStatus(POP ? 'Prima scegli che materiale POP vuoi realizzare'
                   : 'Prima scegli che tipo di pack vuoi realizzare','err');
@@ -3122,15 +3161,16 @@ function corpo(p){
 
 /** Il riempimento con i due PDF: la lettura dice quale e' il vassoio, poi
  *  quanti pack mettere e le opzioni del flowpack. */
-async function riempimentoAvanti(){
+async function riempimentoAvanti(cu = cuScelta || 'flowpack', extra = {}){
   const c = corpo(pending);
-  const cu = cuScelta || 'flowpack';
-  const opts = {kind: 'riempimento', cu, parti: c.parti, nomi: nomiPdf(pending)};
+  const opts = Object.assign({kind: 'riempimento', cu, parti: c.parti, nomi: nomiPdf(pending)}, extra);
   if (cu === 'carton') opts.spessore = spessoreScelto;
+  // il contenitore e' l'astuccio aperto, non un vassoio: nei testi
+  const dove = extra.apertura ? 'nell\u2019astuccio aperto' : 'nel vassoio';
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
-    pending.riempimento = {c, info, cu};
+    pending.riempimento = {c, info, cu, extra, dove};
     const astuccio = cu === 'carton';
     document.getElementById('teeth').value = '';
     document.getElementById('params-tit').textContent =
@@ -3145,9 +3185,10 @@ async function riempimentoAvanti(){
     quantiEl.value = '';
     quantiFld.hidden = false;
     params.classList.add('on');
-    setStatus(astuccio ? 'Riempimento: quanti astucci nel vassoio'
+    document.querySelector('label[for="quanti"]').textContent = 'Quanti pack (CU) ' + dove;
+    setStatus(astuccio ? 'Riempimento: quanti astucci ' + dove
                          + (info.strappo ? ', e la fustella dell\u2019apertura a strappo' : '')
-                       : 'Riempimento: quanti pack nel vassoio, poi le opzioni del flowpack','');
+                       : 'Riempimento: quanti pack ' + dove + ', poi le opzioni del flowpack','');
     quantiEl.focus();
   }catch(err){ fermato(err); }
 }
@@ -3295,6 +3336,9 @@ function chiediStrappo(c, opts, info){
   strappoGradi.value = String(s.gradi || 60);
   scegliStrappo(null);
   scegliFustella(null);
+  riempiPdf = null;
+  scegliRiempi(null);
+  scegliRiempiCu(null);
   strappoEl.classList.add('on');
   setStatus('Apertura a strappo: astuccio chiuso o aperto?','');
 }
@@ -3306,7 +3350,47 @@ function scegliStrappo(a){
     b.setAttribute('aria-pressed', String(b.dataset.a === a)));
   fustellaFld.hidden = a !== 'chiusa';
   gradiFld.hidden = a !== 'aperta';
+  riempiFld.hidden = a !== 'aperta';
+  mostraRiempi();
   mostraGradi();
+}
+
+/** L'astuccio aperto vuoto (0) o riempito (1). */
+function scegliRiempi(r){
+  riempiAperto = r;
+  riempiScelta.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(r !== null && Number(b.dataset.r) === r)));
+  mostraRiempi();
+}
+
+/** Il pack (CU) dentro l'astuccio aperto: 'flowpack' o 'carton'. */
+function scegliRiempiCu(u){
+  riempiCuScelto = u;
+  riempiCu.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.u === u)));
+  mostraRiempi();
+}
+
+/** Il tipo di pack e il suo PDF si chiedono solo per l'astuccio aperto
+ *  riempito. */
+function mostraRiempi(){
+  const si = aperturaScelta === 'aperta' && riempiAperto === 1;
+  riempiCuFld.hidden = !si;
+  riempiPdfFld.hidden = !si;
+  riempiSlot.querySelector('li').className = riempiPdf ? 'pieno' : '';
+  document.getElementById('riempi-nome').textContent = riempiPdf ? riempiPdf.name : 'nessun PDF';
+  document.getElementById('riempi-carica').textContent = riempiPdf ? 'Cambia PDF' : 'Carica PDF';
+}
+
+/** Il PDF del pack da mettere nell'astuccio aperto. */
+async function mettiPdfCu(f){
+  if (!isPdf(f)){ setStatus('Il pack da inserire: solo un file PDF','err'); return; }
+  try{
+    riempiPdf = {name: f.name, buf: await f.arrayBuffer()};
+  }catch(err){ setStatus(testoErrore(err), 'err'); return; }
+  mostraRiempi();
+  setStatus(riempiCuScelto ? 'Premi Costruisci'
+                           : 'Scegli il tipo di riempimento: flowpack o astuccio','');
 }
 
 /** Chiuso: la fustella dell'apertura modellata come solchi (1) o liscio (0). */
@@ -3334,6 +3418,22 @@ async function strappoAvanti(){
       return;
     }
     scelta.apertura = gradi;
+    if (riempiAperto === null){
+      setStatus('Dimmi se vuoi l\u2019astuccio aperto vuoto o riempito','err');
+      return;
+    }
+    if (riempiAperto === 1){
+      if (!riempiCuScelto){
+        setStatus('Scegli il tipo di riempimento: flowpack o astuccio','err');
+        return;
+      }
+      if (!riempiPdf){
+        setStatus('Carica il PDF del pack da inserire','err');
+        return;
+      }
+      strappoEl.classList.remove('on');
+      return riempiAstuccioAperto(s, gradi);
+    }
   } else if (aperturaScelta === 'chiusa'){
     if (incisioniScelte === null){
       setStatus('Dimmi se vuoi la fustella dell\u2019apertura modellata nel modello','err');
@@ -3349,6 +3449,22 @@ async function strappoAvanti(){
   try{
     esitoFinale(await build(s.c.buf, pending.name, Object.assign({}, s.opts, scelta)), s.titolo);
   }catch(err){ fermato(err); }
+}
+
+/** L'astuccio aperto riempito: un riempimento coi due PDF, l'astuccio e il
+ *  pack da inserire, aperto di `gradi`. La lettura dice quale e' il
+ *  contenitore; poi quanti pack e le opzioni del pack, come per il vassoio. */
+function riempiAstuccioAperto(s, gradi){
+  const pdf = slots.filter((x, k) => tipoSlot(k) === 'pdf');
+  pending = {buf: pdf[0].buf, bufs: [pdf[0].buf, riempiPdf.buf], name: pdf[0].name,
+             nomi: [pdf[0].name, riempiPdf.name], prodotto: null};
+  setTitolo(pending.nomi.join(' + '));
+  setMeta([]);
+  // lo spessore della carta vale per l'astuccio aperto (e per l'astuccio
+  // dentro); la pellicola, se l'ha chiesta, per la sua finestra
+  const extra = {apertura: gradi, spessore: spessoreScelto};
+  if (s.opts.pellicola !== undefined) extra.pellicola = s.opts.pellicola;
+  return riempimentoAvanti(riempiCuScelto, extra);
 }
 
 /** Il modello fuori dal viewer, con la memoria che occupava. */
@@ -3447,6 +3563,15 @@ strappoScelta.querySelectorAll('button').forEach(b => {
 fustellaScelta.querySelectorAll('button').forEach(b => {
   b.onclick = () => scegliFustella(Number(b.dataset.i));
 });
+riempiScelta.querySelectorAll('button').forEach(b => {
+  b.onclick = () => scegliRiempi(Number(b.dataset.r));
+});
+riempiCu.querySelectorAll('button').forEach(b => {
+  b.onclick = () => scegliRiempiCu(b.dataset.u);
+});
+document.getElementById('riempi-carica').onclick = () => fileCuEl.click();
+fileCuEl.onchange = e => { const f = e.target.files[0]; e.target.value = '';
+                           if (f) mettiPdfCu(f); };
 strappoGradi.oninput = mostraGradi;
 strappoGradi.onkeydown = e => { if (e.key === 'Enter') strappoAvanti(); };
 document.getElementById('strappo-go').onclick = strappoAvanti;
@@ -3493,7 +3618,7 @@ document.getElementById('go').onclick = async () => {
     if (q !== ''){
       quanti = parseInt(q, 10);
       if (!(quanti >= 1 && quanti <= 2000)){
-        setStatus('Quanti pack nel vassoio: un numero da 1 a 2000, o vuoto per pieno','err');
+        setStatus('Quanti pack ' + r.dove + ': un numero da 1 a 2000, o vuoto per pieno','err');
         return;
       }
     }
@@ -3504,11 +3629,12 @@ document.getElementById('go').onclick = async () => {
       return;
     }
     params.classList.remove('on');
-    const o = {kind: 'riempimento', cu: 'carton', parti: r.c.parti, nomi: nomiPdf(pending),
-               spessore: spessoreScelto, quanti};
+    const o = Object.assign({}, r.extra, {kind: 'riempimento', cu: 'carton', parti: r.c.parti,
+               nomi: nomiPdf(pending), spessore: spessoreScelto, quanti});
     if (r.info.strappo) o.incisioni = cuIncisioni;
     try{
-      setStatus('Costruisco il vassoio, l\u2019astuccio e il riempimento: ci vuole qualche minuto','');
+      setStatus('Costruisco ' + (r.extra.apertura ? 'l\u2019astuccio aperto' : 'il vassoio')
+                + ', l\u2019astuccio e il riempimento: ci vuole qualche minuto','');
       esitoFinale(await build(r.c.buf, pending.name, o), r.info.title || 'Vassoio pieno');
     }catch(err){ fermato(err); }
     return;
@@ -3526,9 +3652,10 @@ document.getElementById('go').onclick = async () => {
                        : Number(document.getElementById('soft').value)};
   try{
     if (r){
-      setStatus('Costruisco il vassoio, il flowpack e il riempimento: ci vuole qualche minuto','');
+      setStatus('Costruisco ' + (r.extra.apertura ? 'l\u2019astuccio aperto' : 'il vassoio')
+                + ', il flowpack e il riempimento: ci vuole qualche minuto','');
       const v = await build(r.c.buf, pending.name,
-                  Object.assign(fp, {kind: 'riempimento', cu: 'flowpack', parti: r.c.parti, quanti}));
+                  Object.assign(fp, r.extra, {kind: 'riempimento', cu: 'flowpack', parti: r.c.parti, quanti}));
       esitoFinale(v, r.info.title || 'Vassoio pieno');
     } else {
       const v = await build(pending.buf, pending.name, Object.assign(fp, {kind: 'flowpack'}));
