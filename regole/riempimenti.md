@@ -11,8 +11,10 @@ flowpack, e un GLB solo (`pack3d/riempimento.py`).
 ### Si dichiara, e i PDF si riconoscono da soli
 
 Il riempimento non si indovina: lo dichiara chi carica, scegliendo
-*Riempimenti*. La pagina ha due posti, il **pack (CU)** e il **vassoio o
-display**, e finche' non ci sono tutti e due non si procede. Quale dei due e'
+*Trade Unit*, vassoio o display, e poi *Piena* (fino al 19 novembre 2026 la
+voce era *Riempimenti*, ora unita al Vassoio). La pagina ha due posti, il
+**vassoio o display** e il **pack (CU) da inserire**, e finche' non ci sono
+tutti e due non si procede. Quale dei due e'
 il vassoio lo verifica comunque la lettura: si prova il vassoio su tutti e due
 (`analisi_riempimento`), e deve passare **uno solo**. Se passano tutti e due,
 o nessuno, ci si ferma e lo si dice. L'altro si legge come flowpack, con le

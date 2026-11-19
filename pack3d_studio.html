@@ -578,13 +578,12 @@
   </section>
 
   <div id="famiglie" class="pannello on">
-    <h2 class="domanda" id="famiglie-domanda">Che tipo di Pack/Riempimento intendi realizzare?</h2>
+    <h2 class="domanda" id="famiglie-domanda">Che tipo di Pack/Trade Unit intendi realizzare?</h2>
     <div class="carte" id="carte-pack" role="group" aria-label="Famiglia del pack">
       <button type="button" data-f="flowpack"><b>Flowpack</b><span>Pack con saldature e pinne laterali</span></button>
       <button type="button" data-f="pouch"><b>Pouch</b><span>Pack con fondo a soffietto ed estremit&agrave; saldata</span></button>
       <button type="button" data-f="carton"><b>Cartotecnico</b><span>Astuccio o scatola</span></button>
-      <button type="button" data-f="vassoio"><b>Vassoio</b><span>Vassoi espositori e display, realizzati vuoti</span></button>
-      <button type="button" data-f="riempimento"><b>Riempimenti</b><span>Un vassoio o un display con dentro le CU</span></button>
+      <button type="button" data-f="tu"><b>Trade Unit</b><span>Vassoi e display, vuoti o pieni di CU</span></button>
       <button type="button" data-f="incarto"><b>Incarti</b><span>Un foglio che avvolge il prodotto: chiuso a pieghe o avvolto</span></button>
     </div>
     <div class="carte" id="carte-pop" role="group" aria-label="Materiale POP" hidden>
@@ -602,6 +601,14 @@
     <div id="carto" class="carte due" role="group" aria-label="Astuccio o scatola" hidden>
       <button type="button" data-c="astuccio" aria-pressed="false"><b>Astuccio</b><span>Pack cartotecnico composto da un solo elemento, che si chiude da solo</span></button>
       <button type="button" data-c="scatola" aria-pressed="false"><b>Scatola</b><span>Pack cartotecnico composto da due o pi&ugrave; elementi. Esempio: base pi&ugrave; coperchio</span></button>
+    </div>
+    <div id="tu-scelta" class="carte due" role="group" aria-label="Vassoio o display" hidden>
+      <button type="button" data-t="vassoio" aria-pressed="false"><b>Vassoio</b><span>Vassoio espositore: il fondo e le pareti, aperto in alto</span></button>
+      <button type="button" data-t="display" aria-pressed="false"><b>Display</b><span>Ha la plancia, quasi sempre ricavata dallo stesso DT: in partenza il display &egrave; una scatola</span></button>
+    </div>
+    <div id="tu-pieno" class="carte due" role="group" aria-label="Vuoto o pieno" hidden>
+      <button type="button" data-v="0" aria-pressed="false"><b>Vuoto</b><span>Solo il contenitore, senza pack dentro</span></button>
+      <button type="button" data-v="1" aria-pressed="false"><b>Pieno</b><span>Con dentro le CU: si carica anche il PDF del pack da inserire</span></button>
     </div>
     <div id="cu-scelta" class="carte due" role="group" aria-label="Il pack (CU)" hidden>
       <button type="button" data-u="flowpack" aria-pressed="false"><b>CU: Flowpack</b><span>Pack con saldature e pinne laterali</span></button>
@@ -2806,16 +2813,14 @@ const FAMIGLIE = {
   pouch: {nome: 'Pouch', descr: 'Pack con fondo a soffietto ed estremità saldata.',
           slot: ['Il PDF del pouch']},
   carton: {nome: 'Cartotecnico', descr: '', slot: []},
-  vassoio: {nome: 'Vassoio',
-            descr: 'Contenitore espositivo che contiene le CU (Consumer Unit): flowpack, '
-                 + 'cartotecnici e altri pack. Comprende anche i display, che si riconoscono '
-                 + 'dalla plancia nel DT. Vassoi e display si realizzano vuoti.',
-            slot: ['Il PDF del vassoio o del display']},
-  riempimento: {nome: 'Riempimenti',
-                descr: 'I riempimenti sono TU (Trade Unit): contenitori come vassoi e display, '
-                     + 'con dentro le CU desiderate: flowpack o astucci.',
-                slot: ['Inserisci il pack (CU) desiderato',
-                       'Inserisci il vassoio o il display desiderato']},
+  // le TU (Trade Unit): il vassoio o il display, vuoti o pieni di CU. I posti
+  // li decidono le scelte: il contenitore, e se pieno anche il pack
+  tu: {nome: 'Trade Unit',
+       descr: 'Le TU (Trade Unit) sono i contenitori che portano le CU (Consumer Unit) al '
+            + 'punto vendita: il vassoio espositore, o il display, che ha la plancia '
+            + '(quasi sempre ricavata dallo stesso DT: in partenza il display \u00e8 una '
+            + 'scatola). Si realizzano vuote o piene di CU: flowpack o astucci.',
+       slot: []},
   // un foglio che avvolge un prodotto: la misura finale del 3D dipende anche
   // dal prodotto, quindi oltre al PDF si chiede la sua immagine
   incarto: {nome: 'Incarti',
@@ -2846,7 +2851,9 @@ const FAMIGLIE = {
                    slot: ['Il PDF dell\u2019espositore, o i PDF dei pezzi tutti insieme']},
 };
 // queste partono da sole appena c'e' il PDF: nessun'altra domanda prima
-const DA_SOLE = ['flowpack', 'pouch', 'vassoio', 'totem', 'espositore_pop'];
+const DA_SOLE = ['flowpack', 'pouch', 'totem', 'espositore_pop'];
+/** La famiglia parte da sola appena c'e' il PDF: anche la TU vuota. */
+const daSola = () => DA_SOLE.includes(famiglia) || (famiglia === 'tu' && tuPieno === 0);
 // la famiglia scelta, astuccio o scatola, e i PDF caricati, uno per posto
 let famiglia = null, carto = null, slots = [], slotAttivo = -1;
 // come si chiude l'incarto: 'pieghe' o 'avvolto'
@@ -2862,6 +2869,14 @@ function avvolto(){ return famiglia === 'incarto' && chiusura === 'avvolto'; }
 // il pack (CU) del riempimento: 'flowpack' o 'carton' (l'astuccio); e, se
 // l'astuccio ha l'apertura a strappo, se se ne vuole la fustella modellata
 let cuScelta = null, cuIncisioni = null;
+// la Trade Unit: 'vassoio' o 'display', e vuota (0) o piena (1)
+let tuTipo = null, tuPieno = null;
+const tuSceltaEl = document.getElementById('tu-scelta');
+const tuPienoEl = document.getElementById('tu-pieno');
+/** La TU piena: un riempimento, col contenitore e il pack. */
+const pieno = () => famiglia === 'tu' && tuPieno === 1;
+/** Le scelte della TU che vengono prima dei PDF sono fatte. */
+const tuScelta = () => !!tuTipo && tuPieno !== null && (tuPieno === 0 || !!cuScelta);
 const cuSceltaEl = document.getElementById('cu-scelta');
 const cuFustellaFld = document.getElementById('cu-fustella-fld');
 const cuFustella = document.getElementById('cu-fustella');
@@ -2872,6 +2887,9 @@ function nomiSlot(){
   if (famiglia === 'espositore_pop' && slots.length > 1)
     return slots.map((_, k) => 'Pezzo ' + (k + 1) + ' \u2014 il suo PDF');
   if (avvolto()) return FAMIGLIE.incarto.slotAvvolto;
+  if (famiglia === 'tu')
+    return [tuTipo === 'display' ? 'Il PDF del display' : 'Il PDF del vassoio',
+            'Il PDF del pack (CU) da inserire'].slice(0, slots.length);
   if (famiglia !== 'carton') return FAMIGLIE[famiglia].slot;
   if (carto === 'astuccio') return ['Il PDF dell’astuccio'];
   return slots.map((_, k) => 'Parte ' + (k + 1) + ' — il suo PDF');
@@ -2880,7 +2898,7 @@ function nomiSlot(){
 /** Tutto quello che il passo chiede c'e'. */
 function pronto(){
   if (!slots.length || slots.some(x => !x)) return false;
-  if (famiglia === 'riempimento') return !!cuScelta && (cuScelta !== 'carton' || !!spessoreScelto);
+  if (famiglia === 'tu') return tuScelta() && (!pieno() || cuScelta !== 'carton' || !!spessoreScelto);
   if (famiglia === 'incarto') return !!chiusura;
   return famiglia !== 'carton' || (!!carto && !!spessoreScelto);
 }
@@ -2900,6 +2918,7 @@ function mostraFamiglie(){
 function scegliFamiglia(f){
   if (!FAMIGLIE[f]) return;
   famiglia = f; carto = null; slotAttivo = -1; cuScelta = null; chiusura = null;
+  tuTipo = null; tuPieno = null;
   slots = FAMIGLIE[f].slot.map(() => null);
   partiEl.value = '';
   scegliSpessore(0);
@@ -2934,6 +2953,24 @@ function scegliChiusura(i){
   statoPasso();
 }
 
+/** La Trade Unit: vassoio o display. */
+function scegliTu(t){
+  tuTipo = t;
+  disegnaPasso();
+  statoPasso();
+}
+
+/** La Trade Unit vuota (0) o piena (1): piena ha anche il posto del pack.
+ *  Il PDF del contenitore gia' caricato resta. */
+function scegliPieno(v){
+  tuPieno = v;
+  const prima = slots[0] || null, cu = slots[1] || null;
+  slots = v ? [prima, cu] : [prima];
+  disegnaPasso();
+  if (daSola() && pronto()) return avanti();
+  statoPasso();
+}
+
 /** Il pack (CU) del riempimento: flowpack o astuccio. */
 function scegliCu(u){
   cuScelta = u;
@@ -2949,7 +2986,13 @@ function disegnaPasso(){
   cartoEl.hidden = !c;
   cartoEl.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.c === carto)));
-  const r = famiglia === 'riempimento';
+  const tu = famiglia === 'tu', r = pieno();
+  tuSceltaEl.hidden = !tu;
+  tuSceltaEl.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(b.dataset.t === tuTipo)));
+  tuPienoEl.hidden = !(tu && tuTipo);
+  tuPienoEl.querySelectorAll('button').forEach(b =>
+    b.setAttribute('aria-pressed', String(tuPieno !== null && Number(b.dataset.v) === tuPieno)));
   cuSceltaEl.hidden = !r;
   cuSceltaEl.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.u === cuScelta)));
@@ -2957,7 +3000,7 @@ function disegnaPasso(){
   incartoSceltaEl.hidden = !inc;
   incartoSceltaEl.querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.i === chiusura)));
-  passoCampi.hidden = (c && !carto) || (inc && !chiusura);
+  passoCampi.hidden = (c && !carto) || (inc && !chiusura) || (tu && !tuScelta());
   partiFld.hidden = !(c && carto === 'scatola');
   spessoreFld.hidden = !((c && carto) || (r && cuScelta === 'carton'));
   const nomi = nomiSlot();
@@ -2978,7 +3021,8 @@ function disegnaPasso(){
     slotEl.appendChild(li);
   });
   // le famiglie da un PDF partono da sole: Continua serve solo per riprovare
-  continuaBtn.hidden = (c && !carto) || (inc && !chiusura) || (DA_SOLE.includes(famiglia) && !pronto());
+  continuaBtn.hidden = (c && !carto) || (inc && !chiusura) || (tu && !tuScelta())
+                       || (daSola() && !pronto());
   continuaBtn.disabled = !pronto();
 }
 
@@ -2997,8 +3041,14 @@ function statoPasso(errore){
   else if (famiglia === 'incarto' && mancano)
     t = 'Incarti: carica ' + [!slots[0] ? 'il PDF dello steso' : '',
                               !slots[1] ? 'l\u2019immagine del prodotto' : ''].filter(Boolean).join(' e ');
-  else if (famiglia === 'riempimento' && !cuScelta) t = 'Riempimenti: il pack (CU) \u00e8 un flowpack o un astuccio?';
-  else if (famiglia === 'riempimento' && cuScelta === 'carton' && !spessoreScelto)
+  else if (famiglia === 'tu' && !tuTipo) t = 'Trade Unit: vassoio o display?';
+  else if (famiglia === 'tu' && tuPieno === null)
+    t = 'Trade Unit: ' + (tuTipo === 'display' ? 'il display' : 'il vassoio') + ' lo vuoi vuoto o pieno?';
+  else if (pieno() && !cuScelta) t = 'Trade Unit piena: che pack (CU) ci va dentro, flowpack o astuccio?';
+  else if (pieno() && mancano)
+    t = 'Trade Unit: carica ' + [!slots[0] ? (tuTipo === 'display' ? 'il PDF del display' : 'il PDF del vassoio') : '',
+                                 !slots[1] ? 'il PDF del pack da inserire' : ''].filter(Boolean).join(' e ');
+  else if (pieno() && cuScelta === 'carton' && !spessoreScelto)
     t = 'Scegli lo spessore della carta dell\u2019astuccio: 1, 2 o 3';
   else if (carto === 'scatola' && !slots.length) t = 'Scatola: digita di quante parti è fatto il pack, da 2 a ' + MAX_PEZZI;
   else if (mancano) t = F.nome + ': ' + (slots.length === 1 ? 'carica il PDF'
@@ -3122,7 +3172,7 @@ async function riceviFile(lista){
               + (letti.length - messi === 1 ? ' in più non l’ho preso' : ' in più non li ho presi'), 'err');
     return;
   }
-  if (DA_SOLE.includes(famiglia) && pronto()) return avanti();
+  if (daSola() && pronto()) return avanti();
   statoPasso();
 }
 
@@ -3138,7 +3188,8 @@ async function avanti(){
   setTitolo(pending.nomi.join(' + '));
   setMeta([]);
   passoEl.classList.remove('on');
-  if (famiglia === 'riempimento') return riempimentoAvanti();
+  if (pieno()) return riempimentoAvanti();
+  if (famiglia === 'tu') return procedi('vassoio', {}, tuTipo);
   if (famiglia === 'incarto') return procedi('incarto', {chiusura});
   if (famiglia === 'carton')
     return procedi('carton', {pezzi: slots.length, spessore: spessoreScelto});
@@ -3166,10 +3217,12 @@ async function riempimentoAvanti(cu = cuScelta || 'flowpack', extra = {}){
   const opts = Object.assign({kind: 'riempimento', cu, parti: c.parti, nomi: nomiPdf(pending)}, extra);
   if (cu === 'carton') opts.spessore = spessoreScelto;
   // il contenitore e' l'astuccio aperto, non un vassoio: nei testi
-  const dove = extra.apertura ? 'nell\u2019astuccio aperto' : 'nel vassoio';
+  const dove = extra.apertura ? 'nell\u2019astuccio aperto'
+             : famiglia === 'tu' && tuTipo === 'display' ? 'nel display' : 'nel vassoio';
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
+    if (famiglia === 'tu') controllaTu(info, tuTipo);
     pending.riempimento = {c, info, cu, extra, dove};
     const astuccio = cu === 'carton';
     document.getElementById('teeth').value = '';
@@ -3193,6 +3246,22 @@ async function riempimentoAvanti(cu = cuScelta || 'flowpack', extra = {}){
   }catch(err){ fermato(err); }
 }
 
+/** La TU dichiarata e quella letta devono tornare: il display ha la
+ *  plancia, il vassoio no. La lettura lo dice nel titolo ("Display con
+ *  plancia", "Display a scatola", "Vassoio espositore"; nel riempimento
+ *  dentro il suo). Se non torna ci si ferma: la dichiarazione vale anche
+ *  quando la fustella le da' torto. */
+function controllaTu(info, tu){
+  if (!tu) return;
+  const display = /display/i.test(info.title || '');
+  if (tu === 'display' && !display)
+    throw new Error('Hai scelto Display, ma nel DT non trovo la plancia: si legge come vassoio. '
+                    + 'Se \u00e8 un vassoio, premi Cambia tipo e scegli Vassoio');
+  if (tu === 'vassoio' && display)
+    throw new Error('Hai scelto Vassoio, ma il DT ha la plancia: \u00e8 un display. '
+                    + 'Premi Cambia tipo e scegli Display');
+}
+
 /** Lo spessore della carta: 1, 2 o 3, o 0 per nessuno. */
 function scegliSpessore(n){
   spessoreScelto = n;
@@ -3202,13 +3271,14 @@ function scegliSpessore(n){
   if (famiglia) disegnaPasso();
 }
 
-async function procedi(kind, extra){
+async function procedi(kind, extra, tu){
   const c = corpo(pending);
   const opts = Object.assign({kind, parti: c.parti, nomi: nomiPdf(pending)}, extra);
   if (c.prodotto) opts.prodotto = c.prodotto;
   try{
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
+    controllaTu(info, tu);
     // l'incarto a triangolo e' un film, ma non ha pinne ne' rigonfiamento:
     // si costruisce subito
     if (kind === 'flowpack' && info.kind !== 'incarto'){
@@ -3539,6 +3609,8 @@ if (POP){
 famiglieEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliFamiglia(b.dataset.f); });
 cartoEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCarto(b.dataset.c); });
 cuSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliCu(b.dataset.u); });
+tuSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliTu(b.dataset.t); });
+tuPienoEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliPieno(Number(b.dataset.v)); });
 incartoSceltaEl.querySelectorAll('button').forEach(b => { b.onclick = () => scegliChiusura(b.dataset.i); });
 cuFustella.querySelectorAll('button').forEach(b => {
   b.onclick = () => {

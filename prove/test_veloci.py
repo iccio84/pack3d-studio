@@ -2082,6 +2082,23 @@ class ScatolaChiusa(unittest.TestCase):
 
 
 
+class VoceTradeUnit(unittest.TestCase):
+    """Vassoio e Riempimenti sono una voce sola, Trade Unit: vassoio o
+    display, poi vuota o piena; piena chiede il pack e il suo PDF."""
+
+    def test_la_pagina_ha_la_voce_trade_unit(self):
+        qui = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(qui, "pack3d_studio.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        self.assertIn('data-f="tu"><b>Trade Unit</b>', html)
+        self.assertNotIn('data-f="vassoio"', html)
+        self.assertNotIn('data-f="riempimento"', html)
+        for pezzo in ('data-t="vassoio"', 'data-t="display"', 'data-v="0"', 'data-v="1"',
+                      "function controllaTu", "procedi('vassoio', {}, tuTipo)",
+                      "'Il PDF del pack (CU) da inserire'"):
+            self.assertIn(pezzo, html)
+
+
 class AstuccioApertoRiempito(unittest.TestCase):
     """L'astuccio con l'apertura a strappo, aperto, si puo' riempire: la
     pagina chiede vuoto o riempito, il tipo di pack e il suo PDF, e la
