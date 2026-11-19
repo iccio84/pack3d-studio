@@ -106,9 +106,11 @@ cartoncino, e' un cartotecnico e si costruisce.
     approvato dall'utente. Se c'e', leggi `conoscenze/INDICE.md` e solo il
     file dell'argomento del caso, non tutti. Vale meno del DT e di chi ha
     caricato il PDF: se li contraddice, vincono loro.
-  - Il **parco della notte** (`.github/workflows/parco.yml`): ogni notte, se
-    `coda-settimana` e' andata avanti, il parco intero contro `main`, nelle
-    Actions di questo repository, dove stanno i PDF. E' rosso se un caso che
+  - Il **parco del sabato notte** (`.github/workflows/parco.yml`): una volta
+    a settimana (fino al 19 novembre 2026 ogni notte: i minuti delle Actions
+    di un repository privato si pagano), se `coda-settimana` e' andata
+    avanti, il parco intero contro `main`, nelle Actions di questo
+    repository, dove stanno i PDF. E' rosso se un caso che
     con `main` si costruiva non si costruisce piu', o se una misura
     approvata cambia (`prove/parco.py esito`); il riassunto dice anche i
     modelli solo cambiati, con le viste affiancate nell'artefatto. Si lancia
@@ -244,8 +246,10 @@ indietro - `coda-settimana` avanti a `main`, o casi approvati da chiudere
 
    **Poi il rilascio** (RILASCIO.md), se il caso ha avuto una PR unita in
    `coda-settimana`: la correzione va sullo Space subito, non a fine
-   settimana - il parco intero nelle Actions, `main`, la prova del caso
-   sullo Space, una mezz'ora. Se un'altra sessione ha unito qualcosa nel
+   settimana - `prove/parco.py serve` dice se il parco serve, e se serve il
+   parco intero in locale, nella sessione (le Actions solo di riserva:
+   costano minuti), poi `main` e la prova del caso sullo Space, tre quarti
+   d'ora. Se un'altra sessione ha unito qualcosa nel
    frattempo, il rilascio porta anche quello; se ne sta gia' facendo uno,
    l'unione allo SHA fissato si rifiuta e si riparte dal punto 2 di
    RILASCIO.md. **Il giro finisce qui.**
