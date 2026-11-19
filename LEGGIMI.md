@@ -65,7 +65,10 @@ combinazione funziona.
    - **Cartotecnico**: astuccio o scatola e lo spessore della carta;
      l'astuccio un PDF, la scatola di quante parti e' fatta e un PDF per
      parte. Se l'astuccio ha un'apertura a strappo, chiuso (con o senza la
-     fustella dell'apertura modellata) o aperto di quanti gradi; se il pack
+     fustella dell'apertura modellata) o aperto di quanti gradi; aperto, se
+     lo si vuole vuoto o riempito, e riempito il tipo di riempimento (il pack
+     che ci va dentro, flowpack o astuccio) e il PDF del pack da inserire,
+     poi quanti pack e le loro domande come nei Riempimenti; se il pack
      ha una finestra, se ci va la pellicola trasparente;
    - **Riempimenti**: che cosa e' il pack (CU), flowpack o astuccio; il pack
      e il vassoio o display; poi quanti pack mettere e le domande del
