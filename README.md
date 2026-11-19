@@ -55,7 +55,7 @@ d'ambiente del backend.
 
 
 Da artwork PDF a modello 3D mappato. La pagina chiede prima la famiglia -
-Flowpack, Pouch, Cartotecnico, Vassoio, Riempimenti, Incarti - poi i PDF che
+Flowpack, Pouch, Cartotecnico, Trade Unit, Incarti - poi i PDF che
 servono a quella famiglia, uno per posto (agli incarti anche l'immagine del
 prodotto da incartare), e le sue domande; il sistema ricostruisce la
 geometria dalla fustella e restituisce un GLB scaricabile.

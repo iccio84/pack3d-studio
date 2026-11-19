@@ -391,6 +391,21 @@ tre. Senza dichiarazione usciva un **flowpack** - nastro 515 x passo 486 mm,
 sezione 134 x 116,5 - cioe' un modello plausibile della famiglia sbagliata, il
 difetto peggiore che questo progetto possa avere.
 
+### Dalla pagina: Trade Unit, display
+
+Dal 19 novembre 2026 la pagina ha una voce sola, **Trade Unit**, al posto di
+Vassoio e Riempimenti, e chiede subito **vassoio o display**. Il
+proprietario: «la differenza e' che il display ha una plancia (quasi sempre
+ricavabile dallo stesso dt perche' i display in partenza sono scatole)». La
+costruzione e' la stessa per tutti e due (`kind` vassoio, e il display si
+riconosce da solo); la scelta si controlla con la lettura (`controllaTu`
+nella pagina): *Display con plancia* e *Display a scatola* sono display,
+*Vassoio espositore* - sagomato compreso - e' un vassoio. Se non torna ci si
+ferma e si dice di cambiare tipo, senza mettere il caso in coda: e' la
+scelta a non tornare, non la lettura. Nel parco, un file chiamato
+«Display» che si legge come vassoio espositore (senza plancia) per la
+pagina e' un vassoio.
+
 ### Si riconosce dalla croce, non dalla grafica
 
 Fondo, pareti e alette agli angoli sono quelle del vassoio, e si stendono con
