@@ -14,9 +14,10 @@ l'ha unita:
 - la routine, dopo la `consegna` di un caso corretto (CODA.md, *Il giro*);
 - una sessione che lavora sul codice, dopo l'unione della sua PR.
 
-Costa una mezz'ora: il parco intero nelle Actions di `pack3d-casi`, una
-ventina di minuti, poi lo Space che riparte e la prova del caso. Il parco
-costruisce solo il codice nuovo: `main` la trova in cassa, perche' la cassa
+Costa tre quarti d'ora: il parco intero in locale, nella sessione, una
+quarantina di minuti (punto 3; nelle Actions di `pack3d-casi` solo di
+riserva, perche' costano minuti), poi lo Space che riparte e la prova del
+caso. Nelle Actions il parco costruisce solo il codice nuovo: `main` la trova in cassa, perche' la cassa
 ha la chiave sull'albero del codice e `main` ha lo stesso albero che il
 rilascio prima ha appena provato; e dentro la cassa ogni caso ha la sua
 impronta, cosi' il caso appena consegnato, nuovo nel parco, si costruisce
@@ -46,44 +47,53 @@ approvati da chiudere (punto 1).
    chiudono.
 2. **Fissa il ramo.** Annota lo SHA di `origin/coda-settimana`: provi e
    pubblichi quello, non quello che un'altra sessione unisce nel frattempo.
-3. **Il parco intero, prima e dopo, nelle Actions** di `pack3d-casi`: li' ci
-   sono i PDF. Serve solo se cambia il codice che costruisce i modelli:
+3. **Il parco serve?** Solo se cambia il codice che costruisce i modelli:
 
-       git diff --name-only origin/main <SHA> | grep -E '^(server\.py|agent\.py|pack3d/|requirements\.txt|Dockerfile|risorse/)'
+       python3 prove/parco.py serve origin/main <SHA>
 
-   Se non esce niente - documenti, prove, la pagina - i modelli non
-   possono cambiare: basta il controllo `prove` della PR, e si salta al
-   punto 5. Altrimenti si lancia il giro:
+   Esce con 1 se cambiano solo la pagina, le prove o i documenti: i modelli
+   non possono cambiare, basta il controllo `prove` della PR, e si salta al
+   punto 5. Con 0 dice quali file dei modelli cambiano, e il parco si fa.
+
+   **Un parco per rilascio.** Lo SHA fissato al punto 2 porta tutte le PR
+   gia' unite: un parco solo le prova tutte. Un'unione che arriva mentre il
+   parco gira non ne fa partire un secondo: va nel rilascio dopo.
+
+   **Il parco intero, prima e dopo, in locale, nella sessione.** Dal 19
+   novembre 2026 e' la strada di serie: le Actions di `pack3d-casi`, privato,
+   costano minuti (a novembre circa 3.000 in 19 giorni, contro i 2.000 del
+   mese, e il 19 si sono fermate), il parco nella sessione no. La sessione ha
+   i PDF (`../pack3d-casi`); le due costruzioni in parallelo, in background,
+   una quarantina di minuti:
+
+       git worktree add --detach <scratch>/prima origin/main
+       git worktree add --detach <scratch>/dopo <SHA>
+       (TMPDIR=<scratch>/tmp PACK3D_CACHE=<scratch>/tmp/c_prima python3 prove/parco.py costruisci ../pack3d-casi <scratch>/parco_prima --codice <scratch>/prima > <scratch>/prima.log 2>&1 &
+        TMPDIR=<scratch>/tmp PACK3D_CACHE=<scratch>/tmp/c_dopo python3 prove/parco.py costruisci ../pack3d-casi <scratch>/parco_dopo --codice <scratch>/dopo > <scratch>/dopo.log 2>&1 & wait)
+       python3 prove/parco.py esito <scratch>/parco_prima <scratch>/parco_dopo
+       python3 prove/parco.py confronta <scratch>/parco_prima <scratch>/parco_dopo --immagini <scratch>/confronto
+       python3 prove/parco.py misure ../pack3d-casi <scratch>/parco_dopo
+       python3 prove/parco.py stesi ../pack3d-casi <scratch>/parco_dopo
+
+   `esito` e' il verdetto del parco delle Actions: rosso se un caso che con
+   `main` si costruiva non si costruisce piu', o se una misura approvata
+   cambia. `confronta` dice i modelli solo cambiati, coi nomi, e le viste
+   affiancate stanno nella cartella `--immagini`: si guardano da li', una
+   per volta. Nella PR verso `main` si scrive che il parco e' stato fatto
+   in locale, coi numeri del riassunto.
+
+   **Le Actions solo di riserva**: se la sessione non arriva ai PDF o non ha
+   lo spazio per le due costruzioni. Il giro:
 
        gh api -X POST repos/iccio84/pack3d-casi/actions/workflows/parco.yml/dispatches -f ref=main -f "inputs[codice]=<SHA>"
        gh api "repos/iccio84/pack3d-casi/actions/workflows/parco.yml/runs?event=workflow_dispatch&per_page=1" --jq '.workflow_runs[0] | [.id, .status, .conclusion, .created_at] | @tsv'
 
    Aspetta che il giro finisca (controlla ogni cinque minuti; un altro parco
-   in corso lo mette in fila): una ventina di minuti, il codice nuovo. Di
-   `main` rifa' solo i casi nuovi o cambiati del parco - quello appena
-   consegnato, mezzo minuto; se `main` manca in cassa (la cassa che nessuno
-   usa per sette giorni scade, e ogni processore ha la sua) la ricostruisce
-   intera, altri 17 minuti. Il
-   riassunto del giro dice quanti casi ha riusato e quanti ha costruito.
-   `conclusion` e' `success` se nessun caso che con
-   `main` si costruiva si e' rotto e nessuna misura approvata e' cambiata
-   (`prove/parco.py esito`). I modelli solo cambiati li dice il log del
-   giro, nel passo «Le viste affiancate» (il riassunto di `confronto`, coi
-   nomi): lo strumento GitHub delle Actions (i log di un job), o
-   `gh api repos/iccio84/pack3d-casi/actions/jobs/<job>/logs`. L'artefatto
-   con le viste affiancate si scarica da un dominio che la rete della
-   sessione non raggiunge: le viste si guardano dalla pagina del giro.
-
-   Se il comando che lancia il giro non e' permesso (le regole della
-   sessione: DEPLOY.md, *I permessi della routine*), il parco si fa in
-   locale, piu' lento - un'ora o due, la cassa e' vuota:
-
-       git worktree add /tmp/prima origin/main
-       git worktree add /tmp/dopo <SHA>
-       python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_prima --codice /tmp/prima > /tmp/prima.log 2>&1
-       python3 prove/parco.py costruisci ../pack3d-casi /tmp/parco_dopo --codice /tmp/dopo > /tmp/dopo.log 2>&1
-       python3 prove/parco.py confronta /tmp/parco_prima /tmp/parco_dopo
-       python3 prove/parco.py stesi ../pack3d-casi /tmp/parco_dopo
+   in corso lo mette in fila): una ventina di minuti, quaranta se `main`
+   manca in cassa. `conclusion` e' `success` se il verdetto e' verde; i
+   modelli solo cambiati li dice il log del giro, nel passo «Le viste
+   affiancate». Se il giro si chiude in pochi secondi senza log, i minuti
+   del mese sono finiti: si torna al parco in locale.
 
 4. **Si pubblica solo se sono vere tutte**:
    - il parco e' verde: nessun caso che prima si costruiva si e' rotto,
@@ -91,8 +101,9 @@ approvati da chiudere (punto 1).
      nella PR coi suoi numeri;
    - i modelli cambiati sono solo quelli dei casi corretti in questo
      rilascio - nel parco col loro `codice` - oppure ogni altro cambio e' un
-     **miglioramento evidente**, guardato sulle viste affiancate
-     dell'artefatto e spiegato caso per caso nella PR;
+     **miglioramento evidente**, guardato sulle viste affiancate (la
+     cartella di `confronta`, o l'artefatto delle Actions) e spiegato caso
+     per caso nella PR;
    - il controllo `prove` della PR verso `main` e' verde.
 
    Se un caso si e' rotto, trova quale correzione l'ha rotto e sistemala con
@@ -196,6 +207,8 @@ approvati da chiudere (punto 1).
    L'aggiornamento diretto del riferimento del ramo e l'API "merges" di
    GitHub, da una sessione cloud, il proxy non li permette.
 
-Il parco della notte, le varianti della domenica, del lunedi' e del
-mercoledi' e le soglie del venerdi' (Actions di `pack3d-casi`) restano: sono
-la rete che vede quello che un rilascio non ha guardato.
+Il parco del sabato notte, le varianti del 1 e del 15 del mese e le soglie
+del venerdi' (Actions di `pack3d-casi`) restano: sono la rete che vede
+quello che un rilascio non ha guardato. Dal 19 novembre 2026 girano meno
+spesso - il parco era ogni notte, le varianti tre volte a settimana - per
+stare nei minuti del mese.
