@@ -1078,6 +1078,36 @@ def _oltre_il_fondo(im):
     return float(1.0 - n[:3].sum() / n.sum()) if n.sum() else 0.0
 
 
+# Quanto possono differire, in media sui tre canali (0-255), le due strisce
+# ai lati di una piega perche' la grafica passi da una faccia all'altra.
+CONTINUA_MAX = 18.0
+
+
+def _continua_il_fronte(fronte, altri):
+    """Se i fianchi della fascia del fronte (`altri`, come sul foglio: il
+    sinistro a sinistra del fronte) continuano la sua grafica sulle due pieghe:
+    la striscia di ogni fianco contro la piega uguale a quella del fronte.
+    Dal proprietario, sul T2x12 con la finestra: i fianchi sono «quelle ai
+    lati del fronte che si sovrappongono poi alle altre alette. Ci deve essere
+    continuita' della colata»."""
+    import numpy as np
+    if "left" not in altri or "right" not in altri:
+        return False
+
+    def striscia(im, lato, alto):
+        im = im.convert("RGB")
+        w, h = im.size
+        k = max(1, w // 60)
+        box = (w - k, 0, w, h) if lato == "destra" else (0, 0, k, h)
+        return np.asarray(im.crop(box).resize((1, alto)), np.float32)[:, 0]
+
+    alto = 200
+    f = fronte
+    d_sx = np.abs(striscia(altri["left"], "destra", alto) - striscia(f, "sinistra", alto)).mean()
+    d_dx = np.abs(striscia(altri["right"], "sinistra", alto) - striscia(f, "destra", alto)).mean()
+    return bool(max(d_sx, d_dx) <= CONTINUA_MAX)
+
+
 def scegli_fianchi(tex, panels, d, altri):
     """Fra le due coppie di fianchi di un astuccio chiuso, quella stampata.
 
@@ -1098,10 +1128,16 @@ def scegli_fianchi(tex, panels, d, altri):
         # due: e sono quelli a vista, come sul T2x25
         ga = min((_oltre_il_fondo(im) for im in nostri), default=0.0)
         gb = min((_oltre_il_fondo(im) for im in altri.values()), default=0.0)
-        if not (gb > ga * 1.3 and gb > ga + 0.02):
+        sul_fronte = (d.fianchi_su == "back" and "front" in tex
+                      and _continua_il_fronte(tex["front"], altri))
+        if not (gb > ga * 1.3 and gb > ga + 0.02) and not sul_fronte:
             return None
-        perche = ("la faccia piu' povera ha grafica oltre il fondo per il %.0f%% "
-                  "contro il %.0f%%" % (100 * gb, 100 * ga))
+        if sul_fronte:
+            perche = ("la loro grafica continua quella del fronte sulla piega: "
+                      "la colata passa dal fronte ai fianchi")
+        else:
+            perche = ("la faccia piu' povera ha grafica oltre il fondo per il %.0f%% "
+                      "contro il %.0f%%" % (100 * gb, 100 * ga))
     else:
         perche = "croma %.0f contro %.0f" % (b, a)
     prima = d.fianchi_su
