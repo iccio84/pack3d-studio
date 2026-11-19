@@ -985,11 +985,23 @@ class Handler(BaseHTTPRequestHandler):
                     # opzioni, col motivo: il caso si prepara come quelli che
                     # il controllo respinge, e parte quando lo conferma con
                     # la descrizione. Niente costruzione: la rifa' la routine.
-                    motivo = str(opts.get("motivo") or "").strip()[:300] or "letto male"
-                    verdetto = {"esito": "sbagliato", "segnalato": True,
-                                "motivo": "Segnalato da chi l'ha costruito: il PDF e' "
-                                          "stato letto male - %s" % motivo,
-                                "difetti": ["letto male: %s" % motivo]}
+                    # «Chiedi una modifica»: il modello e' passato - il
+                    # controllo ha detto ok - ma chi l'ha costruito lo vuole
+                    # diverso. Stesso caso, e cosa cambiare lo dice la sua
+                    # descrizione, che la pagina chiede prima di mandarlo.
+                    if opts.get("richiesta") == "modifica":
+                        verdetto = {"esito": "sbagliato", "segnalato": True,
+                                    "modifica": True,
+                                    "motivo": "Chiesto da chi l'ha costruito: il modello "
+                                              "va modificato come dice la sua descrizione",
+                                    "difetti": ["da modificare: come dice la descrizione "
+                                                "di chi l'ha costruito"]}
+                    else:
+                        motivo = str(opts.get("motivo") or "").strip()[:300] or "letto male"
+                        verdetto = {"esito": "sbagliato", "segnalato": True,
+                                    "motivo": "Segnalato da chi l'ha costruito: il PDF e' "
+                                              "stato letto male - %s" % motivo,
+                                    "difetti": ["letto male: %s" % motivo]}
                     ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
                                riconosciuto="-", avvisi=[], nomi=nomi,
                                opzioni={k: opts[k] for k in OPZIONI_CASO

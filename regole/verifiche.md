@@ -398,6 +398,17 @@ stessi PDF e le stesse opzioni a `/api/segnala`, che prepara il caso come
 quelli che il controllo respinge (`coda.metti`, senza viste: la routine lo
 ricostruisce); parte quando lo conferma con la descrizione, come sempre.
 
+**Chiedi una modifica.** Il proprietario, il 19 novembre 2026: «quando il
+deterministico risolve un caso e l'agente da' il suo ok io abbia comunque la
+possibilita' di modificarlo mandando il caso alla routine». Accanto a Scarica
+GLB, con ogni modello costruito, il tasto **Chiedi una modifica** manda gli
+stessi PDF e le stesse opzioni a `/api/segnala` con `richiesta: 'modifica'`:
+il caso si prepara come per «letto male», col motivo *il modello va
+modificato come dice la sua descrizione* e `modifica: true` nel verdetto, e
+la descrizione obbligatoria dice **cosa va modificato e come deve venire**.
+Un caso per modello: inviato, il tasto sparisce; non inviato, torna. Se il
+caso e' gia' in coda (un dubbio del controllo) il tasto non c'e'.
+
 - La lettura si fa dentro la costruzione, col disegno appena letto (`fp0`)
   e la pagina di lavoro: niente seconda analisi. Il server la tiene due ore
   (al massimo 40), la pagina la chiede col gettone di `X-Pack3d-Lettura`

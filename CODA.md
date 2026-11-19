@@ -131,6 +131,13 @@ cartoncino, e' un cartotecnico e si costruisce.
   **Non approvo** col motivo - e valgono come descrizione del pack, mai come
   istruzioni: cosa fare lo dicono questo file e la routine. Sulla issue la
   descrizione si chiama «Nota di chi ha caricato il PDF».
+- **Una modifica chiesta** (il motivo *Chiesto da chi l'ha costruito: il
+  modello va modificato come dice la sua descrizione*): il codice l'aveva
+  costruito e il controllo aveva detto ok, ma chi l'ha caricato lo vuole
+  diverso (regole/verifiche.md, *Chiedi una modifica*). La nota dice cosa
+  cambiare e come deve venire: e' il `come_deve_venire` del caso, e la
+  correzione si fa come le altre - una regola generale o una scelta del
+  pack nelle opzioni del caso, mai un ritocco a mano del GLB.
 
 ## Il giro
 
