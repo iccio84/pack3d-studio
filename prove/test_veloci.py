@@ -2082,6 +2082,21 @@ class ScatolaChiusa(unittest.TestCase):
 
 
 
+class AnteprimeEFoto(unittest.TestCase):
+    """Ogni file caricato si vede e si toglie; la descrizione del caso ha
+    piu' foto, con l'anteprima e la crocetta, e un campo ampio."""
+
+    def test_la_pagina(self):
+        qui = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(qui, "pack3d_studio.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        for pezzo in ("function togliFile(k)", "function urlDi(x)", "className = 'mini'",
+                      "selettoreFoto('nota-foto', 'Aggiungi foto (facoltative)')",
+                      "await notaSf.foto()", 'id="riempi-togli"', 'rows="7"'):
+            self.assertIn(pezzo, html)
+        self.assertNotIn("notaFoto.files", html)
+
+
 class IlParcoServe(unittest.TestCase):
     """`prove/parco.py serve`: il parco del rilascio serve solo se cambia il
     codice che costruisce i modelli (RILASCIO.md, punto 3)."""

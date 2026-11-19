@@ -157,7 +157,7 @@
   .risposta textarea, #invio input{font:inherit;font-size:13px;line-height:1.45;
     padding:8px 11px;border:1px solid var(--border);border-radius:var(--radius-sm);
     background:var(--surface);color:var(--foreground);width:100%}
-  .risposta textarea{resize:vertical;min-height:58px}
+  .risposta textarea{resize:vertical;min-height:120px}
   .risposta textarea:focus, #invio input:focus{outline:none;
     border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
   .risposta .azioni, #invio .azioni{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -278,8 +278,6 @@
     padding:10px 16px;border-radius:var(--radius);border:1px solid var(--border);
     background:var(--background);color:var(--muted-foreground);cursor:pointer}
   #nota-foto-box .bottone:hover{border-color:color-mix(in oklab,var(--primary) 60%,transparent)}
-  #nota-foto-nome{font-size:12px;color:var(--muted-foreground);flex:1;min-width:0;
-    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   #nota-esito{font-size:12px;color:var(--muted-foreground)}
   #nota-esito:empty{display:none}
   #nota-esito.ok{color:var(--foreground);font-weight:600}
@@ -288,7 +286,8 @@
      con lui: senza, il caso non parte */
   #invio #nota{width:auto;margin-top:0;gap:6px}
   #invio #nota label[for=nota-testo]{font-size:12px}
-  #invio #nota textarea{min-height:0}
+  #invio #nota textarea{min-height:150px}
+  #nota textarea{min-height:150px}
   /* nel modulo la foto sta sulla riga dei tasti, e la riga della nota se ne va */
   #invio #nota > .azioni{display:none}
   #nota #nota-testo[aria-invalid=true]{border-color:var(--destructive)}
@@ -405,6 +404,16 @@
   .slot .nome{flex:1 1 160px;font-size:11px;color:var(--muted-foreground);overflow-wrap:anywhere}
   .slot li.pieno .nome{color:var(--primary);font-weight:600}
   .slot li button{padding:7px 12px;font-size:10px}
+  /* il file caricato si vede prima di mandarlo: la miniatura dell'immagine,
+     l'anteprima del PDF in un'altra scheda, e il tasto per toglierlo */
+  .slot .mini{width:44px;height:44px;border-radius:var(--radius-sm);object-fit:cover;
+              border:1px solid var(--border);background:var(--secondary);flex:0 0 auto}
+  .slot a.vedi{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+               color:var(--primary);text-decoration:none;padding:7px 4px}
+  .slot a.vedi:hover{text-decoration:underline}
+  .slot a.vedi[hidden], .slot button[hidden]{display:none}
+  .slot button.togli{color:var(--destructive);
+                     border-color:color-mix(in oklab,var(--destructive) 45%,transparent)}
   #continua{width:100%;max-width:300px;margin:12px auto 0;display:block}
   #continua[hidden]{display:none}
 
@@ -503,14 +512,11 @@
     </div>
     <div id="nota" hidden>
       <label for="nota-testo">Descrivi il pack per chi lo corregge (obbligatoria)</label>
-      <textarea id="nota-testo" rows="2" maxlength="2000" aria-describedby="invio-esito nota-esito"
+      <textarea id="nota-testo" rows="7" maxlength="2000" aria-describedby="invio-esito nota-esito"
         placeholder="Com'&egrave; fatto, come si monta, cosa non torna nel modello. Per esempio: scatola esagonale, base e coperchio a calzare"></textarea>
+      <div id="nota-anteprime"></div>
       <div class="azioni">
-        <span id="nota-foto-box">
-          <label class="bottone" for="nota-foto">Foto (facoltativa)</label>
-          <input type="file" id="nota-foto" accept="image/*" hidden>
-          <span id="nota-foto-nome"></span>
-        </span>
+        <span id="nota-foto-box"></span>
         <button id="nota-invia" type="button" class="primary">Invia la nota</button>
       </div>
       <div id="nota-esito" role="status"></div>
@@ -697,7 +703,7 @@
       </div>
     </div>
     <div class="fld" id="riempi-pdf-fld" hidden>
-      <ul id="riempi-slot" class="slot"><li><span class="cosa">Il PDF del pack da inserire</span><span class="nome" id="riempi-nome">nessun PDF</span><button type="button" id="riempi-carica">Carica PDF</button></li></ul>
+      <ul id="riempi-slot" class="slot"><li><span class="cosa">Il PDF del pack da inserire</span><span class="nome" id="riempi-nome">nessun PDF</span><a class="vedi" id="riempi-vedi" target="_blank" rel="noopener" hidden>Anteprima</a><button type="button" class="togli" id="riempi-togli" hidden>Togli</button><button type="button" id="riempi-carica">Carica PDF</button></li></ul>
       <p class="note">Dopo Costruisci ti chiedo quanti pack mettere nell&rsquo;astuccio e, per il flowpack, le sue opzioni.</p>
     </div>
     </div>
@@ -1883,7 +1889,6 @@ invioSi.addEventListener('click', async () => {
   // prima, cosi' una foto che non si apre ferma l'invio invece di arrivare a
   // meta'
   const testo = notaTesto.value.trim();
-  const file = notaFoto.files[0];
   const corta = testo.length < DESCRIZIONE_MIN;
   notaTesto.setAttribute('aria-invalid', String(corta));
   if (corta){
@@ -1900,9 +1905,9 @@ invioSi.addEventListener('click', async () => {
   };
   blocca(true);
   esitoInvio('Invio del caso…');
-  let foto = null;
+  let foto = [];
   try{
-    if (file) foto = await fotoRidotta(file);
+    foto = await notaSf.foto();
     const r = await fetch(url('/api/caso'), {method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({codice: v.codice, azione: 'invia', email})});
@@ -2343,7 +2348,7 @@ function moduloApprova(c){
   motivo.hidden = true;
   const ta = document.createElement('textarea');
   ta.maxLength = 2000;
-  ta.rows = 3;
+  ta.rows = 6;
   ta.placeholder = 'Cosa non va nel modello? Per esempio: il fianco deve rientrare di pi\u00f9';
   ta.setAttribute('aria-label', 'Cosa non va nel modello');
   const sf = selettoreFoto('rifiuto-' + c.codice, 'Aggiungi foto');
@@ -2457,7 +2462,7 @@ function moduloRisposta(c){
   }
   const ta = document.createElement('textarea');
   ta.maxLength = 2000;
-  ta.rows = 2;
+  ta.rows = 5;
   ta.placeholder = 'Oppure scrivi a parole tue';
   ta.setAttribute('aria-label', 'Risposta a parole tue');
   const az = document.createElement('div');
@@ -2732,7 +2737,11 @@ function tastoElimina(c){
 // coperchio, a display montato, dal disegno non si capiva.
 const notaEl = document.getElementById('nota');
 const notaTesto = document.getElementById('nota-testo');
-const notaFoto = document.getElementById('nota-foto');
+// le foto della descrizione: piu' d'una, ognuna con l'anteprima e la
+// crocetta per toglierla, come nelle risposte (`selettoreFoto`)
+const notaSf = selettoreFoto('nota-foto', 'Aggiungi foto (facoltative)');
+document.getElementById('nota-foto-box').append(...notaSf.tasto);
+document.getElementById('nota-anteprime').replaceWith(notaSf.griglia);
 const notaInvia = document.getElementById('nota-invia');
 const notaEsito = document.getElementById('nota-esito');
 let notaCodice = null;
@@ -2768,8 +2777,7 @@ function mostraNota(v, tieni){
   notaInvia.disabled = false;
   if (tieni) return;
   notaTesto.value = '';
-  notaFoto.value = '';
-  document.getElementById('nota-foto-nome').textContent = '';
+  notaSf.svuota();
   esitoNota('');
 }
 
@@ -2781,10 +2789,6 @@ notaTesto.addEventListener('input', () => {
   }
 });
 
-notaFoto.addEventListener('change', () => {
-  const f = notaFoto.files[0];
-  document.getElementById('nota-foto-nome').textContent = f ? f.name : '';
-});
 
 /** La foto rimpicciolita a 1600 px sul lato lungo, in JPEG: quella di un
  *  telefono pesa dieci volte tanto, e i dettagli di un pack si vedono lo
@@ -2827,12 +2831,11 @@ notaInvia.addEventListener('click', async () => {
   if (!notaCodice) return;
   const codice = notaCodice;
   const testo = notaTesto.value.trim();
-  const file = notaFoto.files[0];
   if (testo.length < DESCRIZIONE_MIN){ esitoNota('Descrivi il pack prima di mandarla.', 'err'); return; }
   notaInvia.disabled = true;
   esitoNota('Invio della nota\u2026');
   try{
-    await mandaNota(codice, testo, file ? await fotoRidotta(file) : null);
+    await mandaNota(codice, testo, await notaSf.foto());
   }catch(err){
     notaInvia.disabled = false;
     esitoNota('Descrizione non inviata: ' + testoErrore(err), 'err');
@@ -3074,7 +3077,23 @@ function disegnaPasso(){
     bt.type = 'button';
     bt.textContent = img ? (x ? 'Cambia immagine' : 'Carica immagine') : (x ? 'Cambia PDF' : 'Carica PDF');
     bt.onclick = () => apriFile(k);
-    li.append(cosa, nome, bt);
+    if (!x){ li.append(cosa, nome, bt); slotEl.appendChild(li); return; }
+    // caricato: l'anteprima e il tasto per toglierlo
+    const via = document.createElement('button');
+    via.type = 'button'; via.className = 'togli'; via.textContent = 'Togli';
+    via.title = img ? 'Togli questa immagine' : 'Togli questo PDF';
+    via.onclick = () => togliFile(k);
+    if (img){
+      const mini = document.createElement('img');
+      mini.className = 'mini'; mini.src = urlDi(x); mini.alt = x.name;
+      li.append(mini, cosa, nome, via, bt);
+    } else {
+      const vedi = document.createElement('a');
+      vedi.className = 'vedi'; vedi.textContent = 'Anteprima';
+      vedi.href = urlDi(x); vedi.target = '_blank'; vedi.rel = 'noopener';
+      vedi.title = 'Apri il PDF in un\u2019altra scheda';
+      li.append(cosa, nome, vedi, via, bt);
+    }
     slotEl.appendChild(li);
   });
   // le famiglie da un PDF partono da sole: Continua serve solo per riprovare
@@ -3113,6 +3132,23 @@ function statoPasso(errore){
   else if (famiglia === 'carton' && !spessoreScelto) t = 'Scegli lo spessore della carta: 1, 2 o 3';
   else t = 'Premi Continua';
   setStatus(t, errore ? 'err' : '');
+}
+
+/** L'indirizzo locale di un file caricato, per l'anteprima: uno per file,
+ *  tenuto sul file stesso e lasciato quando il file se ne va. */
+function urlDi(x){
+  if (!x.url) x.url = URL.createObjectURL(new Blob([x.buf], {type: x.img ? 'image/jpeg' : 'application/pdf'}));
+  return x.url;
+}
+
+/** Toglie il file del posto k: il posto resta, vuoto, da ricaricare. */
+function togliFile(k){
+  const x = slots[k];
+  if (!x) return;
+  if (x.url) URL.revokeObjectURL(x.url);
+  slots[k] = null;
+  disegnaPasso();
+  statoPasso();
 }
 
 /** La finestra dei file per il posto k: si apre solo da un clic. */
@@ -3507,6 +3543,9 @@ function mostraRiempi(){
   riempiSlot.querySelector('li').className = riempiPdf ? 'pieno' : '';
   document.getElementById('riempi-nome').textContent = riempiPdf ? riempiPdf.name : 'nessun PDF';
   document.getElementById('riempi-carica').textContent = riempiPdf ? 'Cambia PDF' : 'Carica PDF';
+  const vedi = document.getElementById('riempi-vedi');
+  vedi.hidden = document.getElementById('riempi-togli').hidden = !riempiPdf;
+  if (riempiPdf) vedi.href = urlDi(riempiPdf);
 }
 
 /** Il PDF del pack da mettere nell'astuccio aperto. */
@@ -3699,6 +3738,7 @@ riempiCu.querySelectorAll('button').forEach(b => {
   b.onclick = () => scegliRiempiCu(b.dataset.u);
 });
 document.getElementById('riempi-carica').onclick = () => fileCuEl.click();
+document.getElementById('riempi-togli').onclick = () => { riempiPdf = null; mostraRiempi(); };
 fileCuEl.onchange = e => { const f = e.target.files[0]; e.target.value = '';
                            if (f) mettiPdfCu(f); };
 strappoGradi.oninput = mostraGradi;

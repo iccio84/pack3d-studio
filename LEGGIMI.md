@@ -56,7 +56,9 @@ combinazione funziona.
 1. Per prima cosa la pagina chiede **che tipo di Pack/Trade Unit** si vuole
    realizzare: Flowpack, Pouch, Cartotecnico, Trade Unit, Incarti.
    Poi il passo della famiglia, con un posto per ogni PDF (solo PDF, tranne
-   l'immagine del prodotto degli incarti):
+   l'immagine del prodotto degli incarti). Ogni file caricato si vede prima
+   di andare avanti - la miniatura dell'immagine, l'**Anteprima** del PDF in
+   un'altra scheda - e si toglie col suo tasto **Togli**:
    - **Flowpack**: il PDF, poi le domande obbligatorie - numero dei denti
      della zigrinatura, rigonfiamento, apertura delle pinne - la saldatura
      delle pinne (da 0, lisce, a 3, le righe delle ganasce piene) e la
@@ -88,7 +90,7 @@ combinazione funziona.
 4. **Chiedi una modifica**: anche quando il codice l'ha costruito e il
    controllo dell'AI ha detto ok, chi l'ha caricato puo' volerlo diverso.
    Il tasto prepara il caso con gli stessi PDF e le stesse scelte, chiede
-   **cosa va modificato** (obbligatorio, con la foto facoltativa) e lo manda
+   **cosa va modificato** (obbligatorio, con le foto facoltative) e lo manda
    alla routine, che lo modifica e lo riporta in Glam come i casi corretti.
    Il modello che si vede resta usabile.
 
