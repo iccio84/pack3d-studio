@@ -2082,6 +2082,23 @@ class ScatolaChiusa(unittest.TestCase):
 
 
 
+class ChiediUnaModifica(unittest.TestCase):
+    """Anche un modello passato si puo' mandare alla routine: il tasto
+    Chiedi una modifica e la richiesta `modifica` di /api/segnala."""
+
+    def test_la_pagina_ha_il_tasto(self):
+        qui = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(qui, "pack3d_studio.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        self.assertIn('id="modifica-btn"', html)
+        self.assertIn("{richiesta: 'modifica'}", html)
+        self.assertIn("Cosa va modificato nel modello (obbligatoria)", html)
+        with open(os.path.join(qui, "server.py"), encoding="utf-8") as fh:
+            server = fh.read()
+        self.assertIn('opts.get("richiesta") == "modifica"', server)
+        self.assertIn('"modifica": True', server)
+
+
 class VoceTradeUnit(unittest.TestCase):
     """Vassoio e Riempimenti sono una voce sola, Trade Unit: vassoio o
     display, poi vuota o piena; piena chiede il pack e il suo PDF."""

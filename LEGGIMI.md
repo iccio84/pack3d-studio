@@ -85,6 +85,12 @@ combinazione funziona.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.
+4. **Chiedi una modifica**: anche quando il codice l'ha costruito e il
+   controllo dell'AI ha detto ok, chi l'ha caricato puo' volerlo diverso.
+   Il tasto prepara il caso con gli stessi PDF e le stesse scelte, chiede
+   **cosa va modificato** (obbligatorio, con la foto facoltativa) e lo manda
+   alla routine, che lo modifica e lo riporta in Glam come i casi corretti.
+   Il modello che si vede resta usabile.
 
 Si puo' anche trascinare un GLB gia' pronto per guardarlo senza backend.
 
