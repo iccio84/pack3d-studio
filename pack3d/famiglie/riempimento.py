@@ -137,14 +137,16 @@ def per_fila_scelti(valore):
 
 def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
                       carta=None, incisioni=True, per_fila=None, dove_plancia=None,
-                      gradi=0.0, tegola=0.0, apertura=None, gira=0.0):
+                      gradi=0.0, tegola=0.0, apertura=None, gira=0.0,
+                      pellicola=None):
     """Il vassoio pieno: il vassoio e il pack costruiti ognuno dalla sua
     famiglia, poi `quanti` pezzi messi nel vano (None: pieno). Il flowpack
     con `flowpack`, gli argomenti di `build_flowpack` dopo il PDF e il file
     d'uscita; l'astuccio (`info["cu"] == "carton"`) chiuso, con lo spessore
     `carta` e la fustella dell'apertura a strappo se `incisioni`. Se il
     contenitore e' un astuccio (`info["contenitore"]`), si costruisce aperto
-    di `apertura` gradi, e i pack vanno nel suo corpo."""
+    di `apertura` gradi, e i pack vanno nel suo corpo; `pellicola` e' la
+    scelta per la sua finestra, come per l'astuccio aperto da solo."""
     from pack3d import riempimento
     astuccio = info.get("cu") == "carton"
     with tempfile.TemporaryDirectory(dir=stato.cartella()) as td:
@@ -153,7 +155,7 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
         aperto = info.get("contenitore") == "carton"
         if aperto:
             av_v = build_carton(pdfs[info["vassoio"]], gv, quality, carta=carta,
-                                apertura=apertura or 60)
+                                apertura=apertura or 60, pellicola=pellicola)
         else:
             av_v = build_vassoio(pdfs[info["vassoio"]], gv, quality, dove_plancia=dove_plancia)
         if astuccio:

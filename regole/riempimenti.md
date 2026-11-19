@@ -548,4 +548,16 @@ Cards (caso 88976a700d) con 25 flowpack Kinder Cards T2, 5 x 5
   180 gradi l'ingombro e' lo stesso. Sul T2x25 chi l'ha caricato li ha
   chiesti girati di 180 (il marchio dritto per chi guarda dal davanti) e la
   finestra aperta di 120 gradi invece di 60.
+- **Dalla pagina** si arriva dall'astuccio, non dai Riempimenti: il
+  proprietario, il 19 novembre 2026, «oltre a questo l'app deve chiedere se
+  si vuole riempire la scatola o lasciarla vuota». Quando l'astuccio ha
+  l'apertura a strappo e si sceglie aperto, coi gradi del coperchio la
+  pagina chiede se lo si vuole vuoto o riempito; riempito, il tipo di
+  riempimento (il pack: flowpack o astuccio) e il PDF del pack da inserire.
+  Poi e' un riempimento coi due PDF e `apertura`: la lettura dice quale e'
+  il contenitore, e seguono le domande dei Riempimenti - quanti pack, e
+  quelle del flowpack o la fustella dell'astuccio dentro. Lo spessore della
+  carta e' quello scelto per l'astuccio; la pellicola, se il contenitore
+  ha la finestra e l'ha chiesta, va all'astuccio aperto come quando e' da
+  solo (`build_riempimento(pellicola=...)`).
 
