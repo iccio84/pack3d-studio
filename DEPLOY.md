@@ -445,8 +445,9 @@ FINE
 
 Lo script sovrascrive il file a ogni sessione, cosi' una regola nuova vale
 dalla sessione dopo. Le regole del `gh api` aprono le PR, le uniscono (anche
-il rilascio verso `main`, che aggiorna lo Space) e lanciano il parco intero
-nelle Actions di `pack3d-casi` (RILASCIO.md, punto 3). Chi vuole approvare i
+il rilascio verso `main`, che aggiorna lo Space) e, di riserva, lanciano il
+parco intero nelle Actions di `pack3d-casi` (RILASCIO.md, punto 3: di serie
+il parco si fa in locale, nella sessione). Chi vuole approvare i
 rilasci a mano toglie la regola `-X PUT .../pulls/*` dallo script e aggiunge
 `"ask": ["Bash(gh api -X PUT repos/iccio84/pack3d-studio/pulls/*)"]`.
 

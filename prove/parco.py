@@ -667,6 +667,36 @@ def misure_del_parco(args):
         raise SystemExit(1)
 
 
+# I file che costruiscono i modelli: se fra `main` e il codice da rilasciare
+# non ne cambia nessuno - la pagina, le prove, i documenti - i modelli non
+# possono cambiare e il parco non serve (RILASCIO.md, punto 3).
+CODICE_DEI_MODELLI = ("server.py", "agent.py", "pack3d/", "requirements.txt",
+                      "Dockerfile", "risorse/")
+
+
+def file_dei_modelli(nomi):
+    """Dei file cambiati, quelli che costruiscono i modelli."""
+    return [n for n in nomi
+            if any(n == c or (c.endswith("/") and n.startswith(c))
+                   for c in CODICE_DEI_MODELLI)]
+
+
+def serve_il_parco(args):
+    """Il parco del rilascio serve? Esce con 0 se si', con 1 se no: cambiano
+    solo file che non costruiscono i modelli."""
+    nomi = subprocess.run(["git", "-C", args.codice or QUI, "diff", "--name-only",
+                           args.base, args.sha], check=True, capture_output=True,
+                          text=True).stdout.split()
+    toccati = file_dei_modelli(nomi)
+    if toccati:
+        print("il parco serve: cambiano %d file che costruiscono i modelli (%s)"
+              % (len(toccati), ", ".join(toccati[:6]) + (" ..." if len(toccati) > 6 else "")))
+        return
+    print("il parco non serve: fra %s e %s cambiano solo %d file che non costruiscono "
+          "i modelli; basta il controllo prove della PR" % (args.base, args.sha, len(nomi)))
+    raise SystemExit(1)
+
+
 def versione_del_codice(args):
     from pack3d import versione
     print(versione.impronta(os.path.abspath(args.codice or QUI)))
@@ -3113,6 +3143,12 @@ def main():
             x.add_argument("--categoria", default="Casi risolti",
                            help="la cartella del modello in Glam")
         x.set_defaults(fai=fai)
+    sv = sub.add_parser("serve", help="il parco del rilascio serve? 0 si', 1 no: "
+                                      "cambiano solo file che non costruiscono i modelli")
+    sv.add_argument("base", help="di solito origin/main")
+    sv.add_argument("sha", help="lo SHA fissato di coda-settimana")
+    sv.add_argument("--codice", help="cartella del codice (di serie questo)")
+    sv.set_defaults(fai=serve_il_parco)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")
     v.add_argument("--codice", help="cartella del codice (di serie questo)")

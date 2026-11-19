@@ -2082,6 +2082,22 @@ class ScatolaChiusa(unittest.TestCase):
 
 
 
+class IlParcoServe(unittest.TestCase):
+    """`prove/parco.py serve`: il parco del rilascio serve solo se cambia il
+    codice che costruisce i modelli (RILASCIO.md, punto 3)."""
+
+    def test_i_file_dei_modelli(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "prove"))
+        import parco
+        self.assertEqual(parco.file_dei_modelli(
+            ["pack3d_studio.html", "RILASCIO.md", "prove/test_veloci.py",
+             "pack3d/famiglie/riempimento.py", "server.py", "risorse/x.png",
+             "pack3d_note.md"]),
+            ["pack3d/famiglie/riempimento.py", "server.py", "risorse/x.png"])
+        self.assertEqual(parco.file_dei_modelli(["LEGGIMI.md", "regole/vassoi.md"]), [])
+
+
 class ChiediUnaModifica(unittest.TestCase):
     """Anche un modello passato si puo' mandare alla routine: il tasto
     Chiedi una modifica e la richiesta `modifica` di /api/segnala."""
