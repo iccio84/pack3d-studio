@@ -495,11 +495,14 @@ def _perforata_continua(percorsi, pezzi, quadri, sul_lato=False):
                 catena = list(a) + chiusura[1:-1] + list(b[::-1])
                 lunga = _lunghezza(catena) * PT2MM
                 if lunga >= PERFORATA_MIN and (migliore is None or lunga > migliore[0]):
-                    migliore = (lunga, catena, [list(a), list(b)])
+                    migliore = (lunga, catena, [list(a), list(b)], chiusura)
     if migliore is None:
         return None
-    _lunga, catena, linee = migliore
-    return {"catena": catena, "pezzi": linee, "vicini": []}
+    _lunga, catena, linee = migliore[:3]
+    out = {"catena": catena, "pezzi": linee, "vicini": []}
+    if len(migliore) > 3:
+        out["chiusura"] = migliore[3]
+    return out
 
 
 def _lati_quadri(p):
@@ -571,7 +574,145 @@ def continua_per_penna(pdf, panels, facce, page_no=0):
             lunga = _lunghezza(t["catena"])
             if migliore is None or lunga > migliore[0]:
                 migliore = (lunga, t)
-    return None if migliore is None else migliore[1]
+    if migliore is None:
+        return None
+    t = migliore[1]
+    if t.get("chiusura") is not None:
+        oltre = linguetta_oltre(pdf, quadri, t["chiusura"], page_no)
+        if oltre is not None:
+            t["linguetta"] = oltre
+    return t
+
+
+def linguetta_oltre(pdf, quadri, chiusura, page_no=0):
+    """La linguetta che continua la finestra OLTRE il lato su cui il
+    contorno si chiude (`_chiusa_sul_lato`), su una falda che non e' una
+    faccia: il poligono chiuso, in punti PDF, dal capo `chiusura[1]` sul lato
+    giu' per la linguetta e su fino al capo `chiusura[2]` - il lato lo chiude
+    - o None.
+
+    E' il percorso piu' corto fra i due capi sui tratti sottili di qualunque
+    penna fuori da tutte le facce, senza quelli che corrono sul lato: due
+    tratti che non si toccano per meno di `PONTE` si cuciono (un capo libero
+    va sul punto piu' vicino di un altro tratto). Sull'astuccio di biscotti
+    T10 (caso e88a907c54) la linguetta e' nera da 0,55 sulla falda sotto il
+    fronte, 44,4 mm larga e lunga 31, e finisce sul bordo della falda (nero
+    da 1,0), con due salti da 0,3 e 1,2 mm fra un tratto e l'altro."""
+    import heapq
+    _a, U, V, _b = chiusura
+    ux, uy = V[0] - U[0], V[1] - U[1]
+    lato = math.hypot(ux, uy)
+    if lato < 1e-6:
+        return None
+    tx, ty = ux / lato, uy / lato
+    # verso fuori: dalla parte opposta alla faccia del contorno
+    fx, fy = -ty, tx
+    gx, gy = (U[0] + V[0]) / 2.0, (U[1] + V[1]) / 2.0
+    cx, cy = (_a[0] + _b[0]) / 2.0, (_a[1] + _b[1]) / 2.0
+    if (cx - gx) * fx + (cy - gy) * fy > 0:
+        fx, fy = -fx, -fy
+    ponte = PONTE * MM
+    portata = 2.0 * lato + 50.0 * MM
+
+    def fuori(q):
+        return (q[0] - U[0]) * fx + (q[1] - U[1]) * fy
+
+    def lungo(q):
+        return (q[0] - U[0]) * tx + (q[1] - U[1]) * ty
+
+    segs = []
+    for percorsi in _tratti_per_penna(pdf, page_no).values():
+        for sg in _segmenti(percorsi):
+            if any(_dentro_pannello(sg, p) is not None for p in quadri):
+                continue
+            if max(abs(fuori(q)) for q in sg) < 0.3 * MM:
+                continue        # sul lato: e' la piega, non la linguetta
+            if min(fuori(q) for q in sg) < -0.3 * MM:
+                continue
+            if any(fuori(q) > portata or not -portata < lungo(q) < lato + portata
+                   for q in sg):
+                continue
+            segs.append(sg)
+    if not segs:
+        return None
+    # i nodi: i capi dei tratti, e i punti dove un capo libero si cuce
+    grado = {}
+
+    def chiave(q):
+        return (round(q[0] / 0.05), round(q[1] / 0.05))
+    for a, b in segs:
+        for q in (a, b):
+            grado[chiave(q)] = grado.get(chiave(q), 0) + 1
+    tagli = {i: [] for i in range(len(segs))}
+    ponti = []
+    for i, (a, b) in enumerate(segs):
+        for q in (a, b):
+            if grado[chiave(q)] != 1:
+                continue
+            meglio = None
+            for j, (c, d) in enumerate(segs):
+                if j == i:
+                    continue
+                dx, dy = d[0] - c[0], d[1] - c[1]
+                l2 = dx * dx + dy * dy
+                t = 0.0 if l2 < 1e-12 else max(0.0, min(1.0, ((q[0] - c[0]) * dx + (q[1] - c[1]) * dy) / l2))
+                r = (c[0] + dx * t, c[1] + dy * t)
+                dist = math.hypot(r[0] - q[0], r[1] - q[1])
+                if 1e-6 < dist <= ponte and chiave(r) != chiave(q) and (meglio is None or dist < meglio[0]):
+                    meglio = (dist, j, t, r)
+            if meglio is not None:
+                tagli[meglio[1]].append((meglio[2], meglio[3]))
+                ponti.append((q, meglio[3]))
+    archi = {}
+
+    def arco(p, q):
+        kp, kq = chiave(p), chiave(q)
+        if kp == kq:
+            return
+        w = math.hypot(q[0] - p[0], q[1] - p[1])
+        archi.setdefault(kp, []).append((w, kq, q))
+        archi.setdefault(kq, []).append((w, kp, p))
+    for i, (a, b) in enumerate(segs):
+        punti = [a] + [r for _t, r in sorted(tagli[i])] + [b]
+        for p, q in zip(punti, punti[1:]):
+            arco(p, q)
+    for p, q in ponti:
+        arco(p, q)
+    pos = {}
+    for k, lst in archi.items():
+        for _w, k2, q in lst:
+            pos.setdefault(k2, q)
+
+    def vicino(X):
+        cand = [(math.hypot(q[0] - X[0], q[1] - X[1]), k) for k, q in pos.items()]
+        d, k = min(cand) if cand else (None, None)
+        return k if d is not None and d <= ponte else None
+    s, e = vicino(U), vicino(V)
+    if s is None or e is None or s == e:
+        return None
+    dist, prima = {s: 0.0}, {}
+    coda = [(0.0, s)]
+    while coda:
+        d, k = heapq.heappop(coda)
+        if k == e:
+            break
+        if d > dist.get(k, float("inf")):
+            continue
+        for w, k2, _q in archi.get(k, []):
+            if d + w < dist.get(k2, float("inf")):
+                dist[k2] = d + w
+                prima[k2] = k
+                heapq.heappush(coda, (d + w, k2))
+    if e not in dist:
+        return None
+    cammino = [e]
+    while cammino[-1] != s:
+        cammino.append(prima[cammino[-1]])
+    cammino = [pos[k] for k in reversed(cammino)]
+    # una linguetta e' un pezzo che esce dal lato, non un tratto lungo la piega
+    if max(fuori(q) for q in cammino) < 2.0 * PONTE * MM:
+        return None
+    return [tuple(U)] + [tuple(q) for q in cammino] + [tuple(V)]
 
 
 def tagli(pdf, panels, facce, page_no=0):

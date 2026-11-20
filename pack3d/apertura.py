@@ -463,6 +463,7 @@ def _leggi(pdf, panels, facce):
     su un'apertura che la costruzione sa aprire.
     """
     trovata = incisioni.firma(pdf, panels, facce)
+    linguetta = None
     if trovata is not None:
         aperture, vicini, rovescio = trovata
         if len(aperture) != 1:
@@ -479,6 +480,7 @@ def _leggi(pdf, panels, facce):
         if p is None:
             return None
         catena, vicini, rovescio = p["catena"], [[v] for v in p["vicini"]], []
+        linguetta = p.get("linguetta")
     if catena is None:
         return None
     cerniera = _cerniera(catena, panels, facce)
@@ -495,7 +497,7 @@ def _leggi(pdf, panels, facce):
     return {"catena": catena, "dentro": dentro, "sfogliati": sfogliati,
             "rovescio": rovescio, "lunette": lunette, "liberi": liberi,
             "cerniera": nome_c, "piega": piega, "oltre": oltre,
-            "toccate": toccate}
+            "toccate": toccate, "linguetta": linguetta}
 
 
 def trova(pdf, panels, facce):
@@ -519,6 +521,74 @@ def trova(pdf, panels, facce):
 # --------------------------------------------------------------------------- #
 # l'astuccio aperto
 # --------------------------------------------------------------------------- #
+LINGUETTA = "linguetta"
+UV_QUAD = [(0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0)]
+
+
+def _linguetta(L, panels, toccate, per_nome, girate):
+    """La linguetta oltre il lato della faccia (`incisioni.linguetta_oltre`)
+    come una faccia sua: (pannello, giro, quad), o None.
+
+    La falda su cui sta non e' una faccia del solido, ma e' piegata a 90
+    gradi dalla faccia a cui e' attaccata, verso dentro: il punto del foglio
+    a distanza d oltre il lato sta sul lato, a d mm dentro la scatola. Il
+    pannello e' il riquadro della linguetta, girato come la faccia - la
+    piega e' una rotazione, e la falda non e' specchiata. Sull'astuccio di
+    biscotti T10 (caso e88a907c54) chi l'ha caricato: «manca il pezzo di
+    sotto che e' il proseguimento del coperchio»."""
+    from .dieline import Panel
+    from .folding import _normale
+    if not L or len(L) < 4:
+        return None
+    U, V = np.asarray(L[0], float), np.asarray(L[-1], float)
+    nome = next((n for n in toccate if n in panels
+                 and incisioni._distanza_punto(tuple(U), _bordo(panels[n])) < 0.5
+                 and incisioni._distanza_punto(tuple(V), _bordo(panels[n])) < 0.5), None)
+    if nome is None:
+        return None
+    p, g = panels[nome], girate.get(nome, 0)
+    q = np.asarray(per_nome[nome]["quad"], float)
+    e1, e2 = q[1] - q[0], q[3] - q[0]
+    dentro = -_normale(q)
+    dentro = dentro / np.linalg.norm(dentro)
+    t = (V - U) / np.linalg.norm(V - U)
+    f = np.array([-t[1], t[0]])
+    if (np.asarray(L[len(L) // 2], float) - U) @ f < 0:
+        f = -f
+
+    def al3d(X):
+        X = np.asarray(X, float)
+        s_ = U + ((X - U) @ t) * t
+        u, v = incisioni._uv_faccia([tuple(s_)], p, g)[0]
+        return q[0] + u * e1 + v * e2 + dentro * float((X - U) @ f) * PT2MM
+    xs = [x for x, _y in L]
+    ys = [y for _x, y in L]
+    vp = Panel(min(xs), min(ys), max(xs), max(ys), LINGUETTA)
+    if vp.x1 - vp.x0 < 1.0 or vp.y1 - vp.y0 < 1.0:
+        return None
+    quad = [None] * 4
+    for X in ((vp.x0, vp.y0), (vp.x1, vp.y0), (vp.x1, vp.y1), (vp.x0, vp.y1)):
+        u, v = incisioni._uv_faccia([X], vp, g)[0]
+        quad[UV_QUAD.index((round(u), round(v)))] = tuple(float(c) for c in al3d(X))
+    return vp, g, quad
+
+
+def riquadro_linguetta(pdf, panels):
+    """Il riquadro (x0, y0, x1, y1) in punti della linguetta su una falda che
+    non e' una faccia (`incisioni.linguetta_oltre`), o None: lo steso lo
+    deve contenere, perche' aperta la linguetta si vede."""
+    a = _leggi(pdf, panels, list(panels))
+    L = a.get("linguetta") if a else None
+    if not L:
+        return None
+    xs, ys = [x for x, _y in L], [y for _x, y in L]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _bordo(p):
+    return [(p.x0, p.y0), (p.x1, p.y0), (p.x1, p.y1), (p.x0, p.y1), (p.x0, p.y0)]
+
+
 def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
     """L'astuccio con la finestra aperta di `gradi`, appoggiato sulla faccia
     opposta alla cerniera. In place su `faces`, che devono essere le facce
@@ -554,6 +624,14 @@ def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
     pezzi = {nome: _apri_faccia(per_nome[nome]["quad"], panels[nome],
                                 girate.get(nome, 0), P, Pin, lunette, spessore)
              for nome in toccate}
+    # la linguetta sulla falda che non e' una faccia (`_linguetta`)
+    lin = _linguetta(a.get("linguetta"), panels, toccate, per_nome, girate)
+    if lin is not None:
+        vp, giro_l, quad_l = lin
+        L = a["linguetta"]
+        pezzi_l = _apri_faccia(quad_l, vp, giro_l, L, L, [], spessore)
+        if not pezzi_l["finestra"].get("stampa"):
+            lin = None
 
     # la cerniera nel modello, sulla faccia stampata
     qc = np.asarray(per_nome[nome_c]["quad"], float)
@@ -608,6 +686,19 @@ def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
                           "uv": f.get("uv"), "tex": tinte["interno"],
                           "maglia": (interno, None)})
         coste += [parti["scatola"].get("taglio"), fin.get("taglio")]
+    if lin is not None:
+        # della falda si porta via solo la linguetta: il resto non e' una
+        # faccia del solido
+        fin = {m: _ruota(x, Rf, Ha) for m, x in pezzi_l["finestra"].items()}
+        # il pannello e il giro, per la sua immagine dallo steso
+        faces.append({"name": LINGUETTA, "quad": quad_l, "uv": list(UV_QUAD),
+                      "tex": tinte["interno"], "maglia": (fin.get("stampa"), None),
+                      "pannello": vp, "giro": giro_l})
+        if fin.get("interno") is not None:
+            faces.append({"name": LINGUETTA + " interno", "quad": quad_l,
+                          "uv": list(UV_QUAD), "tex": tinte["interno"],
+                          "maglia": (fin["interno"], None)})
+        coste.append(fin.get("taglio"))
     taglio = _unisci(coste)
     if taglio is not None:
         faces.append({"name": "apertura taglio", "quad": per_nome[nome_c]["quad"],
@@ -634,4 +725,5 @@ def apri(pdf, panels, facce, faces, gradi, girate=None, spessore=None):
         "sfogliatura_mm": float(np.median(sfoglia)) if sfoglia else 0.0,
         "lunette": len(lunette),
         "tagli_liberi": len(liberi),
+        "linguetta": None if lin is None else (lin[0], lin[1]),
     }
