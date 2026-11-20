@@ -76,6 +76,8 @@ PONTE = 2.5
 PONTI_MIN = 8
 PERFORATA_MIN = 80.0
 SVOLTA = 60.0
+# la cerniera minima di un contorno chiuso sul lato (`_chiusa_sul_lato`), mm
+CERNIERA_MIN = 20.0
 # La linguetta di chiusura: il taglio del bordo libero di una faccia che
 # entra nella faccia - le due tacche e il lobo fra loro - almeno di tanti mm.
 # Meno e' il bordo stesso, appena storto (i lati obliqui di una falda).
@@ -442,7 +444,7 @@ def perforata(pdf, panels, facce, page_no=0):
     return {"catena": catena, "pezzi": [list(m) for m in fila], "vicini": vicini}
 
 
-def _perforata_continua(percorsi, pezzi, quadri):
+def _perforata_continua(percorsi, pezzi, quadri, sul_lato=False):
     """La perforazione disegnata CONTINUA, senza trattini, o None: sul T2x25
     i due rami partono dalla piega fra cielo e fronte, scendono nel fronte e
     nella falda del fondo e si fermano a 1,5 mm dalle tacche della
@@ -486,10 +488,90 @@ def _perforata_continua(percorsi, pezzi, quadri):
                 lunga = _lunghezza(catena) * PT2MM
                 if lunga >= PERFORATA_MIN and (migliore is None or lunga > migliore[0]):
                     migliore = (lunga, catena, [list(a), punta, list(b)])
+            # `sul_lato` (`continua_per_penna`): senza una punta, i capi
+            # liberi si chiudono lungo il lato della faccia a cui arrivano
+            chiusura = _chiusa_sul_lato(a, b, la, quadri) if sul_lato else None
+            if chiusura is not None:
+                catena = list(a) + chiusura[1:-1] + list(b[::-1])
+                lunga = _lunghezza(catena) * PT2MM
+                if lunga >= PERFORATA_MIN and (migliore is None or lunga > migliore[0]):
+                    migliore = (lunga, catena, [list(a), list(b)])
     if migliore is None:
         return None
     _lunga, catena, linee = migliore
     return {"catena": catena, "pezzi": linee, "vicini": []}
+
+
+def _lati_quadri(p):
+    return (((p.x0, p.y0), (p.x1, p.y0)), ((p.x0, p.y1), (p.x1, p.y1)),
+            ((p.x0, p.y0), (p.x0, p.y1)), ((p.x1, p.y0), (p.x1, p.y1)))
+
+
+def _chiusa_sul_lato(a, b, la, quadri):
+    """Il tratto che chiude i due rami `a` e `b` lungo un lato di faccia, o
+    None: i loro capi liberi stanno a meno di PONTE mm dallo stesso lato -
+    non quello della piega da cui partono - e il tratto fra le due
+    proiezioni e' piu' corto di ciascun ramo. E' il contorno che sul fronte
+    finisce sulla piega con una falda che non e' una faccia: la linguetta
+    gira li', e del solido la finestra arriva fino al lato."""
+    ponte = PONTE * MM
+    A, B = a[-1], b[-1]
+    # la finestra va da una piega al lato opposto della stessa faccia, e la
+    # cerniera e' una cerniera, non due tagli quasi attaccati: sul parco una
+    # coppia di tratti a 5,5 mm sul fondo di un astuccio passava per apertura
+    if math.hypot(a[0][0] - b[0][0], a[0][1] - b[0][1]) * PT2MM < CERNIERA_MIN:
+        return None
+    opposti = {(k, lato ^ 1) for k, lato in la}
+    for k, p in enumerate(quadri):
+        for lato, (u, v) in enumerate(_lati_quadri(p)):
+            if (k, lato) not in opposti:
+                continue
+            if _distanza_punto(A, [u, v]) > ponte or _distanza_punto(B, [u, v]) > ponte:
+                continue
+            dx, dy = v[0] - u[0], v[1] - u[1]
+            l2 = dx * dx + dy * dy
+            if l2 < 1e-12:
+                continue
+
+            def su(q):
+                t = max(0.0, min(1.0, ((q[0] - u[0]) * dx + (q[1] - u[1]) * dy) / l2))
+                return (u[0] + dx * t, u[1] + dy * t)
+            chiusura = [A, su(A), su(B), B]
+            if _lunghezza(chiusura) < min(_lunghezza(a), _lunghezza(b)):
+                return chiusura
+    return None
+
+
+def continua_per_penna(pdf, panels, facce, page_no=0):
+    """L'apertura a strappo disegnata CONTINUA su una penna sottile fuori
+    dalle tecniche, o None: come `_perforata_continua`, ma penna per penna
+    (`_tratti_per_penna`), e i due rami si chiudono anche lungo il lato della
+    faccia a cui arrivano (`_chiusa_sul_lato`).
+
+    Sull'astuccio di biscotti T10 (caso e88a907c54) il contorno e'
+    verde da 0,55, senza ponticelli e senza taglio dal rovescio: due rami
+    dalla piega fra cielo e fronte, giu' per il fronte, che si fermano a 1,4
+    mm dalla piega con la falda sotto il fronte - una falda, non una faccia -
+    dove la linguetta continua in nero fino alla tacca per il dito. Si prova
+    solo quando la firma, la firma larga e la perforazione non trovano
+    niente: i casi di prima non cambiano strada.
+    """
+    quadri = [panels[n] for n in facce if n in panels]
+    if not quadri:
+        return None
+    migliore = None
+    for _st, percorsi in _tratti_per_penna(pdf, page_no).items():
+        segmenti = [sg for sg in _segmenti(percorsi)
+                    if any(_dentro_pannello(sg, p) is not None for p in quadri)]
+        pezzi = [l for l in _catene(segmenti) if not _di_bordo(l, quadri)]
+        if len(pezzi) < 2:
+            continue
+        t = _perforata_continua(percorsi, pezzi, quadri, sul_lato=True)
+        if t is not None:
+            lunga = _lunghezza(t["catena"])
+            if migliore is None or lunga > migliore[0]:
+                migliore = (lunga, t)
+    return None if migliore is None else migliore[1]
 
 
 def tagli(pdf, panels, facce, page_no=0):
@@ -522,6 +604,8 @@ def tagli(pdf, panels, facce, page_no=0):
         p = perforata(pdf, panels, facce, page_no) if larga is None else None
         if p is not None:
             scelte = p["pezzi"] + p["vicini"]
+        elif larga is None and (c := continua_per_penna(pdf, panels, facce, page_no)) is not None:
+            scelte = c["pezzi"]
         elif larga is not None:
             # l'apertura su penne sottili si incide sul taglio DAL ROVESCIO,
             # la linea con le spunte: e' quella che il proprietario guarda
