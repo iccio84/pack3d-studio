@@ -161,6 +161,9 @@ def apri_apertura(pdf, d, faces, girate, spessore, gradi):
     if info["lunette"]:
         riga += ("; la lunetta per il dito spinta dentro" if info["lunette"] == 1
                  else "; %d lunette per il dito spinte dentro" % info["lunette"])
+    if info.get("linguetta"):
+        riga += ("; la linguetta sulla falda sotto il %s, che non e' una faccia, "
+                 "si alza con la finestra" % nome(info["cerniera"]))
     if info["tagli_liberi"]:
         riga += ("; %d tagli vicini all'apertura non disegnati"
                  % info["tagli_liberi"])
@@ -238,15 +241,26 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # lo steso, la texture del modello: il DT con un millimetro attorno,
     # dallo stesso foglio delle facce (`pack3d.steso`)
     m_dt = 1.0 / PT2MM
+    # aperto, la linguetta su una falda fuori dal DT si alza con la finestra
+    # e la sua grafica deve stare nello steso (`apertura.riquadro_linguetta`)
+    sx0, sy0, sx1, sy1 = d.bbox
+    if apertura and not d.curva_mm:
+        from pack3d import apertura as lo_strappo
+        try:
+            rl = lo_strappo.riquadro_linguetta(pdf, d.panels)
+        except Exception:                         # noqa: BLE001
+            traceback.print_exc()
+            rl = None
+        if rl is not None:
+            sx0, sy0 = min(sx0, rl[0]), min(sy0, rl[1])
+            sx1, sy1 = max(sx1, rl[2]), max(sy1, rl[3])
     tex, avvisi_tex = artwork.texture_astuccio(pdf, d.panels, dpi,
                                               lastre_extra=lastre_extra,
                                               colata_riquadro=colata_riquadro,
                                               regione=d.bbox, esito=esito,
                                               dieline=d,
-                                              steso=(d.bbox[0] - m_dt,
-                                                     d.bbox[1] - m_dt,
-                                                     d.bbox[2] + m_dt,
-                                                     d.bbox[3] + m_dt))
+                                              steso=(sx0 - m_dt, sy0 - m_dt,
+                                                     sx1 + m_dt, sy1 + m_dt))
     faces = folding.build_faces(d.dims_mm, tex, layout=d.layout,
                                 panels=d.panels, chiuso=d.chiuso,
                                 spessore=(folding.SPESSORE_CRT if carta is None
@@ -334,6 +348,20 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     girate_steso = dict(esito.get("girate") or {})
     if "falda" in pannelli and "bottom" in girate_steso:
         girate_steso["falda"] = girate_steso["bottom"]
+    # una faccia che porta il suo pannello - la linguetta dell'apertura sulla
+    # falda che non e' una faccia (`apertura._linguetta`) - prende la sua
+    # immagine dallo steso, girata come lei
+    for f in faces:
+        if f.get("pannello") is not None:
+            from ..artwork import GIRO_TEXTURE
+            pf, g = f.pop("pannello"), f.pop("giro", 0)
+            pannelli[f["name"]] = pf
+            if g:
+                girate_steso[f["name"]] = g
+            rit = tela.crop(tuple(round(c * scala) - o for c, o in
+                                  zip((pf.x0, pf.y0, pf.x1, pf.y1),
+                                      (box[0], box[1], box[0], box[1]))))
+            f["tex"] = (rit.transpose(GIRO_TEXTURE[g]) if g else rit).convert("RGB")
     op = lo_steso.facce_sullo_steso(faces, pannelli, girate_steso, scala,
                                  box, gradi)
     normale, riga_rilievo = rilievo_sicuro(

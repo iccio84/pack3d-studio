@@ -523,6 +523,16 @@ sparivano dietro le pinne.
   `riempimento_nutella_biscuits_display` (172,9), che hanno la punta mezzo
   millimetro nel cartoncino: il parco del rilascio li ha visti.
 
+Il capo fila, di lato, si ferma alla parete (`contro_le_pareti`). Due T1
+Kinder Bueno Biscuits larghi 72,4 nell'astuccio T10 aperto (vano 139,5, caso
+e88a907c54) ci stanno solo stretti del 2% e schiacciati fra loro
+(`COMPRIME`): centrati sul passo da 69,75, i due di capo passavano i fianchi
+di 1,2 mm, oltre `FUORI_VANO`, e si intersecavano con l'astuccio. Quando il
+pezzo e' piu' largo del suo passo, nel suo largo, quello che passa una
+parete si sposta dentro fino al filo, non piu' di `COMPRIME` del largo: si
+schiaccia un po' di piu' contro il vicino. Per il lungo vale la punta
+piegata, qui sopra.
+
 ### Il contenitore puo' essere l'astuccio aperto
 
 Un riempimento con l'opzione `apertura` (gradi) ha per contenitore un
