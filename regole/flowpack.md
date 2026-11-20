@@ -253,7 +253,7 @@ neutro tutte e due, metallo 1 e ruvidita' 0,16 come le cromate.
 **Il grigio e' argento, se lo si sceglie** (`"film_argento": true`). Il T1
 del T10 di biscotti: lo steso ha il fondo dietro il biscotto grigio
 (196,196,196), il file si chiama «sfondo argento», ma non c'e' la lastra
-dell'alluminio - solo Kinder Orange, PANTONE 1675 C e Warm Red - e il grigio
+dell'alluminio - solo tre tinte piatte di colore - e il grigio
 e' quadricromia. Di serie un grigio stampato resta inchiostro, perche' il
 metallo lo dicono le lastre (*materiali*); al terzo Non approvo chi l'ha
 caricato: «nel flowpack sostituisci il grigio con il metallo argentato».
