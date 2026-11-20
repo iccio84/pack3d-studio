@@ -49,11 +49,18 @@ approvati da chiudere (punto 1).
    pubblichi quello, non quello che un'altra sessione unisce nel frattempo.
 3. **Il parco serve?** Solo se cambia il codice che costruisce i modelli:
 
-       python3 prove/parco.py serve origin/main <SHA>
+       python3 prove/parco.py serve origin/main <SHA> --casi ../pack3d-casi
 
    Esce con 1 se cambiano solo la pagina, le prove o i documenti: i modelli
    non possono cambiare, basta il controllo `prove` della PR, e si salta al
-   punto 5. Con 0 dice quali file dei modelli cambiano, e il parco si fa.
+   punto 5. Con 0 dice quali file dei modelli cambiano, e il parco si fa:
+   **intero** se cambia il nucleo dei pack o il comune (il server, il
+   registro), che usano tutte le famiglie; **solo i casi delle famiglie
+   toccate** se cambiano solo file propri di famiglie (`prove/confini.py`,
+   regole/casi.md, *Una famiglia per PR*), e allora stampa la riga
+   `--solo ...` da passare a `costruisci` e a `misure`. Il riempimento conta
+   anche per la famiglia del pack che contiene, il flowpack e gli incarti
+   vanno insieme; il giro del sabato rifa' comunque il parco intero.
 
    **Un parco per rilascio.** Lo SHA fissato al punto 2 porta tutte le PR
    gia' unite: un parco solo le prova tutte. Un'unione che arriva mentre il
@@ -68,12 +75,15 @@ approvati da chiudere (punto 1).
 
        git worktree add --detach <scratch>/prima origin/main
        git worktree add --detach <scratch>/dopo <SHA>
-       (TMPDIR=<scratch>/tmp PACK3D_CACHE=<scratch>/tmp/c_prima python3 prove/parco.py costruisci ../pack3d-casi <scratch>/parco_prima --codice <scratch>/prima > <scratch>/prima.log 2>&1 &
-        TMPDIR=<scratch>/tmp PACK3D_CACHE=<scratch>/tmp/c_dopo python3 prove/parco.py costruisci ../pack3d-casi <scratch>/parco_dopo --codice <scratch>/dopo > <scratch>/dopo.log 2>&1 & wait)
+       (TMPDIR=<scratch>/tmp PACK3D_CACHE=<scratch>/tmp/c_prima python3 prove/parco.py costruisci ../pack3d-casi <scratch>/parco_prima --codice <scratch>/prima [--solo ...] > <scratch>/prima.log 2>&1 &
+        TMPDIR=<scratch>/tmp PACK3D_CACHE=<scratch>/tmp/c_dopo python3 prove/parco.py costruisci ../pack3d-casi <scratch>/parco_dopo --codice <scratch>/dopo [--solo ...] > <scratch>/dopo.log 2>&1 & wait)
        python3 prove/parco.py esito <scratch>/parco_prima <scratch>/parco_dopo
        python3 prove/parco.py confronta <scratch>/parco_prima <scratch>/parco_dopo --immagini <scratch>/confronto
-       python3 prove/parco.py misure ../pack3d-casi <scratch>/parco_dopo
-       python3 prove/parco.py stesi ../pack3d-casi <scratch>/parco_dopo
+       python3 prove/parco.py misure ../pack3d-casi <scratch>/parco_dopo [--solo ...]
+       python3 prove/parco.py stesi ../pack3d-casi <scratch>/parco_dopo [--solo ...]
+
+   `[--solo ...]` e' la riga che ha stampato `serve`, se l'ha stampata;
+   senza, il parco e' intero.
 
    `esito` e' il verdetto del parco delle Actions: rosso se un caso che con
    `main` si costruiva non si costruisce piu', o se una misura approvata

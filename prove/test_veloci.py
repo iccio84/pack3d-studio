@@ -2112,6 +2112,28 @@ class IlParcoServe(unittest.TestCase):
             ["pack3d/famiglie/riempimento.py", "server.py", "risorse/x.png"])
         self.assertEqual(parco.file_dei_modelli(["LEGGIMI.md", "regole/vassoi.md"]), [])
 
+    def test_i_casi_delle_famiglie(self):
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "prove"))
+        import parco
+        m = {"casi": [
+            {"nome": "fp", "opzioni": {"kind": "flowpack"}},
+            {"nome": "ast", "opzioni": {"kind": "carton"}},
+            {"nome": "vas", "opzioni": {"kind": "vassoio"}},
+            {"nome": "rfp", "opzioni": {"kind": "riempimento"}},
+            {"nome": "rast", "opzioni": {"kind": "riempimento", "cu": "carton"}},
+            {"nome": "raperto", "opzioni": {"kind": "riempimento", "apertura": 120}},
+            {"nome": "senza", "opzioni": {}},
+        ]}
+        self.assertEqual(parco.casi_per_famiglie(m, {"cartotecnico"}),
+                         ["ast", "rast", "raperto", "senza"])
+        self.assertEqual(parco.casi_per_famiglie(m, {"flowpack"}),
+                         ["fp", "rfp", "raperto", "senza"])
+        self.assertEqual(parco.casi_per_famiglie(m, {"incarti"}),
+                         ["fp", "rfp", "raperto", "senza"])
+        self.assertEqual(parco.casi_per_famiglie(m, {"trade unit"}),
+                         ["vas", "rfp", "rast", "raperto", "senza"])
+
 
 class ChiediUnaModifica(unittest.TestCase):
     """Anche un modello passato si puo' mandare alla routine: il tasto

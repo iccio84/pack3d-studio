@@ -420,6 +420,11 @@ fondato, guardando il foglio e i difetti:
 - **Il tipo e' giusto e il codice non conosce quella fustella**: e' un caso
   come gli altri, con una regola generale per quella famiglia, anche quando
   serve un modulo nuovo (*Cosa si risolve*).
+- **Una famiglia per PR** (regole/casi.md): la correzione tocca la famiglia
+  del caso e, se serve, il nucleo comune; un riempimento anche la famiglia
+  del pack che contiene. Se la stessa regola serve a un'altra famiglia, e'
+  un'altra PR; un lavoro davvero di tutte si dichiara col titolo che
+  comincia con «Trasversale:». `prove/confini.py` ferma il resto.
 - **Un materiale POP** (tipo dichiarato `totem`, dalla finestra «Crea
   materiali POP 3D da PDF»): il codice non ne sa ancora costruire nessuno, e
   ogni caso e' il primo della sua famiglia. Si lavora **solo** in
