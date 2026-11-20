@@ -64,5 +64,46 @@ class ConfineFraPopEPack(unittest.TestCase):
             os.chdir(prima)
 
 
+class UnaFamigliaPerPR(unittest.TestCase):
+    """Dentro i pack, una famiglia per PR col nucleo comune; la Trade Unit
+    con la famiglia del pack che contiene; «Trasversale:» per il resto."""
+
+    def test_le_famiglie(self):
+        self.assertEqual(confini.famiglia("pack3d/flowpack.py"), "flowpack")
+        self.assertEqual(confini.famiglia("pack3d/famiglie/astuccio.py"), "cartotecnico")
+        self.assertEqual(confini.famiglia("regole/riempimenti.md"), "trade unit")
+        self.assertEqual(confini.famiglia("pack3d/uovo.py"), "incarti")
+        self.assertEqual(confini.famiglia("pack3d/dieline.py"), "nucleo")
+        self.assertEqual(confini.famiglia("pack3d/artwork.py"), "nucleo")
+        self.assertEqual(confini.famiglia("server.py"), "comune")
+        self.assertEqual(confini.famiglia("pack3d/pop/totem.py"), "pop")
+
+    def test_una_famiglia_col_nucleo_va_bene(self):
+        va, righe = confini.controlla(["pack3d/dieline.py", "pack3d/artwork.py",
+                                       "pack3d/incisioni.py", "regole/astucci.md"])
+        self.assertTrue(va)
+        self.assertIn("famiglie dei pack: cartotecnico", righe)
+
+    def test_trade_unit_col_suo_pack_va_bene(self):
+        va, _ = confini.controlla(["pack3d/riempimento.py", "pack3d/famiglie/flowpack.py"])
+        self.assertTrue(va)
+
+    def test_due_famiglie_no(self):
+        va, righe = confini.controlla(["pack3d/flowpack.py", "pack3d/incisioni.py"])
+        self.assertFalse(va)
+        self.assertIn("Una famiglia per PR", "\n".join(righe))
+        va, _ = confini.controlla(["pack3d/riempimento.py", "pack3d/flowpack.py",
+                                   "pack3d/apertura.py"])
+        self.assertFalse(va)
+
+    def test_trasversale_si_ma_non_col_pop(self):
+        va, _ = confini.controlla(["pack3d/flowpack.py", "pack3d/incisioni.py"],
+                                  trasversale=True)
+        self.assertTrue(va)
+        va, _ = confini.controlla(["pack3d/flowpack.py", "pack3d/pop/totem.py"],
+                                  trasversale=True)
+        self.assertFalse(va)
+
+
 if __name__ == "__main__":
     unittest.main()

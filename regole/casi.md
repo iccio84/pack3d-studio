@@ -3,6 +3,33 @@
 Una parte di REGOLE.md, che ha i principi, le domande all'utente e l'indice
 di tutte le sezioni.
 
+## Una famiglia per PR
+
+Dal 20 novembre 2026, chiesto dal proprietario per alleggerire i rilasci
+senza dividere il progetto: dentro i pack una PR verso `coda-settimana`
+tocca **una famiglia sola** - flowpack, pouch, cartotecnico, incarti, Trade
+Unit - insieme al **nucleo** che tutte usano (la lettura del DT, la grafica,
+la piegatura, la texture, le verifiche) e al comune (la pagina, il server,
+il registro). Quali file sono di quale famiglia lo dice `FAMIGLIE` in
+`prove/confini.py`, da MAPPA.md; tutto il resto dei pack e' nucleo.
+
+- **La Trade Unit con il suo pack**: un caso di riempimento puo' toccare
+  anche la famiglia della CU che contiene - il flowpack del display (la PR
+  del T1x10), la posa dell'astuccio aperto (quella del T2x25) - mai due
+  famiglie oltre a lei.
+- **Trasversale**: un lavoro che deve toccare piu' famiglie - una regola per
+  tutte, uno spostamento, i nomi dei clienti tolti dappertutto - si dichiara
+  col titolo della PR che comincia con «Trasversale:». Il confine fra POP e
+  pack vale lo stesso (regole/pop.md, *Il confine*).
+- Lo ferma `prove/confini.py` nelle Actions di ogni PR verso
+  `coda-settimana`. Provato sulle 80 PR unite fino al 19 novembre: le uniche
+  che avrebbe fermato sono le quattro trasversali di fine ottobre e inizio
+  novembre (le varianti di tutte le famiglie, le famiglie fuori da
+  `server.py`, i nomi dei clienti).
+- Il parco del rilascio, se cambiano solo file di famiglie, ricostruisce
+  solo i casi di quelle famiglie (`prove/parco.py serve --casi`,
+  RILASCIO.md, punto 3).
+
 ## Casi calibrati
 
 Gli artwork il cui impaginato non rientra nei solutori automatici stanno nel

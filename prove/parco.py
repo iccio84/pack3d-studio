@@ -681,9 +681,47 @@ def file_dei_modelli(nomi):
                    for c in CODICE_DEI_MODELLI)]
 
 
+def famiglie_del_caso(opzioni):
+    """Le famiglie (`prove/confini.py`) di cui un caso del parco usa il
+    codice, dalle sue opzioni; None se non si sa, e allora il caso si fa
+    sempre. Il flowpack e gli incarti vanno insieme: un incarto a triangolo
+    si dichiara flowpack. Il riempimento usa anche la famiglia del pack che
+    contiene, e il cartotecnico se il contenitore e' l'astuccio aperto."""
+    kind = (opzioni or {}).get("kind")
+    if kind in ("flowpack", "incarto"):
+        return {"flowpack", "incarti"}
+    if kind in ("carton", "coppa"):
+        return {"cartotecnico"}
+    if kind == "pouch":
+        return {"pouch"}
+    if kind == "vassoio":
+        return {"trade unit"}
+    if kind == "riempimento":
+        f = {"trade unit"}
+        f |= ({"cartotecnico"} if opzioni.get("cu") == "carton"
+              else {"flowpack", "incarti"})
+        if opzioni.get("apertura"):
+            f.add("cartotecnico")
+        return f
+    if kind in ("totem", "espositore_pop"):
+        return {"pop"}
+    return None
+
+
+def casi_per_famiglie(manifesto, famiglie):
+    """I nomi dei casi del parco che usano il codice di queste famiglie."""
+    return [c["nome"] for c in manifesto["casi"]
+            if famiglie_del_caso(c.get("opzioni")) is None
+            or famiglie_del_caso(c.get("opzioni")) & set(famiglie)]
+
+
 def serve_il_parco(args):
     """Il parco del rilascio serve? Esce con 0 se si', con 1 se no: cambiano
-    solo file che non costruiscono i modelli."""
+    solo file che non costruiscono i modelli. Se cambiano solo file propri
+    di qualche famiglia (`prove/confini.py`), dice le famiglie e, con
+    `--casi`, i casi del parco da costruire (`--solo`); col nucleo o col
+    comune il parco e' intero."""
+    import confini
     nomi = subprocess.run(["git", "-C", args.codice or QUI, "diff", "--name-only",
                            args.base, args.sha], check=True, capture_output=True,
                           text=True).stdout.split()
@@ -691,6 +729,17 @@ def serve_il_parco(args):
     if toccati:
         print("il parco serve: cambiano %d file che costruiscono i modelli (%s)"
               % (len(toccati), ", ".join(toccati[:6]) + (" ..." if len(toccati) > 6 else "")))
+        parti = {confini.famiglia(f) for f in toccati}
+        if parti & {"nucleo", "comune"}:
+            print("parco intero: cambia il nucleo o il comune, che usano tutte le famiglie")
+            return
+        print("solo le famiglie: %s" % ", ".join(sorted(parti)))
+        if args.casi:
+            with open(os.path.join(args.casi, "parco", "parco.json"), encoding="utf-8") as fh:
+                manifesto = json.load(fh)
+            solo = casi_per_famiglie(manifesto, parti)
+            print("%d casi su %d:" % (len(solo), len(manifesto["casi"])))
+            print("--solo " + ",".join(solo))
         return
     print("il parco non serve: fra %s e %s cambiano solo %d file che non costruiscono "
           "i modelli; basta il controllo prove della PR" % (args.base, args.sha, len(nomi)))
@@ -3148,6 +3197,8 @@ def main():
     sv.add_argument("base", help="di solito origin/main")
     sv.add_argument("sha", help="lo SHA fissato di coda-settimana")
     sv.add_argument("--codice", help="cartella del codice (di serie questo)")
+    sv.add_argument("--casi", help="il repository dei casi: dice anche quali casi "
+                                   "del parco costruire, se cambiano solo famiglie")
     sv.set_defaults(fai=serve_il_parco)
     v = sub.add_parser("versione", help="l'impronta del codice, come la dice "
                                         "/api/ping")

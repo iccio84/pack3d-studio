@@ -27,8 +27,13 @@ jobs:
       # Una PR verso il ramo della settimana o e' del POP o e' dei pack, mai
       # le due cose insieme (regole/pop.md, *Il confine*). Non vale per il
       # rilascio (verso main) ne' per il riallineo (da main)
-      - name: Il confine fra POP e pack
+      # e dentro i pack una famiglia per PR, se il titolo non comincia con
+      # «Trasversale:» (prove/confini.py); il titolo passa da una variabile,
+      # mai dentro il comando
+      - name: Il confine fra POP e pack, e fra le famiglie
         if: github.event_name == 'pull_request' && github.base_ref == 'coda-settimana' && github.head_ref != 'main'
+        env:
+          PR_TITOLO: ${{ github.event.pull_request.title }}
         run: python prove/confini.py HEAD^1 HEAD
       - uses: actions/setup-python@v7
         with:
