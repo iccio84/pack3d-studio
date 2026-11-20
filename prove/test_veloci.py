@@ -1732,6 +1732,37 @@ class FiancoASoffietto(unittest.TestCase):
         self.assertEqual(P2[2, 0], -45.0)         # dall'altra parte niente
         self.assertEqual(len(riempimento.vertici(J, B, solo="soffietto")), 6)
 
+class FilmArgento(unittest.TestCase):
+    """Il grigio stampato del film e' il film argentato, scelta del pack:
+    metallo senza inchiostro dove la texture e' grigio neutro chiaro, il
+    resto com'era (`famiglie.flowpack.maschera_grigio`, `metallo_su`)."""
+
+    def test_la_scelta(self):
+        from pack3d.famiglie.flowpack import argento_scelto
+        self.assertTrue(argento_scelto({"film_argento": True}))
+        self.assertTrue(argento_scelto({"film_argento": "si"}))
+        self.assertFalse(argento_scelto({}))
+        self.assertFalse(argento_scelto({"film_argento": "no"}))
+
+    def test_solo_il_grigio(self):
+        from PIL import Image
+        from pack3d.famiglie.flowpack import MR_FILM, maschera_grigio, metallo_su
+        foglio = Image.new("RGB", (120, 40), (196, 196, 196))   # grigio argento
+        foglio.paste((250, 250, 250), (40, 0, 60, 40))           # bianco
+        foglio.paste((230, 80, 20), (60, 0, 80, 40))             # arancio
+        foglio.paste((60, 60, 60), (80, 0, 100, 40))             # testo scuro
+        m = maschera_grigio(foglio)
+        self.assertGreater(m[20, 20], 0.99)
+        for x in (50, 70, 90):
+            self.assertLess(m[20, x], 0.01)
+        col, mr = metallo_su(foglio, foglio, None, m, argento=True)
+        c, r = np.asarray(col).astype(int), np.asarray(mr)
+        self.assertEqual(int(r[20, 20, 2]), 255)                # metallo
+        self.assertEqual(tuple(r[20, 50]), MR_FILM)              # plastica
+        self.assertLessEqual(c[20, 20].max() - c[20, 20].min(), 2)
+        self.assertEqual(tuple(c[20, 70]), (230, 80, 20))
+
+
 class PinneCromate(unittest.TestCase):
     """Le pinne di testa cromate, scelta del pack: metallo lucido sulle due
     testate dello steso, il resto del film com'era
