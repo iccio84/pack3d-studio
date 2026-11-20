@@ -613,6 +613,27 @@ agli angoli di una falda, uniti dal bordo, passavano per contorno); almeno
 piega cielo/fronte a x 347 e 525 mm, fino a 1,5 mm dalle tacche della
 linguetta; 6 tagli su fronte e falda del fondo, cerniera di 178 mm.
 
+**Una linea continua su una penna sottile, chiusa sul lato**
+(`incisioni.continua_per_penna`, provata in `apertura._leggi` e in
+`incisioni.tagli` solo quando la firma, la firma larga e la perforazione non
+trovano niente). Sull'astuccio di biscotti T10 (141,5 x 99,8 x 61,3 mm, caso
+e88a907c54) il contorno della finestra e' verde da 0,55, fuori dalle penne
+tecniche, senza ponticelli e senza taglio dal rovescio: due rami dalla piega
+fra cielo e fronte (a 22 mm dai fianchi) giu' per il fronte, che si
+chiudono verso il centro e si fermano a 1,4 mm dalla piega con la falda sotto
+il fronte; la linguetta continua sulla falda, che non e' una faccia del
+solido, in nero fino alla tacca per il dito. Chiesto aperto, usciva chiuso
+con «il disegno non ha un'apertura a strappo». La regola: le linee si
+leggono penna per penna, come la firma larga, e due rami (`_perforata_continua`)
+che non hanno una punta che li unisca si chiudono lungo un lato, se i loro
+capi liberi stanno a meno di `PONTE` dal **lato opposto alla piega** da cui
+partono, sulla stessa faccia, e il tratto di chiusura e' piu' corto di
+ciascun ramo; la cerniera e' lunga almeno `CERNIERA_MIN` (20 mm). Senza
+quest'ultima, sul parco due tratti a 5,5 mm sul fondo di un altro astuccio
+diventavano un'apertura. Sul T10: cerniera di 98 mm, finestra di tutto il
+fronte fra i due tagli; aperto di 120 gradi l'ingombro e' 141,5 x 147,9 x
+149,6 mm. Nessun altro caso del parco cambia lettura.
+
 **L'apertura sul taglio dal rovescio** (`incisioni.firma` con `larga`,
 provata quando la firma sulle penne tecniche non trova niente, PRIMA della
 perforazione). Sul T2x12

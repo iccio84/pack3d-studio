@@ -473,6 +473,10 @@ def _leggi(pdf, panels, facce):
         # colmati, e non c'e' taglio dal rovescio ne' cartoncino sfogliato
         p = incisioni.perforata(pdf, panels, facce)
         if p is None:
+            # il contorno continuo su una penna sottile, chiuso anche sul
+            # lato della faccia (`incisioni.continua_per_penna`)
+            p = incisioni.continua_per_penna(pdf, panels, facce)
+        if p is None:
             return None
         catena, vicini, rovescio = p["catena"], [[v] for v in p["vicini"]], []
     if catena is None:
