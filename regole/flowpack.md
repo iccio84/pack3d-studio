@@ -250,6 +250,20 @@ sotto l'alluminio non c'e' inchiostro: il colore delle due testate e' la
 riflettanza dell'alluminio (`materiali.F0_ALLUMINIO`), lo stesso argento
 neutro tutte e due, metallo 1 e ruvidita' 0,16 come le cromate.
 
+**Il grigio e' argento, se lo si sceglie** (`"film_argento": true`). Il T1
+del T10 di biscotti: lo steso ha il fondo dietro il biscotto grigio
+(196,196,196), il file si chiama «sfondo argento», ma non c'e' la lastra
+dell'alluminio - solo tre tinte piatte di colore - e il grigio
+e' quadricromia. Di serie un grigio stampato resta inchiostro, perche' il
+metallo lo dicono le lastre (*materiali*); al terzo Non approvo chi l'ha
+caricato: «nel flowpack sostituisci il grigio con il metallo argentato».
+Allora, scelta del pack: dove la texture e' grigio neutro chiaro (fra i
+canali meno di 14, luminosita' fra 150 e 232, sfumato su 8) il film e'
+alluminio senza inchiostro (`maschera_grigio`, `metallo_su`), il colore la
+riflettanza dell'alluminio, metallo 1 e ruvidita' 0,16; il bianco, i colori
+e i testi scuri restano plastica stampata. Sul T1: alluminio sul 59% del
+film. Di serie niente: gli altri flowpack restano al byte.
+
 **Mappare per pannello, non per arco uniforme.** Gli spigoli della sezione si
 trovano dalla curvatura e si usano come nodi di interpolazione: ogni fascia
 dello steso finisce sul suo pannello, indipendentemente da come i raccordi
