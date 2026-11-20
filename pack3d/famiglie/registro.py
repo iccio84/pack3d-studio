@@ -32,6 +32,7 @@ from .flowpack import (CASI,
     _analisi_flowpack_dichiarata,
     _dice_film,
     _sig,
+    argento_scelto,
     build_flowpack,
     cromate_scelte,
     nello_spessore_scelto,
@@ -685,7 +686,7 @@ def _costruisci_riempimento(r, info):
              sezione_da_agente(opts.get("params")),
              scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
              saldatura_scelta(opts), nello_spessore_scelto(opts),
-             cromate_scelte(opts)), r.q,
+             cromate_scelte(opts), argento_scelto(opts)), r.q,
             per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
             gradi=inclina_scelta(opts), tegola=tegola_scelta(opts),
             carta=r.carta, apertura=r.apertura, gira=gira_scelta(opts),
@@ -704,7 +705,7 @@ def _costruisci_flowpack(r, info):
             sezione_da_agente(opts.get("params")),
             scatola, pinne, lastre, r.col_riq, mat, r.mat_ai,
             saldatura_scelta(opts), nello_spessore_scelto(opts),
-            cromate_scelte(opts))
+            cromate_scelte(opts), argento_scelto(opts))
     return costruisci
 
 

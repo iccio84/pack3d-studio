@@ -12,7 +12,7 @@ import os
 import threading
 import traceback
 
-from PIL import Image
+from PIL import Image, ImageFilter
 import numpy as np
 
 from .. import artwork
@@ -389,20 +389,63 @@ def pinne_cromate(foglio, colore, mr, fp, argento=False):
             pinne[:k, :] = pinne[h - k:, :] = 1.0
         else:
             pinne[:, :k] = pinne[:, w - k:] = 1.0
-    # argentate: sotto l'alluminio niente inchiostro, il colore e' la sua
-    # riflettanza
+    return metallo_su(foglio, colore, mr, pinne, argento)
+
+
+def metallo_su(foglio, colore, mr, maschera, argento=False):
+    """(colore, mr) col film metallizzato dove `maschera` (HxW in [0, 1]) lo
+    dice, e com'era altrove. Con `argento` sotto l'alluminio non c'e'
+    inchiostro: il colore e' la sua riflettanza. Senza, la stampa resta
+    sopra (`materiali.mappe_pbr`)."""
+    w, h = foglio.size
+    maschera = np.clip(np.asarray(maschera, np.float32), 0.0, 1.0)
     sotto = Image.new("RGB", foglio.size, (255, 255, 255)) if argento else foglio
     c, m, _q, _o = materiali.mappe_pbr(
-        sotto, {materiali.ALLUMINIO: pinne, materiali.BIANCO: np.zeros_like(pinne)})
-    dove = pinne[..., None] > 0
+        sotto, {materiali.ALLUMINIO: maschera,
+                materiali.BIANCO: np.zeros_like(maschera)})
     prima = (np.asarray(mr.convert("RGB")) if mr is not None
              else np.empty((h, w, 3), np.uint8))
     if mr is None:
         prima[...] = MR_FILM
-    nuovo_mr = np.where(dove, np.asarray(m), prima)
-    nuovo_col = np.where(dove, np.asarray(c.convert("RGB")),
-                         np.asarray(colore.convert("RGB")))
-    return Image.fromarray(nuovo_col.astype(np.uint8)), Image.fromarray(nuovo_mr.astype(np.uint8))
+    a = maschera[..., None]
+    nuovo_mr = np.asarray(m, np.float32) * a + prima.astype(np.float32) * (1 - a)
+    nuovo_col = (np.asarray(c.convert("RGB"), np.float32) * a
+                 + np.asarray(colore.convert("RGB"), np.float32) * (1 - a))
+    return (Image.fromarray(np.round(nuovo_col).astype(np.uint8)),
+            Image.fromarray(np.round(nuovo_mr).astype(np.uint8)))
+
+
+def argento_scelto(opts):
+    """Il grigio stampato del film e' il film argentato: `"film_argento":
+    true` fra le opzioni del caso. Una scelta del pack (il T1 del T10 di
+    biscotti: «nel flowpack sostituisci il grigio con il metallo
+    argentato»), non una regola: di serie un grigio stampato e' inchiostro,
+    e il metallo lo dicono le lastre (`materiali`)."""
+    v = opts.get("film_argento", False)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "si", "sì", "yes", "argento")
+    return bool(v)
+
+
+# Il grigio che fa da argento: tinta neutra (fra i canali meno di
+# GRIGIO_TINTA) e chiara, fra GRIGIO_SCURO e GRIGIO_CHIARO di luminosita'.
+# Il bianco del film e i testi scuri restano inchiostro; ai margini il
+# passaggio e' graduale, su GRIGIO_SFUMA, per non scalettare i bordi.
+GRIGIO_TINTA, GRIGIO_SCURO, GRIGIO_CHIARO, GRIGIO_SFUMA = 14.0, 150.0, 232.0, 8.0
+
+
+def maschera_grigio(foglio):
+    """HxW in [0, 1]: dove la texture e' il grigio neutro chiaro dell'argento."""
+    a = np.asarray(foglio.convert("RGB"), np.float32)
+    tinta = a.max(axis=2) - a.min(axis=2)
+    lum = a.mean(axis=2)
+    t = np.clip((GRIGIO_TINTA - tinta) / GRIGIO_SFUMA, 0, 1)
+    su = np.clip((lum - GRIGIO_SCURO) / GRIGIO_SFUMA, 0, 1)
+    giu = np.clip((GRIGIO_CHIARO - lum) / GRIGIO_SFUMA, 0, 1)
+    m = Image.fromarray(np.round(t * su * giu * 255).astype(np.uint8))
+    # via i puntini isolati (l'antialias dei testi), il resto com'e'
+    m = m.filter(ImageFilter.MinFilter(3)).filter(ImageFilter.MaxFilter(3))
+    return np.asarray(m, np.float32) / 255.0
 
 
 def saldatura_scelta(opts):
@@ -594,7 +637,7 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
                    colata_riquadro=None, materiali_dich=None,
                    materiali_ai=None, saldatura=3, nello_spessore=False,
-                   cromate=False):
+                   cromate=False, argento=False):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -1043,6 +1086,18 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
             colore, mr = tex, None
             avvisi_sez.append("materiali dai DT non applicati (%s): il film "
                               "resta plastica" % e)
+    if argento:
+        # il grigio stampato e' il film argentato (scelta del pack): sotto
+        # niente inchiostro, il colore e' la riflettanza dell'alluminio
+        grigio = maschera_grigio(foglio)
+        quota = float(grigio.mean())
+        if quota >= 0.005:
+            colore, mr = metallo_su(foglio, colore, mr, grigio, argento=True)
+            avvisi_sez.append("film argentato dove e' grigio (scelta del pack): "
+                              "alluminio lucido sul %.0f%% del film" % (100 * quota))
+        else:
+            avvisi_sez.append("film argentato dove e' grigio (scelta del pack): "
+                              "nel film non c'e' grigio, resta com'era")
     if cromate == ARGENTO:
         colore, mr = pinne_cromate(foglio, colore, mr, fp, argento=True)
         avvisi_sez.append("pinne di testa argentate (scelta del pack): "
