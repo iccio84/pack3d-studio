@@ -1063,6 +1063,35 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
     return peggio
 
 
+def contro_le_pareti(vano, p, d, poste, V_prodotto):
+    """I pezzi di capo fila spinti dentro il vano fino alla parete, se la
+    passano di lato o davanti-dietro: si schiacciano contro il vicino, come
+    fra due vicini (`COMPRIME`), e non piu' di tanto. L'astuccio di biscotti
+    T10 aperto coi 10 T1 (caso e88a907c54): due flowpack larghi 70,9 mm, gia'
+    stretti del 2%, nel vano da 139,5 ci stanno solo schiacciati fra loro, e
+    centrati sul loro passo da 69,75 passavano i fianchi di 1,2 mm: si
+    intersecavano con l'astuccio. Il film si schiaccia contro la parete, non
+    la passa. Solo nel largo del pezzo, e solo se e' piu' largo del suo
+    passo: per il lungo la punta piegata ha la sua regola
+    (`PUNTA_NELLA_PARETE`)."""
+    a = d.asse(p.assi[1])
+    if a == 1 or p.largo <= d.passo[a]:
+        return poste
+    massimo = COMPRIME * p.largo
+    lo, hi = (vano.x0, vano.x1) if a == 0 else (vano.z0, vano.z1)
+    out = []
+    for R, t in poste:
+        W = (V_prodotto - p.centro) @ R.T + t
+        t = np.array(t, dtype=float)
+        sotto, sopra = lo - W[:, a].min(), W[:, a].max() - hi
+        if sotto > 0.0 and sopra <= 0.0:
+            t[a] += min(sotto, -sopra, massimo)
+        elif sopra > 0.0 and sotto <= 0.0:
+            t[a] -= min(sopra, -sotto, massimo)
+        out.append((R, t))
+    return out
+
+
 # --------------------------------------------------------------------------- #
 # Il GLB composto
 
@@ -1140,6 +1169,8 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
                        [-math.sin(a), 0.0, math.cos(a)]])
         poste = [(Ry @ R_, t_) for R_, t_ in poste]
         accorciato.append("girati di %.0f gradi attorno alla verticale" % float(gira))
+    if not rigido:
+        poste = contro_le_pareti(vano, p, d, poste, Vp)
     messi = 0.0
     if gradi and d.posa == "sdraiati":
         poste, messi = inclina(vano, p, poste, Vp, float(gradi))

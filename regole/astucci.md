@@ -634,6 +634,27 @@ diventavano un'apertura. Sul T10: cerniera di 98 mm, finestra di tutto il
 fronte fra i due tagli; aperto di 120 gradi l'ingombro e' 141,5 x 147,9 x
 149,6 mm. Nessun altro caso del parco cambia lettura.
 
+**La linguetta oltre il lato si alza con la finestra**
+(`incisioni.linguetta_oltre`, `apertura._linguetta`). Sullo stesso T10,
+aperto, chi l'ha caricato: «manca il pezzo di sotto che e' il proseguimento
+del coperchio». Il contorno si chiudeva sul lato fra fronte e falda, e la
+linguetta - sulla falda, che non e' una faccia - restava fuori: la finestra
+si alzava senza. La regola: quando i due rami si chiudono sul lato, la
+linguetta e' il percorso piu' corto fra i due capi sul lato sui tratti
+sottili di qualunque penna fuori da tutte le facce, senza quelli che corrono
+sul lato, cucendo i salti sotto `PONTE` (un capo libero va sul punto piu'
+vicino di un altro tratto); deve uscire dal lato di almeno 2 `PONTE`. Sul
+T10: nera da 0,55, 44,4 mm larga, fino al bordo della falda (nero da 1,0)
+con la tacca per il dito, due salti da 0,3 e 1,2 mm, 108 mm di contorno.
+Aperta, la linguetta e' una faccia sua: il punto del foglio a d mm oltre il
+lato sta sul lato, a d mm dentro la scatola (la falda e' piegata a 90 gradi),
+il pannello e' il riquadro della linguetta girato come la faccia (la piega
+e' una rotazione: niente specchio), e ruota con la finestra. Della falda si
+alza solo la linguetta; la sua grafica va nello steso, che per questo si
+allarga al riquadro della linguetta (`apertura.riquadro_linguetta`, solo
+sull'astuccio chiesto aperto). Il T10 aperto passa da 147,9 a 166,1 mm
+d'altezza: la linguetta sta in cima alla finestra sollevata.
+
 **L'apertura sul taglio dal rovescio** (`incisioni.firma` con `larga`,
 provata quando la firma sulle penne tecniche non trova niente, PRIMA della
 perforazione). Sul T2x12
