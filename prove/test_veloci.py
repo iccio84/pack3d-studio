@@ -282,8 +282,23 @@ class UovoAvvolto(unittest.TestCase):
         r.assert_called_once_with(["c.pdf", "f.pdf"])
         self.assertEqual(letto["kind"], "uovo")
         self.assertIn("Incarto avvolto: l'uovo incartato col collarino", letto["meta"])
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as e:
             fi.analisi_incarto_dichiarato("a.pdf", "pieghe", ["a.pdf", "b.pdf"])
+        self.assertIn("incarto a pieghe in 2 pezzi", str(e.exception))
+        # l'avvolto in tre pezzi: il codice conosce l'uovo in due, va in coda
+        with self.assertRaises(ValueError) as e:
+            fi.analisi_incarto_dichiarato("a.pdf", "avvolto", ["a.pdf", "b.pdf", "c.pdf"])
+        self.assertIn("incarto avvolto in 3 pezzi", str(e.exception))
+
+    def test_la_pagina_chiede_i_pezzi(self):
+        qui = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        with open(os.path.join(qui, "pack3d_studio.html"), encoding="utf-8") as fh:
+            html = fh.read()
+        for pezzo in ("let pezziIncarto = 0", "function rifaiSlotIncarto()",
+                      "procedi('incarto', {chiusura, pezzi: pezziIncarto})",
+                      "Di quanti pezzi \\u00e8 composto l\\u2019incarto"):
+            self.assertIn(pezzo, html)
+        self.assertNotIn("slotAvvolto", html)
 
     def test_la_cima_si_chiude_senza_toccare_il_resto(self):
         # z si scala dello stesso fattore a ogni altezza: sotto Y_STRINGE

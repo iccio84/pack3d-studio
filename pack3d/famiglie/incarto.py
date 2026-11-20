@@ -111,15 +111,22 @@ def analisi_incarto_dichiarato(pdf, chiusura, pdfs=None):
     (`_analisi_incarto`); avvolto, l'uovo incartato col collarino, dai due
     PDF `pdfs` (`pack3d.uovo`). Si ferma con l'errore che dice cosa manca, e
     il caso va in coda."""
+    n = len(pdfs) if pdfs is not None else 1
     if chiusura == "avvolto":
+        # l'avvolto che il codice conosce e' l'uovo: due pezzi, il foglio e
+        # il collarino. Con altri pezzi il caso va in coda
+        if n != 2:
+            raise ValueError("incarto avvolto in %d %s: il codice conosce l'uovo "
+                             "in due pezzi, il foglio e il collarino" % (n, "pezzo" if n == 1 else "pezzi"))
         foglio, collarino = uovo.riconosci(list(pdfs or [pdf]))
         return dict(kind="uovo", title="Uovo incartato col collarino",
                     meta=uovo.dichiara(foglio, collarino) + foglio.avvisi
                     + collarino.avvisi)
-    if pdfs is not None and len(pdfs) > 1:
-        raise ValueError("incarto a pieghe: un PDF solo, il foglio della "
-                         "barretta (due PDF solo per l'avvolto, il foglio e il "
-                         "collarino)")
+    if n > 1:
+        # un incarto a pieghe in piu' pezzi (un foglio interno e uno esterno,
+        # una fascetta): il codice ne conosce uno solo, il caso va in coda
+        raise ValueError("incarto a pieghe in %d pezzi: il codice sa costruire "
+                         "un pezzo solo, il foglio della barretta" % n)
     letto = _analisi_incarto(pdf, quarto=True)
     if letto is None:
         raise ValueError("incarto a pieghe: il DT non si legge come il foglio "

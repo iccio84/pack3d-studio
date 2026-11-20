@@ -968,11 +968,9 @@ class Handler(BaseHTTPRequestHandler):
                 if kind == "totem" and len(pdfs) != 2:
                     return self._send(400, "Totem: carica due PDF, il pannello "
                                            "del fronte e quello del retro")
-                # l'incarto avvolto arriva in due PDF, il foglio e il collarino
-                if kind == "incarto" and len(pdfs) > 1 and chiusura != "avvolto":
-                    return self._send(400, "Incarti a pieghe: carica un PDF solo, "
-                                           "lo steso. Due PDF solo per l'avvolto: "
-                                           "il foglio e il collarino")
+                # l'incarto arriva in un PDF per pezzo (`pezzi`): quanti ne sa
+                # costruire il codice lo dice la lettura, e quello che non sa
+                # va in coda (`analisi_incarto_dichiarato`)
                 if len(pdfs) > 1 and kind not in ("coppa", "carton", "riempimento",
                                                   "totem", "espositore_pop", "incarto"):
                     return self._send(400, "Piu' PDF insieme solo per un "

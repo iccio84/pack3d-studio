@@ -80,10 +80,11 @@ combinazione funziona.
      dell'apertura a strappo dell'astuccio. Se la lettura non torna con la
      scelta (display senza plancia, vassoio con la plancia) si ferma e lo
      dice;
-   - **Incarti**: come si chiude il foglio, a pieghe (le barrette) o
-     avvolto (l'uovo col collarino); il PDF dello steso e l'immagine del
-     prodotto da incartare (JPEG, PNG o WebP), e per l'avvolto anche il PDF
-     del collarino.
+   - **Incarti**: di quanti pezzi e' composto (l'uovo ne ha due, il foglio
+     e il collarino), come si chiude il foglio, a pieghe (le barrette) o
+     avvolto (l'uovo col collarino); poi un PDF per pezzo e l'immagine del
+     prodotto da incartare (JPEG, PNG o WebP). I pezzi che il codice non sa
+     ancora montare vanno in coda come caso nuovo.
 2. Il viewer mostra il risultato scartando le facce posteriori, quindi un
    modello con le normali girate si riconosce a colpo d'occhio.
 3. **Scarica GLB** salva il file appena costruito.

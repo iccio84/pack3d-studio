@@ -137,10 +137,15 @@ tutto (tipo l'ovetto con la sorpresa). La misura finale del 3D non dipende
 solo dallo steso ma anche dal **prodotto**: per questo la pagina, oltre al
 PDF, chiede **l'immagine del prodotto da incartare**.
 
-- La pagina chiede prima come si chiude (`chiusura`: `pieghe` o `avvolto`),
-  poi mostra i posti: a pieghe il PDF dello steso e l'immagine; avvolto il
-  PDF del foglio, quello del collarino e l'immagine (cambiando la chiusura i
-  file gia' caricati restano, ognuno nel primo posto del suo tipo). Il tasto
+- **Di quanti pezzi e' composto**, prima di tutto: dal 20 novembre 2026,
+  chiesto dal proprietario («abbiamo visto con l'uovo che gli incarti
+  possono avere piu' elementi»). Poi come si chiude (`chiusura`: `pieghe` o
+  `avvolto`), poi i posti: un PDF per pezzo e l'immagine. Un pezzo solo e'
+  il PDF dello steso; l'avvolto in due pezzi ha il foglio e il collarino
+  (in qualunque ordine: `uovo.riconosci`); con altri numeri i posti sono
+  «Pezzo 1», «Pezzo 2»... Cambiando i pezzi o la chiusura i file gia'
+  caricati restano, ognuno nel primo posto del suo tipo. Il numero va al
+  server in `pezzi`, che controlla che i PDF siano tanti quanti. Il tasto
   del posto dell'immagine apre la scelta delle immagini. Un file trascinato va nel posto
   del suo tipo. L'immagine si rimpicciolisce a 1600 px sul lato lungo, in
   JPEG, come la foto della nota.
@@ -148,8 +153,12 @@ PDF, chiede **l'immagine del prodotto da incartare**.
   ne da' le lunghezze e `prodotto` (`nome`, `tipo`) dice che l'ultimo
   pezzo e' l'immagine. Il server la separa subito (`_separa_prodotto`: deve
   essere davvero una JPEG, PNG o WebP, al massimo 12 MB). Senza immagine un
-  incarto si ferma con 400; un'immagine con un'altra famiglia pure. Due PDF
-  li vuole solo l'avvolto: a pieghe due PDF si fermano con 400.
+  incarto si ferma con 400; un'immagine con un'altra famiglia pure.
+- **I pezzi che il codice non sa ancora montare** - a pieghe piu' d'uno (un
+  foglio interno e uno esterno, una fascetta), avvolto diverso da due - si
+  fermano nella lettura col messaggio che dice cosa sa costruire
+  (`analisi_incarto_dichiarato`), e il caso va in coda coi PDF e
+  l'immagine: e' la routine a imparare il pezzo nuovo.
 - **A pieghe** si costruisce come l'incarto a triangolo; se il PDF non e'
   un incarto a triangolo, si ferma e va in coda. **Avvolto** si costruisce
   l'uovo incartato col collarino (*L'uovo avvolto*, sotto); due PDF che non
