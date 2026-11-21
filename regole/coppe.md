@@ -243,6 +243,14 @@ lid: si cerca solo fra piu' PDF (`orienta(dischi=True)`). Il sopra del
 foglio va dietro: guardando il cono dal davanti e dall'alto il lid si legge
 dritto.
 
+Un cartotecnico dichiarato in un pezzo che non si legge come niente
+(`registro._ferma_cartotecnico`) consiglia di caricare anche il cono solo
+se il suo disco ha l'abbondanza attorno al taglio: un cerchio solo e' quasi
+sempre il bollo tondo della grafica. Dal 2 al 20 novembre 2026 il bollo
+«x10» di due astucci (25 mm) ha mandato sei volte verso il lid di un cono
+chi non ne aveva; nel parco il disco con l'abbondanza l'hanno solo i due
+lid.
+
 ### Il fronte senza il fondo giallo
 
 Il fronte e' il marchio, come sulla coppa, ma sul cono il colore vivo piu'
