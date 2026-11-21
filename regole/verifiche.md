@@ -289,6 +289,148 @@ il display a vassoio T1x40, coi due riempimenti che lo contengono, non si
 costruiva piu'. Corretto con una regola generale (`_segni_fuori`,
 regole/vassoi.md): 45 su 45, e le 45 letture uguali.
 
+### Le varianti che riscrivono il disegno
+
+Il piano del 20 novembre 2026 - un deterministico che fallisce il meno
+possibile, il tempo di calcolo speso in robustezza - comincia dal misurare
+dove la lettura si rompe oggi, con le diversita' che le varianti di sopra
+non provavano. Quelle AGGIUNGONO disegno; queste cambiano quello che c'e',
+come lo manderebbe un altro disegnatore o un'altra prestampa:
+
+- **`penne`**: ogni penna tecnica (`dieline._technical_pens`) in un colore
+  di quadricromia suo - il rosso il taglio, il verde la cordonatura, il blu
+  le quote, nell'ordine in cui sanno di fustella -, e con una tinta piatta
+  tecnica anche i numeri e le frecce che disegna (`_penne_altre`);
+- **`senzaquote`**: il DT senza le quote, numeri e linee (`_senza_quote`):
+  le tinte e i livelli delle quote spenti; i numeri che misurano una linea
+  accanto - lunga quanto loro, o fra due richiami che la attraversano, come
+  le catene sotto uno steso - con le linee fuori dal disegno, i richiami
+  corti e le frecce ai capi; le penne che quelle quote spiegano per meta'.
+  Dentro il disegno una piega con la sua misura scritta accanto resta: se ne
+  va il numero. I numeri li legge pdfium, come `quote.numeri`: pdfminer certi
+  font non li decodifica (sul display T4x9 le quote uscivano `(cid:27)`), e
+  la variante non li vedeva. E solo i numeri staccati: un pezzo di data o di
+  codice (`10/02/2020`, `T1 0018`) sul T1 cold seal misurava per caso le
+  righe del cartiglio. Le quote che restano sono quelle che nessuno legge
+  come quote: disegnate come contorni, o su una vista non in scala;
+- **`curve`**: ogni testo diventa i suoi contorni, al suo posto
+  (`_testi_in_curve`). `appiattito` lo fa con Ghostscript su tutto il file e
+  perde i livelli e il DT; qui Ghostscript vede una copia di servizio coi
+  soli testi, ognuno di un colore suo, e i contorni tornano nel flusso al
+  posto dell'operatore che scriveva, dipinti col colore del testo. Livelli,
+  tinte e l'ordine del disegno restano;
+- **`spezzati`**: ogni tratto dritto delle penne tecniche in pezzi di tre
+  millimetri attaccati, ognuno un percorso suo, come li esportano certi CAD
+  (`_tratti_spezzati`): si vede uguale, e la lettura trova solo tratti corti;
+- **`dimezzato`**: il disegno in scala 1:2 con le quote del passo e del giro
+  che dicono le misure vere (`quote`, poi `scala0.5`): il modello giusto e'
+  quello dell'originale, non la sua meta';
+- **`pagine`**: il disegno sulla terza pagina di quattro, davanti una
+  copertina e una pagina di note, dietro le tinte; **`scheda`**: davanti la
+  scheda tecnica del fornitore, con le voci in una tabella a filo sottile -
+  il limite che regole/pdf.md dice («una scheda piena di tabelle davanti la
+  regola non la vede»), misurato (`_pagine_in_piu`).
+
+Per cambiare un tratto o un testo bisogna sapere, operatore per operatore,
+con che penna, che colore e dove la lettura lo vede. Lo dice pdfminer - la
+libreria con cui pdfplumber, e quindi la lettura della fustella, legge la
+pagina - seguito operatore per operatore (`_oracolo`), e il flusso si
+riscrive con pypdf (`_riscrivi`). Le due letture devono contare gli stessi
+operatori, flusso per flusso: sui 1.946 flussi dei PDF del parco tornano
+tutti, e un flusso dove non tornassero resterebbe com'e'.
+
+Le varianti fanno quello che dicono, e solo quello - provato su tutti i PDF
+del parco prima di costruire:
+
+- con `penne` ogni penna di prima ha la sua penna di dopo, coi segmenti
+  uguali: due penne restano due, una resta una. Due cose l'hanno chiesto. La
+  lettura distingue le penne per spessore e colore com'e' scritto, non per il
+  nome della tinta: due tinte piatte al 100% con lo stesso spessore sono una
+  penna sola, e ricolorate per nome diventavano due. E certi CAD disegnano
+  ogni linea del DT due volte, col tratto e col riempimento (`m l f`, che
+  non lascia niente sulla pagina): la lettura conta anche quella, con la
+  penna del colore di contorno (`dieline._segments` prende tutte le `lines`),
+  e la variante la tratta come un tratto (`_linea_piena`). Un colore nuovo
+  che la pagina usa gia' si salta: sul T2x12 il blu delle quote diventava il
+  rosso di un'altra penna;
+- con `spezzati` non resta un tratto tecnico piu' lungo di quattro
+  millimetri e mezzo, e la pagina si vede uguale (meno di un livello di
+  grigio, in media). Le curve vanno a pezzi anche loro, pezzi di curva: la
+  lettura prende la corda di ogni curva, e certi DT disegnano le dritte come
+  curve. Un percorso riempito e tracciato si riempie intero e si traccia a
+  pezzi;
+- con `curve` la pagina si vede uguale, e su 55 PDF su 57 non resta un
+  carattere vivo; sugli altri due ne restano 10 e 9, scritti a tratto
+  (`Tr 1`), che la variante lascia come sono.
+
+Una variante che su un caso non ha niente da cambiare - le quote tolte da un
+PDF che non ne ha - non si costruisce, e si conta a parte: non e' un caso
+provato.
+
+**La copertina era bianca.** `insert_blank_page` di pypdf 6 da' la pagina di
+prima della copia nel file: il riquadro e il titolo che la variante le
+scriveva andavano persi, e davanti c'era una pagina vuota. Ora si scrive
+sulla pagina del file.
+
+**Il primo giro**, il 21 novembre 2026, in locale (niente minuti delle
+Actions), sui 56 casi del parco con le misure approvate, col codice di
+`coda-settimana` (uguale a `main`): ogni caso con ogni variante, contro
+l'originale costruito con lo stesso codice.
+
+| variante | come l'originale | niente da variare |
+|---|---|---|
+| penne | 52 su 55 | 1 |
+| senzaquote | 29 su 31 | 25 |
+| curve | 43 su 51 | 5 |
+| spezzati | 4 su 55 | 1 |
+| dimezzato | 1 su 56 | 0 |
+| pagine | 55 su 56 | 0 |
+| scheda | 0 su 56 | 0 |
+| copertina, ora scritta | 55 su 56 | 0 |
+
+Cosa dicono:
+
+- **`spezzati` rompe quasi tutto.** La lettura cerca i tratti lunghi: una
+  penna e' tecnica se ha linee lunghe almeno il 5% della pagina
+  (`dieline._technical_pens`), e un DT a pezzi di tre millimetri non ne ha. I
+  flowpack si fermano («nessun tracciato tecnico riconoscibile», «saldature
+  di testa non riconosciute»), gli astucci finiscono nel lid di un cono («ha
+  un disco»), i riempimenti non trovano il vassoio; otto casi si costruiscono
+  da altro, piccoli e sbagliati. Il pane ripieno T2 e il croccante T2
+  fondente non finiscono nei venti minuti del lavoratore. Reggono il tubo,
+  due display a vassoio e l'uovo incartato.
+- **`dimezzato`: tutti a meta'**, come ci si aspetta: la scala e' quella del
+  PDF, e le quote che dicono le misure vere non si usano (il punto 4 del
+  piano). Regge solo la foto del display T1x10, che la scala la prende
+  dall'opzione `larghezza_fustella`.
+- **`scheda`: 56 su 56**, il limite di regole/pdf.md, misurato. Peggio di un
+  errore: 19 cartotecnici si costruiscono dalla tabella, un bastoncino di
+  111 x 9 x 9 mm.
+- **`curve`: otto.** Senza testo vivo il verso non si legge: il T6 aperto e
+  il vassoio T1x36 escono capovolti, l'astuccio della ciambella girato di un
+  quarto. Senza i numeri le catene di quote dei due T2x12 e del T2x25 sono
+  una colonna, e il corpo e' largo 252-257 mm invece di 271
+  (`_penne_di_quote` riconosce la penna delle quote dai numeri scritti). Il
+  T1 a fondo argento cambia steso (136 mm invece di 102), e un riempimento
+  dispone diversamente i prodotti.
+- **`senzaquote`: due.** Il T1 a fondo argento senza le quote cambia steso,
+  spesso 50 mm invece di 12,5 - probabilmente perche' le quote d'insieme
+  scartavano il riquadro sbagliato (`flowpack._smentito`), da verificare. E
+  il riempimento che con `curve` dispone diversamente i prodotti lo fa anche
+  qui: in tutte e due gli mancano i numeri. In 25 casi non c'e' una quota
+  che si legga come tale.
+- **`penne`: tre.** La pulizia toglie il DT per il nome della tinta: sul cono
+  il cerchio del taglio, ricolorato, resta stampato sul coperchio. Il
+  ballotin e la coppa da 500 col DT in altri colori si leggono diversi (il
+  ballotin 120 x 465 x 90 invece di 115 x 100 x 115; la coppa non trova la
+  vista montata accanto alla miniatura del fondo).
+- **`pagine` e `copertina`** reggono tutto tranne l'uovo incartato: con una
+  pagina davanti l'incarto avvolto non riconosce piu' il foglio e il
+  collarino.
+
+Nessuna diversa e' approvata in `parco/varianti.json`: e' il quadro da cui
+partono i punti dopo del piano, e lo decide il proprietario.
+
 ## Quanto manca alle soglie
 
 Il parco dice che un caso esce giusto, non quanto e' vicino a uscire
