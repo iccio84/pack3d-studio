@@ -1202,14 +1202,16 @@ def _dalla_tavola(pdf, d0, page_no=0):
         "quote, note), girato anche lui" % giro)
 
 
-# Le letture gia' decise: impronta del file -> (giro, avviso). L'analisi e la
-# costruzione dello stesso file la chiedono tutte e due, e le prove costano
-# un'analisi l'una.
+# Le letture gia' decise: (impronta del file, dichiarato cartotecnico) ->
+# (giro, avviso, astuccio). L'analisi e la costruzione dello stesso file la
+# chiedono tutte e due, e le prove costano un'analisi l'una; l'astuccio si
+# tiene perche' puo' venire da una strada diversa da quella per colore
+# (`pack3d.strade`), e rileggerlo per colore darebbe un'altra cosa.
 _SULLA_GRAFICA = {}
 _SULLA_GRAFICA_MAX = 16
 
 
-def astuccio_sulla_grafica(pdf, page_no=0):
+def astuccio_sulla_grafica(pdf, page_no=0, cartotecnico=False):
     """`(pdf, dieline, giro, avviso)`: l'astuccio risolto nel verso della
     grafica, `giro` i gradi orari di cui si e' girato il foglio.
 
@@ -1237,62 +1239,73 @@ def astuccio_sulla_grafica(pdf, page_no=0):
     girato di 90 gradi il fronte era la faccia di PREPARAZIONE, e il cielo
     capovolto l'ha detto.
 
-    Si prova solo quando serve: se ogni faccia che ha testo vivo si legge come
-    deve - o se nessuna ne ha - il foglio resta com'e' e non costa niente. E
-    se sul foglio com'e' l'astuccio non si risolve, si prova girato prima di
-    arrendersi: il solutore conosce meglio certi versi di altri.
+    Su ogni verso l'astuccio e' la lettura migliore fra tutte le strade della
+    fustella e tutte le forme (`pack3d.strade.letture`): il verso lo dice la
+    grafica, la lettura le misure, le quote e le correzioni. Le strade
+    diverse da quella per colore si provano se il disegno si legge da
+    cartotecnico o se il pack e' dichiarato tale (`cartotecnico`). Due letture
+    quasi alla pari che danno astucci diversi sono un dubbio, scritto in
+    `dieline.dubbio`.
+
+    Si prova a girare solo quando serve: se ogni faccia che ha testo vivo si
+    legge come deve - o se nessuna ne ha - il foglio resta com'e' e non costa
+    niente. E se sul foglio com'e' l'astuccio non si risolve, si prova girato
+    prima di arrendersi: il solutore conosce meglio certi versi di altri.
     """
-    from . import dieline as dl
+    import copy
+    from . import strade
     from . import tracciati
-    chiave = _impronta(pdf)
+    impronta = _impronta(pdf)
+    chiave = (impronta, bool(cartotecnico)) if impronta else None
     noto = _SULLA_GRAFICA.get(chiave) if chiave else None
     if noto is not None:
-        giro, avviso = noto
+        giro, avviso, d = noto
         scelto = pagina_girata(pdf, giro) if giro else pdf
-        return scelto, dl.analyze(scelto), giro, avviso
+        return scelto, copy.deepcopy(d), giro, avviso
 
-    def ricorda(giro, avviso):
+    def ricorda(giro, avviso, d):
         if chiave:
             while len(_SULLA_GRAFICA) >= _SULLA_GRAFICA_MAX:
                 _SULLA_GRAFICA.pop(next(iter(_SULLA_GRAFICA)))
-            _SULLA_GRAFICA[chiave] = (giro, avviso)
+            _SULLA_GRAFICA[chiave] = (giro, avviso, copy.deepcopy(d))
 
-    letture = []                     # (giro, pdf, dieline, voti)
+    def fatto(scelto, d, giro, avviso):
+        ricorda(giro, avviso, d)
+        return scelto, d, giro, avviso
+
+    es0 = strade.letture(pdf, page_no, 0, cartotecnico)
+    letture = []                     # (giro, pdf, esito delle letture)
     ordine = []
-    try:
-        d0 = dl.analyze(pdf)
-        errore = None
-    except Exception as e:
-        d0, errore = None, e
-    if d0 is not None:
-        if not d0.panels:
-            return pdf, d0, 0, None
-        v0 = voti_della_grafica(pdf, d0, page_no)
+    if es0.migliore is None and not es0.astuccio:
+        # il disegno non e' un cartotecnico su nessuna strada: la fustella per
+        # colore senza pannelli, come prima, e il registro va avanti
+        return pdf, es0.colore, 0, None
+    if es0.migliore is not None:
+        d0 = es0.dieline()
+        v0 = es0.migliore.voti
         if not v0:
             # Le facce tacciono: il verso lo chiede alla tavola fuori dal DT
             # (`_dalla_tavola`). Dritta o muta, il foglio resta com'e'.
             dalla = _dalla_tavola(pdf, d0, page_no)
             if dalla is not None:
-                ricorda(dalla[2], dalla[3])
+                ricorda(dalla[2], dalla[3], dalla[1])
                 return dalla
             # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
             # dipendere da come il DT sta sulla tavola.
             avviso = ("verso della grafica non letto: nessuna faccia ha testo "
                       "vivo (scritte vettorializzate), e il foglio resta com'e' "
                       "sulla tavola - il verso va controllato sul modello")
-            ricorda(0, avviso)
-            return pdf, d0, 0, avviso
+            return fatto(pdf, d0, 0, avviso)
         if all(g == 0 for g in v0.values()):
-            ricorda(0, None)
-            return pdf, d0, 0, None  # ogni faccia che parla si legge come deve
-        letture.append((0, pdf, d0, v0))
+            return fatto(pdf, d0, 0, None)  # ogni faccia che parla si legge come deve
+        letture.append((0, pdf, es0))
         # prima i giri che la grafica suggerisce, quello del fronte in testa
         ordine = [(360 - g) % 360 for n, g in
                   sorted(v0.items(), key=lambda kv: kv[0] != "front") if g]
     else:
         # nessuna lettura sul foglio com'e': prima il giro del testo del DT
         try:
-            g = tracciati.verso_grafica(pdf, {"dt": dl.extract(pdf).bbox},
+            g = tracciati.verso_grafica(pdf, {"dt": es0.colore.bbox},
                                         page_no).get("dt")
         except Exception:
             g = None
@@ -1303,30 +1316,46 @@ def astuccio_sulla_grafica(pdf, page_no=0):
             continue
         girato = pagina_girata(pdf, giro)
         try:
-            d = dl.analyze(girato)
+            # sui fogli girati solo le strade che sul foglio com'era davano una
+            # lettura (`strade.strade_buone`): senza nessuna, solo quella per
+            # colore, come prima
+            es = strade.letture(girato, page_no, giro, cartotecnico,
+                                solo=strade.strade_buone(es0))
         except Exception:
-            d = None
-        if d is None or not d.panels:
-            letture.append((giro, girato, None, {}))
+            es = None
+        if es is None or es.migliore is None:
+            letture.append((giro, girato, None))
             continue
-        v = voti_della_grafica(girato, d, page_no)
-        letture.append((giro, girato, d, v))
+        letture.append((giro, girato, es))
+        v = es.migliore.voti
         if v and all(g == 0 for g in v.values()):
             break                    # ogni faccia che parla si legge come deve
     risolte = [l for l in letture if l[2] is not None]
     if not risolte:
-        raise errore
+        raise es0.errore or ValueError("astuccio: la fustella non si risolve "
+                                       "in nessun verso del foglio")
     # a parita' vince il foglio com'e', poi il primo giro provato
-    giro, scelto, d, v = max(risolte,
-                             key=lambda l: (_consenso(l[3]), l[0] == 0))
+    giro, scelto, es = max(risolte, key=lambda l: (_consenso(l[2].migliore.voti),
+                                                   l[0] == 0))
+    d = es.dieline()
+    v = es.migliore.voti
+    if not d.dubbio:
+        # un altro verso con la grafica d'accordo uguale e un astuccio diverso
+        # quasi alla pari: il verso e' in dubbio
+        pari = [l[2].migliore for l in risolte if l[2] is not es
+                and _consenso(l[2].migliore.voti) == _consenso(v)
+                and not _stesso(l[2].migliore, es.migliore)]
+        vicina = min(pari, key=lambda l: l.costo, default=None)
+        if vicina is not None and vicina.costo - es.migliore.costo < strade.DUBBIO:
+            d.dubbio = strade.riga_dubbio(es.migliore, vicina)
     if giro == 0:
         avviso = ("la grafica non si legge come deve in nessun verso del "
                   "foglio: l'astuccio resta letto com'e' sulla tavola, con "
                   "le texture raddrizzate faccia per faccia")
-    elif d0 is None:
+    elif es0.migliore is None:
         avviso = ("sul foglio com'e' l'astuccio non si risolveva (%s): "
                   "girato di %d gradi si'%s"
-                  % (str(errore)[:60], giro,
+                  % (str(es0.errore)[:60], giro,
                      "" if _consenso(v) > 0 else
                      ", ma senza testo vivo il verso non e' confermato dalla "
                      "grafica"))
@@ -1334,8 +1363,19 @@ def astuccio_sulla_grafica(pdf, page_no=0):
         avviso = ("foglio girato di %d gradi prima di risolvere: sulla tavola "
                   "il DT stava girato rispetto alla grafica, e cielo, fondo, "
                   "retro e fianchi si leggono nel suo verso" % giro)
-    ricorda(giro, avviso)
-    return scelto, d, giro, avviso
+    return fatto(scelto, d, giro, avviso)
+
+
+def _stesso(a, b):
+    """Se due letture su versi diversi danno lo stesso astuccio: le misure e
+    le facce, il giro a parte."""
+    from . import dieline as dl
+    giri = a.giro, b.giro
+    a.giro = b.giro = 0
+    try:
+        return dl.stesso_modello(a, b)
+    finally:
+        a.giro, b.giro = giri
 
 
 def lastre_fisse(pagina, fisse):

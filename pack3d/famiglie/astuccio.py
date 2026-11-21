@@ -15,6 +15,7 @@ from .. import quote as quotature
 from .. import rilievo
 from .. import sormonto as lo_sormonto
 from .. import steso as lo_steso
+from .. import strade
 from .. import verifica
 from ..artwork import risoluzione
 from ..dieline import PT2MM
@@ -228,7 +229,7 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
     # grafica: se il foglio sta girato sulla tavola, da qui in avanti si
     # lavora sulla copia girata. Vedi `artwork.astuccio_sulla_grafica`.
     sorgente = pdf
-    pdf, d, gradi, giro = artwork.astuccio_sulla_grafica(pdf)
+    pdf, d, gradi, giro = artwork.astuccio_sulla_grafica(pdf, cartotecnico=True)
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
     if not d.panels:
         raise ValueError("astuccio riconosciuto ma i pannelli non sono risolvibili")
@@ -381,6 +382,10 @@ def build_carton(pdf, out_glb, quality="hd", lastre_extra=(),
                         steso=(tela, normale, mr))
     meta = ["astuccio %s%s" % (d.layout, "" if d.chiuso else " aperto"),
             "%.1f x %.1f x %.1f mm" % d.dims_mm] + ([giro] if giro else [])
+    # come e' stata letta la fustella, se non per colore, e il dubbio fra due
+    # letture quasi alla pari (`pack3d.strade`): li vede chi guarda il modello
+    # e il controllo dell'AI
+    meta += [r for r in (strade.riga_strada(d), d.dubbio) if r]
     meta += righe_lamina
     if storte:
         meta.append("STESO: la grafica di %s non torna con lo steso (%s): la "

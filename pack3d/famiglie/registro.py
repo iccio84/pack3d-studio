@@ -19,6 +19,7 @@ from .. import primitive
 from .. import punta
 from .. import scatola_plancia
 from .. import sportello
+from .. import strade
 from .. import tubo
 from .. import vassoio
 from .astuccio import (build_carton,
@@ -329,7 +330,8 @@ def _prova_astuccio(l):
     try:
         # nel verso della grafica, come la costruzione: i cartellini
         # devono dire le falde nell'ordine in cui le vedra' il modello
-        l.pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(l.pdf)
+        l.pdf, d, _gradi, giro = artwork.astuccio_sulla_grafica(
+            l.pdf, cartotecnico=l.kind == "carton")
         if not d.panels:
             if l.kind == "carton":
                 # Dichiarato cartotecnico, e il solutore astuccio non trova
@@ -343,6 +345,9 @@ def _prova_astuccio(l):
                 "%.1f x %.1f x %.1f mm" % d.dims_mm]
         if giro:
             meta.append(giro)
+        # come e' stata letta la fustella, se non per colore, e il dubbio fra
+        # due letture quasi alla pari (`pack3d.strade`)
+        meta += [r for r in (strade.riga_strada(d), d.dubbio) if r]
         apertura = dl.dichiara_apertura(d)
         if apertura:
             meta.append(apertura)

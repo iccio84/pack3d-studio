@@ -66,6 +66,12 @@ sono in GADGET.md.
   disco (`PACK3D_CACHE`), per tutti i lavoratori. Chi vuole i tracciati della
   fustella li chiede li' (`extract`, `plancia.tratti`, il ripiego del
   flowpack), non a pdfplumber.
+- `pack3d/strade.py`: le strade di lettura della fustella - per colore, coi
+  tratti riuniti, per geometria, senza una penna dubbia - e il punteggio che
+  sceglie fra le letture dell'astuccio, con quote e grafica; due letture
+  quasi alla pari sono un dubbio dichiarato. Le letture candidate di una
+  fustella e il loro costo geometrico stanno in `dieline.letture_carton`
+  (regole/astucci.md, *Le letture a punteggio*).
 - `pack3d/statistiche.py`: dove il codice si ferma sui PDF veri, senza nomi
   - letture, costruzioni, fermate col loro motivo, verdetti dell'AI - in
   `/api/statistiche`; lo Space le salva da solo nel registro ogni giorno e
@@ -120,7 +126,7 @@ sono in GADGET.md.
 
 | famiglia | moduli |
 |---|---|
-| astuccio | `dieline.py` (fustella: `extract`, `solve_carton`), `folding.py` (piegatura, `build_faces`), `incisioni.py` (tagli dentro le facce), `apertura.py` (strappo aperto), `rilievo.py` (embossing), `lamina.py` (foil: metallo sulla scatola a prisma) |
+| astuccio | `dieline.py` (fustella: `extract`, `letture_carton`, `solve_carton`), `strade.py` (le strade e il punteggio), `folding.py` (piegatura, `build_faces`), `incisioni.py` (tagli dentro le facce), `apertura.py` (strappo aperto), `rilievo.py` (embossing), `lamina.py` (foil: metallo sulla scatola a prisma) |
 | scatola a punta | `punta.py` |
 | tubo a cono (settore di corona, fondo saldato piatto) | `tubo.py`, montato in `famiglie.tubo.build_tubo`; `gelato.py` (il ghiacciolo che esce dalla bocca, a scelta) |
 | scatola a prisma (fondo poligonale e coperchio a calzare) | `prisma.py`, montata in `famiglie.coppa.build_prisma` |
