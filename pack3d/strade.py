@@ -640,7 +640,7 @@ def strade_buone(es):
             } - {("colore", None)}
 
 
-def letture(pdf, page_no=0, giro=0, cartotecnico=False, solo=None):
+def letture(pdf, page_no=0, giro=0, cartotecnico=False, solo=None, tutte=False):
     """Tutte le letture dell'astuccio su questo foglio, col costo intero, e il
     verdetto (`Esito`).
 
@@ -650,7 +650,9 @@ def letture(pdf, page_no=0, giro=0, cartotecnico=False, solo=None):
     tornano, o le quote la smentiscono - tutte le altre (`altre_fustelle`),
     solo se il disegno per colore si legge da cartotecnico, come prima, o se
     il pack e' dichiarato tale (`cartotecnico`). `solo`, se c'e', le strade
-    da rifare (`strade_buone`); `set()` nessuna, solo quella per colore."""
+    da rifare (`strade_buone`); `set()` nessuna, solo quella per colore.
+    `tutte`: tutte le strade anche se quella per colore e' forte, per
+    misurare i margini (`prove/punteggi.py`)."""
     ctx = Contesto(pdf, page_no)
     pag = Pagina(pdf, page_no)
     colore = pag.per_colore(list(pag.t.segmenti))
@@ -669,8 +671,8 @@ def letture(pdf, page_no=0, giro=0, cartotecnico=False, solo=None):
     es = Esito(colore=copy.copy(f0.d))
     es.colore.kind = tipo
     es.letture = _leggi(f0, pdf, giro, es)
-    if ((tipo in ("carton", "unknown") or cartotecnico)
-            and not forte(dl.migliore(es.letture), ctx) and solo != set()):
+    if ((tipo in ("carton", "unknown") or cartotecnico) and solo != set()
+            and (tutte or not forte(dl.migliore(es.letture), ctx))):
         for f in altre_fustelle(pag, colore, viste, solo):
             es.letture += _leggi(f, pdf, giro, es)
     plaus = dl.plausibili(es.letture)
