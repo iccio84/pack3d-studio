@@ -31,7 +31,8 @@ def build(args):
         # nel verso della grafica, come il server: vedi
         # `artwork.astuccio_sulla_grafica`. Da qui in avanti `pdf` e' la
         # copia girata, se il foglio andava girato.
-        pdf, d, gradi, giro = artwork.astuccio_sulla_grafica(args.pdf)
+        pdf, d, gradi, giro = artwork.astuccio_sulla_grafica(
+            args.pdf, cartotecnico=args.kind == "carton")
     else:
         pdf, gradi = args.pdf, 0
         d = dl.analyze(pdf, kind=args.kind)

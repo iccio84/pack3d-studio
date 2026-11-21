@@ -73,6 +73,15 @@ class Dieline:
     # Il fondo a tetto, a soffietto dentro la scatola: (dove sta la cresta,
     # in mm dal fronte, quanto sale), o None per il fondo piatto. Vedi `_tetto`.
     tetto: tuple | None = None
+    # Come e' stato letto l'astuccio (`letture_carton`, `pack3d.strade`): la
+    # forma, la strada della fustella, le correzioni alle fasce, il costo con
+    # le sue voci; `dubbio` dice la seconda lettura quando e' quasi alla pari.
+    forma: str = ""
+    strada: str = "colore"
+    correzioni: tuple = ()
+    costo: float = 0.0
+    voci: dict = field(default_factory=dict)
+    dubbio: str = ""
 
     def cols_in_row(self, y0, y1, cover=0.8):
         """Cordonature verticali che attraversano davvero la fascia [y0, y1]."""
@@ -1311,11 +1320,10 @@ def _penne_fustella_pulite(segs, numeri, page_w, page_h, tutti=None):
     return nuove
 
 
-def extract(pdf_path: str, page_no: int = 0) -> Dieline:
-    t = tratti(pdf_path, page_no)
-    all_segs = list(t.segmenti)
-    pens = _technical_pens(all_segs, t.larghezza, t.altezza)
-    segs = [s for s in all_segs if s[4] in pens] or all_segs
+def testo_del_disegno(pdf_path, page_no=0):
+    """`(numeri, lettere)` della pagina, per riconoscere quote e legenda: i
+    numeri in punti come li vuole `_largest_cluster`, le lettere come le da'
+    `lettere`. Vuoti se il testo non si legge."""
     try:
         from .quote import numeri as _numeri
         numeri = [((x if asse == 0 else q) / PT2MM, (q if asse == 0 else x) / PT2MM, v)
@@ -1326,19 +1334,45 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
         caratteri = lettere(pdf_path, page_no)
     except Exception:
         caratteri = None
-    segs = _largest_cluster(segs, dettaglio=lambda r: _colori(
-        pdf_path, r, page_no), numeri=numeri, lettere=caratteri)
+    return numeri, caratteri
+
+
+def fustella_per_colore(all_segs, page_w, page_h, numeri=(), caratteri=None,
+                        dettaglio=None):
+    """I tratti della fustella scelti per PENNA, la lettura di sempre: le
+    penne tecniche, il gruppo connesso piu' esteso, poi via le penne che non
+    sono fustella, di quote e di riquadri. E' la prima strada di
+    `pack3d.strade`; le altre le danno tratti diversi."""
+    pens = _technical_pens(all_segs, page_w, page_h)
+    segs = [s for s in all_segs if s[4] in pens] or all_segs
+    segs = _largest_cluster(segs, dettaglio=dettaglio, numeri=numeri,
+                            lettere=caratteri)
     # Fra le penne tecniche tenute qui sopra ce ne puo' essere una che non
     # e' fustella: si scarta adesso, dopo il raggruppamento spaziale, cioe'
     # guardando solo quello che sta sulla fustella.
     # Anche le penne di quote e di riquadri: `_penne_fustella_pulite`.
-    fustella = _penne_fustella_pulite(segs, numeri, t.larghezza, t.altezza,
+    fustella = _penne_fustella_pulite(segs, numeri, page_w, page_h,
                                       tutti=all_segs)
     if fustella:
         gia = {s[4] for s in segs}
         segs = ([s for s in segs if s[4] in fustella]
                 + [s for s in all_segs if s[4] in fustella and s[4] not in gia]) or segs
+    return segs
 
+
+def extract(pdf_path: str, page_no: int = 0) -> Dieline:
+    t = tratti(pdf_path, page_no)
+    numeri, caratteri = testo_del_disegno(pdf_path, page_no)
+    segs = fustella_per_colore(list(t.segmenti), t.larghezza, t.altezza,
+                               numeri, caratteri,
+                               dettaglio=lambda r: _colori(pdf_path, r, page_no))
+    return griglia(segs, t.larghezza, t.altezza)
+
+
+def griglia(segs, page_w, page_h) -> Dieline:
+    """La griglia di righe e colonne dai tratti della fustella: il riquadro,
+    le cordonature lunghe raggruppate, i tratti tenuti. Vale per tutte le
+    strade (`pack3d.strade`)."""
     bx0 = by0 = 1e9
     bx1 = by1 = -1e9
     for kind, c, a, b, st in segs:
@@ -1372,7 +1406,7 @@ def extract(pdf_path: str, page_no: int = 0) -> Dieline:
         if not any(abs(v - y) < 2.5 for y in ys):
             ys.append(v)
     xs.sort(); ys.sort()
-    d = Dieline(t.larghezza, t.altezza, bbox, xs, ys)
+    d = Dieline(page_w, page_h, bbox, xs, ys)
     d.vsegs = [(c, a, b) for k, c, a, b, st in segs if k == "V"]
     d.hsegs = [(c, a, b) for k, c, a, b, st in segs if k == "H"]
     return d
@@ -1626,55 +1660,127 @@ def cresta(D, a, b):
     return x, math.sqrt(max(a * a - x * x, 0.0))
 
 
-def solve_carton(d: Dieline) -> Dieline:
-    """Ruoli dei pannelli di un astuccio a fasciatura verticale.
+# --------------------------------------------------------------------------- #
+# le letture candidate di un astuccio, e il loro costo
+# --------------------------------------------------------------------------- #
+# Il 20 novembre 2026 il proprietario: il deterministico deve fallire il meno
+# possibile, anche a costo di tempo (regole/astucci.md, *Le letture a
+# punteggio*). Fino ad allora `solve_carton` confrontava le fasce con poche
+# sequenze fisse e vinceva la prima che passava; due ripieghi, uno per caso -
+# il riquadro a strappo del pane ripieno T10, il fondo a tetto del T15 - si
+# provavano in fila. Adesso si fanno tutte le letture, le serie di fasce
+# candidate per tutte le forme, ognuna col suo costo, e vince la migliore; la
+# lettura di prima, se c'e', vince a pari merito (`PRECEDENZA`). Le altre
+# strade della fustella e il resto del punteggio - quote e grafica - stanno in
+# `pack3d.strade`.
 
-    Due famiglie, e la fustella dice quale: chiuso, con retro e fronte della
-    stessa altezza, oppure aperto, con una faccia grande sola. Vedi `_chiuso` e
-    `_aperto`.
-    """
-    def leggi(rows):
-        return (_chiuso(rows, fianchi=lambda i: _ha_fianchi(d, rows[i]))
-                or _aperto(rows))
+# Quanto costa una correzione delle fasce: poco, cosi' a pari misure vince la
+# lettura piu' vicina al disegno.
+COSTO_CORREZIONE = 0.1
+# Quanto deve costare meno un'altra lettura per battere quella di prima.
+PRECEDENZA = 0.3
+# Oltre questo costo una lettura che non e' quella di prima non vale: e'
+# un astuccio che non torna. Sulla scatola a punta T6 le unioni davano un
+# fondo a tetto coi fianchi larghi il 41% piu' della profondita' (costo 4,2):
+# la punta non e' un astuccio, e deve leggerla `pack3d.punta`.
+COSTO_MAX = 2.0
+# Una voce sola non conta piu' di tanto: una lettura sbagliata in una cosa
+# sola non deve sembrare peggio di una sbagliata in tutto.
+VOCE_MAX = 5.0
+# Le tolleranze di sempre diventano l'unita' del costo: uno scarto pari alla
+# tolleranza costa 1.
+TOL_ALTI = 0.08          # fronte e retro alti uguali (`_chiuso`)
+TOL_PROFONDI = 0.25      # cielo e fondo di un chiuso (il fondo di `_chiuso`)
+TOL_APERTO = 0.10        # cielo e fondo di un aperto (`_aperto`)
+TOL_FIANCHI = 0.08       # i fianchi larghi quanto la profondita'
+TOL_LARGHI = 0.03        # fronte e retro larghi uguali, fasciatura orizzontale
+TOL_ALETTE = 0.06        # le alette di testa profonde come la scatola (`check`)
+# Una faccia che manca; un'aletta presa per faccia, o una falda del retro
+# alta quasi come il fronte, che e' un retro.
+COSTO_FACCIA = 2.0
+COSTO_ALETTA = 3.0
+# Sotto i sei decimi dell'altra, il cielo o il fondo e' un'aletta: girata di
+# 180 gradi la punta T6 dava un "fondo" da 3,4 mm.
+ALETTA = 0.6
+FALDA_RETRO = 0.85
+# Le voci del costo che vengono da fuori del disegno (`pack3d.strade`).
+EVIDENZE = ("grafica", "quote", "copertura")
+# Le facce come le chiamano gli errori.
+NOMI_FACCE = {"top": "il cielo", "bottom": "il fondo", "back": "il retro",
+              "front": "il fronte", "left": "il fianco sinistro",
+              "right": "il fianco destro"}
 
-    rows = _fasce_del_corpo(d)
-    ruoli = leggi(rows)
-    if ruoli is None:
-        # Solo se la lettura coi riquadri non trova la scatola, e solo se
-        # senza ne esce una scatola intera - retro, fronte, cielo e fondo:
-        # sulla scatola a punta lo stesso riquadro a strappo, tolto, ne
-        # faceva un astuccio senza fondo (regole/astucci.md, la scatola a
-        # linguetta).
-        senza = _fasce_del_corpo(d, riquadri=False)
-        if senza != rows:
-            r2 = leggi(senza)
-            if r2 is not None and all(k in r2 for k in
-                                      ("back", "front", "top", "bottom")):
-                # cielo e fondo devono essere facce tutte e due: girata di
-                # 180 gradi la punta T6 dava un "fondo" da 3,4 mm, un'aletta
-                ht = senza[r2["top"]][2]
-                hb = senza[r2["bottom"]][2]
-                if min(ht, hb) >= 0.6 * max(ht, hb):
-                    ruoli, rows = r2, senza
-    if ruoli is None:
-        # il fondo a tetto: vedi `_tetto`. Coi riquadri e senza: sul T15 il
-        # riquadro della prima falda la spezza in 10 + 16 + 23
-        for cand in (rows, _fasce_del_corpo(d, riquadri=False)):
-            t = _tetto(cand, lambda i, c=cand: _ha_fianchi(d, c[i]))
-            if t is not None:
-                ruoli, rows = t
-                break
+
+@dataclass
+class Lettura:
+    """Una lettura candidata dell'astuccio: la forma, le fasce usate, i ruoli
+    e le correzioni che l'hanno data; `d` l'astuccio risolto - una copia
+    della fustella coi pannelli - oppure `scartata` col motivo. `prima` e' la
+    lettura che si faceva prima del 21 novembre 2026, quella che vince a pari
+    merito. Strada, giro e voti li aggiunge `pack3d.strade`."""
+    forma: str
+    rows: list
+    ruoli: dict
+    correzioni: tuple = ()
+    d: object = None
+    voci: dict = field(default_factory=dict)
+    costo: float = 0.0
+    scartata: str = ""
+    prima: bool = False
+    strada: str = "colore"
+    giro: int = 0
+    pdf: object = None
+    voti: dict = field(default_factory=dict)
+
+    @property
+    def valida(self):
+        return self.d is not None and not self.scartata
+
+    @property
+    def geometrico(self):
+        """Il costo che dice il disegno da solo - le misure e le correzioni -
+        senza le prove di fuori (quote, grafica, copertura): e' quello che
+        decide se una lettura e' plausibile (`plausibili`)."""
+        return round(sum(v for k, v in self.voci.items() if k not in EVIDENZE), 3)
+
+    def descrivi(self):
+        """La lettura in una riga: misure, forma, strada e correzioni."""
+        d = self.d
+        cosa = ("%.1f x %.1f x %.1f mm" % d.dims_mm) if d is not None else "-"
+        come = [self.forma or "astuccio"]
+        if self.strada != "colore":
+            come.append(self.strada)
+        come += list(self.correzioni)
+        if self.giro:
+            come.append("foglio girato di %d gradi" % self.giro)
+        return "%s (%s)" % (cosa, "; ".join(come))
+
+
+def stesso_modello(a, b, tol=1.5, rel=0.02):
+    """Se due letture danno lo stesso astuccio, anche arrivandoci da strade
+    diverse: stessa forma, stesse facce, stesso giro, misure entro `tol` mm o
+    `rel` della misura. Un millimetro e mezzo su un retro da 138 (la seconda
+    lettura del pane ripieno T10, con la fascia da 3 mm fuori) non e' un
+    altro astuccio; 252 contro 271 di larghezza si'."""
+    da, db = a.d, b.d
+
+    def vicine(x, y):
+        return abs(x - y) <= max(tol, rel * max(x, y))
+    return (da.layout == db.layout and da.chiuso == db.chiuso
+            and a.giro == b.giro and set(da.panels) == set(db.panels)
+            and all(vicine(x, y) for x, y in zip(da.dims_mm, db.dims_mm))
+            and vicine(da.finestra_mm, db.finestra_mm))
+
+
+def _pannelli(d, rows, ruoli):
+    """L'astuccio di una lettura: una copia di `d` coi pannelli, le misure e
+    i controlli che il disegno impone, o ValueError col motivo."""
+    import copy
+    d = copy.copy(d)
 
     def fasce():
         """Le fasce misurate, per gli errori: senza numeri non si diagnostica."""
         return [round(r[2] * PT2MM, 1) for r in rows]
-
-    if ruoli is None:
-        raise ValueError(
-            "astuccio: la sequenza delle fasce non e' ne' quella di un "
-            "astuccio chiuso (retro e fronte alti uguali) ne' quella di uno "
-            "aperto (cielo e fondo uguali attorno a una faccia sola). "
-            "Fasce (mm): %s" % fasce())
 
     # I fianchi si cercano sulla griglia valida per la fascia a cui sono
     # agganciati: le alette di presa del cielo non attraversano quella fascia.
@@ -1756,6 +1862,352 @@ def solve_carton(d: Dieline) -> Dieline:
     d.kind = "carton"
     d.dims_mm = (round(W, 1), round(H, 1), round(D, 1))
     return d
+
+
+def _scarto(a, b):
+    return abs(a - b) / max(a, b, 1e-9)
+
+
+def costo_misure(d):
+    """Le voci del costo di un astuccio risolto che il disegno dice da solo:
+    quanto non tornano fra loro le misure delle facce. Nessuna voce e' un
+    astuccio che torna in tutto.
+
+    - fronte e retro alti uguali, sono la stessa faccia vista da due parti;
+    - cielo e fondo profondi uguali (non sul fondo a tetto: le falde sono
+      piu' corte apposta); sotto i sei decimi uno dei due e' un'aletta;
+    - **i fianchi larghi quanto la profondita'**: sull'astuccio chiuso prima
+      non si guardava, ed e' quello che smentisce una colonna in piu' (la
+      catena delle quote del T2x12, quando i numeri non si leggono, faceva un
+      fianco di 18,6 mm su una scatola profonda 45);
+    - le facce che mancano;
+    - su un aperto, una falda del retro alta quasi come il fronte e' un retro.
+    """
+    P = d.panels
+    W, H, D = d.dims_mm
+    voci = {}
+
+    def voce(nome, v):
+        if v > 1e-6:
+            voci[nome] = round(min(v, VOCE_MAX), 3)
+
+    if d.layout == "hwrap":
+        voce("fronte e retro", _scarto(P["front"].w_mm, P["back"].w_mm) / TOL_LARGHI)
+        voce("fianchi", _scarto(P["left"].w_mm, P["right"].w_mm) / TOL_FIANCHI)
+        for k in ("top", "bottom"):
+            if k in P:
+                voce("aletta di testa",
+                     abs(P[k].h_mm - D - d.curva_mm) / max(D, 1.0) / TOL_ALETTE)
+            else:
+                voce("manca " + NOMI_FACCE[k], COSTO_FACCIA)
+        return voci
+    if "front" in P and "back" in P:
+        voce("fronte e retro", _scarto(P["front"].h_mm, P["back"].h_mm) / TOL_ALTI)
+    if "top" in P and "bottom" in P and not d.tetto:
+        a, b = P["top"].h_mm, P["bottom"].h_mm
+        voce("cielo e fondo", _scarto(a, b) / (TOL_PROFONDI if d.chiuso else TOL_APERTO))
+        if min(a, b) < ALETTA * max(a, b):
+            voce("aletta presa per faccia", COSTO_ALETTA)
+    for k in ("top", "bottom"):
+        if k not in P:
+            voce("manca " + NOMI_FACCE[k], COSTO_FACCIA)
+    fianchi = [P[k].w_mm for k in ("left", "right") if k in P]
+    if not fianchi:
+        voce("mancano i fianchi", COSTO_FACCIA)
+    else:
+        voce("fianchi", sum(_scarto(w, D) for w in fianchi) / len(fianchi) / TOL_FIANCHI)
+        if len(fianchi) == 1:
+            voce("un fianco solo", COSTO_FACCIA / 2.0)
+    if not d.chiuso:
+        alta = max((P[k].h_mm for k in ("back_top", "back_bottom") if k in P),
+                   default=0.0)
+        if alta >= FALDA_RETRO * H:
+            voce("falda alta come il fronte", COSTO_ALETTA)
+    return voci
+
+
+def riga_debole(d, y, x0, x1, rientro_mm=1.5, copre=0.9, salto_mm=3.0):
+    """Se la riga `y` della colonna [x0, x1] puo' non essere una piega della
+    fasciatura: non la attraversa tutta (copre meno di `copre`, coi salti di
+    un tratteggio fino a `salto_mm` chiusi), oppure si ferma prima di tutti e
+    due i bordi, come i lati di un riquadro dentro una faccia (il riquadro a
+    strappo del pane ripieno T10 rientra di 3,2 mm per parte, quello della
+    falda del T15 di 7,9). Una piega vera va da bordo a bordo: la cresta del
+    fondo a tetto del T15 copre la colonna intera, e le due falde non si
+    uniscono."""
+    tr = sorted((max(a, x0), min(b, x1)) for c, a, b in d.hsegs
+                if abs(c - y) < 2.5 and b > x0 and a < x1)
+    if not tr:
+        return True
+    salto = salto_mm / PT2MM
+    pezzi = [list(tr[0])]
+    for a, b in tr[1:]:
+        if a - pezzi[-1][1] <= salto:
+            pezzi[-1][1] = max(pezzi[-1][1], b)
+        else:
+            pezzi.append([a, b])
+    coperto = sum(b - a for a, b in pezzi) / max(x1 - x0, 1e-9)
+    r = rientro_mm / PT2MM
+    return coperto < copre or (pezzi[0][0] - x0 >= r and x1 - pezzi[-1][1] >= r)
+
+
+def _gemelle(rows, tol=3.0, rel=0.03, minima=0.2, volte=2, debole=None):
+    """Le serie con due o tre fasce vicine unite, quando insieme tornano con
+    un'altra fascia della serie - la faccia gemella - e le righe fra loro sono
+    deboli (`debole(y)`, di serie `riga_debole`). Sul pane ripieno T10 il
+    riquadro a strappo spezza il retro in 111,3 + 24,2 + 3, che insieme
+    tornano col fronte da 139,2; sul T15 il riquadro della prima falda la
+    spezza in 10 + 16,1 + 23, gemella dell'altra da 49. La gemella deve essere
+    una faccia, non un'aletta: almeno `minima` della fascia piu' alta. Al piu'
+    `volte` unioni per serie: le candidate restano qualche decina.
+    `[(fasce, (perche', ...))]`."""
+    def una(rows):
+        hs = [r[2] * PT2MM for r in rows]
+        alto = max(hs) if hs else 0.0
+        out = []
+        for i in range(len(rows)):
+            for n in (2, 3):
+                j = i + n
+                if j > len(rows):
+                    break
+                if debole is not None and not all(debole(rows[m][0])
+                                                  for m in range(i + 1, j)):
+                    continue
+                s = sum(hs[i:j])
+                for k, h in enumerate(hs):
+                    if i <= k < j or h < minima * alto:
+                        continue
+                    if abs(s - h) <= max(tol, rel * h):
+                        unita = (rows[i][0], rows[j - 1][1], rows[j - 1][1] - rows[i][0])
+                        out.append((list(rows[:i]) + [unita] + list(rows[j:]),
+                                    "unite %s come la fascia da %.1f mm"
+                                    % (" + ".join("%.1f" % v for v in hs[i:j]), h)))
+                        break
+        return out
+
+    fuori = []
+
+    def avanti(rows, fatte, quante):
+        for r, perche in una(rows):
+            fuori.append((r, fatte + (perche,)))
+            if quante > 1:
+                avanti(r, fatte + (perche,), quante - 1)
+    avanti(list(rows), (), volte)
+    return fuori
+
+
+SENZA_RIQUADRI = "senza i riquadri dentro le facce"
+
+
+def serie_candidate(d, rows=None):
+    """Le serie di fasce da provare, col perche' di ognuna: quella di serie
+    (`_fasce_del_corpo`), senza i riquadri dentro le facce
+    (`_senza_riquadri`), e su tutte e due le facce gemelle unite (`_gemelle`).
+    `[(fasce, correzioni)]`, la serie di sempre per prima."""
+    rows = _fasce_del_corpo(d) if rows is None else rows
+    out, viste = [], set()
+
+    def metti(r, corr):
+        k = tuple(round(x[0], 1) for x in r) + ((round(r[-1][1], 1),) if r else ())
+        if k not in viste:
+            viste.add(k)
+            out.append((list(r), corr))
+    metti(rows, ())
+    metti(_fasce_del_corpo(d, riquadri=False), (SENZA_RIQUADRI,))
+    xs = d.xs
+    ci = max(range(len(xs) - 1), key=lambda i: xs[i + 1] - xs[i])
+    deboli = {}
+
+    def debole(y):
+        k = round(y, 2)
+        if k not in deboli:
+            deboli[k] = riga_debole(d, y, xs[ci], xs[ci + 1])
+        return deboli[k]
+    for base, corr in list(out):
+        for r, perche in _gemelle(base, debole=debole):
+            metti(r, corr + perche)
+    return out
+
+
+def forme(d, rows, fianchi=None):
+    """Le forme d'astuccio che questa serie di fasce puo' essere, tutte e non
+    la prima che passa: `[(forma, ruoli, fasce)]`. Chiuso (nelle sue tre
+    letture, che decidono i fianchi: `_chiuso`), aperto (`_aperto`), a tetto
+    (`_tetto`, con le fasce del retro unite)."""
+    if fianchi is None:
+        def fianchi(i):
+            return _ha_fianchi(d, rows[i])
+    out = []
+    r = _chiuso(rows, fianchi=fianchi)
+    if r is not None:
+        out.append(("chiuso", r, rows))
+    r = _aperto(rows)
+    if r is not None:
+        out.append(("aperto", r, rows))
+    t = _tetto(rows, fianchi)
+    if t is not None:
+        out.append(("tetto", t[0], t[1]))
+    return out
+
+
+def _non_intera(d):
+    """Perche' l'astuccio di una lettura con le fasce corrette non vale, o
+    "": una correzione vale solo se ne esce una scatola intera, retro,
+    fronte, cielo e fondo (su un aperto i fianchi al posto del retro), e cielo
+    e fondo facce tutte e due. Sulla scatola a punta il riquadro a strappo,
+    tolto, ne faceva un astuccio senza fondo."""
+    P = d.panels
+    servono = (("back", "front", "top", "bottom") if d.chiuso
+               else ("front", "top", "bottom", "left", "right"))
+    manca = [NOMI_FACCE[k] for k in servono if k not in P]
+    if manca:
+        return "scatola non intera: manca %s" % ", ".join(manca)
+    if not d.tetto:
+        a, b = P["top"].h_mm, P["bottom"].h_mm
+        if min(a, b) < ALETTA * max(a, b):
+            return ("cielo da %.1f e fondo da %.1f mm: uno dei due e' un'aletta"
+                    % (a, b))
+    return ""
+
+
+def letture_carton(d):
+    """Tutte le letture candidate dell'astuccio a fasciatura verticale `d`:
+    le serie di fasce (`serie_candidate`) per le forme (`forme`), ognuna
+    risolta (`_pannelli`) e col suo costo (`costo_misure`, piu'
+    `COSTO_CORREZIONE` per ogni correzione). Una lettura con le fasce
+    corrette vale solo se la scatola e' intera (`_non_intera`). `prima` e'
+    quella che si faceva prima (`_segna_la_prima`)."""
+    sa = {}
+
+    def ha_fianchi(riga):
+        k = (round(riga[0], 2), round(riga[1], 2))
+        if k not in sa:
+            sa[k] = _ha_fianchi(d, riga)
+        return sa[k]
+
+    out = []
+    for serie, corr in serie_candidate(d):
+        for forma, ruoli, usate in forme(d, serie,
+                                          lambda i, s=serie: ha_fianchi(s[i])):
+            l = Lettura(forma, usate, ruoli, corr)
+            try:
+                l.d = _pannelli(d, usate, ruoli)
+            except ValueError as e:
+                l.scartata = str(e)
+                out.append(l)
+                continue
+            if corr:
+                l.scartata = _non_intera(l.d)
+            l.voci = costo_misure(l.d)
+            if corr:
+                l.voci["correzioni"] = round(COSTO_CORREZIONE * len(corr), 3)
+            l.costo = round(sum(l.voci.values()), 3)
+            out.append(l)
+    _segna_la_prima(out)
+    return out
+
+
+def _segna_la_prima(letture):
+    """Quale lettura si faceva prima del 21 novembre 2026, quando vinceva la
+    prima che passava: la serie di sempre, chiuso o aperto; se non c'era,
+    senza i riquadri, ma solo un chiuso intero; se no il fondo a tetto, coi
+    riquadri e senza. Se quella c'era ma il disegno la smentiva, prima si
+    fermava: allora nessuna e' `prima`, e vince la migliore."""
+    serie = [l for l in letture if not l.correzioni]
+    senza = [l for l in letture if l.correzioni == (SENZA_RIQUADRI,)]
+    primo = next((l for l in serie if l.forma in ("chiuso", "aperto")), None)
+    if primo is not None:
+        primo.prima = primo.valida
+        return
+    primo = next((l for l in senza if l.forma in ("chiuso", "aperto")), None)
+    if primo is not None and primo.forma == "chiuso" and primo.valida:
+        primo.prima = True
+        return
+    for gruppo in (serie, senza):
+        for l in gruppo:
+            if l.forma == "tetto":
+                l.prima = l.valida
+                return
+
+
+def plausibili(letture, costo_max=COSTO_MAX):
+    """Le letture che possono vincere: quella di prima se vale, come prima;
+    le altre se valgono e il loro costo geometrico (`Lettura.geometrico`) e'
+    al piu' `costo_max`."""
+    return [l for l in letture
+            if l.valida and (l.prima or l.geometrico <= costo_max)]
+
+
+def migliore(letture, precedenza=PRECEDENZA):
+    """La lettura che vince fra le plausibili (`plausibili`): il costo piu'
+    basso, ma quella di prima (`prima`), se c'e', a meno di `precedenza`.
+    None se nessuna vale."""
+    valide = plausibili(letture)
+    if not valide:
+        return None
+    best = min(valide, key=lambda l: l.costo)
+    prima = next((l for l in valide if l.prima), None)
+    if prima is not None and prima.costo <= best.costo + precedenza:
+        return prima
+    return best
+
+
+def perche_no(d, letture):
+    """L'errore quando nessuna lettura vale: quello di prima - la condizione
+    mancata della lettura che si faceva, o la sequenza delle fasce che non e'
+    nessuna forma - e dopo quante se ne sono provate, con la piu' vicina e il
+    motivo per cui e' scartata."""
+    fasce = [round(r[2] * PT2MM, 1) for r in _fasce_del_corpo(d)]
+    serie = [l for l in letture if not l.correzioni]
+    primo = next((l for l in serie if l.forma in ("chiuso", "aperto")), None)
+    if primo is not None:
+        msg = primo.scartata
+    else:
+        msg = ("astuccio: la sequenza delle fasce non e' ne' quella di un "
+               "astuccio chiuso (retro e fronte alti uguali) ne' quella di uno "
+               "aperto (cielo e fondo uguali attorno a una faccia sola). "
+               "Fasce (mm): %s" % fasce)
+    for l in letture:
+        if l.valida and not l.prima and l.geometrico > COSTO_MAX:
+            l.scartata = ("non torna: costo %.1f oltre %.1f (%s)" % (
+                l.geometrico, COSTO_MAX, ", ".join("%s %.1f" % kv for kv in
+                                                   sorted(l.voci.items(),
+                                                          key=lambda kv: -kv[1])[:3])))
+    altre = [l for l in letture if l is not primo and l.scartata]
+    if altre:
+        con_costo = [l for l in altre if l.d is not None]
+        vicina = (min(con_costo, key=lambda l: l.costo) if con_costo
+                  else altre[0])
+        msg += (" Provate %d letture, nessuna vale; la piu' vicina, %s %s, "
+                "e' scartata: %s" % (len(letture), vicina.forma,
+                                     "(%s)" % "; ".join(vicina.correzioni)
+                                     if vicina.correzioni else "di serie",
+                                     vicina.scartata[:160]))
+    return msg
+
+
+def _applica(l):
+    """L'astuccio della lettura scelta, con scritto come e' stato letto."""
+    d = l.d
+    d.forma, d.correzioni = l.forma, tuple(l.correzioni)
+    d.costo, d.voci, d.strada = l.costo, dict(l.voci), l.strada
+    return d
+
+
+def solve_carton(d: Dieline) -> Dieline:
+    """Ruoli dei pannelli di un astuccio a fasciatura verticale: la lettura
+    migliore fra le candidate (`letture_carton`, `migliore`).
+
+    Due famiglie, e la fustella dice quale: chiuso, con retro e fronte della
+    stessa altezza, oppure aperto, con una faccia grande sola; e il fondo a
+    tetto. Vedi `_chiuso`, `_aperto` e `_tetto`. Se nessuna lettura vale,
+    l'errore dice le fasce e la lettura piu' vicina (`perche_no`).
+    """
+    letture = letture_carton(d)
+    l = migliore(letture)
+    if l is None:
+        raise ValueError(perche_no(d, letture))
+    return _applica(l)
 
 
 def _alternating_run(widths, tol=0.06, contrast=0.12):

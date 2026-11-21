@@ -449,6 +449,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - Astucci
   - La griglia non tollera un intruso
   - Quando il solutore non sa, deve dirlo
+  - Le letture a punteggio
   - Un astuccio puo' non chiudersi
     - Il retro e' la faccia che porta i fianchi
     - Se i fianchi li portano tutte e due, si vedono quelli stampati

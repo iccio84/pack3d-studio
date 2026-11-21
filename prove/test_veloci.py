@@ -213,7 +213,7 @@ class RegistroDelleFamiglie(unittest.TestCase):
         vuoto = mock.Mock(panels=[])
         with tempfile.TemporaryDirectory() as c, \
                 mock.patch.object(artwork, "astuccio_sulla_grafica",
-                                  side_effect=lambda p: (p, vuoto, 0, None)), \
+                                  side_effect=lambda p, **_k: (p, vuoto, 0, None)), \
                 mock.patch.object(coppa, "e_un_cono", return_value=False), \
                 mock.patch.object(coppa, "riconosci", return_value=None), \
                 mock.patch.object(coppa, "leggi_disco", return_value=None), \
@@ -1562,6 +1562,158 @@ class FondoATetto(unittest.TestCase):
         # come `folding._normale`) guarda in giu'
         n = -np.cross(fondo[1] - fondo[0], fondo[3] - fondo[0])
         self.assertLess(n[1], 0)
+
+
+class LettureAPunteggio(unittest.TestCase):
+    """Le letture a punteggio (`dieline.letture_carton`, `pack3d.strade`): le
+    fasce gemelle unite solo sopra le righe deboli, il costo delle misure,
+    la lettura di prima a pari merito, il dubbio, e le strade della fustella
+    - i tratti riuniti, la geometria, le penne dubbie - senza PDF."""
+
+    P = 1 / dl.PT2MM
+
+    @staticmethod
+    def _fasce(*mm):
+        return FondoATetto._fasce(*mm)
+
+    @staticmethod
+    def _mm(rows):
+        return [round(r[2] * dl.PT2MM, 1) for r in rows]
+
+    def test_il_retro_spezzato_dal_riquadro_torna_col_fronte(self):
+        # pane ripieno T10: il riquadro a strappo spezza il retro in tre
+        rows = self._fasce(16, 16, 46.3, 139.2, 56.5, 111.3, 24.2, 3.0, 6.0, 18.0)
+        deboli = {round(rows[6][0], 2), round(rows[7][0], 2)}
+        serie = dl._gemelle(rows, debole=lambda y: round(y, 2) in deboli)
+        tutte = [self._mm(s) for s, _ in serie]
+        self.assertIn([16.0, 16.0, 46.3, 139.2, 56.5, 138.5, 6.0, 18.0], tutte)
+        # sopra una riga forte non si unisce niente: il cielo resta fuori dal fronte
+        self.assertFalse(any(185.5 in s for s in tutte))
+
+    def test_la_falda_spezzata_e_il_tetto(self):
+        # pane ripieno T15: la prima falda spezzata dal riquadro, il retro da una riga
+        rows = self._fasce(16, 16, 72.7, 139.8, 10, 16.1, 23, 49, 109, 29)
+        deboli = {round(rows[5][0], 2), round(rows[6][0], 2)}
+        serie = dl._gemelle(rows, debole=lambda y: round(y, 2) in deboli)
+        unita = next(s for s, _ in serie
+                     if self._mm(s)[:6] == [16.0, 16.0, 72.7, 139.8, 49.1, 49.0])
+        forme = {f: (r, u) for f, r, u in dl.forme(None, unita, fianchi=lambda i: i == 3)}
+        self.assertIn("tetto", forme)
+        ruoli, usate = forme["tetto"]
+        self.assertAlmostEqual(usate[ruoli["back"]][2] * dl.PT2MM, 138.0, places=1)
+        # la cresta del tetto e' una riga forte: la seconda meta' della falda
+        # spezzata (23) non si unisce alla falda da 49 come se fosse un fondo
+        # profondo quanto il cielo (72)
+        self.assertFalse(any(72.0 in self._mm(s) for s, _ in serie))
+
+    def _astuccio(self, W=271.0, H=100.0, D=45.0, sx=46.0, dx=46.0, chiuso=True,
+                  falda=None):
+        """Un astuccio risolto, coi pannelli in punti: retro, cielo, fronte,
+        fondo, i fianchi sul retro; aperto, con una falda del retro alta
+        `falda`."""
+        p, x0 = self.P, 100.0
+        y = [0.0, H, H + D, 2 * H + D, 2 * H + 2 * D]
+        P = {"top": dl.Panel(x0, y[1] * p, x0 + W * p, y[2] * p, "top"),
+             "front": dl.Panel(x0, y[2] * p, x0 + W * p, y[3] * p, "front"),
+             "bottom": dl.Panel(x0, y[3] * p, x0 + W * p, y[4] * p, "bottom"),
+             "left": dl.Panel(x0 - sx * p, 0, x0, H * p, "left"),
+             "right": dl.Panel(x0 + W * p, 0, x0 + (W + dx) * p, H * p, "right")}
+        if chiuso:
+            P["back"] = dl.Panel(x0, 0, x0 + W * p, H * p, "back")
+        elif falda:
+            P["back_top"] = dl.Panel(x0, (H - falda) * p, x0 + W * p, H * p, "back_top")
+        d = dl.Dieline(2000.0, 2000.0, (0, 0, 1000, 1000), panels=P, kind="carton",
+                       layout="vwrap", chiuso=chiuso, dims_mm=(W, H, D))
+        return d
+
+    def test_i_fianchi_contro_la_profondita(self):
+        giusto = dl.costo_misure(self._astuccio())
+        # la catena delle quote presa per colonna: un fianco da 18,6 mm su 45
+        quota = dl.costo_misure(self._astuccio(dx=18.6))
+        self.assertLess(giusto.get("fianchi", 0), 0.5)
+        self.assertGreater(quota["fianchi"], 3.0)
+        # aperto, una falda alta quasi come il fronte e' un retro
+        falda = dl.costo_misure(self._astuccio(chiuso=False, falda=99.0))
+        self.assertIn("falda alta come il fronte", falda)
+        self.assertNotIn("falda alta come il fronte",
+                         dl.costo_misure(self._astuccio(chiuso=False, falda=33.5)))
+
+    def _lettura(self, costo, prima=False, **kw):
+        l = dl.Lettura("chiuso", [], {}, () if prima else ("una correzione",))
+        l.d = self._astuccio(**kw)
+        l.voci = {"misure": costo}
+        l.costo, l.prima = costo, prima
+        return l
+
+    def test_vince_la_prima_a_pari_merito_e_il_dubbio_si_dice(self):
+        from pack3d import strade
+        prima = self._lettura(0.3, prima=True)
+        uguale = self._lettura(0.1)                 # lo stesso astuccio
+        best, dubbio = strade.scegli([prima, uguale])
+        self.assertIs(best, prima)
+        self.assertEqual(dubbio, "")
+        diversa = self._lettura(0.1, W=252.5)       # un altro astuccio, meglio
+        best, dubbio = strade.scegli([prima, diversa])
+        self.assertIs(best, prima)
+        self.assertTrue(dubbio.startswith("DUBBIO DI LETTURA"))
+        self.assertIn("252.5", dubbio)
+        # la prima che non torna perde: la catena delle quote presa per colonna
+        sbagliata = self._lettura(8.85, prima=True, W=252.5)
+        giusta = self._lettura(0.5)
+        best, dubbio = strade.scegli([sbagliata, giusta])
+        self.assertIs(best, giusta)
+        self.assertEqual(dubbio, "")
+        # e una lettura che non e' la prima vale solo se torna
+        self.assertEqual(dl.plausibili([self._lettura(4.2)]), [])
+
+    def test_i_pezzi_di_una_linea_si_riuniscono(self):
+        from pack3d import strade
+        nero, rosso = (0.5, "nero"), (0.5, "rosso")
+        pezzi = [("H", 100.0, 10.0 + 8.5 * i, 10.0 + 8.5 * (i + 1), nero)
+                 for i in range(10)]
+        out = strade.unisci(pezzi + [("H", 100.2, 10.0, 95.0, rosso),
+                                     ("H", 140.0, 10.0, 50.0, nero)])
+        neri = sorted((round(c, 2), round(a, 2), round(b, 2))
+                      for k, c, a, b, st in out if st == nero)
+        self.assertEqual(neri, [(100.0, 10.0, 95.0), (140.0, 10.0, 50.0)])
+        self.assertEqual(sum(1 for s in out if s[4] == rosso), 1)
+
+    @staticmethod
+    def _rettangolo(x0, y0, x1, y1, st):
+        return [("H", y0, x0, x1, st), ("H", y1, x0, x1, st),
+                ("V", x0, y0, y1, st), ("V", x1, y0, y1, st)]
+
+    def test_la_fustella_per_geometria(self):
+        from pack3d import strade
+        st = (0.5, "qualunque")
+        fustella = (self._rettangolo(100, 100, 500, 300, st)
+                    + [("V", 250.0, 100.0, 300.0, (0.3, "un'altra"))])
+        legenda = self._rettangolo(510, 100, 560, 140, st)     # vicina, non tocca
+        cornice = self._rettangolo(20, 20, 900, 700, st)       # racchiude tutto
+        t = dl.Tratti(1000.0, 800.0, tuple(fustella + legenda + cornice), ())
+        out = strade.per_geometria(t)
+        self.assertEqual(sorted(out), sorted(fustella))
+
+    def test_la_penna_che_finisce_sulle_altre_non_e_dubbia(self):
+        from pack3d import strade
+        taglio, piega, quota = (0.5, "taglio"), (0.5, "piega"), (0.5, "quota")
+        segs = (self._rettangolo(100, 100, 500, 300, taglio)
+                + [("V", 250.0, 100.0, 300.0, piega), ("V", 380.0, 100.0, 300.0, piega)]
+                + [("H", 320.0, 100.0, 500.0, quota), ("H", 330.0, 100.0, 250.0, quota)])
+        dubbie = strade.penne_dubbie(segs, 1000.0, 800.0)
+        self.assertIn(quota, dubbie)
+        self.assertNotIn(piega, dubbie)
+
+    def test_la_riga_debole(self):
+        p, x0, x1 = self.P, 100.0, 100.0 + 190.0 * self.P
+        trattini = [(300.0, x0 + i * 22 * p, x0 + (i * 22 + 20) * p) for i in range(9)]
+        d = dl.Dieline(2000.0, 2000.0, (0, 0, 1000, 1000), hsegs=[
+            (100.0, x0, x1),                                   # da bordo a bordo
+            (200.0, x0 + 3.2 * p, x1 - 3.2 * p)] + trattini)   # un riquadro
+        self.assertFalse(dl.riga_debole(d, 100.0, x0, x1))
+        self.assertTrue(dl.riga_debole(d, 200.0, x0, x1))
+        self.assertFalse(dl.riga_debole(d, 300.0, x0, x1 - 2 * p))  # tratteggiata
+        self.assertTrue(dl.riga_debole(d, 400.0, x0, x1))       # non c'e'
 
 
 class DomandaSenzaLucchetto(unittest.TestCase):
