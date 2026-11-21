@@ -66,7 +66,8 @@ from pack3d.famiglie.astuccio import (
     spessore_carta)
 from pack3d.famiglie.coppa import analisi_coppa, in_piu_pezzi
 from pack3d.famiglie.tubo import GELATO
-from pack3d.famiglie.incarto import analisi_incarto_dichiarato, chiusura_incarto
+from pack3d.famiglie.incarto import (analisi_incarto_dichiarato, chiusura_incarto,
+                                     immagine_in_pdf)
 from pack3d.famiglie.riempimento import (
     analisi_riempimento,
     cu_riempimento,
@@ -237,7 +238,7 @@ OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
                 "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura",
                 "gonfio", "plancia", "inclina", "pinne_cromate", "chiusa", "gira",
-                "film_argento")
+                "film_argento", "senza_grafica")
 
 
 # l'immagine del prodotto da incartare: la pagina la rimpicciolisce a 1600 px
@@ -286,13 +287,23 @@ def riga_prodotto(immagine, nome):
 # --------------------------------------------------------------------------- #
 # http
 # --------------------------------------------------------------------------- #
-def _dividi(data, parti):
+def _immagine(blocco):
+    """Il blocco e' un'immagine JPEG, PNG o WebP (dai primi byte)."""
+    return (blocco[:3] == b"\xff\xd8\xff" or blocco[:8] == b"\x89PNG\r\n\x1a\n"
+            or (blocco[:4] == b"RIFF" and blocco[8:12] == b"WEBP"))
+
+
+def _dividi(data, parti, immagini=False):
     """I PDF di un corpo solo: `[bytes]`, o None se `parti` non torna.
 
-    Senza `parti` il corpo e' un PDF solo, com'e' sempre stato.
+    Senza `parti` il corpo e' un PDF solo, com'e' sempre stato. Con
+    `immagini` un pezzo puo' essere anche un'immagine (la grafica di un pezzo
+    d'incarto: il bollino, il pirottino), che chi chiama mette in un PDF.
     """
+    def buono(b):
+        return b.startswith(b"%PDF") or (immagini and _immagine(b))
     if not parti:
-        return [data]
+        return [data] if buono(data) else None
     try:
         lunghe = [int(k) for k in parti]
     except (TypeError, ValueError):
@@ -303,9 +314,24 @@ def _dividi(data, parti):
     for k in lunghe:
         blocchi.append(data[o:o + k])
         o += k
-    if not all(b.startswith(b"%PDF") for b in blocchi):
+    if not all(buono(b) for b in blocchi):
         return None
     return blocchi
+
+
+def senza_grafica(valore, pezzi):
+    """I numeri (da 1) dei pezzi senza grafica - la stagnola della pralina:
+    la pagina non manda il loro file. ValueError se non tornano coi pezzi."""
+    if valore in (None, "", []):
+        return []
+    try:
+        numeri = sorted({int(k) for k in valore})
+    except (TypeError, ValueError):
+        raise ValueError("I pezzi senza grafica si dicono coi loro numeri")
+    if not pezzi or any(k < 1 or k > pezzi for k in numeri):
+        raise ValueError("I pezzi senza grafica devono essere fra i pezzi "
+                         "dichiarati (da 1 a %s)" % (pezzi or "?"))
+    return numeri
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -854,9 +880,14 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(413, "PDF troppo grande (limite %d MB)"
                                   % (MAX_UPLOAD // (1024 * 1024)))
             data = self.rfile.read(n)
-            if not data.startswith(b"%PDF"):
-                return self._send(400, "Il file caricato non e' un PDF")
             opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            # la grafica di un pezzo d'incarto puo' arrivare anche come
+            # immagine (il bollino, il pirottino della pralina): diventa un
+            # PDF di una pagina (`immagine_in_pdf`)
+            con_immagini = (isinstance(opts, dict)
+                            and normalizza_kind(opts.get("kind") or None) == "incarto")
+            if not (data.startswith(b"%PDF") or (con_immagini and _immagine(data))):
+                return self._send(400, "Il file caricato non e' un PDF")
             # la prova dello Space a ogni rilascio non e' un lavoro vero: non
             # conta nelle statistiche (`statistiche.in_prova`)
             statistiche.in_prova(isinstance(opts, dict) and opts.get("prova") is True)
@@ -873,7 +904,7 @@ class Handler(BaseHTTPRequestHandler):
             # Piu' PDF in un corpo solo, uno dopo l'altro: `parti` ne dice le
             # lunghezze. Serve alla coppa, che arriva in due file - lo sleeve
             # e il tappo - e si costruisce intera solo con tutti e due.
-            blocchi = _dividi(data, parti_pdf)
+            blocchi = _dividi(data, parti_pdf, immagini=con_immagini)
             if blocchi is None:
                 return self._send(400, "Le parti dichiarate non tornano col "
                                        "corpo, o una non e' un PDF")
@@ -882,6 +913,12 @@ class Handler(BaseHTTPRequestHandler):
                 for k, blocco in enumerate(blocchi):
                     pdfs.append(os.path.join(td, "in.pdf" if k == 0
                                              else "in%d.pdf" % k))
+                    if _immagine(blocco):
+                        try:
+                            blocco = immagine_in_pdf(blocco)
+                        except Exception:                   # noqa: BLE001
+                            return self._send(400, "Un'immagine dei pezzi non si "
+                                                   "apre: mandala in JPEG, PNG o WebP")
                     with open(pdfs[-1], "wb") as fh:
                         fh.write(blocco)
                 # Un PDF che e' solo una foto della tavola si rifa' vettoriale,
@@ -943,12 +980,25 @@ class Handler(BaseHTTPRequestHandler):
                                                "come numero intero")
                     if pezzi < 1:
                         return self._send(400, "Un pack ha almeno un pezzo")
-                    if pezzi != len(pdfs):
-                        return self._send(400, "Il pack e' di %d %s ma sono "
-                                               "arrivati %d PDF: ne serve uno "
-                                               "per pezzo"
-                                          % (pezzi, "pezzo" if pezzi == 1
-                                             else "pezzi", len(pdfs)))
+                # un pezzo d'incarto puo' essere senza grafica (la stagnola
+                # della pralina): non ha il file, e conta fra i pezzi
+                try:
+                    senza = (senza_grafica(opts.get("senza_grafica"),
+                                           pezzi if isinstance(pezzi, int) else None)
+                             if kind == "incarto" else [])
+                except ValueError as e:
+                    return self._send(400, str(e))
+                if isinstance(pezzi, int) and pezzi != len(pdfs) + len(senza):
+                    if senza:
+                        return self._send(400, "Il pack e' di %d pezzi, %d senza "
+                                               "grafica, ma sono arrivati %d file: "
+                                               "ne serve uno per ogni pezzo con la "
+                                               "grafica" % (pezzi, len(senza), len(pdfs)))
+                    return self._send(400, "Il pack e' di %d %s ma sono "
+                                           "arrivati %d PDF: ne serve uno "
+                                           "per pezzo"
+                                      % (pezzi, "pezzo" if pezzi == 1
+                                         else "pezzi", len(pdfs)))
                 try:
                     carta = spessore_carta(opts.get("spessore"))
                     gradi_aperta = apertura_gradi(opts.get("apertura"))
@@ -1051,7 +1101,8 @@ class Handler(BaseHTTPRequestHandler):
                     # costruzione non parte mai. Va in coda da qui.
                     try:
                         if kind == "incarto":
-                            letto = analisi_incarto_dichiarato(pdf, chiusura, pdfs)
+                            letto = analisi_incarto_dichiarato(pdf, chiusura, pdfs,
+                                                               senza, nomi)
                             letto = dict(letto, meta=list(letto.get("meta") or [])
                                          + [riga_prodotto(prodotto, nome_prodotto)])
                         else:
@@ -1078,7 +1129,8 @@ class Handler(BaseHTTPRequestHandler):
                         out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_incarto_dichiarato(pdf, chiusura, pdfs)
+                        info = (analisi_incarto_dichiarato(pdf, chiusura, pdfs,
+                                                           senza, nomi)
                                 if kind == "incarto"
                                 else analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
                                 else pop.analisi(pdfs, kind) if pop.e_pop(kind)

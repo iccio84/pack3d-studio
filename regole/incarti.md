@@ -149,6 +149,24 @@ PDF, chiede **l'immagine del prodotto da incartare**.
   del posto dell'immagine apre la scelta delle immagini. Un file trascinato va nel posto
   del suo tipo. L'immagine si rimpicciolisce a 1600 px sul lato lungo, in
   JPEG, come la foto della nota.
+- **Un pezzo senza grafica** (dal 21 novembre 2026, con la pralina): nel
+  posto di ogni pezzo c'e' il tasto **«Senza grafica»**, che riempie il
+  posto senza file («senza grafica: stagnola dorata»); compare solo se un
+  altro pezzo resta con la grafica. I numeri di questi pezzi, da 1, vanno
+  al server in `senza_grafica` (`server.senza_grafica`), e allora i file
+  devono essere i pezzi meno quelli senza grafica.
+- **La grafica di un pezzo puo' essere un'immagine** (JPEG, PNG o WebP),
+  non solo un PDF: il bollino e il pirottino della pralina sono arrivati
+  cosi'. Il posto di un pezzo prende tutti e due («Carica PDF o
+  immagine»), e l'immagine va coi suoi pixel, senza rimpicciolirla. Sul
+  server, solo per gli incarti, un pezzo che e' un'immagine (dai primi
+  byte: `server._immagine`) diventa subito un PDF di una pagina
+  (`famiglie.incarto.immagine_in_pdf`: il JPEG coi suoi byte, le altre
+  senza perdita), e da li' segue la strada dei PDF - la lettura, il
+  controllo, la coda, il parco - senza cambiare nient'altro; il caso in
+  coda tiene l'immagine com'e' arrivata. Un'immagine trascinata va prima
+  nel posto del prodotto, poi in quello di un pezzo vuoto: per sceglierlo
+  si usa il tasto del posto.
 - Il corpo della richiesta e' il PDF e poi l'immagine, di fila: `parti`
   ne da' le lunghezze e `prodotto` (`nome`, `tipo`) dice che l'ultimo
   pezzo e' l'immagine. Il server la separa subito (`_separa_prodotto`: deve
@@ -163,7 +181,10 @@ PDF, chiede **l'immagine del prodotto da incartare**.
   un incarto a triangolo, si ferma e va in coda. **Avvolto** si costruisce
   l'uovo incartato col collarino (*L'uovo avvolto*, sotto); due PDF che non
   sono il suo foglio e il suo collarino si fermano col messaggio che dice
-  cosa sa montare, e il caso va in coda coi PDF e l'immagine.
+  cosa sa montare, e il caso va in coda coi PDF e l'immagine. **Avvolto in
+  tre pezzi, uno senza grafica**, si costruisce la pralina (*La pralina
+  avvolta*, sotto); un pezzo senza grafica in ogni altra combinazione si
+  ferma col messaggio della pralina, e va in coda.
 - L'immagine **va col caso** (`prodotto_<nome>.jpg`, accanto al PDF) e nei
   dettagli tecnici c'e' una riga che la nomina, con le sue misure in pixel.
   **Per ora la misura del modello la da' il DT** (per l'uovo, il primo
@@ -181,6 +202,7 @@ PDF, chiede **l'immagine del prodotto da incartare**.
   vedi *L'uovo avvolto*, *Cosa manca all'uovo*.
 - L'immagine del prodotto non entra ancora nella misura del modello.
 - Gli incarti parzialmente scartati nella pagina.
+- La pralina: vedi *La pralina avvolta*, *Cosa manca alla pralina*.
 
 ## L'uovo avvolto
 
@@ -282,3 +304,91 @@ come versione ufficiale.
   il rovescio e' una tinta piena.
 - Fra i petali restano fessure strette: nel modello a semipiani due petali
   vicini non si sovrappongono.
+
+## La pralina avvolta
+
+La pralina incartata: una pralina avvolta in un quadrato di stagnola dorata
+stropicciata, senza grafica, con un **bollino** ovale in cima e un
+**pirottino** di carta plissettata sotto. Il codice sta in
+`pack3d/pralina.py`, il montaggio in `famiglie.incarto.build_pralina`; dalla
+pagina si dichiara **Incarti**, **3 pezzi**, chiuso **avvolto**, col pezzo
+della stagnola **«Senza grafica»**, i file del bollino e del pirottino (PDF
+o immagini) e l'immagine del prodotto. La lettura e'
+`dict(kind="pralina", title="Pralina incartata")`, la costruzione
+`"pralina"` in `COSTRUZIONI`. Nel parco e' `pralina_incartata`.
+
+E' nata da un modello **fatto a mano** il 20 novembre 2026, fuori dal
+codice, e approvato dal proprietario (pack3d-casi, `lavori/pralina`: lo
+script, le immagini e cosa ha chiesto, in ordine); il 21 novembre e' entrata
+nel codice. **La geometria e' quella dello script approvato**, numero per
+numero e con gli stessi semi: i vertici dei triangoli tornano uguali al
+micron (confrontati sul GLB finito, dopo `primitive.rifinisci`).
+
+**I due file**, in qualunque ordine (`pralina.riconosci`): ognuno dice da
+se' cos'e'. Un PDF che e' un'immagine sola (quello che il server fa da
+un'immagine) da' quell'immagine coi suoi pixel; un PDF vero si rende a 2048
+px sul lato lungo (`immagine_del_pdf`). Poi si ritaglia sulla parte
+stampata, i pixel non bianchi (`stampato`, sotto 245 in un canale):
+
+- **il bollino** e' piu' largo che alto, di piu' del 10% (`OVALE`): l'ovale
+  stampato su bianco. Un ovale piu' alto che largo si gira di un quarto.
+- **il pirottino** e' quadrato: il disco della carta stesa (anche tutto
+  pieno, com'e' l'immagine del primo caso: marrone fino agli angoli).
+- Due bollini o due pirottini si fermano, col messaggio che dice cosa si e'
+  letto, e il caso va in coda.
+
+**Il solido** (il fondo del pirottino a Y = 0, la cima +Y; la testa della
+scritta del bollino verso -Z, come nel modello approvato):
+
+- **La stagnola**: una sfera di 14,8 mm di raggio (`R`, centro a 16,9),
+  circa 31,6 mm stropicciata, dall'icosaedro diviso 6 volte (~82 mila
+  triangoli), con le normali lisce. Le pieghe sono quelle approvate: un
+  fondo appena ondulato (12 onde da 9 a 16 mm, 0,06 mm) e 280 pieghe lunghe
+  (`pieghe_lunghe`): archi sulla sfera da 8 a 20 mm, sezione 1/cosh^2 larga
+  0,9-2,2 mm, profonde 0,22-0,58 mm, creste e valli, il 45% lungo il
+  meridiano verso il bollino, che si assottigliano alle punte. Sotto il
+  bollino la stagnola e' liscia, e la cima e' schiacciata a una cupola
+  appena bombata col minimo morbido (nessuno spigolo).
+- **L'oro satinato**: colore pieno (sRGB 206 166 98), metallo 1, ruvidita'
+  0,46, e la **trama a rettangolini** nella mappa delle normali: una tegola
+  di 3,5 mm con 10 x 14 rettangolini appena bombati, ripetuta, sulle UV
+  azimutali dall'alto (nessuna cucitura).
+- **Il pirottino**: la ciotola di carta a 52 pieghe a dente di sega,
+  arrotondate in cima (il bordo ondeggia senza punte); 21,2 mm sul fondo,
+  circa 36,4 in cima, alto 15,2, con le normali piatte (le pieghe nette).
+  Ha **due facce**, 0,1 mm fra l'una e l'altra, coi triangoli al contrario:
+  i visori che scartano il retro lo mostravano bucato da dentro. La
+  grafica e' il disco della carta stesa: il raggio di carta dal centro del
+  fondo, 2% in piu' del piu' lungo (circa 28,3 mm), e' il bordo del
+  quadrato della grafica.
+- **Il bollino**: l'ovale di 9,5 x 7,7 mm (`LA`, `LB`) 0,14 mm sopra la
+  cupola, la grafica sul riquadro dell'ovale. Alta col bollino 31,1 mm.
+
+**La texture e' una sola**, un atlante (`atlante`): il pirottino a sinistra
+(2048 px), il bollino a destra in cima (1024 px utili, con 16 px bianchi
+attorno). Cosi' in Glam il modello ha la texture e il **template**, che il
+modello fatto a mano non aveva (ne aveva due: «Si per l'atlante», il
+proprietario, 21 novembre 2026). La stagnola non prende la texture: e'
+colore pieno, e la sua mappa delle normali e' una seconda immagine,
+ripetuta (`scrivi_glb`, un GLB coi suoi tre materiali: lo scrittore comune
+ne fa uno solo). A vista il modello e' quello approvato: le viste di
+`lavori/strumenti` differiscono solo nei pixel del bollino ricampionato.
+
+**Le misure** sono quelle del modello approvato, prese dalle foto del pack
+(la sagoma confrontata riga per riga con la foto di lato), come la sagoma
+dell'uovo: i file danno solo la grafica.
+
+### Cosa manca alla pralina
+
+- Le misure sono fisse: una pralina di un'altra misura, o un bollino di
+  un'altra forma, viene come la prima. La misura dal DT di un PDF vero (il
+  cerchio del pirottino, l'ovale del bollino) non si legge ancora: finora
+  sono arrivate solo immagini. L'immagine del prodotto non entra nella
+  misura.
+- La stagnola e' solo dorata: altri colori (argento, rosso) si
+  dichiarerebbero col pezzo senza grafica.
+- Un bollino tondo e il pirottino sono due dischi: non si distinguono, e
+  il caso va in coda.
+- Gli altri avvolti in tre pezzi con un pezzo senza grafica (una caramella
+  col sigillo, per esempio) si costruiscono come la pralina, o si fermano
+  se le grafiche non sono un ovale e un disco.
