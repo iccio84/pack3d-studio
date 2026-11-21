@@ -163,7 +163,9 @@ non votano piu'.
 `solve_carton` non prova a indovinare: **legge la sequenza delle fasce e
 decide a quale famiglia appartiene**. Se non e' nessuna delle due, solleva un
 errore che riporta le fasce misurate in millimetri, e l'errore dice quale
-condizione e' mancata.
+condizione e' mancata; dal 21 novembre 2026 dice anche quante letture ha
+provato e la piu' vicina, col motivo per cui e' scartata (*Le letture a
+punteggio*, qui sotto).
 
 Prima di leggere le fasce, pero', bisogna sapere **quali linee sono fasce**. Le
 `ys` del foglio sono l'unione di tutte le cordonature, e ci finisce anche
@@ -187,6 +189,136 @@ I controlli che decidono la famiglia:
   faccia sola**, e i **fianchi devono tornare con la profondita'**;
 - in tutti i casi **cielo o fianco devono esistere**, altrimenti la profondita'
   non e' ricavabile e prima si leggeva un `KeyError: 'left'`.
+
+### Le letture a punteggio
+
+Il 20 novembre 2026 il proprietario: «preferisco che il deterministico
+fallisca il meno possibile a discapito del tempo», perche' un caso che va
+alla routine costa piu' di una costruzione lenta (pack3d-casi,
+`regole/decisioni.md`). Fino ad allora l'astuccio si leggeva in un modo solo:
+la fustella per penna, le fasce confrontate con poche sequenze fisse, e
+vinceva la prima che passava; due ripieghi in fila, uno per caso (il
+riquadro a strappo del pane ripieno T10, il fondo a tetto del T15). Il
+banco delle varianti del 21 novembre (pack3d-casi, `parco/quadro_varianti.md`)
+ha misurato dove si rompeva: il disegno in pezzi corti 20 astucci su 21, i
+testi in curve 5.
+
+Adesso si fanno tutte le letture, ognuna col suo costo, e vince la migliore
+(`dieline.letture_carton`, `pack3d.strade`):
+
+- **Le strade della fustella** (`strade.fustelle`). Per colore, la lettura di
+  sempre (`dieline.fustella_per_colore`, e' `extract`). Coi tratti riuniti
+  (`strade.unisci`): i pezzi della stessa penna sulla stessa retta che si
+  toccano sono una linea, come li esportano certi CAD; non e' una regola per
+  tutti, perche' sull'impaginato del T6 aperto riunire cambia le penne
+  tecniche da cinque a una. Per geometria (`strade.per_geometria`): senza
+  guardare i colori, il gruppo di tratti sottili che si TOCCANO - non basta
+  la vicinanza dei 25 punti di `_gruppi`, che e' come legenda e quote
+  finivano attaccate - col disegno piu' grande, e fuori quote, legenda,
+  cartiglio, miniature e segni che non lo toccano; un gruppo che ne racchiude
+  un altro con piu' di tre decimi del suo disegno e' la cornice. Senza una
+  penna dubbia alla volta, per colore e coi tratti riuniti
+  (`strade.penne_dubbie`): sul T2x12 coi testi in curve la penna blu delle
+  quote, senza numeri vivi, non si riconosceva piu' come quote ed entrava
+  nella fustella (un fianco da 18,6 mm su una scatola profonda 45). Una penna
+  coi tratti che finiscono tutti sulle altre e' una cordonatura, e non e'
+  dubbia.
+- **Su ogni fustella tutte le letture** (`dieline.letture_carton`): le serie
+  di fasce candidate (`serie_candidate`) - quella di serie, senza i riquadri
+  dentro le facce, e con due o tre fasce vicine unite quando insieme tornano
+  con un'altra fascia, la faccia gemella (`_gemelle`) - per tutte le forme
+  (`forme`): chiuso, nelle sue tre letture che decidono i fianchi, aperto, a
+  tetto. Si unisce solo sopra una **riga debole** (`riga_debole`): una riga
+  che non attraversa tutta la colonna, o che si ferma prima di tutti e due i
+  bordi come i lati di un riquadro (il T10 rientra di 3,2 mm per parte, la
+  falda del T15 di 7,9). Una piega vera va da bordo a bordo: la cresta del
+  tetto del T15 la copre intera, e la mezza falda da 23 non si unisce alla
+  falda da 49 come un fondo profondo quanto il cielo. I due ripieghi di
+  prima sono diventati candidate come le altre.
+- **Il costo** (`dieline.costo_misure`, `strade.punteggio`), piu' basso e'
+  meglio. Le tolleranze di sempre diventano l'unita': fronte e retro alti
+  uguali (8%), cielo e fondo profondi uguali (25% sul chiuso, 10%
+  sull'aperto), **i fianchi larghi quanto la profondita'** (8%, sul chiuso
+  prima non si guardava); una faccia che manca 2, un'aletta presa per faccia
+  o una falda del retro alta quasi come il fronte 3; ogni correzione - un
+  riquadro tolto, due fasce unite, una strada che non e' quella per colore,
+  una penna tolta - 0,1, cosi' a pari misure vince la lettura piu' vicina al
+  disegno. Poi le prove di fuori: la copertura (sotto il 45% del riquadro piu'
+  grande fra le strade la scatola spiega un pezzo della fustella, non lei),
+  le quote scritte (`quote.esito_riscontro`: ogni conferma -0,5, ogni smentita
+  +1; senza quote leggibili niente) e il verso della grafica (mezzo punto per
+  voto di `artwork._consenso`, il fronte vale due).
+- **Il verdetto** (`strade.scegli`). Vince il costo piu' basso; la lettura di
+  prima - quella che vinceva quando vinceva la prima che passava - vince a
+  meno di 0,3 (`PRECEDENZA`). Una lettura che non e' quella di prima vale
+  solo se le sue misure tornano (costo geometrico al piu' 2, `COSTO_MAX`): la
+  scatola a punta T6, unendo fasce, dava un tetto coi fianchi larghi il 41%
+  piu' della profondita', e deve leggerla `pack3d.punta`. Se un'altra lettura
+  plausibile da' un **astuccio diverso** (forma o facce diverse, una misura
+  oltre 1,5 mm e il 2%) a meno di 0,25 (`DUBBIO`), e' un **dubbio dichiarato**:
+  la riga «DUBBIO DI LETTURA: costruito ...; quasi alla pari ...» sta nella
+  lettura della pagina e negli avvisi del modello, li vede chi carica e il
+  controllo dell'AI, ed e' quello che il punto 3 del piano provera' da solo.
+  Una fustella letta per un'altra strada lo dice anche lei («fustella letta
+  coi tratti riuniti ...»).
+- **Il verso del foglio** lo decide la grafica come prima
+  (`artwork.astuccio_sulla_grafica`): su ogni verso provato l'astuccio e' la
+  lettura migliore fra le strade, e fra i versi vince quello con piu' facce
+  che si leggono come devono. Due versi con la grafica d'accordo uguale e
+  astucci diversi quasi alla pari sono un dubbio.
+- **Il tempo**. La strada per colore prima; se la sua lettura e' forte - le
+  misure tornano (costo geometrico al piu' 1, `COSTO_FORTE`) e le quote non
+  la smentiscono - le altre non si provano e non costano niente: e' la
+  strada dei PDF come quelli del parco. Se no, tutte, se il disegno per
+  colore si legge da cartotecnico o se il pack e' dichiarato tale (senza
+  dichiarazione un flowpack steso resta un flowpack). Sui fogli girati si
+  rifanno solo le strade che sul foglio com'era davano una lettura: per la
+  scatola a punta, la coppa e il tubo, che l'astuccio rifiuta in ogni verso,
+  solo quella per colore, come prima.
+
+**Le penne a pezzi corti, per le quote e lo strappo**
+(`strati._penne_a_pezzi`). Coi tratti spezzati `strati.penne`, che sceglie
+le penne del DT dalle linee lunghe, sul T2x25 ne trovava una su sei: la
+catena delle quote non si riconosceva, e la cifra «100.5» che corre sul
+fronte votava da sola il verso della grafica (`tracciati.verso_grafica`),
+girando il modello di un quarto; e sul T10 al lampone la perforazione dello
+strappo restava fuori, e l'astuccio chiesto aperto usciva chiuso. Una penna
+senza nessun tratto lungo che riunita e' tecnica conta come penna del DT in
+`quote_dt` e in `incisioni`; mai una bianca (sulla pagina di lavoro della
+brioche STD i filetti bianchi della grafica, riuniti, passavano per tecnici
+e un tratto si spegneva). Non in `strati.penne`: li' cambiava anche chi legge
+il prisma, che col disegno spezzato trovava la sua geometria ma perdeva la
+grafica fuori dal suo riquadro, un modello bianco invece di un errore. Sui
+PDF del parco non aggiunge nessuna penna.
+
+A guardia: le letture del parco restano quelle di prima (`prove/parco.py
+letture`, nessuna cambiata), tutte per colore, e il parco intero resta
+uguale al byte. Il banco delle varianti sui 21 cartotecnici del parco, il
+21 novembre 2026:
+
+- **disegno in pezzi corti** (`spezzati`): 15 come l'originale invece di 1.
+  Gli astucci tutti, il T15 per geometria, gli altri coi tratti riuniti, il
+  T2x25 anche senza la penna delle quote. Restano la punta, la coppa, il
+  cono, il ballotin e il prisma, che l'astuccio non legge e che sono della
+  fase dopo, e il T5 a strappo chiesto aperto, che esce chiuso: il suo
+  strappo si riconosce dal taglio dal rovescio con le spunte, e coi pezzi
+  non si trova. Sui modelli coi tratti spezzati le linee del DT a pezzi
+  restano stampate, sottili, sulla texture: la pulizia (`strati.penne`) non
+  le riconosce, e il banco le conta uguali perche' cambiano poco le viste.
+- **testi in curve** (`curve`): 18 su 20 invece di 15. I tre formati (T2x12,
+  T2x12 con la finestra, T2x25) ora come l'originale; il T6 aperto e
+  l'astuccio della ciambella no, perche' senza testo vivo niente dice il
+  verso del foglio: resta l'avviso «verso della grafica non letto», e li
+  provera' il punto 3. Coi testi in curve le cifre delle quote sono
+  contorni, e la pulizia non le toglie: sul retro del T2x12 resta stampato
+  un «100».
+- le altre come prima: `penne` 18 su 21, `senzaquote` 12 su 12, `pagine` e
+  `copertina` 21 su 21; `dimezzato` e `scheda` 0 su 21, che sono il punto 4
+  e la PR delle pagine. Col disegno a scala 1:2 i tre formati, gia' a meta'
+  prima, adesso escono anche girati di un quarto: le cifre della catena
+  dicono il doppio delle linee, non si riconoscono come quote e votano il
+  verso, e sul foglio girato ora si trova un astuccio che prima non si
+  trovava. Con la scala presa dalle quote tornano quote.
 
 ### Un astuccio puo' non chiudersi
 
@@ -297,9 +429,11 @@ Le cause erano due, e le regole sono due.
    tutte e due prima di ENTRAMBI i bordi (piu' di 1,5 mm), agli stessi capi,
    con due verticali che le chiudono, sono un riquadro: si tolgono dalle
    fasce. Una cordonatura vera arriva ai bordi; il bordo libero della
-   linguetta, che rientra, e' il bordo del disegno e non si tocca. E' un
-   **ripiego**: si prova solo se la lettura di serie non trova la scatola, e
-   vale solo se ne esce una scatola intera (retro, fronte, cielo e fondo).
+   linguetta, che rientra, e' il bordo del disegno e non si tocca. Era un
+   **ripiego**, provato solo se la lettura di serie non trovava la scatola;
+   dal 21 novembre 2026 e' una delle serie candidate (*Le letture a
+   punteggio*), e come ogni lettura con le fasce corrette vale solo se ne
+   esce una scatola intera (retro, fronte, cielo e fondo).
    La scatola a punta T6 della stessa linea ha lo stesso riquadro: tolto,
    le sue fasce diventavano un astuccio 131,5 x 169,3 x 28,3 senza fondo, e
    la punta spariva; girata di 180 gradi il suo "fondo" era un'aletta da
@@ -337,10 +471,11 @@ profondita' (`cresta`): qui a 36,4 mm dal fronte, e sale di 32,9.
 Il retro e' **quello che viene dopo le falde, alto come il fronte**: qui una
 riga lo spezza in 109 + 29 (la fascia in cima, coi biscotti e la fessura
 della linguetta), e le fasce che insieme tornano col fronte (138 contro
-139,8, a meno del 3%) sono il retro intero. E' un ripiego, come il riquadro
-interno: si prova solo se le letture di serie non trovano la scatola, coi
-riquadri e senza (qui il riquadro bianco da 174 x 16 spezza la prima falda in
-10 + 16 + 23).
+139,8, a meno del 3%) sono il retro intero. Era un ripiego, come il riquadro
+interno; dal 21 novembre 2026 il tetto e' una delle forme provate su tutte le
+serie candidate (*Le letture a punteggio*): qui il riquadro bianco da 174 x 16
+spezza la prima falda in 10 + 16 + 23, e la serie senza riquadri - o quella
+con le tre fasce unite, gemelle della falda da 49 - la rimette intera.
 
 Sul modello (`folding._a_tetto`) la prima falda va dallo spigolo basso del
 fronte alla cresta e la seconda dalla cresta a quello del retro, ognuna
