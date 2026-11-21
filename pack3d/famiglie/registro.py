@@ -419,21 +419,29 @@ def _prova_tubo(l):
 
 def _ferma_cartotecnico(l):
     # Dichiarato cartotecnico e nessuna forma l'ha preso: l'errore resta
-    # quello dell'astuccio. Un disco da solo non dice di essere un lid
-    # (`coppa.orienta`): se c'e', prima viene il consiglio, che
-    # l'interfaccia mostra solo i primi 200 caratteri.
+    # quello dell'astuccio. Il consiglio del cono solo se il disco e' quello
+    # di un lid: il taglio con l'abbondanza fuori, da 1,5 a 3,2 mm
+    # (`coppa.leggi_disco`). Un cerchio solo non lo e': dal 2 al 20 novembre
+    # 2026 il bollo tondo della grafica di due astucci (25 mm) ha mandato
+    # sei volte verso il lid di un cono chi non ne aveva. Il
+    # consiglio viene prima, perche' l'interfaccia mostra solo i primi 200
+    # caratteri.
     e = l.errore_astuccio
     if e is None:
         return None
     from pack3d import coppa as cp
     disco = cp.leggi_disco(cp.tracce(l.pdf))
-    if disco is not None:
-        raise ValueError("Non si risolve come astuccio, e ha un disco "
-                         "di %.0f mm: se e' il lid di un cono, "
-                         "dichiara 2 pezzi e carica anche il PDF del "
-                         "cono. (astuccio: %s)"
-                         % (2 * disco.r_taglio, e)) from e
+    if disco is not None and disco.abbondanza is not None:
+        raise ValueError(LID_DA_SOLO % (2 * disco.r_taglio, e)) from e
     raise e
+
+
+# Il messaggio di un cartotecnico che non si legge e ha il disco di un lid:
+# il consiglio dentro i 200 caratteri, l'errore dell'astuccio dopo.
+LID_DA_SOLO = (
+    "Non si legge come astuccio, ma c'e' un disco da %.0f mm con "
+    "l'abbondanza attorno, come il lid di un cono: se e' un lid, dichiara "
+    "2 pezzi e carica anche il PDF del cono. (astuccio: %s)")
 
 
 def _prova_incarto(l):

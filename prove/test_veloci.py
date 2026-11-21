@@ -235,6 +235,33 @@ class RegistroDelleFamiglie(unittest.TestCase):
     def test_senza_dichiarazione_lo_stesso_foglio_va_al_flowpack(self):
         self.assertEqual(self._leggi(None), {"kind": "flowpack"})
 
+    def _ferma(self, disco):
+        """`_ferma_cartotecnico` su un astuccio rifiutato, col disco dato."""
+        from pack3d import coppa
+        l = self.s._Lettura("foglio.pdf", "carton", False)
+        l.errore_astuccio = ValueError("astuccio: le fasce non tornano")
+        with mock.patch.object(coppa, "tracce", return_value=None), \
+                mock.patch.object(coppa, "leggi_disco", return_value=disco), \
+                self.assertRaises(ValueError) as e:
+            self.s._ferma_cartotecnico(l)
+        return str(e.exception)
+
+    def test_il_disco_del_lid_porta_il_consiglio_del_cono(self):
+        # il lid del cono T1 macaron: abbondanza 33,5, taglio 30,5
+        from pack3d import coppa
+        m = self._ferma(coppa.Disco((0, 0), 30.5, [33.5, 30.5, 25.5], 33.5))
+        self.assertIn("lid di un cono", m)
+        self.assertIn("61 mm", m)
+        self.assertLessEqual(len(m.split(" (astuccio:")[0]), 200)
+        self.assertTrue(m.endswith("(astuccio: astuccio: le fasce non tornano)"))
+
+    def test_un_cerchio_solo_non_manda_verso_il_cono(self):
+        # il bollo tondo della grafica di un astuccio: un cerchio da 25 mm
+        from pack3d import coppa
+        m = self._ferma(coppa.Disco((0, 0), 12.6, [12.6]))
+        self.assertEqual(m, "astuccio: le fasce non tornano")
+        self.assertEqual(self._ferma(None), "astuccio: le fasce non tornano")
+
 
 class UovoAvvolto(unittest.TestCase):
     """L'incarto avvolto (`pack3d.uovo`): le viste del DT in ordine di
