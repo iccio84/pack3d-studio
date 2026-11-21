@@ -38,7 +38,8 @@ from .flowpack import (CASI,
     nello_spessore_scelto,
     saldatura_scelta,
     sezione_da_agente)
-from .incarto import _analisi_incarto, analisi_incarto_dichiarato, build_incarto, build_uovo
+from .incarto import (_analisi_incarto, analisi_incarto_dichiarato, build_incarto,
+                      build_pralina, build_uovo)
 from .pouch import analisi_pouch, build_pouch
 from .punta import build_punta
 from .riempimento import build_riempimento
@@ -604,6 +605,15 @@ def _costruisci_uovo(r, info):
 
 
 @_vertici_separati
+def _costruisci_pralina(r, info):
+    # l'incarto avvolto in tre pezzi: la stagnola senza grafica, il bollino e
+    # il pirottino, i due file della richiesta in qualunque ordine
+    def costruisci(lastre, uscita):
+        return build_pralina(r.pdfs, info, uscita, r.q)
+    return costruisci
+
+
+@_vertici_separati
 def _costruisci_tubo(r, info):
     def costruisci(lastre, uscita):
         return build_tubo(r.pdf, uscita, r.q, lastre, r.col_riq, carta=r.carta,
@@ -725,6 +735,7 @@ COSTRUZIONI = {
     "punta": _costruisci_punta,
     "incarto": _costruisci_incarto,
     "uovo": _costruisci_uovo,
+    "pralina": _costruisci_pralina,
     "tubo": _costruisci_tubo,
     "carton": _costruisci_astuccio,
     "riempimento": _costruisci_riempimento,

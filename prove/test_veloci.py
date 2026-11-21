@@ -202,7 +202,7 @@ class RegistroDelleFamiglie(unittest.TestCase):
 
     def test_ogni_famiglia_letta_ha_la_sua_costruzione(self):
         for kind in ("coppa", "vassoio", "pouch", "ballotin", "punta", "incarto",
-                     "uovo", "tubo", "carton", "riempimento", "flowpack"):
+                     "uovo", "pralina", "tubo", "carton", "riempimento", "flowpack"):
             self.assertIn(kind, self.s.COSTRUZIONI)
 
     def _leggi(self, kind):
@@ -322,7 +322,8 @@ class UovoAvvolto(unittest.TestCase):
         with open(os.path.join(qui, "pack3d_studio.html"), encoding="utf-8") as fh:
             html = fh.read()
         for pezzo in ("let pezziIncarto = 0", "function rifaiSlotIncarto()",
-                      "procedi('incarto', {chiusura, pezzi: pezziIncarto})",
+                      "procedi('incarto', Object.assign({chiusura, pezzi: pezziIncarto},",
+                      "senza_grafica: senza", "'Senza grafica'",
                       "Di quanti pezzi \\u00e8 composto l\\u2019incarto"):
             self.assertIn(pezzo, html)
         self.assertNotIn("slotAvvolto", html)
@@ -338,6 +339,104 @@ class UovoAvvolto(unittest.TestCase):
         self.assertTrue(np.all(np.diff(s) <= 0))
         self.assertAlmostEqual(float(s[-1]), u.S_CIMA)
         self.assertGreater(float(s.min()), 0.0)
+
+
+class PralinaAvvolta(unittest.TestCase):
+    """La pralina incartata (`pack3d.pralina`): la stagnola senza grafica, il
+    bollino e il pirottino, le cui grafiche arrivano come PDF o immagini."""
+
+    def setUp(self):
+        from pack3d import pralina
+        from pack3d.famiglie import incarto as fi
+        self.p, self.fi = pralina, fi
+        self.dir = tempfile.mkdtemp()
+        self.addCleanup(shutil.rmtree, self.dir)
+
+    def _immagine(self, nome, w, h, ovale, fmt="JPEG"):
+        """Un'immagine come la grafica di un pezzo, messa in un PDF come fa
+        il server: un ovale w x h su bianco, o un quadrato pieno."""
+        from PIL import Image, ImageDraw
+        im = Image.new("RGB", (w + 40, h + 40) if ovale else (w, h), "white")
+        d = ImageDraw.Draw(im)
+        if ovale:
+            d.ellipse((20, 20, 20 + w, 20 + h), fill=(150, 90, 30))
+        else:
+            d.rectangle((0, 0, w, h), fill=(85, 25, 0))
+        bio = io.BytesIO()
+        im.save(bio, fmt, **({"quality": 95} if fmt == "JPEG" else {}))
+        pdf = os.path.join(self.dir, nome + ".pdf")
+        with open(pdf, "wb") as fh:
+            fh.write(self.fi.immagine_in_pdf(bio.getvalue()))
+        return pdf, bio.getvalue()
+
+    def test_il_jpeg_entra_nel_pdf_coi_suoi_pixel(self):
+        from PIL import Image
+        pdf, dati = self._immagine("b", 300, 240, True)
+        im, come = self.p.immagine_del_pdf(pdf)
+        self.assertIn("un'immagine di 340 x 280 px", come)
+        self.assertTrue(np.array_equal(np.asarray(im),
+                                       np.asarray(Image.open(io.BytesIO(dati)).convert("RGB"))))
+
+    def test_un_png_entra_senza_perdita(self):
+        pdf, _ = self._immagine("q", 200, 200, False, fmt="PNG")
+        im, _come = self.p.immagine_del_pdf(pdf)
+        self.assertEqual(im.size, (200, 200))
+        self.assertEqual(im.getpixel((5, 5)), (85, 25, 0))
+
+    def test_ovale_e_bollino_disco_e_pirottino_in_qualunque_ordine(self):
+        bol, _ = self._immagine("bol", 300, 240, True)
+        pir, _ = self._immagine("pir", 400, 400, False)
+        for ordine in ([bol, pir], [pir, bol]):
+            b, q = self.p.riconosci(ordine)
+            self.assertEqual((b.pezzo, q.pezzo), ("bollino", "pirottino"))
+            # il bollino ritagliato sulla parte stampata
+            self.assertLess(abs(b.immagine.width - 301), 6)
+            self.assertLess(abs(b.immagine.height - 241), 6)
+        # un ovale piu' alto che largo si gira
+        alto, _ = self._immagine("alto", 240, 300, True)
+        self.assertEqual(self.p.leggi(alto).pezzo, "bollino")
+        with self.assertRaises(ValueError) as e:
+            self.p.riconosci([pir, pir])
+        self.assertIn("tutte e due pirottini", str(e.exception))
+
+    def test_la_pagina_dichiara_la_pralina_col_pezzo_senza_grafica(self):
+        bol, _ = self._immagine("bol", 300, 240, True)
+        pir, _ = self._immagine("pir", 400, 400, False)
+        letto = self.fi.analisi_incarto_dichiarato(pir, "avvolto", [pir, bol], senza=[1],
+                                                   nomi=["p.jpg", "b.jpg"])
+        self.assertEqual(letto["kind"], "pralina")
+        self.assertTrue(any("bollino: ovale 9.5 x 7.7 mm" in r for r in letto["meta"]))
+        for chiusura, senza, files in (("pieghe", [1], [pir, bol]),
+                                       ("avvolto", [1, 2], [pir]),
+                                       ("avvolto", [1], [pir])):
+            with self.assertRaises(ValueError) as e:
+                self.fi.analisi_incarto_dichiarato(files[0], chiusura, files, senza=senza)
+            self.assertIn("la pralina avvolta in tre pezzi", str(e.exception))
+
+    def test_il_server_conta_i_pezzi_senza_grafica(self):
+        import server
+        self.assertEqual(server.senza_grafica([1], 3), [1])
+        self.assertEqual(server.senza_grafica(None, 3), [])
+        for male in ([4], [0], ["a"]):
+            with self.assertRaises(ValueError):
+                server.senza_grafica(male, 3)
+        jpg = b"\xff\xd8\xff\xe0" + b"x" * 20
+        pdf = b"%PDF-1.4 " + b"x" * 20
+        self.assertIsNone(server._dividi(jpg + pdf, [len(jpg), len(pdf)]))
+        self.assertEqual(server._dividi(jpg + pdf, [len(jpg), len(pdf)], immagini=True),
+                         [jpg, pdf])
+        self.assertEqual(server._dividi(jpg, None, immagini=True), [jpg])
+        self.assertIn("senza_grafica", server.OPZIONI_CASO)
+
+    def test_il_pirottino_e_il_bollino_del_modello_approvato(self):
+        P, F, UV = self.p.pirottino()
+        self.assertEqual(len(F), 24960)
+        self.assertAlmostEqual(2 * np.abs(P[:, [0, 2]]).max(), 36.4, delta=0.05)
+        self.assertTrue((UV >= 0).all() and (UV <= 1).all())
+        P, F, UV = self.p.bollino()
+        self.assertEqual(len(F), 3328)
+        self.assertAlmostEqual(P[:, 0].max() - P[:, 0].min(), 9.5, delta=0.01)
+        self.assertAlmostEqual(P[:, 2].max() - P[:, 2].min(), 7.7, delta=0.01)
 
 
 class FianchiACromaPari(unittest.TestCase):

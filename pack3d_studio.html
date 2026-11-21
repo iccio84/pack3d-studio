@@ -622,7 +622,7 @@
     </div>
     <div id="incarto-scelta" class="carte due" role="group" aria-label="Come si chiude l'incarto" hidden>
       <button type="button" data-i="pieghe" aria-pressed="false"><b>A pieghe</b><span>Il foglio avvolge il prodotto e si chiude con le pieghe sulle testate. Esempio: le barrette</span></button>
-      <button type="button" data-i="avvolto" aria-pressed="false"><b>Avvolto</b><span>Il foglio avvolge tutto il prodotto e si raccoglie in un ciuffo, stretto da un collarino. Esempio: l&rsquo;uovo di Pasqua, in due pezzi, il foglio e il collarino</span></button>
+      <button type="button" data-i="avvolto" aria-pressed="false"><b>Avvolto</b><span>Il foglio avvolge tutto il prodotto. Esempi: l&rsquo;uovo di Pasqua, in due pezzi, il foglio raccolto in un ciuffo e il collarino; la pralina, in tre pezzi, la stagnola senza grafica, il bollino e il pirottino</span></button>
     </div>
     <div class="griglia" id="passo-campi" hidden>
       <div class="fld" id="parti-fld" hidden>
@@ -2888,8 +2888,10 @@ const FAMIGLIE = {
   incarto: {nome: 'Incarti',
             descr: 'Un foglio di carta, alluminio o plastica che avvolge un prodotto: '
                  + 'si chiude con le pieghe (le barrette) o lo avvolge tutto (tipo l\u2019ovetto). '
-                 + 'Un incarto pu\u00f2 avere pi\u00f9 pezzi: l\u2019ovetto ha il foglio e il collarino. '
-                 + 'Si carica un PDF per pezzo e, perch\u00e9 la misura finale del 3D dipende anche '
+                 + 'Un incarto pu\u00f2 avere pi\u00f9 pezzi: l\u2019ovetto ha il foglio e il collarino, '
+                 + 'la pralina la stagnola, il bollino e il pirottino. '
+                 + 'Si carica un PDF (o un\u2019immagine) per pezzo, \u00absenza grafica\u00bb per un pezzo '
+                 + 'che non ne ha, come la stagnola, e, perch\u00e9 la misura finale del 3D dipende anche '
                  + 'dal prodotto, un\u2019immagine del prodotto da incartare.',
             slot: []},
   // i materiali POP, nella finestra con pop=1 (pack3d/pop/)
@@ -2923,6 +2925,15 @@ const tipoSlot = k => famiglia === 'incarto' ? (k < pezziIncarto ? 'pdf' : 'img'
 let pezziIncarto = 0;
 // i file degli incarti mentre i posti non ci sono ancora (pezzi o chiusura da dire)
 let tenutiIncarto = [];
+// il pezzo d'incarto senza grafica (la stagnola della pralina): un posto
+// pieno senza file; va al server in `senza_grafica`, coi numeri dei pezzi
+const SENZA_GRAFICA = () => ({name: 'senza grafica: stagnola dorata', senza: true});
+/** Il posto k e' quello di un pezzo d'incarto (non l'immagine del prodotto). */
+const pezzoIncarto = k => famiglia === 'incarto' && k < pezziIncarto;
+/** Il file f puo' andare nel posto k: del suo tipo, o un'immagine nel posto
+ *  di un pezzo d'incarto (la grafica del bollino, del pirottino). */
+const vaNelPosto = (k, f) => tipoSlot(k) === (isPdf(f) ? 'pdf' : 'img')
+                             || (pezzoIncarto(k) && isImg(f));
 /** L'incarto avvolto: due PDF, il foglio e il collarino, e l'immagine. */
 function avvolto(){ return famiglia === 'incarto' && chiusura === 'avvolto'; }
 
@@ -2935,7 +2946,9 @@ function rifaiSlotIncarto(){
   slots = Array.from({length: pezziIncarto + 1}, () => null);
   tenutiIncarto = [];
   for (const x of tutti){
-    const k = slots.findIndex((y, j) => !y && tipoSlot(j) === (x.img ? 'img' : 'pdf'));
+    // la grafica di un pezzo (un'immagine) e il pezzo senza grafica vanno
+    // nei posti dei pezzi, l'immagine del prodotto nel suo
+    const k = slots.findIndex((y, j) => !y && tipoSlot(j) === (x.img && !x.grafica ? 'img' : 'pdf'));
     if (k >= 0) slots[k] = x;
   }
 }
@@ -2964,7 +2977,8 @@ function nomiSlot(){
     if (pezziIncarto === 1) return ['Il PDF dello steso (il foglio aperto)', img];
     if (avvolto() && pezziIncarto === 2)
       return ['Pezzo 1 \u2014 il PDF del foglio (lo steso)', 'Pezzo 2 \u2014 il PDF del collarino', img];
-    return slots.map((_, k) => k < pezziIncarto ? 'Pezzo ' + (k + 1) + ' \u2014 il suo PDF' : img);
+    return slots.map((_, k) => k < pezziIncarto
+      ? 'Pezzo ' + (k + 1) + ' \u2014 il suo PDF o la sua immagine, o \u00absenza grafica\u00bb (la stagnola)' : img);
   }
   if (famiglia === 'tu')
     return [tuTipo === 'display' ? 'Il PDF del display' : 'Il PDF del vassoio',
@@ -3092,14 +3106,34 @@ function disegnaPasso(){
     if (x) li.className = 'pieno';
     const cosa = document.createElement('span');
     cosa.className = 'cosa'; cosa.textContent = nomi[k];
-    const img = tipoSlot(k) === 'img';
+    const img = tipoSlot(k) === 'img' || !!(x && x.img);
+    const pezzo = pezzoIncarto(k);
     const nome = document.createElement('span');
-    nome.className = 'nome'; nome.textContent = x ? x.name : (img ? 'nessuna immagine' : 'nessun PDF');
+    nome.className = 'nome';
+    nome.textContent = x ? x.name : (img ? 'nessuna immagine' : pezzo ? 'nessun file' : 'nessun PDF');
     const bt = document.createElement('button');
     bt.type = 'button';
-    bt.textContent = img ? (x ? 'Cambia immagine' : 'Carica immagine') : (x ? 'Cambia PDF' : 'Carica PDF');
+    bt.textContent = pezzo ? (x ? 'Cambia file' : 'Carica PDF o immagine')
+                     : img ? (x ? 'Cambia immagine' : 'Carica immagine') : (x ? 'Cambia PDF' : 'Carica PDF');
     bt.onclick = () => apriFile(k);
-    if (!x){ li.append(cosa, nome, bt); slotEl.appendChild(li); return; }
+    // un pezzo d'incarto senza grafica (la stagnola): almeno un pezzo la ha
+    const senzaBt = document.createElement('button');
+    senzaBt.type = 'button'; senzaBt.textContent = 'Senza grafica';
+    senzaBt.title = 'Questo pezzo non ha grafica: la stagnola dorata della pralina';
+    senzaBt.onclick = () => { slots[k] = SENZA_GRAFICA(); disegnaPasso(); statoPasso(); };
+    const conGrafica = slots.filter((y, j) => pezzoIncarto(j) && j !== k && !(y && y.senza)).length;
+    if (!x){
+      li.append(cosa, nome);
+      if (pezzo && pezziIncarto > 1 && conGrafica) li.append(senzaBt);
+      li.append(bt); slotEl.appendChild(li); return;
+    }
+    if (x.senza){
+      const via = document.createElement('button');
+      via.type = 'button'; via.className = 'togli'; via.textContent = 'Togli';
+      via.title = 'Questo pezzo ha la grafica';
+      via.onclick = () => togliFile(k);
+      li.append(cosa, nome, via, bt); slotEl.appendChild(li); return;
+    }
     // caricato: l'anteprima e il tasto per toglierlo
     const via = document.createElement('button');
     via.type = 'button'; via.className = 'togli'; via.textContent = 'Togli';
@@ -3131,7 +3165,7 @@ function statoPasso(errore){
   let t;
   if (famiglia === 'carton' && !carto) t = 'Cartotecnico: astuccio o scatola?';
   else if (famiglia === 'incarto' && !pezziIncarto)
-    t = 'Incarti: di quanti pezzi \u00e8 composto? Per esempio la barretta 1, l\u2019ovetto 2 (il foglio e il collarino)';
+    t = 'Incarti: di quanti pezzi \u00e8 composto? Per esempio la barretta 1, l\u2019ovetto 2 (il foglio e il collarino), la pralina 3 (la stagnola, il bollino e il pirottino)';
   else if (famiglia === 'incarto' && !chiusura) t = 'Incarti: si chiude a pieghe o \u00e8 avvolto?';
   else if (famiglia === 'incarto' && mancano){
     const pdf = slots.filter((x, k) => !x && tipoSlot(k) === 'pdf').length;
@@ -3176,6 +3210,8 @@ function togliFile(k){
 function apriFile(k){
   slotAttivo = k;
   if (tipoSlot(k) === 'img'){ fileImgEl.click(); return; }
+  fileEl.accept = pezzoIncarto(k) ? 'application/pdf,.pdf,image/jpeg,image/png,image/webp'
+                                  : 'application/pdf,.pdf';
   fileEl.multiple = (famiglia === 'carton' && carto === 'scatola') || famiglia === 'espositore_pop'
                     || (famiglia === 'incarto' && pezziIncarto > 1);
   fileEl.click();
@@ -3225,7 +3261,7 @@ async function riceviFile(lista){
   }
   const inc = famiglia === 'incarto';
   if (!files.every(f => isPdf(f) || (inc && isImg(f)))){
-    setStatus(inc ? 'Solo i PDF dei pezzi e un\u2019immagine JPEG, PNG o WebP del prodotto'
+    setStatus(inc ? 'Solo i PDF (o le immagini) dei pezzi e un\u2019immagine JPEG, PNG o WebP del prodotto'
                   : 'Solo file PDF', 'err');
     return;
   }
@@ -3250,31 +3286,43 @@ async function riceviFile(lista){
   }
   // ogni file nel posto del suo tipo (il PDF, o l'immagine del prodotto):
   // il primo nel posto scelto se e' del suo tipo, poi nei posti vuoti
+  // un'immagine va nel posto del prodotto e, se e' gia' pieno, in quello
+  // di un pezzo d'incarto: la grafica del bollino, del pirottino
   const vuoto = (t, da) => {
-    const dopo = slots.findIndex((y, i) => !y && i > da && tipoSlot(i) === t);
-    return dopo >= 0 ? dopo : slots.findIndex((y, i) => !y && tipoSlot(i) === t);
+    const cerca = ok => {
+      const dopo = slots.findIndex((y, i) => !y && i > da && ok(i));
+      return dopo >= 0 ? dopo : slots.findIndex((y, i) => !y && ok(i));
+    };
+    const k = cerca(i => tipoSlot(i) === t);
+    return k >= 0 || t !== 'img' || !inc ? k : cerca(pezzoIncarto);
   };
   const tipoFile = f => isPdf(f) ? 'pdf' : 'img';
   const t0 = tipoFile(files[0]);
-  let k = k0 >= 0 && tipoSlot(k0) === t0 ? k0 : vuoto(t0, -1);
+  let k = k0 >= 0 && vaNelPosto(k0, files[0]) ? k0 : vuoto(t0, -1);
   if (k < 0 && slots.length === 1) k = 0;
   if (k < 0){
     setStatus(inc ? 'C\u2019\u00e8 gi\u00e0: per cambiarlo usa il suo tasto'
                   : 'I PDF ci sono tutti: per cambiarne uno usa il suo tasto','err'); return;
   }
+  // prima i posti, poi i file: la grafica di un pezzo va coi suoi pixel,
+  // l'immagine del prodotto si rimpicciolisce
+  const posti = [];
+  let ultimo = -1;
+  for (const [n, f] of files.entries()){
+    const kk = n === 0 ? k : vuoto(tipoFile(f), ultimo);
+    if (kk < 0 || !vaNelPosto(kk, f) || posti.some(([j]) => j === kk)) continue;
+    posti.push([kk, f]); ultimo = kk;
+  }
   let letti;
   try{
-    letti = await Promise.all(files.map(async f => isPdf(f)
+    letti = await Promise.all(posti.map(async ([kk, f]) => isPdf(f)
       ? {name: f.name, buf: await f.arrayBuffer()}
+      : pezzoIncarto(kk) ? {name: f.name, buf: await f.arrayBuffer(), img: true, grafica: true}
       : {name: f.name, buf: await immagineRidotta(f), img: true}));
   }catch(err){ setStatus(testoErrore(err), 'err'); return; }
-  let messi = 0, ultimo = -1;
-  for (const [n, x] of letti.entries()){
-    const t = x.img ? 'img' : 'pdf';
-    const kk = n === 0 ? k : vuoto(t, ultimo);
-    if (kk < 0 || tipoSlot(kk) !== t) continue;
-    slots[kk] = x; messi++; ultimo = kk;
-  }
+  posti.forEach(([kk], n) => { slots[kk] = letti[n]; });
+  const messi = posti.length;
+  letti = files;
   disegnaPasso();
   if (messi < letti.length && inc){
     setStatus('Incarti: ' + (pezziIncarto === 1 ? 'un PDF' : pezziIncarto + ' PDF') + ' e un\u2019immagine. ' + (letti.length - messi)
@@ -3295,8 +3343,9 @@ async function avanti(){
   if (!famiglia || !passoEl.classList.contains('on')) return;
   if (!pronto()){ statoPasso(true); return; }
   // i PDF da una parte, l'immagine del prodotto (gli incarti) dall'altra
-  const pdf = slots.filter((x, k) => tipoSlot(k) === 'pdf');
+  const pdf = slots.filter((x, k) => tipoSlot(k) === 'pdf' && !x.senza);
   const img = slots.find((x, k) => tipoSlot(k) === 'img');
+  const senza = slots.map((x, k) => x.senza ? k + 1 : 0).filter(Boolean);
   pending = {buf: pdf[0].buf, bufs: pdf.map(x => x.buf), name: pdf[0].name,
              nomi: pdf.map(x => x.name), prodotto: img || null};
   setTitolo(pending.nomi.join(' + '));
@@ -3304,7 +3353,9 @@ async function avanti(){
   passoEl.classList.remove('on');
   if (pieno()) return riempimentoAvanti();
   if (famiglia === 'tu') return procedi('vassoio', {}, tuTipo);
-  if (famiglia === 'incarto') return procedi('incarto', {chiusura, pezzi: pezziIncarto});
+  if (famiglia === 'incarto')
+    return procedi('incarto', Object.assign({chiusura, pezzi: pezziIncarto},
+                                            senza.length ? {senza_grafica: senza} : {}));
   if (famiglia === 'carton')
     return procedi('carton', {pezzi: slots.length, spessore: spessoreScelto});
   return procedi(famiglia, {});
