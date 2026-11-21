@@ -270,7 +270,9 @@ _PENNE = stato.per_lavoro({})
 
 
 def penne(pdf, page_no=0):
-    """Le penne del disegno tecnico, come le sceglie `_technical_pens`."""
+    """Le penne del disegno tecnico, come le sceglie `_technical_pens`, piu'
+    quelle disegnate a pezzi corti (`_penne_a_pezzi`) e quelle a ridosso
+    (`_penne_accanto`)."""
     from .dieline import _technical_pens
     from .tracciati import segmenti
     st = os.stat(pdf)
@@ -278,9 +280,28 @@ def penne(pdf, page_no=0):
     if chiave not in _PENNE:
         segs, larghezza, altezza = segmenti(pdf, page_no)
         tec = set(_technical_pens(segs, larghezza, altezza))
+        tec |= _penne_a_pezzi(segs, larghezza, altezza, tec)
         _PENNE.clear()
         _PENNE[chiave] = frozenset(tec | _penne_accanto(segs, tec))
     return _PENNE[chiave]
+
+
+def _penne_a_pezzi(segs, larghezza, altezza, tec):
+    """Le penne disegnate a pezzi corti, una linea per ogni pezzo come le
+    esportano certi CAD: nessun loro tratto da solo e' lungo quanto chiede
+    `_technical_pens`, ma riuniti (`strade.unisci`) sono una penna tecnica.
+    Col DT in pezzi di 3 mm (la variante `spezzati` del banco) le penne del
+    T2x25 erano una su sei: quella delle quote mancava, `quote_dt` non
+    trovava la catena delle fasce, e il «100.5» del fronte votava da solo il
+    verso della grafica (`tracciati.verso_grafica`), girando il modello di un
+    quarto. Una penna che ha anche un solo tratto lungo resta giudicata come
+    prima: sui PDF del parco questa non ne aggiunge nessuna."""
+    from .dieline import _technical_pens
+    from .strade import unisci
+    lim = 0.05 * max(larghezza, altezza)
+    lunghe = {x[4] for x in segs if x[3] - x[2] >= lim}
+    riunite = set(_technical_pens(unisci(segs), larghezza, altezza))
+    return {st for st in riunite - set(tec) if st not in lunghe}
 
 
 # Quanto vicino al DT, in punti, sta ogni tratto di una penna sottile che
