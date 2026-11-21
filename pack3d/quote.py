@@ -220,6 +220,21 @@ def _riscontro(pdf, cosa, attese, dimensioni, page_no=0):
     if not nums:
         return ("quote del file non leggibili come testo (vettorializzate?): "
                 "%s solo dal disegno, da controllare sulla miniatura" % cosa)
+    confermate, diverse = esito_riscontro(attese, dimensioni, nums, scritte)
+    if diverse:
+        return ("QUOTE DEL FILE DIVERSE DAL DISEGNO: %s. Controllare il DT"
+                % "; ".join(dict.fromkeys(diverse)))
+    if confermate:
+        return ("%s confermati dalle quote del file: %s"
+                % (cosa[0].upper() + cosa[1:], "; ".join(dict.fromkeys(confermate))))
+    return ("nessuna quota del file che torni con %s: misure solo dal "
+            "disegno, da controllare sulla miniatura" % cosa)
+
+
+def esito_riscontro(attese, dimensioni, nums, scritte):
+    """`(confermate, diverse)`: le righe di `_riscontro`, coi numeri e le
+    terne gia' letti. Serve anche al punteggio delle letture
+    (`pack3d.strade`), che confronta tante letture con lo stesso testo."""
     confermate, diverse = [], []
     nostra = tuple(sorted(dimensioni))
     for t in scritte:
@@ -248,14 +263,27 @@ def _riscontro(pdf, cosa, attese, dimensioni, page_no=0):
                                    % (nome, " | ".join("%g" % v for v in c),
                                       " | ".join("%.1f" % v for v in verso)))
                     break
-    if diverse:
-        return ("QUOTE DEL FILE DIVERSE DAL DISEGNO: %s. Controllare il DT"
-                % "; ".join(dict.fromkeys(diverse)))
-    if confermate:
-        return ("%s confermati dalle quote del file: %s"
-                % (cosa[0].upper() + cosa[1:], "; ".join(dict.fromkeys(confermate))))
-    return ("nessuna quota del file che torni con %s: misure solo dal "
-            "disegno, da controllare sulla miniatura" % cosa)
+    return list(dict.fromkeys(confermate)), list(dict.fromkeys(diverse))
+
+
+def attese_astuccio(d):
+    """Le catene di quote che un astuccio risolto fa aspettare: la fila del
+    fronte - i pannelli che gli stanno accanto, da sinistra a destra - e la sua
+    colonna, con le alette sopra e sotto. `[]` senza fronte."""
+    P = d.panels or {}
+    f = P.get("front")
+    if f is None:
+        return []
+
+    def sovrapposti(a0, a1, b0, b1):
+        return min(a1, b1) - max(a0, b0) > 0.5 * min(a1 - a0, b1 - b0)
+
+    riga = sorted((p for p in P.values() if sovrapposti(p.y0, p.y1, f.y0, f.y1)),
+                  key=lambda p: p.x0)
+    colonna = sorted((p for p in P.values() if sovrapposti(p.x0, p.x1, f.x0, f.x1)),
+                     key=lambda p: p.y0)
+    return [("in larghezza", [round(p.w_mm, 1) for p in riga]),
+            ("in altezza", [round(p.h_mm, 1) for p in colonna])]
 
 
 def riscontro_astuccio(pdf, d, page_no=0):
@@ -266,20 +294,9 @@ def riscontro_astuccio(pdf, d, page_no=0):
     sotto: sono le due righe di quote che un DT d'astuccio porta quasi
     sempre, e il cartiglio aggiunge la terna L x P x H.
     """
-    P = d.panels or {}
-    f = P.get("front")
-    if f is None:
+    attese = attese_astuccio(d)
+    if not attese:
         return None
-
-    def sovrapposti(a0, a1, b0, b1):
-        return min(a1, b1) - max(a0, b0) > 0.5 * min(a1 - a0, b1 - b0)
-
-    riga = sorted((p for p in P.values() if sovrapposti(p.y0, p.y1, f.y0, f.y1)),
-                  key=lambda p: p.x0)
-    colonna = sorted((p for p in P.values() if sovrapposti(p.x0, p.x1, f.x0, f.x1)),
-                     key=lambda p: p.y0)
-    attese = [("in larghezza", [round(p.w_mm, 1) for p in riga]),
-              ("in altezza", [round(p.h_mm, 1) for p in colonna])]
     return _riscontro(pdf, "pannelli e alette", attese, d.dims_mm, page_no)
 
 
