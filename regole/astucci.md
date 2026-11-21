@@ -302,7 +302,9 @@ uguale al byte. Il banco delle varianti sui 21 cartotecnici del parco, il
   cono, il ballotin e il prisma, che l'astuccio non legge e che sono della
   fase dopo, e il T5 a strappo chiesto aperto, che esce chiuso: il suo
   strappo si riconosce dal taglio dal rovescio con le spunte, e coi pezzi
-  non si trova.
+  non si trova. Sui modelli coi tratti spezzati le linee del DT a pezzi
+  restano stampate, sottili, sulla texture: la pulizia (`strati.penne`) non
+  le riconosce, e il banco le conta uguali perche' cambiano poco le viste.
 - **testi in curve** (`curve`): 18 su 20 invece di 15. I tre formati (T2x12,
   T2x12 con la finestra, T2x25) ora come l'originale; il T6 aperto e
   l'astuccio della ciambella no, perche' senza testo vivo niente dice il
