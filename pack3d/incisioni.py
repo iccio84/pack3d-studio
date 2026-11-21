@@ -90,10 +90,14 @@ def _tratti_tecnici(pdf, page_no=0, curve=False):
     `curve` i tratti di Bezier sono campionati sulla curva
     (`tracciati._cammina`)."""
     import pypdfium2 as pdfium
-    from . import dieline, tracciati
+    from . import dieline, strati, tracciati
 
     segs, larga, alta = tracciati.segmenti(pdf, page_no)
-    penne = dieline._technical_pens(segs, larga, alta)
+    penne = set(dieline._technical_pens(segs, larga, alta))
+    # e quelle disegnate a pezzi corti (`strati._penne_a_pezzi`): col DT in
+    # pezzi di 3 mm la perforazione dello strappo non stava piu' su una penna
+    # tecnica, e l'astuccio chiesto aperto usciva chiuso
+    penne |= strati._penne_a_pezzi(segs, larga, alta, penne)
     if not penne:
         return []
     doc = pdfium.PdfDocument(pdf)
