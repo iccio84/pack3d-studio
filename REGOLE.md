@@ -139,7 +139,7 @@ PDF**, col suo nome: si sa sempre quali file mancano.
 | **Pouch** - fondo a soffietto ed estremita' saldata | il PDF, e si costruisce | `build_pouch` |
 | **Cartotecnico** | **astuccio** (un solo elemento che si chiude da solo) o **scatola** (due o piu' elementi, per esempio base piu' coperchio); lo **spessore della carta**, da 1 a 3; l'astuccio un PDF, la scatola **di quante parti** e' fatta e poi **esattamente quei PDF**, uno per parte. Dopo lo studio, se l'astuccio ha un'**apertura a strappo**: chiuso - e allora se si vuole la **fustella dell'apertura modellata** - o aperto, e allora di **quanti gradi** si apre il coperchio. Se ha una finestra, la **pellicola** | passo `carto`, `parti`, `spessore`; pannelli `strappo` e `pellicola`; `pezzi`, `spessore`, `apertura`, `incisioni`, `pellicola` nell'intestazione |
 | **Trade Unit** - TU: il vassoio espositore o il display, vuoti o pieni di CU (dal 19 novembre 2026 una voce sola al posto di Vassoio e Riempimenti, chiesto dal proprietario) | **vassoio** o **display** - il display ha la plancia, quasi sempre ricavata dallo stesso DT, perche' in partenza e' una scatola; poi **vuota** o **piena**. Vuota: il PDF del contenitore, e si costruisce. Piena: il **pack (CU)** da inserire, flowpack o astuccio, e dell'astuccio lo spessore della carta; due posti, il **contenitore** e il **pack da inserire**, e finche' non ci sono tutti e due non si procede. Poi **quanti pack** mettere (vuoto = pieno) e le domande del flowpack, o - per l'astuccio con l'apertura a strappo - se se ne vuole la fustella modellata. La scelta fra vassoio e display deve tornare con la lettura (il titolo dice *Display con plancia*, *Display a scatola* o *Vassoio espositore*): se non torna la pagina si ferma e dice di cambiare tipo | passo `tu-scelta`, `tu-pieno`, `cu-scelta`; `controllaTu`; `build_vassoio`, `build_plancia`, `cu`, `analisi_riempimento`, `build_riempimento` |
-| **Incarti** - un foglio di carta, alluminio o plastica che avvolge un prodotto | **di quanti pezzi** e' composto (l'uovo ne ha due, il foglio e il collarino); come si **chiude**: **a pieghe** (le barrette) o **avvolto** (l'uovo col collarino); poi un posto per il **PDF di ogni pezzo** e uno per l'**immagine del prodotto** da incartare (JPEG, PNG o WebP); finche' non ci sono tutti non si procede. Poi si costruisce, senza altre domande; i pezzi che il codice non sa montare vanno in coda | campo `parti`, passo `incarto-scelta`; `pezzi`, `chiusura` e `prodotto` nell'intestazione; `analisi_incarto_dichiarato`, `build_incarto`, `build_uovo` |
+| **Incarti** - un foglio di carta, alluminio o plastica che avvolge un prodotto | **di quanti pezzi** e' composto (l'uovo ne ha due, il foglio e il collarino; la pralina tre, la stagnola, il bollino e il pirottino); come si **chiude**: **a pieghe** (le barrette) o **avvolto** (l'uovo col collarino, la pralina); poi un posto per il **PDF (o l'immagine) di ogni pezzo**, col tasto **«Senza grafica»** per un pezzo che non ne ha (la stagnola), e uno per l'**immagine del prodotto** da incartare (JPEG, PNG o WebP); finche' non ci sono tutti non si procede. Poi si costruisce, senza altre domande; i pezzi che il codice non sa montare vanno in coda | campo `parti`, passo `incarto-scelta`; `pezzi`, `chiusura`, `senza_grafica` e `prodotto` nell'intestazione; `analisi_incarto_dichiarato`, `build_incarto`, `build_uovo`, `build_pralina` |
 
 **La finestra dei materiali POP.** La stessa pagina con `pop=1`
 nell'indirizzo - in Glam, «Crea materiali POP 3D da PDF» - chiede «Che tipo
@@ -565,13 +565,15 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Il lid
   - Il fronte senza il fondo giallo
 
-**`regole/incarti.md`** - l'incarto a triangolo e l'uovo avvolto
+**`regole/incarti.md`** - l'incarto a triangolo, l'uovo avvolto e la pralina
 
 - L'incarto a triangolo
   - Gli incarti nella pagina
   - Cosa manca
 - L'uovo avvolto
   - Cosa manca all'uovo
+- La pralina avvolta
+  - Cosa manca alla pralina
 
 **`regole/riempimenti.md`** - riempimenti
 
