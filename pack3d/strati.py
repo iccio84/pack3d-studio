@@ -295,13 +295,17 @@ def _penne_a_pezzi(segs, larghezza, altezza, tec):
     trovava la catena delle fasce, e il «100.5» del fronte votava da solo il
     verso della grafica (`tracciati.verso_grafica`), girando il modello di un
     quarto. Una penna che ha anche un solo tratto lungo resta giudicata come
-    prima: sui PDF del parco questa non ne aggiunge nessuna."""
+    prima, e una bianca non e' mai del DT (come in `_penne_accanto`): sulla
+    pagina di lavoro della brioche STD i filetti bianchi della grafica, a
+    pezzi, riuniti passavano per una penna tecnica, e un tratto della grafica
+    si spegneva. Sui PDF del parco questa non ne aggiunge nessuna."""
     from .dieline import _technical_pens
     from .strade import unisci
     lim = 0.05 * max(larghezza, altezza)
     lunghe = {x[4] for x in segs if x[3] - x[2] >= lim}
     riunite = set(_technical_pens(unisci(segs), larghezza, altezza))
-    return {st for st in riunite - set(tec) if st not in lunghe}
+    return {st for st in riunite - set(tec)
+            if st not in lunghe and st[1] != "(255, 255, 255)"}
 
 
 # Quanto vicino al DT, in punti, sta ogni tratto di una penna sottile che
