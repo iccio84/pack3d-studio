@@ -276,20 +276,47 @@ Adesso si fanno tutte le letture, ognuna col suo costo, e vince la migliore
   scatola a punta, la coppa e il tubo, che l'astuccio rifiuta in ogni verso,
   solo quella per colore, come prima.
 
-A guardia: le letture del parco devono restare quelle di prima
-(`prove/parco.py letture`), e le restano tutte, per colore; il parco intero
-uguale al byte. In locale, sulle varianti del banco: col disegno in pezzi
-corti 12 astucci su 15 escono uguali all'originale (il T15 per geometria, gli
-altri coi tratti riuniti, il T2x25 anche senza la penna delle quote) e 3 con
-le stesse misure ma non uguali: sui due T6 aperto la falda alta del retro ha
-il bordo ad arco, che per colore si legge dalla corda fra i due capi e coi
-pezzi veri non ha una riga dritta, e la falda manca; sul T10 una riga in piu'
-nel fondo lo fa da 46,5 invece di 56,5. Coi testi in curve i tre formati
-(T2x12, T2x12 con la finestra, T2x25) escono uguali; il T6 aperto e
-l'astuccio della ciambella no, perche' senza testo vivo niente dice il verso
-del foglio: resta l'avviso «verso della grafica non letto», e li provera' il
-punto 3. Il disegno a scala 1:2 e la scheda tecnica davanti non sono di questo
-punto: la scala dalle quote e' il punto 4, la pagina come strada una PR sua.
+**Le penne a pezzi corti, per le quote e lo strappo**
+(`strati._penne_a_pezzi`). Coi tratti spezzati `strati.penne`, che sceglie
+le penne del DT dalle linee lunghe, sul T2x25 ne trovava una su sei: la
+catena delle quote non si riconosceva, e la cifra «100.5» che corre sul
+fronte votava da sola il verso della grafica (`tracciati.verso_grafica`),
+girando il modello di un quarto; e sul T10 al lampone la perforazione dello
+strappo restava fuori, e l'astuccio chiesto aperto usciva chiuso. Una penna
+senza nessun tratto lungo che riunita e' tecnica conta come penna del DT in
+`quote_dt` e in `incisioni`; mai una bianca (sulla pagina di lavoro della
+brioche STD i filetti bianchi della grafica, riuniti, passavano per tecnici
+e un tratto si spegneva). Non in `strati.penne`: li' cambiava anche chi legge
+il prisma, che col disegno spezzato trovava la sua geometria ma perdeva la
+grafica fuori dal suo riquadro, un modello bianco invece di un errore. Sui
+PDF del parco non aggiunge nessuna penna.
+
+A guardia: le letture del parco restano quelle di prima (`prove/parco.py
+letture`, nessuna cambiata), tutte per colore, e il parco intero resta
+uguale al byte. Il banco delle varianti sui 21 cartotecnici del parco, il
+21 novembre 2026:
+
+- **disegno in pezzi corti** (`spezzati`): 15 come l'originale invece di 1.
+  Gli astucci tutti, il T15 per geometria, gli altri coi tratti riuniti, il
+  T2x25 anche senza la penna delle quote. Restano la punta, la coppa, il
+  cono, il ballotin e il prisma, che l'astuccio non legge e che sono della
+  fase dopo, e il T5 a strappo chiesto aperto, che esce chiuso: il suo
+  strappo si riconosce dal taglio dal rovescio con le spunte, e coi pezzi
+  non si trova.
+- **testi in curve** (`curve`): 18 su 20 invece di 15. I tre formati (T2x12,
+  T2x12 con la finestra, T2x25) ora come l'originale; il T6 aperto e
+  l'astuccio della ciambella no, perche' senza testo vivo niente dice il
+  verso del foglio: resta l'avviso «verso della grafica non letto», e li
+  provera' il punto 3. Coi testi in curve le cifre delle quote sono
+  contorni, e la pulizia non le toglie: sul retro del T2x12 resta stampato
+  un «100».
+- le altre come prima: `penne` 18 su 21, `senzaquote` 12 su 12, `pagine` e
+  `copertina` 21 su 21; `dimezzato` e `scheda` 0 su 21, che sono il punto 4
+  e la PR delle pagine. Col disegno a scala 1:2 i tre formati, gia' a meta'
+  prima, adesso escono anche girati di un quarto: le cifre della catena
+  dicono il doppio delle linee, non si riconoscono come quote e votano il
+  verso, e sul foglio girato ora si trova un astuccio che prima non si
+  trovava. Con la scala presa dalle quote tornano quote.
 
 ### Un astuccio puo' non chiudersi
 
