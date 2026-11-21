@@ -270,9 +270,7 @@ _PENNE = stato.per_lavoro({})
 
 
 def penne(pdf, page_no=0):
-    """Le penne del disegno tecnico, come le sceglie `_technical_pens`, piu'
-    quelle disegnate a pezzi corti (`_penne_a_pezzi`) e quelle a ridosso
-    (`_penne_accanto`)."""
+    """Le penne del disegno tecnico, come le sceglie `_technical_pens`."""
     from .dieline import _technical_pens
     from .tracciati import segmenti
     st = os.stat(pdf)
@@ -280,7 +278,6 @@ def penne(pdf, page_no=0):
     if chiave not in _PENNE:
         segs, larghezza, altezza = segmenti(pdf, page_no)
         tec = set(_technical_pens(segs, larghezza, altezza))
-        tec |= _penne_a_pezzi(segs, larghezza, altezza, tec)
         _PENNE.clear()
         _PENNE[chiave] = frozenset(tec | _penne_accanto(segs, tec))
     return _PENNE[chiave]
@@ -298,7 +295,14 @@ def _penne_a_pezzi(segs, larghezza, altezza, tec):
     prima, e una bianca non e' mai del DT (come in `_penne_accanto`): sulla
     pagina di lavoro della brioche STD i filetti bianchi della grafica, a
     pezzi, riuniti passavano per una penna tecnica, e un tratto della grafica
-    si spegneva. Sui PDF del parco questa non ne aggiunge nessuna."""
+    si spegneva. Sui PDF del parco questa non ne aggiunge nessuna.
+
+    Vale solo dove la chiedono le quote (`quote_dt`) e lo strappo
+    (`incisioni`), non in `penne`: messa li', il prisma esagonale coi tratti
+    spezzati trovava la sua penna e la sua geometria, ma la grafica fuori dal
+    suo riquadro spariva e il modello usciva bianco. Il prisma, il ballotin e
+    la pulizia della texture coi pezzi corti sono della fase dopo, le altre
+    forme del cartotecnico."""
     from .dieline import _technical_pens
     from .strade import unisci
     lim = 0.05 * max(larghezza, altezza)
@@ -418,8 +422,11 @@ def quote_dt(pdf, page_no=0, pen=None):
     st = os.stat(pdf)
     chiave = (pdf, page_no, st.st_mtime_ns, st.st_size)
     if chiave not in _QUOTE:
-        pen = penne(pdf, page_no) if pen is None else pen
-        segs, _w, _h = segmenti(pdf, page_no)
+        pen = set(penne(pdf, page_no) if pen is None else pen)
+        segs, larghezza, altezza = segmenti(pdf, page_no)
+        # anche le penne disegnate a pezzi corti (`_penne_a_pezzi`): col DT
+        # spezzato la catena delle quote del T2x25 non si trovava piu'
+        pen |= _penne_a_pezzi(segs, larghezza, altezza, pen)
         segs = [s for s in segs if s[4] in pen or s[4][0] <= FILO]
         try:
             nn = [((x if asse == 0 else q) / PT2MM, (q if asse == 0 else x) / PT2MM, v)
