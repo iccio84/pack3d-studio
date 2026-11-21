@@ -422,8 +422,8 @@ def _ferma_cartotecnico(l):
     # quello dell'astuccio. Il consiglio del cono solo se il disco e' quello
     # di un lid: il taglio con l'abbondanza fuori, da 1,5 a 3,2 mm
     # (`coppa.leggi_disco`). Un cerchio solo non lo e': dal 2 al 20 novembre
-    # 2026 il bollo tondo della grafica di tre astucci (25 e 20 mm) ha
-    # mandato sei volte verso il lid di un cono chi non ne aveva. Il
+    # 2026 il bollo tondo della grafica di due astucci (25 mm) ha mandato
+    # sei volte verso il lid di un cono chi non ne aveva. Il
     # consiglio viene prima, perche' l'interfaccia mostra solo i primi 200
     # caratteri.
     e = l.errore_astuccio

@@ -247,9 +247,9 @@ Un cartotecnico dichiarato in un pezzo che non si legge come niente
 (`registro._ferma_cartotecnico`) consiglia di caricare anche il cono solo
 se il suo disco ha l'abbondanza attorno al taglio: un cerchio solo e' quasi
 sempre il bollo tondo della grafica. Dal 2 al 20 novembre 2026 il bollo
-«x10» di due astucci (25 mm) e il «25x» di un altro (20 mm) hanno mandato
-sei volte verso il lid di un cono chi non ne aveva; nel parco il disco con
-l'abbondanza l'hanno solo i due lid.
+«x10» di due astucci (25 mm) ha mandato sei volte verso il lid di un cono
+chi non ne aveva; nel parco il disco con l'abbondanza l'hanno solo i due
+lid.
 
 ### Il fronte senza il fondo giallo
 
