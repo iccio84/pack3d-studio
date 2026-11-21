@@ -2425,5 +2425,154 @@ class AstuccioApertoRiempito(unittest.TestCase):
         self.assertEqual(chiamate[0]["pellicola"], 1)
 
 
+def _pdf_col_dt(cartella):
+    """Un DT come lo mandano i clienti, piccolo: lo steso e una piega nella
+    tinta «Fustella», una quota sotto nella tinta «Dimensions» - la linea,
+    i richiami e il numero, 400 pt cioe' 141 mm -, e una scritta della
+    grafica in nero. In punti, y dal basso."""
+    import pypdf
+    from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject,
+                               FloatObject, NameObject, NumberObject)
+    w = pypdf.PdfWriter()
+    pagina = w.add_blank_page(600, 400)
+
+    def tinta(nome):
+        f = DictionaryObject({
+            NameObject("/FunctionType"): NumberObject(2), NameObject("/N"): NumberObject(1),
+            NameObject("/Domain"): ArrayObject([NumberObject(0), NumberObject(1)]),
+            NameObject("/C0"): ArrayObject([FloatObject(0)] * 4),
+            NameObject("/C1"): ArrayObject([FloatObject(v) for v in (0, 1, 0, 0)])})
+        return ArrayObject([NameObject("/Separation"), NameObject("/" + nome),
+                            NameObject("/DeviceCMYK"), w._add_object(f)])
+    flusso = DecodedStreamObject()
+    flusso.set_data(
+        b"/CS0 CS 1 SCN 0.5 w\n100 150 400 200 re S\n250 150 m 250 350 l S\n"
+        b"/CS1 CS 1 SCN 0.25 w\n100 140 m 100 110 l S\n500 140 m 500 110 l S\n"
+        b"100 120 m 500 120 l S\n"
+        b"/CS1 cs 1 scn BT /F1 9 Tf 290 124 Td (141) Tj ET\n"
+        b"0 0 0 1 k BT /F1 20 Tf 150 250 Td (Ciao) Tj ET\n")
+    pagina[NameObject("/Contents")] = w._add_object(flusso)
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                             NameObject("/Subtype"): NameObject("/Type1"),
+                             NameObject("/BaseFont"): NameObject("/Helvetica")})
+    pagina[NameObject("/Resources")] = DictionaryObject({
+        NameObject("/ColorSpace"): DictionaryObject({NameObject("/CS0"): tinta("Fustella"),
+                                                     NameObject("/CS1"): tinta("Dimensions")}),
+        NameObject("/Font"): DictionaryObject({NameObject("/F1"): w._add_object(font)})})
+    f = os.path.join(cartella, "dt.pdf")
+    with open(f, "wb") as fh:
+        w.write(fh)
+    return f
+
+
+class VariantiDelDisegno(unittest.TestCase):
+    """`prove/parco.py varianti`: le varianti che riscrivono il disegno (il
+    piano del 20 novembre 2026) fanno quello che dicono, e solo quello."""
+
+    def setUp(self):
+        sys.path.insert(0, os.path.join(QUI, "prove"))
+        import parco
+        self.parco = parco
+        self.cartella = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.cartella, True))
+        cassa = mock.patch.object(dl, "CACHE", os.path.join(self.cartella, "cache"))
+        cassa.start()
+        self.addCleanup(cassa.stop)
+        dl._TRATTI.clear()
+        self.dt = _pdf_col_dt(self.cartella)
+
+    def _uscita(self, nome):
+        return os.path.join(self.cartella, nome + ".pdf")
+
+    def _penne(self, pdf):
+        fuori = {}
+        for k, c, a, b, st in dl.segmenti(pdf, 0):
+            fuori.setdefault(st, set()).add((k, round(c, 1), round(a, 1), round(b, 1)))
+        return fuori
+
+    def test_l_oracolo_conta_gli_operatori_come_pypdf(self):
+        import pypdf
+        orac = self.parco._oracolo(self.dt, 0)
+        ops = pypdf.PdfReader(self.dt).pages[0].get_contents().operations
+        self.assertEqual(orac["ops"][("pagina",)], [self.parco._nome_op(op) for _o, op in ops])
+        penne = {self.parco._penna_di(ev) for evs in orac["tratti"].values() for ev in evs}
+        self.assertEqual(penne, set(self._penne(self.dt)))
+
+    def test_le_penne_cambiano_colore_e_restano_quelle(self):
+        uscita = self._uscita("penne")
+        self.assertGreater(self.parco._penne_altre(self.dt, uscita), 0)
+        prima, dopo = self._penne(self.dt), self._penne(uscita)
+        # la penna del DT e' rossa, coi suoi tratti; quella delle quote, che
+        # per la lettura tecnica non e' (tre tratti), resta com'era
+        self.assertEqual(dopo[(0.5, "(0.0, 1.0, 1.0, 0.0)")], prima[(0.5, "1.0")])
+        self.assertEqual(dopo[(0.25, "1.0")], prima[(0.25, "1.0")])
+        self.assertEqual(len(dopo), len(prima))
+
+    def test_i_tratti_spezzati_sono_corti_e_coprono_il_disegno(self):
+        uscita = self._uscita("spezzati")
+        self.assertGreater(self.parco._tratti_spezzati(self.dt, uscita), 0)
+        dt = [s for s in dl.segmenti(uscita, 0) if s[4] == (0.5, "1.0")]
+        self.assertLessEqual(max(b - a for _k, _c, a, b, _st in dt) * dl.PT2MM, 3.5)
+        # le lunghezze: 2 x 400 + 3 x 200 punti
+        self.assertAlmostEqual(sum(b - a for _k, _c, a, b, _st in dt), 1400.0, delta=1.0)
+
+    def test_le_quote_se_ne_vanno_e_il_resto_resta(self):
+        import pdfplumber
+        uscita = self._uscita("senzaquote")
+        self.assertGreater(self.parco._senza_quote(self.dt, uscita), 0)
+        self.assertNotIn((0.25, "1.0"), self._penne(uscita))
+        self.assertEqual(self._penne(uscita)[(0.5, "1.0")], self._penne(self.dt)[(0.5, "1.0")])
+        with pdfplumber.open(uscita) as d:
+            self.assertEqual("".join(c["text"] for c in d.pages[0].chars), "Ciao")
+        # un PDF senza quote non ha niente da variare
+        semplice = _pdf(self.cartella, GRIGLIA)
+        self.assertFalse(self.parco._pagina_variata(semplice, self._uscita("niente"), "senzaquote"))
+
+    @unittest.skipUnless(shutil.which("gs"), "senza Ghostscript")
+    def test_i_testi_in_curve_si_vedono_uguali(self):
+        import pdfplumber
+        import pypdfium2 as pdfium
+        uscita = self._uscita("curve")
+        self.assertEqual(self.parco._testi_in_curve(self.dt, uscita), 2)
+        with pdfplumber.open(uscita) as d:
+            self.assertEqual(d.pages[0].chars, [])
+
+        def resa(f):
+            doc = pdfium.PdfDocument(f)
+            im = np.asarray(doc[0].render(scale=2).to_pil().convert("L"), float)
+            doc.close()
+            return im
+        a, b = resa(self.dt), resa(uscita)
+        self.assertLess(float(np.abs(a - b).mean()), 0.5)
+        # dove c'era «Ciao» (base a y 250, corpo 20: in pixel le righe da
+        # 270 a 300) c'e' inchiostro anche adesso
+        self.assertLess(float(b[270:300, 300:390].min()), 100)
+
+    def test_il_disegno_a_meta_dice_le_misure_vere(self):
+        import pdfplumber
+        uscita = self._uscita("dimezzato")
+        self.assertTrue(self.parco._pagina_variata(self.dt, uscita, "dimezzato"))
+        with pdfplumber.open(uscita) as d:
+            self.assertAlmostEqual(float(d.pages[0].width), 300.0, delta=0.5)
+            self.assertIn("141", "".join(c["text"] for c in d.pages[0].chars))
+
+    def test_le_pagine_in_piu(self):
+        import pdfplumber
+        from pack3d import artwork
+        pagine, scheda, copertina = (self._uscita(n) for n in ("pagine", "scheda", "copertina"))
+        self.parco._pagina_variata(self.dt, pagine, "pagine")
+        self.parco._pagina_variata(self.dt, scheda, "scheda")
+        self.parco._pagina_variata(self.dt, copertina, "copertina")
+        tratti = [artwork._tratti_tecnici(pagine, i) for i in range(4)]
+        # il disegno e' la terza pagina, e le altre non hanno i tratti di un disegno
+        self.assertEqual(tratti[2], artwork._tratti_tecnici(self.dt, 0))
+        self.assertTrue(all(tratti[i] < artwork.TECNICI_MIN for i in (0, 1, 3)))
+        # la scheda davanti ha la tabella: i tratti di un disegno
+        self.assertGreaterEqual(artwork._tratti_tecnici(scheda, 0), artwork.TECNICI_MIN)
+        # la copertina non e' bianca: pypdf 6 dava la pagina di prima della copia
+        with pdfplumber.open(copertina) as d:
+            self.assertIn("SCHEDA TECNICA", d.pages[0].extract_text())
+
+
 if __name__ == "__main__":
     unittest.main()

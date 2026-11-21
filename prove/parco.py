@@ -2183,25 +2183,41 @@ def _pagina_variata(sorgente, destinazione, variante, kind=None):
       Attenzione: Ghostscript butta anche gran parte del disegno tecnico
       (sul wafer T1 le linee da 1187 a 212, le curve da 552 a 6), e il
       pack non lo risolverebbe nessuno: misura Ghostscript piu' che il
-      codice, e nel giro della settimana non c'e'.
+      codice, e nel giro della settimana non c'e';
+    - `penne`, `spezzati`, `senzaquote`, `curve`: lo stesso disegno
+      riscritto operatore per operatore - le penne del DT in altri colori,
+      i tratti spezzati in pezzi di tre millimetri, le quote tolte, i testi
+      in curve al loro posto (`_penne_altre`, `_tratti_spezzati`,
+      `_senza_quote`, `_testi_in_curve`). Il piano del 20 novembre 2026;
+    - `dimezzato`: il disegno in scala 1:2 con le quote del passo e del giro
+      che dicono le misure vere (`quote`, poi `scala0.5`): il modello giusto
+      e' quello dell'originale, non la sua meta';
+    - `pagine`: il disegno sulla terza pagina di quattro, davanti una
+      copertina e una pagina di note, dietro le tinte; `scheda`: davanti la
+      scheda tecnica, con le voci in una tabella (`_pagine_in_piu`).
 
     Il documento si clona intero: i livelli che la pulizia spegne per nome
     devono restare gli stessi oggetti a cui punta il contenuto. Copiati a
     parte, il livello tecnico del T10 al lampone non si spegneva piu', e le
-    sue quote entravano nella fustella."""
+    sue quote entravano nella fustella.
+
+    Vero se la variante ha cambiato qualcosa: un PDF senza quote non ha
+    quote da togliere, e quel caso la variante non lo prova."""
     import tempfile
     passi = variante.split("+")
     corrente = sorgente
+    cambiata = False
     for k, passo in enumerate(passi):
         if k + 1 == len(passi):
             uscita = destinazione
         else:
             fd, uscita = tempfile.mkstemp(suffix=".pdf", dir=os.path.dirname(destinazione))
             os.close(fd)
-        _un_passo(corrente, uscita, passo, kind, insieme=set(passi) - {passo})
+        cambiata |= bool(_un_passo(corrente, uscita, passo, kind, insieme=set(passi) - {passo}))
         if corrente != sorgente:
             os.remove(corrente)
         corrente = uscita
+    return cambiata
 
 
 def _riquadro_tecnico(pdf, pagina, kind=None):
@@ -2694,14 +2710,1289 @@ def _disegno_in_piu(pdf, pagina, variante, mx0, my1, kind=None, insieme=frozense
     return ("\n".join(righe) + "\n").encode("ascii")
 
 
+# --------------------------------------------------------------------------- #
+# Le varianti che riscrivono il contenuto della pagina: le penne in altri
+# colori, i tratti spezzati, le quote tolte, i testi in curve. Il piano del 20
+# novembre 2026 (pack3d-casi, regole/decisioni.md, *Un deterministico che
+# fallisce il meno possibile*): prima si misura dove la lettura si rompe oggi.
+#
+# Le varianti di stile qui sopra AGGIUNGONO disegno; queste CAMBIANO quello
+# che c'e', operatore per operatore: un tratto si ricolora, si spezza o se ne
+# va, un testo diventa i suoi contorni. Per sapere di ogni operatore la penna,
+# il colore e dove cade si chiede a pdfminer - la libreria con cui pdfplumber,
+# e quindi la lettura della fustella, vede la pagina (`_oracolo`) -, e si
+# riscrive il flusso con pypdf (`_riscrivi`). Le due letture devono contare
+# gli stessi operatori: un flusso dove non tornano non si tocca.
+# --------------------------------------------------------------------------- #
+TRACCIA = (b"m", b"l", b"c", b"v", b"y", b"h", b"re")
+RITAGLIO = (b"W", b"W*")
+DIPINGE = (b"S", b"s", b"f", b"F", b"f*", b"B", b"B*", b"b", b"b*", b"n")
+MOSTRA = (b"Tj", b"TJ", b"'", b'"')
+
+
+def _nome_op(op):
+    return "EI" if op == b"INLINE IMAGE" else op.decode("latin-1")
+
+
+def _oracolo(pdf, pagina):
+    """Quello che pdfminer - cioe' pdfplumber, che legge la fustella - vede di
+    ogni operatore della pagina `pagina`.
+
+    `ops[chiave]` sono i nomi degli operatori di ogni flusso, la pagina
+    (`("pagina",)`) e i Form XObject (la chiave e' la strada dei nomi coi
+    quali ci si arriva), nell'ordine: il k-esimo e' il k-esimo di pypdf.
+    `tratti[(chiave, k)]` e `testi[(chiave, k)]` sono gli eventi di chi
+    dipinge un percorso o scrive un testo, uno per ogni volta che il flusso si
+    disegna: la penna come la legge pdfplumber (spessore e colore, con lo
+    spessore gia' nel telaio della pagina), lo spazio di colore col nome
+    della tinta piatta, i livelli in cui sta, il percorso nel telaio di
+    pdfminer, i caratteri coi loro riquadri, la matrice del testo prima e
+    dopo."""
+    import logging
+    from collections import defaultdict
+    from pdfminer.converter import PDFLayoutAnalyzer
+    from pdfminer.layout import LTChar
+    from pdfminer.pdfdocument import PDFDocument
+    from pdfminer.pdfinterp import (LITERAL_FORM, PDFContentParser, PDFPageInterpreter,
+                                    PDFResourceManager)
+    from pdfminer.pdfpage import PDFPage
+    from pdfminer.pdfparser import PDFParser
+    from pdfminer.pdftypes import dict_value, list_value, resolve1, stream_value
+    from pdfminer.psparser import PSEOF, PSKeyword, PSLiteral, keyword_name, literal_name
+    from pdfminer.utils import MATRIX_IDENTITY, apply_matrix_pt, mult_matrix
+    logging.getLogger("pdfminer").setLevel(logging.ERROR)
+    esito = dict(ops={}, tratti=defaultdict(list), testi=defaultdict(list), oggetti={},
+                 oggetto_di={}, volte={}, mediabox=(0.0, 0.0, 0.0, 0.0))
+
+    def spazio(risorse, nome):
+        if nome in ("DeviceGray", "DeviceRGB", "DeviceCMYK", "Pattern"):
+            return (nome,)
+        try:
+            cs = resolve1(dict_value(risorse.get("ColorSpace") or {}).get(nome))
+            cs = [cs] if isinstance(cs, PSLiteral) else list_value(cs)
+            tipo = literal_name(resolve1(cs[0]))
+            if tipo == "Separation":
+                return ("Separation", literal_name(resolve1(cs[1])))
+            if tipo == "DeviceN":
+                return ("DeviceN",) + tuple(literal_name(resolve1(x))
+                                            for x in list_value(resolve1(cs[1])))
+            return (tipo,)
+        except Exception:  # noqa: BLE001 - uno spazio che non si legge e' un nome
+            return (nome,)
+
+    class Dispositivo(PDFLayoutAnalyzer):
+        dove = None
+        interprete = None
+
+        def paint_path(self, gstate, stroke, fill, evenodd, path):
+            it = self.interprete
+            percorso = [(seg[0], [apply_matrix_pt(self.ctm, (float(a), float(b)))
+                                  for a, b in zip(seg[1::2], seg[2::2])]) for seg in path]
+            esito["tratti"][self.dove].append(dict(
+                stroke=stroke, fill=fill, larghezza=gstate.linewidth, colore=gstate.scolor,
+                riempimento=gstate.ncolor, percorso=percorso, ctm=tuple(self.ctm), spazio=it.spazio_s,
+                spazio_r=it.spazio_n, livelli=tuple(it.livelli)))
+
+        def render_string(self, textstate, seq, ncs, graphicstate):
+            it = self.interprete
+            prima = len(self.cur_item._objs)
+            linea = tuple(textstate.linematrix)
+            super().render_string(textstate, seq, ncs, graphicstate)
+            car = [o for o in self.cur_item._objs[prima:] if isinstance(o, LTChar)]
+            esito["testi"][self.dove].append(dict(
+                caratteri=[(c.get_text(), tuple(c.bbox)) for c in car],
+                corpo=textstate.fontsize, modo=textstate.render, scala=textstate.scaling,
+                verticale=bool(textstate.font and textstate.font.is_vertical()),
+                linea=linea, matrice_dopo=tuple(textstate.matrix),
+                linea_dopo=tuple(textstate.linematrix), ctm=tuple(self.ctm),
+                riempimento=graphicstate.ncolor, spazio_r=it.spazio_n, nome_spazio_r=it.nome_n,
+                livelli=tuple(it.livelli)))
+
+    class Interprete(PDFPageInterpreter):
+        chiave = ("pagina",)
+        livelli_base = ()
+
+        def dup(self):
+            n = self.__class__(self.rsrcmgr, self.device)
+            n.chiave, n.livelli_base = self.chiave, self.livelli_base
+            return n
+
+        def init_state(self, ctm):
+            super().init_state(ctm)
+            self.spazio_s = self.spazio_n = ("DeviceGray",)
+            self.nome_n = None
+            self.pila_spazi, self.pila_mc = [], []
+            self.livelli = list(self.livelli_base)
+
+        def execute(self, streams):
+            # quello di pdfminer, ma ogni operatore si conta
+            try:
+                parser = PDFContentParser([stream_value(o) for o in streams])
+            except PSEOF:
+                return
+            nomi = esito["ops"].get(self.chiave)
+            registra = nomi is None
+            if registra:
+                nomi = esito["ops"][self.chiave] = []
+            k = 0
+            while True:
+                try:
+                    (_, obj) = parser.nextobject()
+                except PSEOF:
+                    break
+                if not isinstance(obj, PSKeyword):
+                    self.push(obj)
+                    continue
+                name = keyword_name(obj)
+                if registra:
+                    nomi.append(name)
+                self.device.dove, self.device.interprete = (self.chiave, k), self
+                k += 1
+                metodo = "do_%s" % name.replace("*", "_a").replace('"', "_w").replace("'", "_q")
+                if hasattr(self, metodo):
+                    func = getattr(self, metodo)
+                    nargs = func.__code__.co_argcount - 1
+                    if nargs:
+                        args = self.pop(nargs)
+                        if len(args) == nargs:
+                            func(*args)
+                    else:
+                        func()
+
+        def do_q(self):
+            super().do_q()
+            self.pila_spazi.append((self.spazio_s, self.spazio_n, self.nome_n))
+
+        def do_Q(self):
+            super().do_Q()
+            if self.pila_spazi:
+                self.spazio_s, self.spazio_n, self.nome_n = self.pila_spazi.pop()
+
+        def do_CS(self, name):
+            super().do_CS(name)
+            self.spazio_s = spazio(self.resources, literal_name(name))
+
+        def do_cs(self, name):
+            super().do_cs(name)
+            self.spazio_n, self.nome_n = spazio(self.resources, literal_name(name)), literal_name(name)
+
+        def do_G(self, g):
+            super().do_G(g)
+            self.spazio_s = ("DeviceGray",)
+
+        def do_g(self, g):
+            super().do_g(g)
+            self.spazio_n, self.nome_n = ("DeviceGray",), None
+
+        def do_RG(self, r, g, b):
+            super().do_RG(r, g, b)
+            self.spazio_s = ("DeviceRGB",)
+
+        def do_rg(self, r, g, b):
+            super().do_rg(r, g, b)
+            self.spazio_n, self.nome_n = ("DeviceRGB",), None
+
+        def do_K(self, c, m, y, k):
+            super().do_K(c, m, y, k)
+            self.spazio_s = ("DeviceCMYK",)
+
+        def do_k(self, c, m, y, k):
+            super().do_k(c, m, y, k)
+            self.spazio_n, self.nome_n = ("DeviceCMYK",), None
+
+        def _livello(self, props):
+            try:
+                if isinstance(props, PSLiteral):
+                    props = dict_value(self.resources.get("Properties") or {}).get(
+                        literal_name(props))
+                d = dict_value(resolve1(props))
+                if d.get("OCGs") is not None:
+                    gs = resolve1(d.get("OCGs"))
+                    gs = gs if isinstance(gs, list) else [gs]
+                    return ",".join(str(resolve1(dict_value(resolve1(g)).get("Name"))) for g in gs)
+                return str(resolve1(d.get("Name")))
+            except Exception:  # noqa: BLE001 - un livello che non si legge non ha nome
+                return "?"
+
+        def do_BDC(self, tag, props):
+            super().do_BDC(tag, props)
+            oc = isinstance(tag, PSLiteral) and literal_name(tag) == "OC"
+            self.pila_mc.append(self._livello(props) if oc else None)
+            if oc:
+                self.livelli.append(self.pila_mc[-1])
+
+        def do_BMC(self, tag):
+            super().do_BMC(tag)
+            self.pila_mc.append(None)
+
+        def do_EMC(self):
+            super().do_EMC()
+            if self.pila_mc and self.pila_mc.pop() is not None and self.livelli:
+                self.livelli.pop()
+
+        def do_Do(self, xobjid_arg):
+            xobjid = literal_name(xobjid_arg)
+            try:
+                xobj = stream_value(self.xobjmap[xobjid])
+            except KeyError:
+                return
+            if xobj.get("Subtype") is LITERAL_FORM and "BBox" in xobj and len(self.chiave) < 8:
+                sotto = self.dup()
+                sotto.chiave = self.chiave + (xobjid,)
+                esito["oggetti"].setdefault(xobj.objid, set()).add(sotto.chiave)
+                esito["oggetto_di"][sotto.chiave] = xobj.objid
+                esito["volte"][sotto.chiave] = esito["volte"].get(sotto.chiave, 0) + 1
+                sotto.livelli_base = tuple(self.livelli)
+                if xobj.get("OC") is not None:
+                    sotto.livelli_base += (self._livello(xobj.get("OC")),)
+                matrice = list_value(xobj.get("Matrix", MATRIX_IDENTITY))
+                ris = xobj.get("Resources")
+                ris = dict_value(ris) if ris else self.resources.copy()
+                self.device.begin_figure(xobjid, list_value(xobj["BBox"]), matrice)
+                sotto.render_contents(ris, [xobj], ctm=mult_matrix(matrice, self.ctm))
+                self.device.end_figure(xobjid)
+
+    with open(pdf, "rb") as fh:
+        doc = PDFDocument(PDFParser(fh))
+        rm = PDFResourceManager(caching=True)
+        dev = Dispositivo(rm, pageno=1, laparams=None)
+        for k, page in enumerate(PDFPage.create_pages(doc)):
+            if k == pagina:
+                Interprete(rm, dev).process_page(page)
+                esito["mediabox"] = tuple(float(v) for v in page.mediabox)
+                break
+    return esito
+
+
+def _scrivi_flusso(xobj, dati):
+    """Il contenuto nuovo di un Form XObject: compresso se lo era, e che si
+    rilegge giusto nello stesso file - un Form di due pagine si riscrive alla
+    prima e si rilegge alla seconda (`set_data` di pypdf tiene in cassa il
+    contenuto decodificato, col filtro di prima)."""
+    from pypdf.generic import EncodedStreamObject, NameObject
+    if isinstance(xobj, EncodedStreamObject):
+        xobj.get_data()
+        xobj[NameObject("/Filter")] = NameObject("/FlateDecode")
+        if "/DecodeParms" in xobj:
+            del xobj["/DecodeParms"]
+    xobj.set_data(dati)
+
+
+def _riscrivi(w, i, orac, tratto=None, testo=None, altro=None, diario=None):
+    """Riscrive la pagina `i` del PdfWriter `w`, Form XObject compresi.
+
+    `tratto(chiave, k, percorso, dipinge, eventi)` riceve un percorso con
+    l'operatore che lo dipinge, `testo(chiave, k, op, eventi)` un operatore
+    che scrive, `altro(chiave, k, op, risorse)` tutti gli altri: danno le
+    operazioni da mettere al loro posto, o None per lasciarle. I percorsi di
+    ritaglio non si toccano. Un flusso dove pypdf e pdfminer non contano gli
+    stessi operatori resta com'e' (`diario["flussi diversi"]`)."""
+    from pypdf.generic import ContentStream
+    page = w.pages[i]
+    fatti = set()
+
+    def uno(cs, risorse, chiave):
+        ops = cs.operations
+        nomi = orac["ops"].get(chiave)
+        if nomi is None or len(nomi) != len(ops) or any(
+                _nome_op(op) != n for (_o, op), n in zip(ops, nomi)):
+            if diario is not None:
+                diario["flussi diversi"] += 1
+            return None
+        nuovi, percorso, cambiato = [], [], False
+        for k, (operandi, op) in enumerate(ops):
+            if op in TRACCIA or op in RITAGLIO:
+                percorso.append((operandi, op))
+                continue
+            if op in DIPINGE:
+                ev = orac["tratti"].get((chiave, k))
+                fuori = None
+                if tratto is not None and ev and not any(o in RITAGLIO for _a, o in percorso):
+                    fuori = tratto(chiave, k, percorso, (operandi, op), ev)
+                if fuori is None:
+                    nuovi.extend(percorso)
+                    nuovi.append((operandi, op))
+                else:
+                    nuovi.extend(fuori)
+                    cambiato = True
+                percorso = []
+                continue
+            if percorso:
+                nuovi.extend(percorso)
+                percorso = []
+            if op in MOSTRA and testo is not None:
+                ev = orac["testi"].get((chiave, k))
+                fuori = testo(chiave, k, (operandi, op), ev) if ev else None
+                if fuori is not None:
+                    nuovi.extend(fuori)
+                    cambiato = True
+                    continue
+            if altro is not None:
+                fuori = altro(chiave, k, (operandi, op), risorse)
+                if fuori is not None:
+                    nuovi.extend(fuori)
+                    cambiato = True
+                    continue
+            if op == b"Do" and operandi:
+                xo = risorse.get("/XObject") or {}
+                nome = str(operandi[0])
+                if nome in xo:
+                    rif = xo.raw_get(nome) if hasattr(xo, "raw_get") else xo[nome]
+                    x = xo[nome].get_object()
+                    ident = getattr(rif, "idnum", None) or id(x)
+                    if x.get("/Subtype") == "/Form" and ident not in fatti:
+                        fatti.add(ident)
+                        dati = uno(ContentStream(x, w), x.get("/Resources") or risorse,
+                                   chiave + (nome.lstrip("/"),))
+                        if dati is not None:
+                            _scrivi_flusso(x, dati)
+            nuovi.append((operandi, op))
+        nuovi.extend(percorso)
+        if not cambiato:
+            return None
+        cs.operations = nuovi
+        return cs.get_data()
+
+    cs = page.get_contents()
+    if cs is None:
+        return
+    dati = uno(cs, page.get("/Resources") or {}, ("pagina",))
+    if dati is not None:
+        nuovo = ContentStream(None, w)
+        nuovo.set_data(dati)
+        page.replace_contents(nuovo)
+        page.compress_content_streams()
+
+
+QUASI_DRITTO = 0.05
+
+
+def _segmenti_del_tratto(ev, mediabox):
+    """I segmenti H/V di un tratto di `_oracolo`, come `dieline._segments`,
+    nel telaio di pdfplumber: [(j, (k, c, a, b))], j l'indice del pezzo nel
+    percorso di pdfminer (dove un `re` e' m l l l h)."""
+    mx0, my0, _mx1, my1 = mediabox
+    alto = my1 - my0
+
+    def pl(p):
+        return (mx0 + p[0], my0 + alto - p[1])
+    fuori, cur, start = [], None, None
+    for j, (op, xy) in enumerate(ev["percorso"]):
+        if op == "m":
+            cur = start = pl(xy[-1])
+            continue
+        dest = start if op == "h" else pl(xy[-1])
+        if cur is not None and dest is not None:
+            (x0, y0), (x1, y1) = cur, dest
+            dx, dy = abs(x1 - x0), abs(y1 - y0)
+            if dy > 1.0 and (dx < 0.7 or dx <= QUASI_DRITTO * dy):
+                fuori.append((j, ("V", (x0 + x1) / 2, min(y0, y1), max(y0, y1))))
+            elif dx > 1.0 and (dy < 0.7 or dy <= QUASI_DRITTO * dx):
+                fuori.append((j, ("H", (y0 + y1) / 2, min(x0, x1), max(x0, x1))))
+        cur = dest
+    return fuori
+
+
+def _penna_di(ev):
+    """La penna di un tratto come la chiama la lettura (`dieline._segments`)."""
+    return (round(ev["larghezza"] or 0, 2), str(ev["colore"]))
+
+
+def _linea_piena(percorso, dipinge):
+    """Vero se e' una linea dipinta col riempimento: `m l f`, che non lascia
+    niente sulla pagina. Certi CAD disegnano ogni linea del DT due volte, cosi'
+    e col tratto; la lettura conta anche questa (`dieline._segments` prende
+    tutte le `lines` di pdfplumber), con la penna del colore di contorno."""
+    if dipinge[1] not in (b"f", b"F", b"f*"):
+        return False
+    return _solo_linee(percorso)
+
+
+def _solo_linee(percorso):
+    """Vero se il percorso e' fatto solo di linee: `m l`, o `m l h` (pdfminer
+    la chiama linea lo stesso), una dopo l'altra."""
+    ops = [op for _o, op in percorso]
+    j = 0
+    while j < len(ops):
+        if ops[j:j + 2] != [b"m", b"l"]:
+            return False
+        j += 3 if ops[j + 2:j + 3] == [b"h"] else 2
+    return bool(ops)
+
+
+def _num(v):
+    from pypdf.generic import FloatObject
+    return FloatObject(round(float(v), 4))
+
+
+def _scrivi(w, destinazione):
+    with open(destinazione, "wb") as fh:
+        w.write(fh)
+
+
+# I colori nuovi delle penne, nell'ordine in cui sanno di fustella
+# (`dieline._punteggi_penna`): il rosso del taglio, il verde della
+# cordonatura, il blu delle quote, come li disegnano i CAD; poi altri.
+PALETTE_PENNE = ((0, 1, 1, 0), (1, 0, 1, 0), (1, 1, 0, 0), (0, 1, 0, 0), (0, 0.5, 1, 0),
+                 (0.5, 1, 0, 0), (1, 0, 0, 0.3), (0, 0, 0, 0.6), (0.3, 0.9, 0, 0),
+                 (0.9, 0.3, 0, 0), (0, 0.3, 0.9, 0), (0.7, 0, 0.4, 0), (0, 0.8, 0.4, 0.1))
+
+
+def _penne_altre(sorgente, destinazione, kind=None):
+    """`penne`: il disegno tecnico nelle penne di un altro disegnatore.
+
+    Ogni penna tecnica della pagina (`dieline._technical_pens`: taglio,
+    cordonatura, quote, la cornice della tavola) prende un colore di
+    quadricromia suo (`PALETTE_PENNE`), e le penne restano distinte come
+    erano: due penne diverse restano due, una resta una. I tratti cambiano
+    per penna, come le distingue la lettura - lo spessore e il colore com'e'
+    scritto, non il nome della tinta: due tinte piatte al 100% con lo stesso
+    spessore sono una penna sola, e ricolorate per nome diventavano due. Un
+    colore che la pagina usa gia' per un tratto si salta: sul T2x12 il blu
+    delle quote diventava il rosso di un'altra penna, e le due penne erano
+    una. Se la penna e' una tinta piatta col nome tecnico
+    (`techink.tecnica`: Fustella, Cutter, Dimensions...), cambiano colore con
+    lei anche i pieni e i testi in quella tinta - i numeri e le frecce delle
+    quote, la legenda -: la tinta era solo del DT. Il disegno e' lo stesso;
+    spariscono il nome della tinta e il colore com'era. Quante modifiche."""
+    from collections import defaultdict
+    from pypdf import PdfWriter
+    from pypdf.generic import NameObject
+    from pack3d import dieline, techink
+    w = PdfWriter(clone_from=sorgente)
+    diario = defaultdict(int)
+    for i in range(len(w.pages)):
+        t = dieline.tratti(sorgente, i)
+        segs = list(t.segmenti)
+        penne = dieline._technical_pens(segs, t.larghezza, t.altezza)
+        if not penne:
+            continue
+        punti = dieline._punteggi_penna(segs, t.larghezza, t.altezza)
+        usati = {st[1] for st in segs} | {o[1][1] for o in t.oggetti}
+        liberi = [c for c in PALETTE_PENNE
+                  if str(tuple(float(x) for x in c)) not in usati]
+        liberi += [(0.05 * k, 0.9, 0.1, 0) for k in range(1, 20)]
+        nuove = dict(zip(sorted(penne, key=lambda st: (-punti.get(st, 0), st)), liberi))
+        orac = _oracolo(sorgente, i)
+        tinte = {}
+        for evs in orac["tratti"].values():
+            for ev in evs:
+                sp = ev["spazio"]
+                if (ev["stroke"] and _penna_di(ev) in nuove and len(sp) == 2
+                        and sp[0] in ("Separation", "DeviceN") and techink.tecnica(sp[1])):
+                    tinte.setdefault(sp[1], nuove[_penna_di(ev)])
+
+        def in_tinta(c, v):
+            # la tinta piatta stesa al 50% resta al 50%
+            try:
+                v = float(max(v) if isinstance(v, (tuple, list)) else v)
+            except (TypeError, ValueError):
+                v = 1.0
+            return [_num(x * v) for x in c]
+
+        def tratto(chiave, k, percorso, dipinge, eventi):
+            ev = eventi[0]
+            prima = []
+            # anche dove non si vede: la lettura da' la penna del contorno
+            # anche alle linee dipinte col riempimento (`_linea_piena`)
+            if _penna_di(ev) in nuove:
+                prima.append(([_num(x) for x in nuove[_penna_di(ev)]], b"K"))
+            if ev["fill"]:
+                sp = ev["spazio_r"]
+                if len(sp) == 2 and sp[1] in tinte:
+                    prima.append((in_tinta(tinte[sp[1]], ev["riempimento"]), b"k"))
+            if not prima:
+                return None
+            diario["tratti"] += 1
+            return [([], b"q")] + prima + percorso + [dipinge, ([], b"Q")]
+
+        def testo(chiave, k, op, eventi):
+            ev = eventi[0]
+            sp = ev["spazio_r"]
+            if len(eventi) > 1 or not (len(sp) == 2 and sp[1] in tinte) or not ev["nome_spazio_r"]:
+                return None
+            # fra BT ed ET niente q e Q: il colore di prima si rimette a mano
+            v = ev["riempimento"]
+            v = list(v) if isinstance(v, (tuple, list)) else [v]
+            diario["testi"] += 1
+            return [(in_tinta(tinte[sp[1]], ev["riempimento"]), b"k"), op,
+                    ([NameObject("/" + ev["nome_spazio_r"])], b"cs"), ([_num(x) for x in v], b"scn")]
+        _riscrivi(w, i, orac, tratto=tratto, testo=testo, diario=diario)
+    _scrivi(w, destinazione)
+    return diario["tratti"] + diario["testi"]
+
+
+# Quanto e' lungo un pezzo dei tratti spezzati, in mm
+PEZZO_MM = 3.0
+
+
+def _tratti_spezzati(sorgente, destinazione, kind=None):
+    """`spezzati`: ogni tratto delle penne tecniche in pezzi di tre
+    millimetri (`PEZZO_MM`), uno attaccato all'altro, ognuno un percorso suo:
+    il DT come lo esportano certi CAD, una linea per ogni pezzo. Si vede
+    uguale; la lettura trova solo tratti corti.
+
+    Anche le curve, in pezzi di curva (de Casteljau): la lettura prende la
+    corda di ogni curva (`dieline._segments`), e certi DT disegnano dritte
+    come curve - sul T2x12 un lato, sul display da 15 le alette. Un percorso
+    riempito e tracciato (`B`) si riempie intero e si traccia a pezzi: il
+    pieno resta quello. Quanti tratti spezzati."""
+    import math
+    from collections import defaultdict
+    from pypdf import PdfWriter
+    from pack3d import dieline
+    from pack3d.dieline import PT2MM
+    w = PdfWriter(clone_from=sorgente)
+    diario = defaultdict(int)
+    for i in range(len(w.pages)):
+        t = dieline.tratti(sorgente, i)
+        penne = dieline._technical_pens(list(t.segmenti), t.larghezza, t.altezza)
+        if not penne:
+            continue
+        orac = _oracolo(sorgente, i)
+
+        def tratto(chiave, k, percorso, dipinge, eventi):
+            ev = eventi[0]
+            dip = dipinge[1]
+            piena = _linea_piena(percorso, dipinge)
+            riempie = dip in (b"B", b"B*", b"b", b"b*")
+            if (dip not in (b"S", b"s") and not piena and not riempie) or _penna_di(ev) not in penne:
+                return None
+            # il passo nel telaio del tratto
+            a, b, c, d = ev["ctm"][:4]
+            passo = PEZZO_MM / PT2MM / (math.sqrt(abs(a * d - b * c)) or 1.0)
+            nuovi, cur, start, pezzi = [], None, None, 0
+
+            def spezza(p, q):
+                nonlocal pezzi
+                n = int(round(math.hypot(q[0] - p[0], q[1] - p[1]) / passo))
+                n = max(n, 1)
+                for j in range(n):
+                    u, v = j / n, (j + 1) / n
+                    nuovi.append(([_num(p[0] + (q[0] - p[0]) * u), _num(p[1] + (q[1] - p[1]) * u)], b"m"))
+                    nuovi.append(([_num(p[0] + (q[0] - p[0]) * v), _num(p[1] + (q[1] - p[1]) * v)], b"l"))
+                pezzi += n - 1
+
+            def curva(p0, p1, p2, p3):
+                # i pezzi di una curva di Bezier sono curve: su [t0, t1] i
+                # capi sono B(t0) e B(t1), e i controlli stanno sulle tangenti
+                # a (t1 - t0)/3 della derivata
+                nonlocal pezzi
+                lungo = (math.dist(p0, p1) + math.dist(p1, p2) + math.dist(p2, p3)
+                         + math.dist(p0, p3)) / 2
+                n = max(int(round(lungo / passo)), 1)
+
+                def B(t):
+                    s = 1 - t
+                    return tuple(s ** 3 * a0 + 3 * s * s * t * a1 + 3 * s * t * t * a2 + t ** 3 * a3
+                                 for a0, a1, a2, a3 in zip(p0, p1, p2, p3))
+
+                def D(t):
+                    s = 1 - t
+                    return tuple(3 * (s * s * (a1 - a0) + 2 * s * t * (a2 - a1) + t * t * (a3 - a2))
+                                 for a0, a1, a2, a3 in zip(p0, p1, p2, p3))
+                for j in range(n):
+                    t0, t1 = j / n, (j + 1) / n
+                    q0, q3, d0, d1 = B(t0), B(t1), D(t0), D(t1)
+                    h = (t1 - t0) / 3
+                    q1 = (q0[0] + h * d0[0], q0[1] + h * d0[1])
+                    q2 = (q3[0] - h * d1[0], q3[1] - h * d1[1])
+                    nuovi.append(([_num(q0[0]), _num(q0[1])], b"m"))
+                    nuovi.append(([_num(x) for pt in (q1, q2, q3) for x in pt], b"c"))
+                pezzi += n - 1
+            ops = list(percorso) + ([([], b"h")] if dip in (b"s", b"b", b"b*") else [])
+            for operandi, op in ops:
+                v = [float(x) for x in operandi]
+                if op == b"m":
+                    cur = start = (v[0], v[1])
+                elif op == b"l":
+                    if cur is not None:
+                        spezza(cur, (v[0], v[1]))
+                    cur = (v[0], v[1])
+                elif op == b"h":
+                    if cur is not None and start is not None and cur != start:
+                        spezza(cur, start)
+                    cur = start
+                elif op == b"re":
+                    x, y, ww, hh = v
+                    q = [(x, y), (x + ww, y), (x + ww, y + hh), (x, y + hh), (x, y)]
+                    for p0, p1 in zip(q, q[1:]):
+                        spezza(p0, p1)
+                    cur = start = (x, y)
+                elif op in (b"c", b"v", b"y"):
+                    p0 = cur if cur is not None else (v[0], v[1])
+                    if op == b"c":
+                        p1, p2, p3 = (v[0], v[1]), (v[2], v[3]), (v[4], v[5])
+                    elif op == b"v":
+                        p1, p2, p3 = p0, (v[0], v[1]), (v[2], v[3])
+                    else:
+                        p1, p2, p3 = (v[0], v[1]), (v[2], v[3]), (v[2], v[3])
+                    curva(p0, p1, p2, p3)
+                    cur = p3
+            if not pezzi:
+                return None
+            diario["tratti"] += 1
+            if riempie and not _solo_linee(percorso):
+                # il pieno com'era, poi il tratto a pezzi; una linea sola non
+                # riempie niente, e la lettura conterebbe la sua copia piena
+                pieno = list(percorso) + [([], b"f*" if dip in (b"B*", b"b*") else b"f")]
+                return pieno + nuovi + [([], b"S")]
+            return nuovi + [dipinge if piena else ([], b"S")]
+        _riscrivi(w, i, orac, tratto=tratto, diario=diario)
+    _scrivi(w, destinazione)
+    return diario["tratti"]
+
+
+# Un numero da quota com'e' scritto: 20, 37,5, R5, Ø72, 120 mm. Staccato dal
+# resto: non un pezzo di una data, di un codice o di una scala (10/02/2020,
+# T1 0018, 1:1), che sul T1 cold seal misuravano per caso le righe del
+# cartiglio, e la variante toglieva la tabella
+NUMERO_SCRITTO = (r"(?<![\w.,/:\-])[RØø⌀]?(?!0\d)(\d{1,4}(?:[.,]\d{1,2})?)(?:\s?mm)?"
+                  r"(?![\w.,/:\-])")
+
+
+def _numeri_della_pagina(pdf, pagina, orac):
+    """I numeri da quota della pagina: [(valore, parola, caratteri)].
+
+    Il testo lo legge pdfium, come lo legge `quote.numeri`: pdfminer certi
+    font non li decodifica - sul display T4x9 le quote uscivano
+    `(cid:27)(cid:19)` -, e la variante non vedeva numeri che la lettura
+    vede. `parola` sono i caratteri di pdfium, `[(None, None, None, testo,
+    (x0, top, x1, bottom))]` nel telaio di pdfplumber; `caratteri` le
+    `(chiave, k, j)` dei caratteri di pdfminer che cadono nel numero, quelli
+    che la variante puo' togliere."""
+    import re
+    import pypdfium2 as pdfium
+    from pack3d.quote import testo_per_indice
+    mx0, my0, _mx1, my1 = orac["mediabox"]
+    alto = my1 - my0
+    # i riquadri dei caratteri di pdfminer: quelli del font, piu' alti di
+    # quelli del glifo che da' pdfium e spostati (sul T2x12 il «271» di
+    # pdfium sta fra 212 e 225 punti, quello di pdfminer fra 219 e 239; sulle
+    # scritte girate anche di lato): un carattere e' del numero se i due
+    # riquadri si toccano, non se il centro cade dentro
+    loro = []
+    for (chiave, k), evs in orac["testi"].items():
+        if len(evs) != 1:
+            continue
+        for j, (ch, (x0, y0, x1, y1)) in enumerate(evs[0]["caratteri"]):
+            if ch.strip():
+                loro.append(((chiave, k, j), (mx0 + x0, my0 + alto - y1, mx0 + x1, my0 + alto - y0)))
+    fuori = []
+    doc = pdfium.PdfDocument(pdf)
+    try:
+        tp = doc[pagina].get_textpage()
+        testo = testo_per_indice(tp)
+        for m in re.finditer(NUMERO_SCRITTO, testo):
+            parola = []
+            for i in range(m.start(), m.end()):
+                left, bottom, right, top = tp.get_charbox(i)
+                if testo[i].strip() and right > left:
+                    parola.append((None, None, None, testo[i],
+                                   (left, my0 + my1 - top, right, my0 + my1 - bottom)))
+            if not parola:
+                continue
+            x0 = min(c[4][0] for c in parola)
+            y0 = min(c[4][1] for c in parola)
+            x1 = max(c[4][2] for c in parola)
+            y1 = max(c[4][3] for c in parola)
+            d = 0.3 * min(x1 - x0, y1 - y0)
+            caratteri = [chi for chi, (a0, b0, a1, b1) in loro
+                         if a0 < x1 + d and a1 > x0 - d and b0 < y1 + d and b1 > y0 - d]
+            fuori.append((float(m.group(1).replace(",", ".")), parola, caratteri))
+        tp.close()
+    finally:
+        doc.close()
+    return fuori
+
+
+def _misurate(segs, parola, v, riq, accanto_mm=10.0, scarto_mm=1.5):
+    """Le linee che il numero `v` misura fuori dal disegno (`riq`): quelle
+    lunghe quanto lui, anche spezzate dove sta scritto; quelle di una catena,
+    dove lo misurano due richiami che le attraversano; e la quota senza
+    linea, due richiami che arrivano al numero. [(k, c, a, b)]
+
+    Le quote che la lettura conosce (`flowpack._quote_estese`,
+    `dieline._quote_a_catena`) sono le linee lunghe quanto il numero; sul T1
+    a fondo argento le catene sotto lo steso - 14, 14, 19,5, 11 - non hanno
+    una linea per numero, e restavano."""
+    from pack3d.dieline import PT2MM
+    mm = 1.0 / PT2MM
+    x0 = min(c[4][0] for c in parola)
+    y0 = min(c[4][1] for c in parola)
+    x1 = max(c[4][2] for c in parola)
+    y1 = max(c[4][3] for c in parola)
+    cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    r0, r1, r2, r3 = riq
+    fuori = []
+    if len(parola) > 1:
+        a, b = parola[0][4], parola[-1][4]
+        versi = ("H",) if abs(b[0] - a[0]) >= abs(b[1] - a[1]) else ("V",)
+    else:
+        versi = ("H", "V")
+    for k in versi:
+        su, lungo = (cy, cx) if k == "H" else (cx, cy)
+        lo, hi = (r1, r3) if k == "H" else (r0, r2)
+        righe = {}
+        for s in segs:
+            if s[0] == k and abs(s[1] - su) <= accanto_mm * mm and not (lo - mm <= s[1] <= hi + mm):
+                righe.setdefault(round(s[1] / 1.5), []).append(s)
+        for pezzi in righe.values():
+            pezzi.sort(key=lambda s: s[2])
+            corse, cur = [], None
+            for s in pezzi:
+                if cur and s[2] - cur[3] <= 15 * mm:
+                    cur = (k, cur[1], cur[2], max(cur[3], s[3]))
+                else:
+                    if cur:
+                        corse.append(cur)
+                    cur = (k, s[1], s[2], s[3])
+            if cur:
+                corse.append(cur)
+            for kk, c, a, b in corse:
+                if not (a - 2 * mm <= lungo <= b + 2 * mm):
+                    continue
+                if abs(v - (b - a) * PT2MM) <= scarto_mm:
+                    fuori.append((kk, c, a, b))
+                    continue
+                tagli = sorted({s[1] for s in segs if s[0] != k
+                                and s[2] - 2.5 * mm <= c <= s[3] + 2.5 * mm
+                                and a - 3 <= s[1] <= b + 3})
+                for p, q in zip(tagli, tagli[1:]):
+                    if p <= lungo <= q and abs(v - (q - p) * PT2MM) <= scarto_mm:
+                        fuori.append((kk, c, a, b))
+                        break
+        tagli = sorted({s[1] for s in segs if s[0] != k
+                        and s[2] - accanto_mm * mm <= su <= s[3] + accanto_mm * mm
+                        and not (lo - mm <= (s[2] + s[3]) / 2 <= hi + mm)})
+        for p, q in zip(tagli, tagli[1:]):
+            if p <= lungo <= q and abs(v - (q - p) * PT2MM) <= scarto_mm:
+                fuori.append((k, su, p, q))
+                break
+    return fuori
+
+
+# Le tinte e i livelli delle quote, per nome
+NOMI_DI_QUOTE = ("dimension", "quota", "quote", "bemass", "bemaß", "cota", "measure", "mesure")
+# Una penna e' di quote se le quote riconosciute ne fanno almeno questa parte
+PENNA_DI_QUOTE = 0.5
+# Il lato piu' lungo di una freccia o di un segno in capo a una quota, in mm
+FRECCIA_MM = 4.0
+
+
+def _di_quote(nome):
+    n = str(nome).strip().lower()
+    return any(p in n for p in NOMI_DI_QUOTE)
+
+
+def _senza_quote(sorgente, destinazione, kind=None):
+    """`senzaquote`: il DT senza le quote, numeri e linee, come lo manda chi
+    le spegne o non le disegna.
+
+    Le quote sono:
+
+    - tutto quello che sta in una tinta piatta o in un livello delle quote
+      (`NOMI_DI_QUOTE`: Dimensions, Quote...) - linee, frecce, numeri, e con
+      loro il resto del livello: chi spegne il livello delle quote spegne
+      tutto;
+    - i numeri che misurano una linea accanto (`_misurate` e le quote che la
+      lettura conosce, `flowpack._quote_estese`, `dieline._quote_a_catena`),
+      e le loro linee: quelle fuori dal disegno (il riquadro della lettura,
+      `_riquadro_tecnico`), coi richiami corti come in `dieline._quote_fuori`;
+      dentro il disegno una linea con la sua misura accanto e' una piega, e
+      resta - se ne va il numero;
+    - le penne che quelle quote spiegano per almeno `PENNA_DI_QUOTE` della
+      loro lunghezza, intere, e i numeri e le frecce del loro colore;
+    - le frecce e i segni piccoli (`FRECCIA_MM`) ai capi delle linee tolte.
+
+    Un testo tolto lascia il suo passo, perche' le scritte che vengono dopo
+    nella stessa riga restino dove sono. Un numero scritto insieme ad altre
+    parole nello stesso operatore resta. Quante modifiche."""
+    import math
+    from collections import defaultdict
+    from pypdf import PdfWriter
+    from pack3d import dieline
+    from pack3d.dieline import PT2MM
+    from pack3d.flowpack import _quote_estese
+    w = PdfWriter(clone_from=sorgente)
+    diario = defaultdict(int)
+    tol, mm = 3.0, 1.0 / PT2MM
+    for i in range(len(w.pages)):
+        t = dieline.tratti(sorgente, i)
+        segs = [s for s in t.segmenti if (s[4][0] or 0) <= 1.2]
+        orac = _oracolo(sorgente, i)
+        mb = orac["mediabox"]
+        alto = mb[3] - mb[1]
+        fustella = dieline.penne_di_fustella(segs, t.larghezza, t.altezza)
+        r = _riquadro_tecnico(sorgente, i, kind)
+        if r is not None:
+            riq = r[0]
+        else:
+            ff = [s for s in segs if s[4] in fustella]
+            riq = ((min((c if k == "V" else a) for k, c, a, b, _ in ff),
+                    min((c if k == "H" else a) for k, c, a, b, _ in ff),
+                    max((c if k == "V" else b) for k, c, a, b, _ in ff),
+                    max((c if k == "H" else b) for k, c, a, b, _ in ff))
+                   if ff else (0.0, 0.0, t.larghezza, t.altezza))
+        r0, r1, r2, r3 = riq
+
+        def di_quote(sp, livelli):
+            return ((bool(sp) and sp[0] in ("Separation", "DeviceN")
+                     and any(_di_quote(n) for n in sp[1:]))
+                    or any(_di_quote(n) for n in livelli or ()))
+        numeri, linee = [], set()
+        for v, parola, caratteri in _numeri_della_pagina(sorgente, i, orac):
+            q = [(parola[0][4][0], parola[0][4][1], v)]
+            trovate = [(k, c, a, b) for (k, c), (_v, a, b) in _quote_estese(segs, q).items()]
+            trovate += list(dieline._quote_a_catena(segs, q))
+            trovate += _misurate(segs, parola, v, riq)
+            linee.update(trovate)
+            numeri.append((caratteri, bool(trovate)))
+
+        def sulla(s, kq, cq, qa, qb):
+            return s[0] == kq and abs(s[1] - cq) <= tol and s[2] >= qa - tol and s[3] <= qb + tol
+
+        def richiamo(s, kq, cq, qa, qb):
+            return (s[0] != kq and min(abs(s[1] - qa), abs(s[1] - qb)) <= tol
+                    and s[2] - tol <= cq <= s[3] + tol)
+        tot, spiegata = defaultdict(float), defaultdict(float)
+        for s in segs:
+            tot[s[4]] += s[3] - s[2]
+            if any(sulla(s, *q) or richiamo(s, *q) for q in linee):
+                spiegata[s[4]] += s[3] - s[2]
+        penne_q = {st for st in tot if tot[st] > 0 and spiegata[st] >= PENNA_DI_QUOTE * tot[st]}
+        colori_q = {st[1] for st in penne_q}
+        fuori_linee = []
+        for k, c, a, b in linee:
+            lo, hi = (r1, r3) if k == "H" else (r0, r2)
+            fuori_linee.append((k, c, a, b, not (lo - mm <= c <= hi + mm),
+                                max((lo - c) if c < lo else (c - hi), 0.0)))
+
+        def da_togliere(seg, st):
+            for kq, cq, qa, qb, fuori, dist in fuori_linee:
+                if sulla(seg, kq, cq, qa, qb):
+                    if fuori or st not in fustella:
+                        return True
+                elif (fuori and richiamo(seg, kq, cq, qa, qb)
+                      and seg[3] - seg[2] <= dist + 6.0 * mm):
+                    return True
+            return False
+        capi = []
+        for k, c, qa, qb, _f, _d in fuori_linee:
+            for e in (qa, qb):
+                capi.append((e, c) if k == "H" else (c, e))
+        via_car = set()
+        for caratteri, misura in numeri:
+            evs = [orac["testi"][(c[0], c[1])][0] for c in caratteri]
+            if evs and (misura or all(str(e["riempimento"]) in colori_q
+                                      or di_quote(e["spazio_r"], e["livelli"]) for e in evs)):
+                via_car.update(caratteri)
+
+        def piccolo(ev):
+            pts = [p for _op, xy in ev["percorso"] for p in xy]
+            if not pts:
+                return False
+            xs = [mb[0] + p[0] for p in pts]
+            ys = [mb[1] + alto - p[1] for p in pts]
+            if max(max(xs) - min(xs), max(ys) - min(ys)) > FRECCIA_MM * mm:
+                return False
+            if ev["fill"] and str(ev["riempimento"]) in colori_q:
+                return True
+            cx, cy = (max(xs) + min(xs)) / 2, (max(ys) + min(ys)) / 2
+            return any(math.hypot(cx - x, cy - y) <= 3 * mm for x, y in capi)
+
+        def tratto(chiave, k, percorso, dipinge, eventi):
+            if len(eventi) != 1:
+                return None
+            ev = eventi[0]
+            st = _penna_di(ev)
+            if (di_quote(ev["spazio"] if ev["stroke"] else ev["spazio_r"], ev["livelli"])
+                    or (ev["stroke"] and st in penne_q) or piccolo(ev)):
+                diario["tratti"] += 1
+                return []
+            piena = _linea_piena(percorso, dipinge)
+            if (not ev["stroke"] and not piena) or (st[0] or 0) > 1.2:
+                return None
+            via = {j for j, sg in _segmenti_del_tratto(ev, mb) if da_togliere(sg, st)}
+            if not via:
+                return None
+            # le operazioni di pypdf contro i pezzi di pdfminer: un `re` e' m l l l h
+            nuovi, j, resta = [], 0, False
+            for operandi, op in percorso:
+                if op == b"re":
+                    x, y, ww, hh = [float(v) for v in operandi]
+                    q = [(x, y), (x + ww, y), (x + ww, y + hh), (x, y + hh), (x, y)]
+                    nuovi.append(([_num(x), _num(y)], b"m"))
+                    for s_, p1 in enumerate(q[1:]):
+                        tolto = (j + 1 + s_) in via
+                        nuovi.append(([_num(p1[0]), _num(p1[1])], b"m" if tolto else b"l"))
+                        resta |= not tolto
+                    j += 5
+                    continue
+                if op == b"l" and j in via:
+                    nuovi.append((operandi, b"m"))
+                elif not (op == b"h" and j in via):
+                    nuovi.append((operandi, op))
+                    resta |= op in (b"l", b"c", b"v", b"y", b"h")
+                j += 1
+            diario["tratti"] += 1
+            if ev["fill"] and not piena:
+                return None if resta else []
+            return nuovi + [dipinge if dipinge[1] != b"s" else ([], b"S")] if resta else []
+
+        def testo(chiave, k, op, eventi):
+            if len(eventi) != 1:
+                return None
+            ev = eventi[0]
+            car = ev["caratteri"]
+            if not car:
+                return None
+            if not di_quote(ev["spazio_r"], ev["livelli"]) and not (
+                    all((chiave, k, j) in via_car or not ch.strip() for j, (ch, _b) in enumerate(car))
+                    and any((chiave, k, j) in via_car for j in range(len(car)))):
+                return None
+            diario["testi"] += 1
+            return _solo_il_passo(op, ev)
+        _riscrivi(w, i, orac, tratto=tratto, testo=testo, diario=diario)
+    _scrivi(w, destinazione)
+    return diario["tratti"] + diario["testi"]
+
+
+def _solo_il_passo(op, ev, matrice=False):
+    """Le operazioni al posto di un testo che se ne va: il suo a capo, se ne
+    aveva uno (`'` e `"`), e il suo passo, perche' le scritte dopo nella
+    stessa riga restino dove sono. Con `matrice`, dopo un ET e un BT, prima
+    rimette la matrice della riga."""
+    from pypdf.generic import ArrayObject, FloatObject
+    fuori = []
+    if matrice:
+        fuori.append(([_num(v) for v in ev["matrice_dopo"]], b"Tm"))
+        if op[1] == b'"':
+            fuori += [([op[0][0]], b"Tw"), ([op[0][1]], b"Tc")]
+        lx = ev["linea_dopo"][0]
+    else:
+        if op[1] == b"'":
+            fuori.append(([], b"T*"))
+        elif op[1] == b'"':
+            fuori += [([op[0][0]], b"Tw"), ([op[0][1]], b"Tc"), ([], b"T*")]
+        lx = ev["linea_dopo"][0] - (0.0 if op[1] in (b"'", b'"') else ev["linea"][0])
+    dx = 0.001 * (ev["corpo"] or 0) * (ev["scala"] or 100) * 0.01
+    if dx and abs(lx) > 1e-6:
+        fuori.append(([ArrayObject([FloatObject(round(-lx / dx, 3))])], b"TJ"))
+    return fuori
+
+
+# I colori della copia di servizio dei testi in curve: tre cifre in questa
+# base, distanti abbastanza da tornare uguali dopo Ghostscript
+BASE_CODICI = 32
+
+
+def _codice_rgb(n):
+    return n // (BASE_CODICI ** 2), (n // BASE_CODICI) % BASE_CODICI, n % BASE_CODICI
+
+
+def _codici():
+    """I codici dei testi, mai grigi: un grigio Ghostscript lo scrive con `g`."""
+    for n in range(1, BASE_CODICI ** 3):
+        r, g, b = _codice_rgb(n)
+        if not (r == g == b):
+            yield n
+
+
+def _per(m1, m2):
+    a1, b1, c1, d1, e1, f1 = m1
+    a2, b2, c2, d2, e2, f2 = m2
+    return (a1 * a2 + b1 * c2, a1 * b2 + b1 * d2, c1 * a2 + d1 * c2, c1 * b2 + d1 * d2,
+            e1 * a2 + f1 * c2 + e2, e1 * b2 + f1 * d2 + f2)
+
+
+def _inversa(m):
+    a, b, c, d, e, f = m
+    det = a * d - b * c
+    if abs(det) < 1e-12:
+        return None
+    ia, ib, ic, id_ = d / det, -b / det, -c / det, a / det
+    return (ia, ib, ic, id_, -(e * ia + f * ic), -(e * ib + f * id_))
+
+
+def _contorni_gs(pdf_gs, pagina):
+    """{codice: [(pezzi, riempimento)]}: i tracciati che Ghostscript ha fatto
+    dai testi della pagina, nel telaio di pdfminer (l'origine all'angolo del
+    MediaBox), riconosciuti dal colore."""
+    from collections import defaultdict
+    from pypdf import PdfReader
+    from pypdf.generic import ContentStream
+    r = PdfReader(pdf_gs)
+    p = r.pages[pagina]
+    ox, oy = float(p.mediabox.left), float(p.mediabox.bottom)
+    fuori = defaultdict(list)
+
+    def scorri(ops, ctm, risorse, prof=0):
+        pila, colore, percorso = [], None, []
+        for operandi, op in ops:
+            if op == b"q":
+                pila.append((ctm, colore))
+            elif op == b"Q":
+                if pila:
+                    ctm, colore = pila.pop()
+            elif op == b"cm":
+                ctm = _per(tuple(float(v) for v in operandi), ctm)
+            elif op in (b"rg", b"sc", b"scn") and len(operandi) == 3:
+                try:
+                    colore = tuple(int(round(float(x) * (BASE_CODICI - 1))) for x in operandi)
+                except (TypeError, ValueError):
+                    colore = None
+            elif op in (b"g", b"k"):
+                colore = None
+            elif op in TRACCIA:
+                percorso.append((operandi, op, ctm))
+            elif op in DIPINGE or op in RITAGLIO:
+                if op in (b"f", b"f*", b"F") and colore is not None and percorso:
+                    pezzi = []
+                    for o, opp, m in percorso:
+                        if opp == b"re":
+                            x, y, ww, hh = [float(v) for v in o]
+                            q = [(x, y), (x + ww, y), (x + ww, y + hh), (x, y + hh)]
+                            o, opp = [v for pt in q for v in pt], None
+                        pts = [float(v) for v in o]
+                        xy = [(m[0] * a + m[2] * b + m[4] - ox, m[1] * a + m[3] * b + m[5] - oy)
+                              for a, b in zip(pts[::2], pts[1::2])]
+                        if opp is None:
+                            pezzi += [("m", [xy[0]])] + [("l", [pt]) for pt in xy[1:]] + [("h", [])]
+                        else:
+                            pezzi.append((opp.decode(), xy))
+                    c0, c1, c2 = colore
+                    fuori[(c0 * BASE_CODICI + c1) * BASE_CODICI + c2].append(
+                        (pezzi, "f*" if op == b"f*" else "f"))
+                if op in DIPINGE:
+                    percorso = []
+            elif op == b"Do" and prof < 6 and operandi:
+                xo = risorse.get("/XObject") or {}
+                nome = str(operandi[0])
+                if nome in xo:
+                    x = xo[nome].get_object()
+                    if x.get("/Subtype") == "/Form":
+                        mm_ = tuple(float(v) for v in x.get("/Matrix", [1, 0, 0, 1, 0, 0]))
+                        scorri(ContentStream(x, r).operations, _per(mm_, ctm),
+                               x.get("/Resources") or risorse, prof + 1)
+    cs = p.get_contents()
+    scorri(cs.operations if cs is not None else [], (1, 0, 0, 1, 0, 0), p.get("/Resources") or {})
+    return fuori
+
+
+def _testi_in_curve(sorgente, destinazione, kind=None):
+    """`curve`: ogni testo diventa i suoi contorni, al suo posto, come fa chi
+    prepara un PDF per la stampa. Tutto il resto - livelli, tinte, l'ordine
+    in cui si disegna - resta com'era.
+
+    `appiattito` lo fa con Ghostscript su tutto il file, e Ghostscript butta
+    anche i livelli e gran parte del DT. Qui Ghostscript vede una copia di
+    servizio con i soli testi, ognuno di un colore suo (`_codici`), e da'
+    i contorni; poi ogni operatore che scrive si sostituisce coi contorni del
+    suo colore - fra un ET e un BT, perche' dentro un testo non si disegna -,
+    dipinti col colore che il testo aveva, e la matrice del testo rimessa
+    dov'era (`_solo_il_passo`). Il testo invisibile se ne va. Restano testo
+    vivo solo i testi che non si possono rimettere al loro posto: scritti in
+    verticale, a tratto, in un Form XObject disegnato piu' volte. Quanti testi
+    in curve."""
+    import shutil
+    import subprocess
+    import tempfile
+    from collections import defaultdict
+    from pypdf import PdfWriter
+    from pypdf.generic import FloatObject, NameObject, NumberObject
+    diario = defaultdict(int)
+    w = PdfWriter(clone_from=sorgente)
+    servizio = PdfWriter(clone_from=sorgente)
+    oracoli, codici = {}, {}
+    liberi = _codici()
+
+    def si_puo(chiave, eventi, orac):
+        if len(eventi) != 1 or orac["volte"].get(chiave, 1) > 1:
+            return False
+        if len(orac["oggetti"].get(orac["oggetto_di"].get(chiave), ())) > 1:
+            return False
+        ev = eventi[0]
+        return ev["modo"] in (0, 3) and not ev["verticale"] and bool(ev["corpo"])
+    for i in range(len(w.pages)):
+        orac = oracoli[i] = _oracolo(sorgente, i)
+
+        def testo_s(chiave, k, op, eventi, i=i, orac=orac):
+            ev = eventi[0]
+            if si_puo(chiave, eventi, orac) and ev["modo"] == 0 and any(
+                    c.strip() for c, _b in ev["caratteri"]):
+                n = next(liberi, None)
+                if n is not None:
+                    codici[(i, chiave, k)] = n
+                    c = [FloatObject(round(v / (BASE_CODICI - 1), 5)) for v in _codice_rgb(n)]
+                    return [([NameObject("/DeviceRGB")], b"cs"), (c, b"sc"), op]
+            return [([NumberObject(3)], b"Tr"), op, ([NumberObject(int(ev["modo"] or 0))], b"Tr")]
+
+        def altro_s(chiave, k, op, risorse):
+            operandi, o = op
+            if o in (b"sh", b"INLINE IMAGE"):
+                return []
+            if o == b"Do" and operandi:
+                xo = risorse.get("/XObject") or {}
+                nome = str(operandi[0])
+                if nome in xo and xo[nome].get_object().get("/Subtype") == "/Image":
+                    return []
+            return None
+        _riscrivi(servizio, i, orac, tratto=lambda *a: [], testo=testo_s, altro=altro_s)
+        pg = servizio.pages[i]
+        for k in ("/Rotate", "/CropBox", "/TrimBox", "/BleedBox", "/ArtBox", "/Annots"):
+            if k in pg:
+                del pg[k]
+    if not codici:
+        shutil.copyfile(sorgente, destinazione)
+        return 0
+    # tutti i livelli accesi: un testo in un livello spento uscirebbe senza contorni
+    if "/OCProperties" in servizio._root_object:
+        del servizio._root_object["/OCProperties"]
+    cartella = tempfile.mkdtemp(dir=os.path.dirname(os.path.abspath(destinazione)))
+    try:
+        a, b = os.path.join(cartella, "servizio.pdf"), os.path.join(cartella, "curve.pdf")
+        _scrivi(servizio, a)
+        subprocess.run(["gs", "-q", "-o", b, "-sDEVICE=pdfwrite", "-dNoOutputFonts",
+                        "-dPrinted=false", "-dAutoRotatePages=/None", a], check=True,
+                       timeout=900, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        contorni = {i: _contorni_gs(b, i) for i in range(len(w.pages))}
+    finally:
+        shutil.rmtree(cartella, ignore_errors=True)
+    for i in range(len(w.pages)):
+        orac = oracoli[i]
+
+        def testo(chiave, k, op, eventi, i=i, orac=orac):
+            if not si_puo(chiave, eventi, orac):
+                diario["rimasti"] += 1
+                return None
+            ev = eventi[0]
+            pezzi = [([], b"ET")]
+            n = codici.get((i, chiave, k))
+            if n is None and ev["modo"] == 0 and any(c.strip() for c, _b in ev["caratteri"]):
+                diario["rimasti"] += 1
+                return None
+            if n is not None:
+                inv = _inversa(ev["ctm"])
+                if n not in contorni[i] or inv is None:
+                    diario["rimasti"] += 1
+                    return None
+                pezzi += [([], b"q"), ([_num(v) for v in inv], b"cm")]
+                for percorso, dip in contorni[i][n]:
+                    for o, xy in percorso:
+                        pezzi.append(([_num(v) for p in xy for v in p], o.encode()))
+                    pezzi.append(([], dip.encode()))
+                pezzi.append(([], b"Q"))
+            pezzi.append(([], b"BT"))
+            diario["testi"] += 1
+            return pezzi + _solo_il_passo(op, ev, matrice=True)
+        _riscrivi(w, i, orac, testo=testo, diario=diario)
+    _scrivi(w, destinazione)
+    return diario["testi"]
+
+
+def _pagina_di_servizio(w, W, H, righe, tabella=False, colori=False, indice=0):
+    """Una pagina senza disegno tecnico, inserita in `indice`: il titolo e le
+    righe di testo; con `tabella` le righe in una tabella a filo sottile,
+    come la scheda tecnica di un fornitore; con `colori` i campioni delle
+    tinte, pieni."""
+    from pypdf.generic import DecodedStreamObject, DictionaryObject, NameObject
+    w.insert_blank_page(W, H, index=indice)
+    p = w.pages[indice]   # quella nel file, non quella di prima della copia
+    s = 0.6 * min(W, H) / 842.0 or 1.0
+    x0, top = 60 * s, H - 70 * s
+    fuori = ["BT /F1 %.1f Tf %.1f %.1f Td (%s) Tj ET" % (26 * s, x0, top, righe[0])]
+    passo = 22 * s
+    for k, t in enumerate(righe[1:]):
+        y = top - 50 * s - k * passo
+        fuori.append("BT /F1 %.1f Tf %.1f %.1f Td (%s) Tj ET" % (11 * s, x0 + 6 * s, y, t))
+        if colori:
+            c = [(1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1),
+                 (0, 0.6, 1, 0), (0.8, 0, 0.6, 0)][k % 6]
+            fuori.append("q %g %g %g %g k %.1f %.1f %.1f %.1f re f Q"
+                         % (c + (x0 + 260 * s, y - 4 * s, 80 * s, 16 * s)))
+    if tabella:
+        # le righe di una tabella vera: fili sottili lunghi, piu' degli otto
+        # tratti che fanno di una prima pagina quella col disegno
+        # (`artwork.TECNICI_MIN`)
+        larg = 420 * s
+        y_alto = top - 50 * s + passo - 6 * s
+        n = len(righe) - 1
+        fuori.append("q 0 0 0 1 K 0.5 w")
+        for k in range(n + 1):
+            y = y_alto - k * passo
+            fuori.append("%.1f %.1f m %.1f %.1f l S" % (x0, y, x0 + larg, y))
+        for x in (x0, x0 + 160 * s, x0 + larg):
+            fuori.append("%.1f %.1f m %.1f %.1f l S" % (x, y_alto, x, y_alto - n * passo))
+        fuori.append("Q")
+    flusso = DecodedStreamObject()
+    flusso.set_data(("\n".join(fuori) + "\n").encode("latin-1"))
+    p[NameObject("/Contents")] = w._add_object(flusso)
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                             NameObject("/Subtype"): NameObject("/Type1"),
+                             NameObject("/BaseFont"): NameObject("/Helvetica")})
+    p[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+        {NameObject("/F1"): w._add_object(font)})})
+
+
+def _pagine_in_piu(sorgente, destinazione, scheda=False):
+    """`pagine`: il disegno sulla terza pagina di un file di quattro - davanti
+    una copertina e una pagina di note, solo testo; dietro i campioni delle
+    tinte -, come lo manda chi spedisce il fascicolo intero.
+
+    `scheda`: davanti, la scheda tecnica del fornitore, con le voci in una
+    tabella a filo sottile. La prima pagina che ha i tratti di un disegno
+    (`artwork._pagina_col_dt`) e' quella: regole/pdf.md lo dice, «una scheda
+    piena di tabelle davanti la regola non la vede»; qui si misura."""
+    from pypdf import PdfWriter
+    w = PdfWriter(clone_from=sorgente)
+    W, H = float(w.pages[0].mediabox.width), float(w.pages[0].mediabox.height)
+    if scheda:
+        _pagina_di_servizio(w, W, H, (
+            "SCHEDA TECNICA", "Cliente", "Codice articolo", "Formato", "Materiale",
+            "Grammatura", "Colori", "Verniciatura", "Fustella", "Revisione",
+            "Data", "Approvazione"), tabella=True)
+    else:
+        _pagina_di_servizio(w, W, H, ("NOTE DI STAMPA", "Prova colore allegata.",
+                                      "Le misure sono in millimetri.",
+                                      "Controllare i testi legali prima della stampa."))
+        _pagina_di_servizio(w, W, H, ("FASCICOLO DI APPROVAZIONE", "Revisione 3",
+                                      "Pagina 3: il disegno"))
+        _pagina_di_servizio(w, W, H, ("TINTE", "Cyan", "Magenta", "Yellow", "Black",
+                                      "Arancio", "Viola"), colori=True, indice=len(w.pages))
+    _scrivi(w, destinazione)
+    return 1
+
+
+# le varianti che riscrivono il contenuto: il nome nella riga di comando
+RISCRITTE = {"penne": _penne_altre, "spezzati": _tratti_spezzati, "senzaquote": _senza_quote,
+             "curve": _testi_in_curve}
+
+
 def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
-    """Una variante sola di `_pagina_variata`."""
+    """Una variante sola di `_pagina_variata`: vero se ha cambiato qualcosa."""
     from pypdf import PdfReader, PdfWriter, Transformation
     from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject,
                                RectangleObject)
+    if variante in RISCRITTE:
+        return RISCRITTE[variante](sorgente, destinazione, kind) > 0
+    if variante in ("pagine", "scheda"):
+        return _pagine_in_piu(sorgente, destinazione, scheda=variante == "scheda") > 0
+    if variante == "dimezzato":
+        # le quote vere, scritte sul disegno com'e', poi tutto a meta'
+        import tempfile
+        fd, intero = tempfile.mkstemp(suffix=".pdf", dir=os.path.dirname(destinazione))
+        os.close(fd)
+        try:
+            _un_passo(sorgente, intero, "quote", kind, insieme)
+            _un_passo(intero, destinazione, "scala0.5", kind, insieme)
+        finally:
+            os.remove(intero)
+        return True
     if variante in ("quote", "cornice", "legenda", "segni"):
         from pypdf import PageObject
         w = PdfWriter(clone_from=sorgente)
+        disegnato = False
         font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
                                  NameObject("/Subtype"): NameObject("/Type1"),
                                  NameObject("/BaseFont"): NameObject("/Helvetica")})
@@ -2727,6 +4018,7 @@ def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
                                    insieme, colore)
             if not dati:
                 continue
+            disegnato = True
             sopra = PageObject.create_blank_page(w, float(mb.width), float(mb.height))
             sopra.mediabox = RectangleObject([float(mb.left), float(mb.bottom),
                                               float(mb.right), float(mb.top)])
@@ -2742,16 +4034,20 @@ def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
             p.merge_page(sopra)
         with open(destinazione, "wb") as fh:
             w.write(fh)
-        return
+        return disegnato
     if variante == "appiattito":
         subprocess.run(["gs", "-q", "-o", destinazione, "-sDEVICE=pdfwrite",
                         "-dNoOutputFonts", sorgente], check=True, timeout=900,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return
+        return True
     w = PdfWriter(clone_from=sorgente)
     if variante == "copertina":
         W, H = (float(v) for v in w.pages[0].mediabox[2:])
-        p = w.insert_blank_page(W, H, index=0)
+        # la pagina e' quella nel file: `insert_blank_page` di pypdf 6 da'
+        # quella di prima della copia, e quello che le si scriveva andava
+        # perso - fino al 20 novembre 2026 la copertina era bianca
+        w.insert_blank_page(W, H, index=0)
+        p = w.pages[0]
         testo = DecodedStreamObject()
         testo.set_data(b"0 0 0 RG 2 w 40 40 %.1f %.1f re S BT /F1 36 Tf 80 %.1f Td "
                        b"(SCHEDA TECNICA - copertina) Tj ET\n" % (W - 80, H - 80, H - 140))
@@ -2763,7 +4059,7 @@ def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
             {NameObject("/F1"): w._add_object(font)})})
         with open(destinazione, "wb") as fh:
             w.write(fh)
-        return
+        return True
     for i, p in enumerate(w.pages):
         mb = p.mediabox
         x0, y0 = float(mb.left), float(mb.bottom)
@@ -2805,6 +4101,7 @@ def _un_passo(sorgente, destinazione, variante, kind=None, insieme=frozenset()):
     w.compress_identical_objects(remove_duplicates=True, remove_unreferenced=True)
     with open(destinazione, "wb") as fh:
         w.write(fh)
+    return True
 
 
 def varianti(args):
@@ -2815,7 +4112,9 @@ def varianti(args):
     misure in scala e viste. I PDF variati stanno in USCITA, mai nel
     repository. Esce con 1 se una variante da' un modello diverso e non e'
     fra quelle gia' note (`VARIANTI`, scritte con `--approva`: i limiti
-    dichiarati)."""
+    dichiarati). Una variante che sul caso non ha niente da cambiare - le
+    quote tolte da un PDF senza quote - non si costruisce, e si conta a
+    parte: non e' un caso provato."""
     import shutil
     import numpy as np
     from PIL import Image
@@ -2832,7 +4131,7 @@ def varianti(args):
     nuovi = []
     for c in tutte:
         for v in args.varianti:
-            file = []
+            file, cambiata = [], False
             for f in c["file"]:
                 sorgente = os.path.join(args.casi, "parco", "pdf", f)
                 if not f.lower().endswith(".pdf"):
@@ -2842,15 +4141,21 @@ def varianti(args):
                     file.append(f)
                     continue
                 file.append("%s__%s.pdf" % (os.path.splitext(f)[0], v))
-                _pagina_variata(sorgente, os.path.join(finto, "parco", "pdf", file[-1]), v,
-                                kind=(c.get("opzioni") or {}).get("kind"))
+                cambiata |= _pagina_variata(sorgente, os.path.join(finto, "parco", "pdf", file[-1]),
+                                            v, kind=(c.get("opzioni") or {}).get("kind"))
             nuovi.append(dict(nome="%s__%s" % (c["nome"], v), file=file,
-                              opzioni=c.get("opzioni"), originale=c, variante=v))
+                              opzioni=c.get("opzioni"), originale=c, variante=v,
+                              cambiata=cambiata))
     with open(os.path.join(finto, "parco", "parco.json"), "w", encoding="utf-8") as fh:
-        json.dump({"casi": [{k: x[k] for k in ("nome", "file", "opzioni")} for x in nuovi]},
+        json.dump({"casi": [{k: x[k] for k in ("nome", "file", "opzioni")}
+                            for x in nuovi if x["cambiata"]]},
                   fh, ensure_ascii=False, indent=1)
     originali, variate = os.path.join(args.uscita, "originali"), os.path.join(args.uscita, "varianti")
-    print("%d casi (%s), %d varianti: costruisco" % (len(tutte), args.famiglia, len(nuovi)))
+    print("%d casi (%s), %d varianti: costruisco" % (
+        len(tutte), args.famiglia, sum(1 for x in nuovi if x["cambiata"])))
+    ferme = [x["nome"] for x in nuovi if not x["cambiata"]]
+    if ferme:
+        print("niente da variare: %s" % ", ".join(ferme))
     sys.stdout.flush()
     from contextlib import redirect_stdout
     import io
@@ -2865,6 +4170,9 @@ def varianti(args):
     risultati, conto = {}, {}
     for x in nuovi:
         c, v = x["originale"], x["variante"]
+        if not x["cambiata"]:
+            conto.setdefault(v, [0, 0, 0])[2] += 1
+            continue
         s = 1.0
         for passo in v.split("+"):
             if passo.startswith("scala"):
@@ -2888,7 +4196,7 @@ def varianti(args):
                     d = float(np.abs(A - B).mean()) if A.shape == B.shape else 255.0
                     if d > 3:
                         motivo = "viste diverse dall'originale (%.1f livelli di grigio)" % d
-        conto.setdefault(v, [0, 0])[motivo is not None] += 1
+        conto.setdefault(v, [0, 0, 0])[motivo is not None] += 1
         risultati[x["nome"]] = motivo
     # le diverse gia' note - i limiti dichiarati - sono approvate in
     # VARIANTI: rosso e' solo una variante diversa che non c'era
@@ -2906,13 +4214,15 @@ def varianti(args):
     for n in guarite:
         righe.append("  %-44s adesso come l'originale: era nota (%s)" % (n[:44], note[n]))
     print("\n".join(righe))
-    for v, (uguali, no) in sorted(conto.items()):
-        print("%-10s %d su %d come l'originale" % (v, uguali, uguali + no))
+    for v, (uguali, no, niente) in sorted(conto.items()):
+        print("%-10s %d su %d come l'originale%s" % (
+            v, uguali, uguali + no, ", %d senza niente da variare" % niente if niente else ""))
     if args.riassunto:
         with open(args.riassunto, "a", encoding="utf-8") as fh:
-            fh.write("## Varianti (%s)\n\n| variante | come l'originale |\n|---|---|\n" % args.famiglia)
-            for v, (uguali, no) in sorted(conto.items()):
-                fh.write("| %s | %d su %d |\n" % (v, uguali, uguali + no))
+            fh.write("## Varianti (%s)\n\n| variante | come l'originale | niente da variare |\n"
+                     "|---|---|---|\n" % args.famiglia)
+            for v, (uguali, no, niente) in sorted(conto.items()):
+                fh.write("| %s | %d su %d | %d |\n" % (v, uguali, uguali + no, niente))
             fh.write("\n%s\n\n" % ("**%d diverse nuove**, non approvate:" % len(nuove)
                                      if nuove else "Nessuna diversa nuova."))
             if righe:
@@ -3071,7 +4381,8 @@ def main():
                     type=lambda s: [x for x in s.split(",") if x],
                     help="giroN (N = 90, 180, 270), rotate, scalaS, spostato, "
                          "miniatura, copertina, appiattito, quote, cornice, segni, "
-                         "legenda, separate da virgole; "
+                         "legenda, penne, spezzati, senzaquote, curve, dimezzato, "
+                         "pagine, scheda, separate da virgole; "
                          "si sommano con + (appiattito+giro90)")
     va.add_argument("--solo", type=lambda s: [x for x in s.split(",") if x],
                     help="solo questi casi, separati da virgole")
