@@ -2130,10 +2130,14 @@ def _segna_la_prima(letture):
                 return
 
 
-def plausibili(letture, costo_max=COSTO_MAX):
+def plausibili(letture, costo_max=None):
     """Le letture che possono vincere: quella di prima se vale, come prima;
     le altre se valgono e il loro costo geometrico (`Lettura.geometrico`) e'
-    al piu' `costo_max`."""
+    al piu' `costo_max` (di serie `COSTO_MAX`, o la soglia larga di un
+    tentativo dopo il primo: `pack3d.tentativi.costo_max`)."""
+    if costo_max is None:
+        from . import tentativi
+        costo_max = tentativi.costo_max(COSTO_MAX)
     return [l for l in letture
             if l.valida and (l.prima or l.geometrico <= costo_max)]
 

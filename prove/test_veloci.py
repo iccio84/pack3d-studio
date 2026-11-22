@@ -2673,5 +2673,143 @@ class VariantiDelDisegno(unittest.TestCase):
             self.assertIn("SCHEDA TECNICA", d.pages[0].extract_text())
 
 
+class SecondoTentativo(unittest.TestCase):
+    """Il secondo tentativo prima della coda (`pack3d.tentativi`): le letture
+    successive, le soglie larghe, il piano e il tetto di tempo."""
+
+    P = LettureAPunteggio.P
+    _astuccio = LettureAPunteggio._astuccio
+    _lettura = LettureAPunteggio._lettura
+
+    def test_l_astuccio_scartato_non_vince_piu(self):
+        from pack3d import strade, tentativi
+        prima = self._lettura(0.3, prima=True)
+        diversa = self._lettura(0.1, W=252.5)
+        self.assertIs(strade.scegli([prima, diversa])[0], prima)
+        t = tentativi.Tentativo(n=2, cosa=tentativi.SECONDA,
+                                escludi=(tentativi.impronta(prima),))
+        with tentativi.dentro(t):
+            best, dubbio = strade.scegli([prima, diversa])
+        self.assertIs(best, diversa)
+        self.assertEqual(dubbio, "")
+        # fuori dal tentativo, come prima
+        self.assertIs(strade.scegli([prima, diversa])[0], prima)
+
+    def test_le_soglie_larghe(self):
+        from pack3d import strade, tentativi
+        cara = self._lettura(2.5)
+        self.assertEqual(dl.plausibili([cara]), [])
+        with tentativi.dentro(tentativi.Tentativo(n=2, cosa=tentativi.LARGHE,
+                                                  larghe=True)):
+            self.assertEqual(dl.plausibili([cara]), [cara])
+            self.assertFalse(strade.forte(self._lettura(0.1), None))
+        self.assertEqual(dl.plausibili([cara]), [])
+
+    def _giro(self, kind="carton", **k):
+        from pack3d import tentativi
+        ora = [0.0]
+        g = tentativi.Giro(True, kind, orologio=lambda: ora[0], **k)
+        return g, ora
+
+    def test_il_piano_dei_tentativi(self):
+        from pack3d import tentativi
+        g, ora = self._giro()
+        t = g.primo()
+        imp = tentativi.impronta(self._lettura(0.3, prima=True))
+        t.osservato.update(famiglia="astuccio", astuccio=imp, altre=1, giro=0,
+                           muto=True)
+        ora[0] = 20
+        g.esito(t, "sbagliato", "fronte capovolto")
+        t = g.prossimo()
+        self.assertEqual((t.n, t.cosa), (2, tentativi.SECONDA))
+        self.assertEqual(len(t.escludi), 1)
+        t.osservato.update(famiglia="astuccio", astuccio=imp, altre=0, giro=0,
+                           muto=True)
+        ora[0] = 40
+        g.esito(t, "dubbio")
+        versi = []
+        for _ in range(3):
+            t = g.prossimo()
+            self.assertEqual(t.cosa, tentativi.VERSO)
+            versi.append(t.giro)
+            g.esito(t, "fermata", "non si risolve")
+        self.assertEqual(versi, [90, 180, 270])
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.LARGHE)
+        self.assertTrue(t.larghe)
+        t.osservato.update(famiglia="astuccio")
+        g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertIsNone(t)
+        self.assertIn("6 tentativi", g.perche_finiti)
+        self.assertTrue(g.riga().startswith("TENTATIVI: 1 prima lettura - sbagliato"))
+
+    def test_l_altra_forma_e_il_tetto(self):
+        from pack3d import tentativi
+        g, ora = self._giro()
+        t = g.primo()
+        t.osservato.update(famiglia="astuccio")
+        ora[0] = 30
+        g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.LARGHE)
+        t.osservato.update(famiglia="astuccio")
+        ora[0] = 60
+        g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.FORMA)
+        self.assertIn("astuccio", t.prove_scartate)
+        self.assertTrue(t.larghe)
+        # un tentativo dura 30 s: a 160 s non ce n'e' piu' il tempo
+        ora[0] = 160
+        g.esito(t, "fermata")
+        self.assertIsNone(g.prossimo())
+        self.assertIn("tempo", g.perche_finiti)
+
+    def test_senza_giudice_un_tentativo_solo(self):
+        from pack3d import tentativi
+        g = tentativi.Giro(False, "carton")
+        t = g.primo()
+        g.esito(t, "fermata")
+        self.assertIsNone(g.prossimo())
+        # un flowpack non ha soglie larghe ne' forme dopo
+        g, _ = self._giro("flowpack")
+        t = g.primo()
+        t.osservato.update(famiglia="flowpack")
+        g.esito(t, "sbagliato")
+        self.assertIsNone(g.prossimo())
+
+    def test_le_prove_dopo_nel_registro(self):
+        from pack3d.famiglie import registro
+        self.assertEqual(registro.prove_dopo("astuccio", "carton"),
+                         ["scatola a punta", "pezzo di coppa", "tubo a cono"])
+        self.assertIn("astuccio", registro.prove_dopo("cono", "carton"))
+        self.assertEqual(registro.prove_dopo("caso calibrato", "flowpack"), [])
+        self.assertEqual(registro.prove_dopo("flowpack", "flowpack"), [])
+
+    def test_la_stessa_lettura_non_si_rifa(self):
+        from pack3d import tentativi
+        g, _ = self._giro()
+        info = dict(kind="carton", title="Astuccio", meta=["271.0 x 100.1 x 45.0 mm"])
+        self.assertFalse(g.gia_letto(info))
+        self.assertTrue(g.gia_letto(dict(info, meta=info["meta"] + [
+            tentativi.RIGA + ": foglio com'e' sulla tavola"])))
+        self.assertFalse(g.gia_costruito(b"glb uno"))
+        self.assertTrue(g.gia_costruito(b"glb uno"))
+
+    def test_le_statistiche_contano_i_tentativi(self):
+        from pack3d import statistiche
+        with tempfile.TemporaryDirectory() as td:
+            f = os.path.join(td, "s.jsonl")
+            with open(f, "w") as fh:
+                for r in ({"e": "tentativo", "fase": "altro verso", "esito": "ok"},
+                          {"e": "tentativo", "fase": "seconda lettura", "esito": "sbagliato"},
+                          {"e": "tentativi", "esito": "riuscito al tentativo 3"},
+                          {"e": "tentativi", "esito": "finiti, in coda: -"}):
+                    fh.write(json.dumps(dict(r, t=1)) + "\n")
+            self.assertEqual(statistiche.riassunto([f])["tentativi"],
+                             {"casi": 2, "tentativi": 2, "riusciti": 1})
+
+
 if __name__ == "__main__":
     unittest.main()

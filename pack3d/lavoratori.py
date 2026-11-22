@@ -29,7 +29,10 @@ quanti lavori ha davanti (`posizione`).
   riparte.
 - Una costruzione col controllo dell'AI manda il modello prima di finire
   (`anticipo`): parte subito verso chi l'ha chiesto, e il lavoratore resta
-  occupato col verdetto, che torna al processo del server alla fine.
+  occupato col verdetto, che torna al processo del server alla fine. Se il
+  modello non passa, il lavoratore riprova con le letture successive
+  (`pack3d.tentativi`, fino a tre minuti in tutto) e intanto manda le fasi
+  (`fase`: «provo un'altra lettura»), che la pagina chiede al server.
 - `PACK3D_LAVORATORI=0`: niente lavoratori, tutto nel processo del server e
   una costruzione alla volta, come prima.
 
@@ -85,7 +88,7 @@ class _Lavoratore:
         self.proc.start()
         figlio.close()
 
-    def esegui(self, lavoro, durata, anticipo=None):
+    def esegui(self, lavoro, durata, anticipo=None, fase=None):
         fine = time.time() + durata
         try:
             self.conn.send(lavoro)
@@ -95,6 +98,12 @@ class _Lavoratore:
                     self._riavvia("non ha finito in %d s" % durata)
                     raise Caduto("non ha finito in %d s" % durata)
                 m = self.conn.recv()
+                if m.get("tipo") == "fase":
+                    # cosa sta facendo («provo un'altra lettura»): per la
+                    # pagina, e il lavoro va avanti
+                    if fase is not None:
+                        fase(m)
+                    continue
                 if m.get("tipo") != "anticipo":
                     return m
                 # il modello prima del verdetto: parte subito, e il lavoro
@@ -201,12 +210,13 @@ def attivi():
     return bool(_lavoratori)
 
 
-def esegui(lavoro, impronta=None, chi=None, anticipo=None):
+def esegui(lavoro, impronta=None, chi=None, anticipo=None, fase=None):
     """Il lavoro su un lavoratore libero, aspettando in fila se non ce n'e'.
     Torna quello che il lavoratore restituisce; Occupato o Caduto. Se il
     lavoratore manda una risposta prima di finire - il modello prima del
     verdetto del controllo - va ad `anticipo`, e il lavoratore resta occupato
-    fino alla fine."""
+    fino alla fine. Le fasi che il lavoratore manda strada facendo - «provo
+    un'altra lettura», `pack3d.tentativi` - vanno a `fase`."""
     voce = {"impronta": impronta, "w": None, "dal": time.time()}
     with _fila_cv:
         if len(_fila) >= FILA_MAX:
@@ -234,7 +244,7 @@ def esegui(lavoro, impronta=None, chi=None, anticipo=None):
         # il prossimo della fila puo' avere un altro lavoratore libero
         _fila_cv.notify_all()
     try:
-        return w.esegui(lavoro, LAVORO_MAX, anticipo)
+        return w.esegui(lavoro, LAVORO_MAX, anticipo, fase)
     finally:
         with _fila_cv:
             w.occupato = False
@@ -299,7 +309,8 @@ def _ciclo(conn):
             return
         try:
             esito = srv.esegui_lavoro(
-                lavoro, lambda pacco: conn.send(dict(pacco, tipo="anticipo")))
+                lavoro, lambda pacco: conn.send(dict(pacco, tipo="anticipo")),
+                lambda f: conn.send(dict(f, tipo="fase")))
         except BaseException as e:              # noqa: BLE001
             traceback.print_exc()
             esito = {"risposta": {"code": 500, "body": ("%s: %s" % (type(e).__name__, e)).encode(),

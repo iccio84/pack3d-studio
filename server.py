@@ -37,6 +37,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import coda, controllo, gelato, pop, statistiche, strati, verifica, versione
+from pack3d import tentativi
 from pack3d import lettura as lettura_pdf
 from pack3d import lavoratori
 from pack3d import stato
@@ -201,7 +202,7 @@ def senza_controllo(opts):
             and opts.get("controllo") is False)
 
 
-def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None):
+def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None, tentati=""):
     """`(errore, verdetto)` di una lettura o di una costruzione che si e'
     fermata, col caso gia' messo in coda.
 
@@ -220,7 +221,10 @@ def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None):
                     modello="nessuno: la costruzione si e' fermata")
     ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
                riconosciuto=(info.get("title") or info.get("kind")) if info else "-",
-               avvisi=[errore], nomi=nomi,
+               # coi tentativi che il codice ha fatto prima di fermarsi
+               # (`pack3d.tentativi`), perche' la routine sappia cosa e' gia'
+               # stato provato
+               avvisi=[errore] + ([tentati] if tentati else []), nomi=nomi,
                opzioni={k: opts[k] for k in OPZIONI_CASO if k in opts})
     verdetto["codice"], verdetto["in_coda"] = coda.metti(blocchi, nomi, verdetto,
                                                          None, ctx)
@@ -347,6 +351,13 @@ class Handler(BaseHTTPRequestHandler):
         self._inviata = False
         super().handle_one_request()
 
+    def _fase(self, testo, gettone=None):
+        """Cosa sta facendo la costruzione, per la pagina che aspetta: «provo
+        un'altra lettura» (`pack3d.tentativi`). La legge da /api/lavori
+        mentre aspetta il modello, e da /api/verdetto mentre aspetta il
+        verdetto (`gettone`)."""
+        metti_fase(getattr(self, "_chi", ""), testo, gettone)
+
     def _cors(self):
         # l'interfaccia puo' stare su un dominio diverso dal backend
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -461,7 +472,9 @@ class Handler(BaseHTTPRequestHandler):
             from urllib.parse import parse_qs, urlparse
             chi = (parse_qs(urlparse(self.path).query).get("id") or [""])[0][:40]
             return self._send(200, json.dumps(dict(lavoratori.stato(),
-                                                   posizione=lavoratori.posizione(chi))))
+                                                   posizione=lavoratori.posizione(chi),
+                                                   fase=fase_di(chi)),
+                                              ensure_ascii=False))
         if self.path.startswith("/api/lettura/"):
             gettone = self.path.split("/api/lettura/", 1)[1].split("?")[0]
             with _LETTURE_LOCK:
@@ -552,9 +565,11 @@ class Handler(BaseHTTPRequestHandler):
             attesa.append(pacco["risposta"].get("verdetto_dopo"))
             metti_verdetto(attesa[-1], pronto=False)
             self._da_lavoratore(pacco)
+        def fase(m):
+            metti_fase(m.get("chi") or chi, m.get("testo"), m.get("gettone"))
         try:
             esito = lavoratori.esegui(lavoro, hashlib.sha256(corpo).hexdigest(), chi,
-                                      anticipo)
+                                      anticipo, fase)
         except lavoratori.Occupato as e:
             print("lavoratori: occupati, %s" % e, file=sys.stderr)
             return self._send(503, "Server occupato: troppe costruzioni in fila, "
@@ -881,6 +896,10 @@ class Handler(BaseHTTPRequestHandler):
                                   % (MAX_UPLOAD // (1024 * 1024)))
             data = self.rfile.read(n)
             opts = json.loads(self.headers.get("X-Pack3d") or "{}")
+            # il nome del lavoro dato dalla pagina: le fasi della costruzione
+            # si chiedono con lui (/api/lavori)
+            self._chi = (str(opts.get("lavoro") or "")[:40]
+                         if isinstance(opts, dict) else "")
             # la grafica di un pezzo d'incarto puo' arrivare anche come
             # immagine (il bollino, il pirottino della pralina): diventa un
             # PDF di una pagina (`immagine_in_pdf`)
@@ -1099,18 +1118,50 @@ class Handler(BaseHTTPRequestHandler):
                     # La pagina chiede la lettura prima della costruzione: un
                     # PDF che il codice non sa leggere si ferma qui, e la
                     # costruzione non parte mai. Va in coda da qui.
+                    giro = tentativi.Giro(giudice_attivo(opts) and kind != "incarto",
+                                          kind)
+                    t = giro.primo()
                     try:
-                        if kind == "incarto":
-                            letto = analisi_incarto_dichiarato(pdf, chiusura, pdfs,
-                                                               senza, nomi)
-                            letto = dict(letto, meta=list(letto.get("meta") or [])
-                                         + [riga_prodotto(prodotto, nome_prodotto)])
-                        else:
-                            letto = analyze_pdf(pdf, kind, domande=True)
+                        with tentativi.dentro(t):
+                            if kind == "incarto":
+                                letto = analisi_incarto_dichiarato(pdf, chiusura, pdfs,
+                                                                   senza, nomi)
+                                letto = dict(letto, meta=list(letto.get("meta") or [])
+                                             + [riga_prodotto(prodotto, nome_prodotto)])
+                            else:
+                                letto = analyze_pdf(pdf, kind, domande=True)
                     except Exception as e:
-                        errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
-                                                      blocchi_caso)
-                        return self._send(500, errore, controllo=verdetto)
+                        # Con il controllo dell'AI la lettura che si ferma
+                        # riprova da sola (`pack3d.tentativi`): qui solo le
+                        # letture, senza costruire; la costruzione rifa' gli
+                        # stessi tentativi, nello stesso ordine, e il modello
+                        # lo guarda il controllo prima che valga.
+                        letto = None
+                        giro.esito(t, "fermata", statistiche.motivo(e))
+                        while giro.attivo:
+                            t = giro.prossimo()
+                            if t is None:
+                                break
+                            self._fase(tentativi.fase(t, "La prima lettura non torna"))
+                            try:
+                                with tentativi.dentro(t):
+                                    letto = analyze_pdf(pdf, kind, domande=True)
+                            except Exception as e2:     # noqa: BLE001
+                                giro.esito(t, "fermata", statistiche.motivo(e2))
+                                continue
+                            letto = dict(letto, meta=[
+                                "%s %d, con %s: la prima lettura si fermava (%s). "
+                                "Il modello lo deve confermare il controllo dell'AI"
+                                % (tentativi.RIGA, t.n, t.descrivi(),
+                                   statistiche.motivo(e)[:120])]
+                                + list(letto.get("meta") or []))
+                            break
+                        if letto is None:
+                            errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
+                                                          blocchi_caso, None, giro.riga()
+                                                          if len(giro.fatti) > 1 else "")
+                            return self._send(500, errore + riga_finiti(giro),
+                                              controllo=verdetto)
                     statistiche.conta("lettura", dichiarato=kind or "nessuna",
                                       letto=letto.get("kind"))
                     return self._send(200, json.dumps(letto))
@@ -1125,20 +1176,17 @@ class Handler(BaseHTTPRequestHandler):
                     # non tornava indietro, e dopo MAX_JOBS tentativi il server
                     # rispondeva 503 a chiunque fino al riavvio.
                     info = None
+                    # Il controllo dell'AI - o l'oracolo delle prove - su questo
+                    # modello: col giudice, se la lettura si ferma o il modello
+                    # non passa, il codice riprova con le letture successive
+                    # prima della coda (`pack3d.tentativi`). Senza, un
+                    # tentativo solo, come prima.
+                    giudice = giudice_attivo(opts)
+                    giro = tentativi.Giro(giudice, kind)
+                    errore_primo = info_primo = None
                     try:
-                        out = os.path.join(td, "out.glb")
                         t0 = traccia("inizio")
                         case = CASI.get(_sig(pdf))
-                        info = (analisi_incarto_dichiarato(pdf, chiusura, pdfs,
-                                                           senza, nomi)
-                                if kind == "incarto"
-                                else analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
-                                else pop.analisi(pdfs, kind) if pop.e_pop(kind)
-                                else analisi_coppa(pdfs, kind)
-                                if in_piu_pezzi(kind, pdfs)
-                                else analyze_pdf(pdf, kind))
-                        t1 = traccia("analisi", t0,
-                                     "%s, %d kB" % (info["kind"], len(data) // 1024))
                         q = qualita(opts.get("quality"))
                         # Su TUTTI i rami: e' proprio sul ramo che se ne
                         # dimenticava che nasceva l'UnboundLocalError.
@@ -1158,6 +1206,9 @@ class Handler(BaseHTTPRequestHandler):
                         # i ruoli delle lastre di materiale che l'AI legge
                         # costruendo un flowpack: vedi leggi_materiali
                         mat_ai = {}
+                        # la scelta del rigonfiamento fatta dall'AI, una volta
+                        # per costruzione: un tentativo dopo il primo la riusa
+                        gonfio = {}
                         # La costruzione e' una funzione delle lastre da
                         # togliere e del file d'uscita: la correzione dell'AI
                         # la rifa' con le lastre tecniche che ha riconosciuto,
@@ -1179,7 +1230,9 @@ class Handler(BaseHTTPRequestHandler):
                                     # Si e' dentro il posto di costruzione, e
                                     # deve essere cosi': la pagina passa da
                                     # pdfium.
-                                    sc = controllo.rigonfiamento(pdf_fp, nome_fp)
+                                    if pdf_fp not in gonfio:
+                                        gonfio[pdf_fp] = controllo.rigonfiamento(pdf_fp, nome_fp)
+                                    sc = gonfio[pdf_fp]
                                     if "errore" in sc:
                                         perche = "l'AI non ha risposto (%s)" % sc["errore"]
                                     else:
@@ -1215,76 +1268,150 @@ class Handler(BaseHTTPRequestHandler):
                             return (soft, scatola, pinne,
                                     materiali_dichiarati(opts.get("materiali")))
 
-                        # la costruzione della famiglia letta: `COSTRUZIONI`
-                        r = SimpleNamespace(
-                            pdf=pdf, pdfs=pdfs, nomi=nomi, kind=kind, opts=opts,
-                            q=q, col_riq=col_riq, carta=carta,
-                            apertura=gradi_aperta, pellicola=con_pellicola,
-                            incisioni=con_incisioni, gelato=con_gelato,
-                            quanti=quanti, per_fila=per_fila, case=case,
-                            mat_ai=mat_ai, parametri_flowpack=parametri_flowpack)
-                        costruisci = COSTRUZIONI.get(
-                            info["kind"], _costruisci_flowpack)(r, info)
-                        avvisi = costruisci(aree, out)
-                        if mat_ai and not opts.get("materiali"):
-                            # col caso in coda, perche' la routine lo rifaccia
-                            # col materiale che ha visto l'utente
-                            opts["materiali"] = dict(mat_ai)
-                        traccia("costruzione", t1,
-                                "%d kB" % (os.path.getsize(out) // 1024))
-                        with open(out, "rb") as fh:
-                            glb = fh.read()
-                        lettura = lettura_accanto(out)
-                        meta = righe_prodotto + avvisi_ingresso + list(avvisi)
-                        # Le righe dell'AI - le sue scelte, il verdetto del
-                        # controllo, la correzione - viaggiano anche in un
-                        # header loro: la pagina le tiene in vista, e il
-                        # resto lo mette nei dettagli tecnici.
-                        righe_ai = list(avvisi_ingresso)
-                        # Le immagini del controllo si fanno qui dentro: le
-                        # pagine passano da pdfium, che non si chiama da due
-                        # thread. La risposta di Claude invece si aspetta
-                        # fuori, a posto restituito: e' solo attesa di rete, e
-                        # chi viene dopo intanto costruisce.
-                        quadro = None
-                        if controllo.attivo() and senza_controllo(opts):
-                            righe_ai.append("controllo AI non fatto: e' una prova "
-                                            "che non lo chiede (controllo: false)")
-                            meta.append(righe_ai[-1])
-                        elif controllo.attivo():
+                        def costruzione(t):
+                            """La lettura e la costruzione del tentativo `t`,
+                            con le immagini del controllo: SimpleNamespace.
+                            Lancia se si ferma, `Uguale` se da' una lettura o
+                            un modello che un tentativo prima ha gia' dato."""
+                            del avvisi_ingresso[:]
+                            out = os.path.join(td, "out.glb" if t.n == 1
+                                               else "tentativo%d.glb" % t.n)
+                            with tentativi.dentro(t):
+                                info = (analisi_incarto_dichiarato(pdf, chiusura, pdfs,
+                                                                   senza, nomi)
+                                        if kind == "incarto"
+                                        else analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
+                                        else pop.analisi(pdfs, kind) if pop.e_pop(kind)
+                                        else analisi_coppa(pdfs, kind)
+                                        if in_piu_pezzi(kind, pdfs)
+                                        else analyze_pdf(pdf, kind))
+                                t.osservato["info"] = info
+                                c = SimpleNamespace(t=t, info=info, out=out, quadro=None)
+                                if giro.gia_letto(info):
+                                    raise tentativi.Uguale("la stessa lettura di un "
+                                                           "tentativo prima")
+                                t1 = traccia("analisi", t0,
+                                             "%s, %d kB" % (info["kind"], len(data) // 1024))
+                                # la costruzione della famiglia letta: `COSTRUZIONI`
+                                r = SimpleNamespace(
+                                    pdf=pdf, pdfs=pdfs, nomi=nomi, kind=kind, opts=opts,
+                                    q=q, col_riq=col_riq, carta=carta,
+                                    apertura=gradi_aperta, pellicola=con_pellicola,
+                                    incisioni=con_incisioni, gelato=con_gelato,
+                                    quanti=quanti, per_fila=per_fila, case=case,
+                                    mat_ai=mat_ai, parametri_flowpack=parametri_flowpack)
+                                c.costruisci = COSTRUZIONI.get(
+                                    info["kind"], _costruisci_flowpack)(r, info)
+                                avvisi = c.costruisci(aree, out)
+                            if mat_ai and not opts.get("materiali"):
+                                # col caso in coda, perche' la routine lo rifaccia
+                                # col materiale che ha visto l'utente
+                                opts["materiali"] = dict(mat_ai)
+                            traccia("costruzione", t1,
+                                    "%d kB" % (os.path.getsize(out) // 1024))
+                            with open(out, "rb") as fh:
+                                c.glb = fh.read()
+                            if giro.gia_costruito(c.glb):
+                                raise tentativi.Uguale("lo stesso modello di un "
+                                                       "tentativo prima")
+                            c.lettura = lettura_accanto(out)
+                            c.meta = righe_prodotto + avvisi_ingresso + list(avvisi)
+                            # Le righe dell'AI - le sue scelte, il verdetto del
+                            # controllo, la correzione - viaggiano anche in un
+                            # header loro: la pagina le tiene in vista, e il
+                            # resto lo mette nei dettagli tecnici.
+                            c.righe_ai = list(avvisi_ingresso)
+                            c.ingresso = list(avvisi_ingresso)
+                            # Le immagini del controllo si fanno qui dentro: le
+                            # pagine passano da pdfium, che non si chiama da due
+                            # thread. La risposta di Claude invece si aspetta
+                            # fuori, a posto restituito: e' solo attesa di rete, e
+                            # chi viene dopo intanto costruisce.
+                            if controllo.attivo() and senza_controllo(opts):
+                                c.righe_ai.append("controllo AI non fatto: e' una prova "
+                                                  "che non lo chiede (controllo: false)")
+                                c.meta.append(c.righe_ai[-1])
+                            elif giudice:
+                                try:
+                                    c.quadro = controllo.prepara(pdfs, out)
+                                except Exception as e:
+                                    traceback.print_exc()
+                                    if t.n > 1:
+                                        # un tentativo che nessuno puo'
+                                        # guardare non si consegna
+                                        raise RuntimeError("le viste del controllo "
+                                                           "non sono riuscite (%s)" % e)
+                                    c.righe_ai.append("controllo AI non fatto: le viste "
+                                                      "del modello non sono riuscite "
+                                                      "(%s)" % e)
+                                    c.meta.append(c.righe_ai[-1])
+                            return c
+
+                        # Il primo tentativo e' la lettura di sempre. Se si
+                        # ferma e c'e' il giudice, i tentativi dopo: il primo
+                        # modello che si costruisce va a chi l'ha chiesto, e
+                        # il giudice lo guarda (sotto).
+                        t = giro.primo()
+                        while True:
                             try:
-                                quadro = controllo.prepara(pdfs, out)
+                                c = costruzione(t)
+                                break
+                            except tentativi.Uguale as e:
+                                giro.esito(t, "uguale", str(e))
                             except Exception as e:
+                                if errore_primo is None:
+                                    errore_primo = e
+                                    info_primo = t.osservato.get("info")
+                                if not giro.attivo:
+                                    raise
                                 traceback.print_exc()
-                                righe_ai.append("controllo AI non fatto: le viste "
-                                                "del modello non sono riuscite "
-                                                "(%s)" % e)
-                                meta.append(righe_ai[-1])
+                                giro.esito(t, "fermata", statistiche.motivo(e))
+                            conta_tentativo(giro, kind)
+                            t = giro.prossimo()
+                            if t is None:
+                                raise errore_primo
+                            self._fase(tentativi.fase(t, "La prima lettura non torna"))
+                        info = c.info
                         traccia("totale", t0)
                         statistiche.conta("costruzione", dichiarato=kind or "nessuna",
                                           letto=info["kind"])
                     except Exception as e:
+                        if giro.fatti:
+                            conta_tentativi(giro, kind, None)
+                        e = errore_primo if giro.fatti and errore_primo is not None else e
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
-                                                      blocchi_caso, info)
-                        return self._send(500, errore, controllo=verdetto)
+                                                      blocchi_caso, info_primo or info,
+                                                      giro.riga())
+                        return self._send(500, errore + riga_finiti(giro),
+                                          controllo=verdetto)
                     finally:
                         _slots.release()
                     verdetto = None
-                    ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
-                               riconosciuto=info.get("title") or info["kind"],
-                               avvisi=list(meta), nomi=nomi,
-                               # col caso in coda, perche' chi lo riprende
-                               # lo ricostruisca uguale
-                               opzioni={k: opts[k] for k in OPZIONI_CASO
-                                        if k in opts})
-                    nota = (nota_apertura(meta) or nota_incisioni(meta)
-                            or nota_materiali(meta) or nota_gelato(meta))
-                    if info["kind"] == "riempimento":
-                        # il controllo sa che e' un riempimento, e quale PDF
-                        # e' il contenitore e quale il pack
-                        nota = " ".join(n for n in (nota_riempimento(info, nomi), nota) if n)
-                    if nota:
-                        ctx["nota"] = nota
+
+                    def contesto(c):
+                        """Il contesto del controllo per il modello `c`."""
+                        ctx = dict(dichiarato=dichiarazione(kind, len(pdfs)),
+                                   riconosciuto=c.info.get("title") or c.info["kind"],
+                                   avvisi=list(c.meta), nomi=nomi,
+                                   # col caso in coda, perche' chi lo riprende
+                                   # lo ricostruisca uguale
+                                   opzioni={k: opts[k] for k in OPZIONI_CASO
+                                            if k in opts})
+                        nota = (nota_apertura(c.meta) or nota_incisioni(c.meta)
+                                or nota_materiali(c.meta) or nota_gelato(c.meta))
+                        if c.info["kind"] == "riempimento":
+                            # il controllo sa che e' un riempimento, e quale PDF
+                            # e' il contenitore e quale il pack
+                            nota = " ".join(n for n in (nota_riempimento(c.info, nomi), nota)
+                                            if n)
+                        nota = " ".join(n for n in (nota, giro.nota(c.t)) if n)
+                        if nota:
+                            ctx["nota"] = nota
+                        return ctx
+
+                    ctx = contesto(c)
+                    glb, meta, righe_ai, lettura, quadro = (c.glb, c.meta, c.righe_ai,
+                                                            c.lettura, c.quadro)
                     if quadro is not None:
                         # Il modello va subito a chi l'ha chiesto, e il
                         # verdetto dell'AI - con la correzione, se serve -
@@ -1301,24 +1428,80 @@ class Handler(BaseHTTPRequestHandler):
                         glb_prima = glb
                         try:
                             t2 = traccia("controllo")
-                            verdetto = controllo.giudica(quadro, ctx)
+                            verdetto = giudica(c, ctx, opts)
                             traccia("controllo", t2, verdetto["esito"])
                             riga = None
                             if (controllo.correggibile(verdetto)
                                     and controllo.correzione_attiva()):
-                                nuovo, riga = correggi(costruisci, aree, pdfs, td,
-                                                       quadro, verdetto, ctx)
+                                with tentativi.dentro(c.t):
+                                    nuovo, riga = correggi(c.costruisci, aree, pdfs, td,
+                                                           quadro, verdetto, ctx)
                                 if nuovo is not None:
                                     glb, avvisi_corr, quadro, verdetto, ctx = nuovo
-                                    meta = (righe_prodotto + avvisi_ingresso
-                                            + list(avvisi_corr))
+                                    meta = righe_prodotto + c.ingresso + list(avvisi_corr)
+                                    c.glb, c.meta, c.quadro = glb, meta, quadro
                                 ctx = dict(ctx, avvisi=[riga] + list(ctx["avvisi"]))
                             # i difetti misurati dalle verifiche valgono come
                             # un dubbio, anche col controllo che dice ok
-                            verdetto = con_difetti(verdetto, meta)
-                            statistiche.conta("verdetto", letto=info["kind"],
+                            verdetto = da_tentativo(c, con_difetti(verdetto, meta))
+                            giro.esito(c.t, verdetto["esito"], verdetto.get("motivo"))
+                            if c.t.n > 1:
+                                conta_tentativo(giro, kind, c.info["kind"])
+                            # Il modello non passa: gli altri tentativi, finche'
+                            # ce ne sono e c'e' tempo. Vince il verdetto
+                            # migliore; a pari merito resta il primo.
+                            scelto = (c, verdetto, ctx, riga)
+                            while scelto[1]["esito"] in ("sbagliato", "dubbio"):
+                                t = giro.prossimo()
+                                if t is None:
+                                    break
+                                self._fase(tentativi.fase(
+                                    t, "Il controllo dell'AI non e' convinto"), attesa)
+                                if not _slots.acquire(timeout=CORREZIONE_ATTESA):
+                                    giro.perche_finiti = "il server era occupato"
+                                    break
+                                try:
+                                    c2 = costruzione(t)
+                                except tentativi.Uguale as e:
+                                    giro.esito(t, "uguale", str(e))
+                                    conta_tentativo(giro, kind)
+                                    continue
+                                except Exception as e:
+                                    traceback.print_exc()
+                                    giro.esito(t, "fermata", statistiche.motivo(e))
+                                    conta_tentativo(giro, kind)
+                                    continue
+                                finally:
+                                    _slots.release()
+                                ctx2 = contesto(c2)
+                                t3 = traccia("controllo")
+                                v2 = giudica(c2, ctx2, opts)
+                                traccia("controllo", t3, v2["esito"])
+                                v2 = da_tentativo(c2, con_difetti(v2, c2.meta))
+                                giro.esito(t, v2["esito"], v2.get("motivo"))
+                                conta_tentativo(giro, kind, c2.info["kind"])
+                                if controllo.RANGO.get(v2["esito"], -1) > \
+                                        controllo.RANGO.get(scelto[1]["esito"], -1):
+                                    scelto = (c2, v2, ctx2, None)
+                            c, verdetto, ctx, riga = scelto
+                            glb, meta, quadro = c.glb, c.meta, c.quadro
+                            righe_ai = list(c.righe_ai)
+                            if len(giro.fatti) > 1:
+                                conta_tentativi(giro, kind, verdetto)
+                                tr = giro.riga()
+                                ctx = dict(ctx, avvisi=[tr] + list(ctx["avvisi"]))
+                                if c.t.n > 1:
+                                    verdetto = dict(verdetto, tentativo=c.t.n,
+                                                    tentativi=list(giro.fatti))
+                                    riga_t = riga_tentativo(c.t, giro, verdetto)
+                                    meta = [riga_t] + list(meta)
+                                    righe_ai.insert(0, riga_t)
+                                meta = list(meta) + [tr]
+                            statistiche.conta("verdetto", letto=c.info["kind"],
                                               esito=verdetto["esito"],
-                                              fase="corretto" if riga else None)
+                                              fase=("corretto" if riga else
+                                                    "tentativo %d" % c.t.n if c.t.n > 1
+                                                    else None))
                             # anche il dubbio: il modello all'utente arriva lo
                             # stesso, ma qualcuno deve guardarlo, e se ha un
                             # difetto vero correggerlo come un caso respinto
@@ -1340,10 +1523,11 @@ class Handler(BaseHTTPRequestHandler):
                             righe_ai.insert(0, "controllo AI non fatto: %s" % e)
                             meta.insert(0, righe_ai[0])
                         metti_verdetto(attesa, verdetto, meta, righe_ai,
-                                       glb if glb is not glb_prima else None)
+                                       glb if glb is not glb_prima else None,
+                                       lettura=c.lettura if glb is not glb_prima else None)
                         return None
                     elif (controllo.manca_la_chiave()
-                          and info["kind"] != "riempimento"):
+                          and c.info["kind"] != "riempimento"):
                         # spento perche' manca la chiave, non perche' qualcuno
                         # l'ha spento apposta: chi gestisce lo Space lo deve sapere
                         righe_ai.append("controllo AI spento: manca la chiave "
@@ -1356,7 +1540,7 @@ class Handler(BaseHTTPRequestHandler):
                         # va in coda senza le viste del controllo, la routine
                         # lo ricostruisce comunque
                         verdetto = con_difetti(None, meta)
-                        statistiche.conta("verdetto", letto=info["kind"],
+                        statistiche.conta("verdetto", letto=c.info["kind"],
                                           esito=verdetto["esito"], fase="senza AI")
                         verdetto["codice"], verdetto["in_coda"] = coda.metti(
                             blocchi_caso, nomi_caso, verdetto, None, ctx)
@@ -1442,8 +1626,10 @@ class _Lavoro(Handler):
     """Una richiesta POST rifatta nel lavoratore: niente socket, la risposta
     resta qui per tornare al processo del server."""
 
-    def __init__(self, path, intestazioni, corpo, casi, anticipa=None):  # pylint: disable=super-init-not-called
+    def __init__(self, path, intestazioni, corpo, casi, anticipa=None,  # pylint: disable=super-init-not-called
+                 segnala=None):
         self.path = path
+        self._segnala = segnala
         self.headers = intestazioni
         self.rfile = io.BytesIO(corpo)
         self.risposta = None
@@ -1467,6 +1653,14 @@ class _Lavoro(Handler):
             return
         self.risposta = r
 
+    def _fase(self, testo, gettone=None):
+        # la fase va al processo del server, che la dice alla pagina
+        if self._segnala is not None:
+            self._segnala({"chi": getattr(self, "_chi", ""), "testo": testo,
+                           "gettone": gettone})
+        else:
+            Handler._fase(self, testo, gettone)
+
 
 def _pacco(r, casi):
     """La risposta di un lavoratore per il processo del server: coi casi da
@@ -1480,14 +1674,15 @@ def _pacco(r, casi):
     return pacco
 
 
-def esegui_lavoro(lavoro, anticipa=None):
+def esegui_lavoro(lavoro, anticipa=None, segnala=None):
     """Nel lavoratore: la richiesta com'era, rifatta da `Handler.do_POST`.
     Torna la risposta, i casi che il processo del server deve mettere in coda
     (`lavoratori.casi_rimandati`), i dati della lettura del PDF e i verdetti
     del controllo. Con `anticipa` il modello parte prima del verdetto: la
     risposta va li', e alla fine restano i casi e i verdetti."""
     casi = []
-    h = _Lavoro(lavoro["path"], lavoro["intestazioni"], lavoro["corpo"], casi, anticipa)
+    h = _Lavoro(lavoro["path"], lavoro["intestazioni"], lavoro["corpo"], casi, anticipa,
+                segnala)
     with _VERDETTI_LOCK:
         prima = set(VERDETTI)
     with lavoratori.casi_rimandati(coda, casi):
@@ -1496,6 +1691,12 @@ def esegui_lavoro(lavoro, anticipa=None):
                                                          "lettura": None}
     with _VERDETTI_LOCK:
         esito["verdetti"] = {k: VERDETTI.pop(k)[1] for k in list(VERDETTI) if k not in prima}
+    for voce in esito["verdetti"].values():
+        # la lettura del modello di un tentativo, che ha preso il posto del
+        # primo: i suoi byte vanno al processo del server col verdetto
+        if voce.get("lettura"):
+            with _LETTURE_LOCK:
+                voce["lettura_dati"] = (LETTURE.pop(voce["lettura"], None) or (0, None))[1]
     return esito
 
 
@@ -1515,7 +1716,14 @@ def nuovo_verdetto():
     return gettone
 
 
-def metti_verdetto(gettone, verdetto=None, meta=None, ai=None, glb=None, pronto=True):
+def metti_verdetto(gettone, verdetto=None, meta=None, ai=None, glb=None, pronto=True,
+                   fase=None, lettura=None, lettura_dati=None):
+    """Il verdetto di `gettone`; finche' non e' `pronto`, `fase` dice alla
+    pagina cosa si sta facendo («provo un'altra lettura»). `lettura` e' il
+    gettone della lettura del PDF del modello che prende il posto del primo
+    (`lettura_dati` i suoi byte, quando arriva da un lavoratore)."""
+    if lettura and lettura_dati:
+        metti_lettura(lettura, lettura_dati)
     with _VERDETTI_LOCK:
         adesso = time.time()
         for k in [k for k, (t, _v) in VERDETTI.items() if adesso - t > LETTURE_ORE]:
@@ -1523,7 +1731,8 @@ def metti_verdetto(gettone, verdetto=None, meta=None, ai=None, glb=None, pronto=
         while len(VERDETTI) >= VERDETTI_MAX and gettone not in VERDETTI:
             del VERDETTI[min(VERDETTI, key=lambda k: VERDETTI[k][0])]
         VERDETTI[gettone] = (adesso, {"pronto": pronto, "verdetto": verdetto,
-                                      "meta": meta, "ai": ai, "glb": glb})
+                                      "meta": meta, "ai": ai, "glb": glb,
+                                      "fase": fase, "lettura": lettura})
 
 
 def verdetto_di(gettone):
@@ -1549,6 +1758,115 @@ def con_difetti(verdetto, meta):
     v["difetti"] = list(trovati) + list(v.get("difetti") or [])
     v["verifiche"] = list(trovati)
     return v
+
+
+# Le fasi delle costruzioni in corso, per nome del lavoro della pagina
+# (`Handler._fase`): pochi minuti, poi si dimenticano.
+FASI = {}
+FASI_S = 600
+_FASI_LOCK = threading.Lock()
+
+
+def metti_fase(chi, testo, gettone=None):
+    if gettone:
+        metti_verdetto(gettone, pronto=False, fase=testo)
+    if not chi:
+        return
+    with _FASI_LOCK:
+        adesso = time.time()
+        for k in [k for k, (t, _f) in FASI.items() if adesso - t > FASI_S]:
+            del FASI[k]
+        FASI[chi] = (adesso, testo)
+
+
+def fase_di(chi):
+    with _FASI_LOCK:
+        v = FASI.get(chi)
+    return v[1] if v and time.time() - v[0] <= FASI_S else None
+
+
+# --- il secondo tentativo prima della coda (`pack3d.tentativi`) -----------
+
+def giudice_attivo(opts):
+    """Se il modello lo guarda qualcuno: il controllo dell'AI o, nelle prove
+    in locale, l'oracolo (`tentativi.oracolo`). Solo allora il codice riprova
+    con le letture successive prima della coda."""
+    return ((controllo.attivo() or tentativi.oracolo())
+            and not senza_controllo(opts))
+
+
+def giudica(c, ctx, opts):
+    """Il verdetto sul modello `c` di una costruzione: del controllo
+    dell'AI, o dell'oracolo delle prove. Non lancia."""
+    if tentativi.oracolo():
+        try:
+            return tentativi.giudica_oracolo(opts.get("oracolo"), c.out)
+        except Exception as e:                      # noqa: BLE001
+            traceback.print_exc()
+            return {"esito": controllo.NON_CONTROLLATO, "motivo": "oracolo: %s" % e,
+                    "difetti": []}
+    return controllo.giudica(c.quadro, ctx)
+
+
+def da_tentativo(c, verdetto):
+    """Un modello che non e' la prima lettura vale solo se qualcuno l'ha
+    guardato: senza verdetto e' un dubbio, e va in coda."""
+    if c.t.n > 1 and verdetto.get("esito") == controllo.NON_CONTROLLATO:
+        return dict(verdetto, esito="dubbio",
+                    motivo="tentativo %d non confermato: %s" % (c.t.n,
+                                                                verdetto.get("motivo", "")),
+                    difetti=list(verdetto.get("difetti") or [])
+                    + ["tentativo non confermato dal controllo"])
+    return verdetto
+
+
+def conta_tentativo(giro, kind, letto=None):
+    """Nelle statistiche, l'ultimo tentativo fatto dopo il primo: cosa ha
+    provato e com'e' andata."""
+    f = giro.fatti[-1] if giro.fatti else None
+    if f is None or f["n"] < 2:
+        return
+    statistiche.conta("tentativo", dichiarato=kind or "nessuna", letto=letto,
+                      fase=f["cosa"], esito=f["esito"])
+
+
+def conta_tentativi(giro, kind, verdetto):
+    """Nelle statistiche, com'e' finito un giro con piu' di un tentativo:
+    riuscito al tentativo n, o finiti (e perche'), col caso in coda."""
+    if len(giro.fatti) < 2:
+        return
+    ok = [f for f in giro.fatti if f["esito"] == "ok"]
+    if verdetto is not None and verdetto.get("esito") == "ok" and ok and ok[0]["n"] > 1:
+        esito = "riuscito al tentativo %d" % ok[0]["n"]
+    else:
+        esito = "finiti, in coda: %s" % (giro.perche_finiti or "-")
+    statistiche.conta("tentativi", dichiarato=kind or "nessuna",
+                      fase="%d tentativi" % len(giro.fatti), esito=esito)
+
+
+def riga_finiti(giro):
+    """In fondo all'errore di una lettura che si ferma: le altre letture
+    provate prima di fermarsi, se ce ne sono state (`pack3d.tentativi`)."""
+    altri = len(giro.fatti) - 1
+    if altri < 1:
+        return ""
+    return (" [provate altre %d letture prima di fermarsi: %s]"
+            % (altri, ", ".join("%s %s" % (f["cosa"], f["esito"])
+                                for f in giro.fatti[1:])))
+
+
+def riga_tentativo(t, giro, verdetto):
+    """Il cartellino del modello di un tentativo dopo il primo: com'e' stato
+    letto e perche' la prima lettura non andava."""
+    primo = giro.fatti[0]
+    if primo["esito"] == "fermata":
+        prima = "la prima lettura si fermava (%s)" % primo["motivo"][:120]
+    else:
+        prima = ("il modello della prima lettura l'ha scartato il controllo "
+                 "(%s%s)" % (primo["esito"], ": " + primo["motivo"][:120]
+                             if primo["motivo"] else ""))
+    return ("%s %d, con %s: %s; questo modello il controllo l'ha giudicato %s"
+            % (tentativi.RIGA, t.n, t.descrivi(), prima, verdetto.get("esito")))
 
 
 def correggi(costruisci, aree, pdfs, cartella, quadro, verdetto, ctx):

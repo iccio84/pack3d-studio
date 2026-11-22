@@ -42,6 +42,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 
 from . import dieline as dl
+from . import tentativi
 from .dieline import PT2MM
 
 # Le penne del disegno tecnico sono sottili (`dieline._technical_pens`).
@@ -529,7 +530,9 @@ def scegli(letture, precedenza=dl.PRECEDENZA, dubbio=DUBBIO):
     (`dieline.plausibili`) - il costo piu' basso, quella di prima a meno di
     `precedenza` - e, se un'altra da' un astuccio diverso a meno di `dubbio`,
     la riga che lo dice. `(None, "")` se nessuna vale."""
-    valide = dl.plausibili(letture)
+    # gli astucci che un tentativo prima ha gia' costruito e il controllo
+    # ha scartato non vincono piu' (`pack3d.tentativi`)
+    valide = [l for l in dl.plausibili(letture) if not tentativi.escluso(l)]
     if not valide:
         return None, ""
     best = min(valide, key=lambda l: l.costo)
@@ -629,6 +632,9 @@ def forte(l, ctx):
     misure tornano (costo geometrico al piu' `COSTO_FORTE`) e le quote, se ci
     sono, non la smentiscono. Il verso no: se la grafica non e' d'accordo si
     gira il foglio (`artwork.astuccio_sulla_grafica`), non si cambia strada."""
+    if tentativi.larghe():
+        # le soglie larghe di un tentativo: tutte le strade, sempre
+        return False
     return (l is not None and l.geometrico <= COSTO_FORTE
             and voce_quote(l, ctx) <= 0)
 
