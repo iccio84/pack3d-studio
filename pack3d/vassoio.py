@@ -33,6 +33,7 @@ texture sola - lo steso - e lo spessore del cartoncino gliela mette `mesh`.
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 
 from .dieline import PT2MM
@@ -139,7 +140,21 @@ def _asse_sagomato(t):
     if not dentro:
         return None
     i = max(dentro, key=luci.__getitem__)
-    return t[i], t[i + 1], (t[i - 1] + t[i]) / 2.0, (t[i + 1] + t[i + 2]) / 2.0
+    p0, p1 = (t[i - 1] + t[i]) / 2.0, (t[i + 1] + t[i + 2]) / 2.0
+    # La cordonatura a tre righe: due luci sottili uguali accanto al fondo,
+    # e la piega e' la riga di mezzo. Sul coperchio del display T1x36 coi
+    # tratti riuniti (`pack3d.strade`) la riga di mezzo, in un'altra penna,
+    # restava, e il fondo veniva 144,0 mm invece di 145,5.
+    if i >= 2 and _due_meta(luci[i - 2], luci[i - 1]):
+        p0 = t[i - 1]
+    if i + 2 < len(luci) and _due_meta(luci[i + 1], luci[i + 2]):
+        p1 = t[i + 2]
+    return t[i], t[i + 1], p0, p1
+
+
+def _due_meta(a, b, tol=0.5):
+    """Se due luci vicine sono le due meta' di una cordonatura a tre righe."""
+    return a + b <= CORDONATURA_LARGA and abs(a - b) <= tol
 
 
 def riconosci_sagomato(d):
@@ -204,7 +219,7 @@ def _basso_di_lato(v, tol=1.0):
     return min(p["est"], p["ovest"]) < min(p["nord"], p["sud"]) - tol
 
 
-def riconosci_sulla_tavola(pdf, sagomato=False):
+def riconosci_sulla_tavola(pdf, sagomato=False, estrai=None):
     """`(pdf, dieline estratta, Vassoio o None, giro, avviso)`.
 
     `riconosci` legge la griglia in un verso solo - cinque colonne e tre
@@ -214,10 +229,13 @@ def riconosci_sulla_tavola(pdf, sagomato=False):
     dire che non e' un vassoio. Mezzo giro non serve: il vassoio si legge
     uguale, e quale testata va davanti lo decide `testata_davanti` dalle
     altezze. Con `sagomato` la griglia si legge con `riconosci_sagomato`.
+    `estrai(pdf)`, se c'e', fa le veci di `dieline.extract`: la lettura a
+    punteggio (`letture`) legge ogni verso del foglio una volta sola.
     """
     from . import artwork, dieline
+    estrai = estrai or dieline.extract
     leggi = riconosci_sagomato if sagomato else riconosci
-    d = dieline.extract(pdf)
+    d = estrai(pdf)
     v = leggi(d)
     if v is not None and _basso_di_lato(v):
         # Il davanti e' la parete piu' bassa (`testata_davanti`), ma si
@@ -228,7 +246,7 @@ def riconosci_sulla_tavola(pdf, sagomato=False):
         # la parete bassa e' una testata.
         for giro in (90, 270):
             girato = artwork.pagina_girata(pdf, giro)
-            d2 = dieline.extract(girato)
+            d2 = estrai(girato)
             v2 = leggi(d2)
             if v2 is not None and not _basso_di_lato(v2):
                 return girato, d2, v2, giro, (
@@ -240,7 +258,7 @@ def riconosci_sulla_tavola(pdf, sagomato=False):
         girato = artwork.pagina_girata(pdf, giro)
         if girato == pdf:
             break
-        d2 = dieline.extract(girato)
+        d2 = estrai(girato)
         v2 = leggi(d2)
         if v2 is not None:
             return girato, d2, v2, giro, (
@@ -1186,3 +1204,531 @@ def sagoma_e_creste(pdf, d, px_mm=4.0, page_no=0, note=None, v=None):
               int(round((gx[3] + gx[4]) / 2 * scala)),
               int(round(gy[1] * scala)), int(round(gy[2] * scala)))
     return sagoma, creste, resa
+
+
+# --------------------------------------------------------------------------- #
+# Le letture a punteggio: il punto 2 del piano del 20 novembre 2026 (pack3d-
+# casi, regole/decisioni.md, *Un deterministico che fallisce il meno
+# possibile*) portato alla Trade Unit, come sugli astucci (`pack3d.strade`).
+#
+# Fino al 22 novembre il vassoio si leggeva in un modo solo - per penna,
+# `dieline.extract` - e delle forme vinceva la prima che passava, in fila:
+# il vassoio piano, la plancia, lo sportello, la scatola, il sagomato. E la
+# fila era scritta due volte, nel registro e nella costruzione. Adesso c'e'
+# una lettura sola (`letture`), che il registro e la costruzione chiedono
+# tutti e due:
+#
+# - **la prima lettura** e' la fila di sempre (`_prima`): sui PDF come quelli
+#   del parco vince lei, e se e' forte le altre non si provano;
+# - **le altre**: le strade della fustella di `pack3d.strade` (per colore,
+#   coi tratti riuniti, senza una penna dubbia, per geometria) per tutte le
+#   forme che leggono la griglia e per tutti i versi del foglio;
+# - **il costo**: le misure che non tornano fra loro (i fianchi alti uguali,
+#   le cordonature larghe uguali, il davanti di lato), le correzioni della
+#   strada, quanto della fustella la lettura spiega, le quote scritte;
+# - **il verdetto** come sugli astucci: vince il costo piu' basso, la prima
+#   lettura a meno di `PRECEDENZA`; due display diversi a meno di `DUBBIO`
+#   sono un dubbio dichiarato.
+#
+# I tentativi (`pack3d.tentativi`) chiedono a questa lettura la seconda
+# plausibile (i display gia' scartati non vincono piu'), le soglie larghe
+# (tutte le strade, plausibili fino a costo 3) e il vassoio montato come
+# coperchio quando nessuna scritta dice il verso (`montaggio`).
+# --------------------------------------------------------------------------- #
+# Le forme, nell'ordine della fila di sempre.
+FORME = ("vassoio", "plancia", "sportello", "scatola", "sagomato")
+NOMI_FORME = {"vassoio": "vassoio espositore", "plancia": "display con plancia",
+              "sportello": "display con la plancia nel coperchio",
+              "scatola": "display a scatola", "sagomato": "vassoio sagomato"}
+# Il fondo piu' piccolo di un vassoio letto per un'altra strada: quello della
+# plancia (`plancia.FONDO_MINIMO`). Un display porta piu' pezzi; sul film del
+# flowpack di un riempimento le altre strade trovavano «vassoi» larghi un
+# pezzo solo.
+FONDO_MINIMO_ALTRE = 40.0
+# I fianchi di un vassoio sono alti uguali: uno scarto del 5% costa uno.
+TOL_FIANCHI = 0.05
+# Le due cordonature fra fondo e fianchi sono larghe uguali: un millimetro di
+# differenza costa uno.
+TOL_CORDONATURE_MM = 1.0
+# Il davanti - la parete piu' bassa - di lato sul foglio (`_basso_di_lato`):
+# la fila di sempre girava il foglio per averlo in testa.
+DI_LATO = 0.5
+# Gli stessi pesi degli astucci (`pack3d.strade`).
+PRECEDENZA = 0.3
+DUBBIO = 0.25
+COSTO_MAX = 2.0
+COSTO_FORTE = 1.0
+COSTO_STRADA = 0.1
+COPERTURA_MIN = 0.45
+COPERTURA_PESO = 5.0
+QUOTA_CONFERMA = 0.5
+QUOTA_SMENTITA = 1.0
+# le voci che non vengono dal disegno da solo
+EVIDENZE = ("copertura", "quote")
+
+
+@dataclass
+class LetturaTU:
+    """Una lettura della Trade Unit: la forma, il verso del foglio, la
+    strada della fustella e le sue correzioni; `pdf` e `d` sono il foglio
+    (girato se `giro`) e la sua griglia, `obj` quello che la forma ha letto
+    (`Vassoio`, `plancia.Plancia`, `sportello.Sportello`,
+    `scatola_plancia.ScatolaPlancia`), `avviso` la riga del foglio girato."""
+    forma: str
+    giro: int
+    strada: str
+    correzioni: tuple
+    pdf: str
+    d: object
+    obj: object
+    avviso: str = None
+    prima: bool = False
+    voci: dict = field(default_factory=dict)
+    costo: float = 0.0
+
+    @property
+    def geometrico(self):
+        return round(sum(v for k, v in self.voci.items() if k not in EVIDENZE), 3)
+
+    def misure(self):
+        """Le misure che dicono che display e': senza il verso del foglio."""
+        o = self.obj
+        if self.forma in ("vassoio", "sagomato"):
+            return tuple(sorted((o.fondo_w, o.fondo_h))) + tuple(sorted(o.pareti.values()))
+        if self.forma == "scatola":
+            return tuple(sorted((o.W, o.D, o.H)))
+        return tuple(sorted(o.dims_mm))
+
+    def impronta(self):
+        """Quello che serve a `stesso_display`, senza la fustella: lo tiene la
+        memoria dei tentativi (`pack3d.tentativi`)."""
+        from types import SimpleNamespace
+        return SimpleNamespace(tipo="vassoio", forma=_famiglia_forma(self.forma),
+                               misure=self.misure())
+
+    def descrivi(self):
+        m = self.misure()
+        come = [NOMI_FORME[self.forma]]
+        if self.strada != "colore" or self.correzioni:
+            come += list(self.correzioni)
+        if self.giro:
+            come.append("foglio girato di %d gradi" % self.giro)
+        return "%s mm (%s)" % (" / ".join("%.1f" % x for x in m), "; ".join(come))
+
+
+def _famiglia_forma(forma):
+    # il piano e il sagomato sono tutti e due un vassoio aperto
+    return "vassoio" if forma in ("vassoio", "sagomato") else forma
+
+
+def stesso_display(a, b, tol=1.5, rel=0.02):
+    """Se due letture (o le loro `impronta`) danno lo stesso display: stessa
+    forma, misure entro `tol` mm o `rel` della misura."""
+    fa = a.forma if getattr(a, "tipo", None) else _famiglia_forma(a.forma)
+    fb = b.forma if getattr(b, "tipo", None) else _famiglia_forma(b.forma)
+    ma = a.misure if getattr(a, "tipo", None) else a.misure()
+    mb = b.misure if getattr(b, "tipo", None) else b.misure()
+    return (fa == fb and len(ma) == len(mb)
+            and all(abs(x - y) <= max(tol, rel * max(x, y)) for x, y in zip(ma, mb)))
+
+
+@dataclass
+class EsitoTU:
+    """Le letture del display su un foglio: tutte, la vincente col suo dubbio,
+    la griglia per colore nel verso del foglio (per il messaggio quando
+    nessuna vale) e le strade provate."""
+    letture: list = field(default_factory=list)
+    migliore: object = None
+    dubbio: str = ""
+    colore: object = None
+    altre: int = 0
+
+    def righe(self):
+        """Le righe da aggiungere agli avvisi: la strada, se non e' quella di
+        sempre, e il dubbio."""
+        out = []
+        m = self.migliore
+        if m is not None and not m.prima:
+            come = [c for c in m.correzioni]
+            if come:
+                out.append("fustella letta %s: per colore, com'era, il display "
+                           "non tornava" % "; ".join(_come(c) for c in come))
+        if self.dubbio:
+            out.append(self.dubbio)
+        return out
+
+
+def _come(c):
+    if c == "tratti riuniti":
+        return "coi tratti riuniti (il disegno e' fatto di pezzi corti)"
+    if c == "per geometria":
+        return "per geometria, senza guardare i colori delle penne"
+    if c.startswith("senza la penna"):
+        return c + ", che e' di quote o riquadri"
+    return c
+
+
+def _prova(f, *a):
+    """`f(*a)`, o None se lancia: una forma che non si legge non ferma le
+    altre."""
+    try:
+        return f(*a)
+    except Exception:                               # noqa: BLE001
+        return None
+
+
+class _Fogli:
+    """I versi del foglio letti una volta sola: per ognuno la `strade.Pagina`,
+    i tratti della fustella per colore e la loro griglia - quella di
+    `dieline.extract`, che la fila di sempre rifaceva per ogni forma e ogni
+    verso (13 volte su un foglio che nessuna forma legge)."""
+
+    def __init__(self):
+        self._fogli = {}
+
+    def foglio(self, pdf):
+        if pdf not in self._fogli:
+            from . import dieline, strade
+            try:
+                pag = strade.Pagina(pdf)
+                colore = pag.per_colore(list(pag.t.segmenti))
+                d = dieline.griglia(colore, pag.W, pag.H)
+                self._fogli[pdf] = (pag, colore, d, None)
+            except Exception as e:                  # noqa: BLE001
+                self._fogli[pdf] = (None, None, None, e)
+        return self._fogli[pdf]
+
+    def estrai(self, pdf):
+        """Come `dieline.extract`: la griglia per colore, o l'errore."""
+        _pag, _colore, d, errore = self.foglio(pdf)
+        if errore is not None:
+            raise errore
+        return d
+
+
+def _prima(sorgente, fogli):
+    """`(LetturaTU o None, griglia per colore nel verso del foglio)`: la fila
+    di sempre, la prima forma che passa - il vassoio piano, la plancia, lo
+    sportello, la scatola, il sagomato - ognuna coi suoi versi."""
+    from . import plancia, scatola_plancia, sportello
+    colore = None
+    estrai = fogli.estrai
+    r = _prova(riconosci_sulla_tavola, sorgente, False, estrai)
+    if r is not None:
+        pdf, d, v, gradi, giro = r
+        colore = d
+        if v is not None:
+            return LetturaTU("vassoio", gradi, "colore", (), pdf, d, v, giro, True), colore
+    for forma, modulo in (("plancia", plancia), ("sportello", sportello)):
+        r = _prova(modulo.riconosci_sulla_tavola, sorgente, estrai)
+        if r is not None and r[2] is not None:
+            pdf, d, p, gradi, giro = r
+            return LetturaTU(forma, gradi, "colore", (), pdf, d, p, giro, True), colore
+    sp = _prova(scatola_plancia.riconosci, sorgente)
+    if sp is not None:
+        return LetturaTU("scatola", 0, "colore", (), sorgente, None, sp, None, True), colore
+    r = _prova(riconosci_sulla_tavola, sorgente, True, estrai)
+    if r is not None and r[2] is not None:
+        pdf, d, v, gradi, giro = r
+        return LetturaTU("sagomato", gradi, "colore", (), pdf, d, v, giro, True), colore
+    return None, colore
+
+
+def _sulla_griglia(forma, pdf, d):
+    """La forma `forma` sulla griglia `d` del foglio `pdf`, o None."""
+    from . import plancia, sportello
+    if forma == "vassoio":
+        return riconosci(d)
+    if forma == "sagomato":
+        return riconosci_sagomato(d)
+    if forma == "plancia":
+        return plancia.riconosci(d)
+    if forma == "sportello":
+        if d.bbox is None:
+            return None
+        return sportello.riconosci(d, plancia.tratti(pdf, d.bbox))
+    return None
+
+
+def _altre(sorgente, viste, fogli):
+    """Le letture delle altre strade, per tutte le forme che leggono la
+    griglia e per tutti i versi del foglio: mezzo giro solo per lo sportello,
+    che vuole il retro in alto (gli altri si leggono uguali). `viste`: le
+    letture gia' fatte, (forma, giro, griglia)."""
+    from . import artwork, strade
+    out = []
+    for giro in (0, 90, 270, 180):
+        g = artwork.pagina_girata(sorgente, giro) if giro else sorgente
+        if giro and g == sorgente:
+            break
+        pag, colore, _d, errore = fogli.foglio(g)
+        if errore is not None:
+            continue
+        try:
+            griglie = set()
+            f0 = strade._griglia(pag, "colore", (), colore, griglie)
+            fs = ([f0] if f0 is not None else []) + strade.altre_fustelle(pag, colore,
+                                                                        griglie)
+        except Exception:                           # noqa: BLE001
+            continue
+        for f in fs:
+            firma = (tuple(round(x, 1) for x in f.d.xs), tuple(round(y, 1) for y in f.d.ys))
+            for forma in FORME:
+                if forma == "scatola" or (giro == 180 and forma != "sportello"):
+                    continue
+                if (forma, giro, firma) in viste:
+                    continue
+                viste.add((forma, giro, firma))
+                obj = _prova(_sulla_griglia, forma, g, f.d)
+                if obj is None:
+                    continue
+                if (forma in ("vassoio", "sagomato")
+                        and min(obj.fondo_w, obj.fondo_h) < FONDO_MINIMO_ALTRE):
+                    # il film del flowpack del cheesecake, per geometria, si
+                    # leggeva come un sagomato col fondo di 34 x 123 mm
+                    continue
+                avviso = None
+                if giro:
+                    avviso = ("foglio girato di %d gradi: sulla tavola il %s "
+                              "stava di traverso" % (giro, NOMI_FORME[forma]))
+                out.append(LetturaTU(forma, giro, f.strada, tuple(f.correzioni), g,
+                                     f.d, obj, avviso))
+    return out
+
+
+def _firma_griglia(d):
+    if d is None:
+        return None
+    return (tuple(round(x, 1) for x in d.xs), tuple(round(y, 1) for y in d.ys))
+
+
+def _voci_misure(l):
+    """Le voci del costo che dice il disegno da solo."""
+    voci = {}
+
+    def voce(nome, v):
+        if v > 1e-6:
+            voci[nome] = round(min(v, 3.0), 3)
+    o = l.obj
+    pareti = getattr(o, "pareti", None) if l.forma != "scatola" else None
+    if pareti and "ovest" in pareti and "est" in pareti:
+        a, b = pareti["ovest"], pareti["est"]
+        voce("fianchi", abs(a - b) / max(a, b, 1e-9) / TOL_FIANCHI)
+    if l.forma == "vassoio":
+        r = o.riquadri
+        sx = (r["fondo"][0] - r["ovest"][2]) * PT2MM
+        dx = (r["est"][0] - r["fondo"][2]) * PT2MM
+        voce("cordonature", abs(sx - dx) / TOL_CORDONATURE_MM)
+    if l.forma in ("vassoio", "sagomato") and _basso_di_lato(o):
+        voce("davanti di lato", DI_LATO)
+    if l.correzioni:
+        voce("strada", COSTO_STRADA * len(l.correzioni))
+    return voci
+
+
+def _attese(l):
+    """Le catene di misure che la lettura fa aspettare dalle quote, e la
+    terna del display montato."""
+    d, o = l.d, l.obj
+    if l.forma in ("vassoio", "sagomato"):
+        xs = sorted({round(t, 2) for t in d.xs})
+        ys = sorted({round(t, 2) for t in d.ys})
+        return ([("in larghezza", [round((b - a) * PT2MM, 1) for a, b in zip(xs, xs[1:])]),
+                 ("in altezza", [round((b - a) * PT2MM, 1) for a, b in zip(ys, ys[1:])])],
+                o.dims_mm)
+    if l.forma == "plancia":
+        bx0, by0, bx1, by1 = d.bbox
+        fx0, fy0, fx1, fy1 = o.fondo
+        b = o.bordi
+        xs = sorted({round(t, 2) for t in (bx0, b["ovest"], fx0, fx1, b["est"], bx1)})
+        ys = sorted({round(t, 2) for t in (by0, b["nord"], fy0, fy1, b["sud"], by1)})
+        return ([("in larghezza", [round((q - a) * PT2MM, 1) for a, q in zip(xs, xs[1:])]),
+                 ("in altezza", [round((q - a) * PT2MM, 1) for a, q in zip(ys, ys[1:])])],
+                o.dims_mm)
+    if l.forma == "sportello":
+        return [], o.dims_mm
+    return [], (o.W, o.D, o.H)
+
+
+def _voce_quote(l, quote_di):
+    from . import quote
+    nums, scritte = quote_di(l.pdf)
+    if not nums:
+        return 0.0
+    attese, dims = _attese(l)
+    conf, div = quote.esito_riscontro(attese, dims, nums, scritte)
+    return -QUOTA_CONFERMA * min(len(conf), 3) + QUOTA_SMENTITA * min(len(div), 2)
+
+
+def _area(l):
+    if l.forma == "scatola":
+        x0, y0, x1, y1 = l.obj.regione
+    elif l.d is None or l.d.bbox is None:
+        return 0.0
+    else:
+        x0, y0, x1, y1 = l.d.bbox
+    return max(0.0, x1 - x0) * max(0.0, y1 - y0)
+
+
+def _punteggio(letture, quote_di):
+    """Il costo intero: le misure, le correzioni, la copertura, le quote."""
+    if not letture:
+        return
+    grande = max(_area(l) for l in letture)
+    for l in letture:
+        l.voci = _voci_misure(l)
+        if grande > 0 and l.forma != "scatola":
+            c = _area(l) / grande
+            if c < COPERTURA_MIN:
+                l.voci["copertura"] = round((COPERTURA_MIN - c) * COPERTURA_PESO, 3)
+        try:
+            q = _voce_quote(l, quote_di)
+        except Exception:                           # noqa: BLE001
+            q = 0.0
+        if q:
+            l.voci["quote"] = round(q, 3)
+        l.costo = round(sum(l.voci.values()), 3)
+
+
+def _quote():
+    """`quote_di(pdf)`: i numeri e le terne delle quote di un foglio, letti
+    una volta."""
+    from . import quote
+    cassa = {}
+
+    def quote_di(pdf):
+        if pdf not in cassa:
+            try:
+                cassa[pdf] = (quote.numeri(pdf), quote.terne(pdf))
+            except Exception:                       # noqa: BLE001
+                cassa[pdf] = ([], [])
+        return cassa[pdf]
+    return quote_di
+
+
+def plausibili(letture):
+    """Le letture che possono vincere: la prima se c'e'; le altre fino al
+    costo geometrico `COSTO_MAX` (o la soglia larga di un tentativo); mai un
+    display che un tentativo prima ha gia' costruito e il controllo ha
+    scartato."""
+    from . import tentativi
+    tetto = tentativi.costo_max(COSTO_MAX)
+    return [l for l in letture
+            if (l.prima or l.geometrico <= tetto)
+            and not tentativi.escluso_display(l.impronta())]
+
+
+def scegli(letture):
+    """`(lettura, dubbio, quante altre)`: la vincente fra le plausibili - il
+    costo piu' basso, la prima a meno di `PRECEDENZA` - la riga del dubbio
+    se un altro display sta a meno di `DUBBIO`, e quanti display diversi dal
+    vincente sono plausibili (per la seconda lettura di un tentativo)."""
+    valide = plausibili(letture)
+    if not valide:
+        return None, "", 0
+    best = min(valide, key=lambda l: l.costo)
+    prima = next((l for l in valide if l.prima), None)
+    if prima is not None and prima.costo <= best.costo + PRECEDENZA:
+        best = prima
+    altre = [l for l in valide if not stesso_display(l, best)]
+    diversi = []
+    for l in altre:
+        if not any(stesso_display(l, x) for x in diversi):
+            diversi.append(l)
+    if not altre:
+        return best, "", 0
+    seconda = min(altre, key=lambda l: l.costo)
+    if seconda.costo - best.costo >= DUBBIO:
+        return best, "", len(diversi)
+    return best, ("DUBBIO DI LETTURA: costruito %s; quasi alla pari %s. "
+                  "Controllare il modello sul PDF"
+                  % (best.descrivi(), seconda.descrivi())), len(diversi)
+
+
+def forte(l, quote_di):
+    """Se la prima lettura basta e le altre strade non si provano: le misure
+    tornano (`COSTO_FORTE`) e le quote, se ci sono, non la smentiscono."""
+    from . import tentativi
+    if tentativi.larghe() or l is None:
+        return False
+    if tentativi.escluso_display(l.impronta()):
+        return False
+    _punteggio([l], quote_di)
+    return l.geometrico <= COSTO_FORTE and l.voci.get("quote", 0.0) <= 0
+
+
+def _memoria():
+    from . import stato
+    global _MEMORIA
+    if _MEMORIA is None:
+        _MEMORIA = stato.per_lavoro({})
+    return _MEMORIA
+
+
+# la lettura di un foglio, che il registro e la costruzione chiedono tutti e
+# due: vale per un lavoro solo (`stato.per_lavoro`)
+_MEMORIA = None
+
+
+def letture(sorgente):
+    """Le letture del display sul foglio `sorgente` (una pagina sola), col
+    verdetto: `EsitoTU`. La prima e' la fila di sempre; se e' forte basta.
+    Se no - non si legge, le misure non tornano, le quote la smentiscono, o
+    un tentativo vuole le soglie larghe - tutte le strade per tutte le forme
+    e tutti i versi, e vince il costo piu' basso."""
+    from . import artwork, tentativi
+    chiave = None
+    if tentativi.neutro():
+        imp = artwork._impronta(sorgente)
+        chiave = (imp, sorgente) if imp is not None else None
+        es = _memoria().get(chiave) if chiave is not None else None
+        # i fogli girati possono essere stati buttati (`artwork.pagina_girata`)
+        if es is not None and (es.migliore is None or os.path.exists(es.migliore.pdf)):
+            _osserva(es)
+            return es
+    quote_di = _quote()
+    fogli = _Fogli()
+    prima, colore = _prima(sorgente, fogli)
+    es = EsitoTU(colore=colore)
+    es.letture = [prima] if prima is not None else []
+    if not forte(prima, quote_di):
+        viste = set()
+        if prima is not None and prima.forma != "scatola":
+            viste.add((prima.forma, prima.giro, _firma_griglia(prima.d)))
+        try:
+            es.letture += _altre(sorgente, viste, fogli)
+        except Exception:                           # noqa: BLE001
+            pass
+        _punteggio(es.letture, quote_di)
+    es.migliore, es.dubbio, es.altre = scegli(es.letture)
+    if chiave is not None:
+        cassa = _memoria()
+        if len(cassa) > 8:
+            cassa.clear()
+        cassa[chiave] = es
+    _osserva(es)
+    return es
+
+
+def _osserva(es):
+    from . import tentativi
+    if es.migliore is not None:
+        tentativi.osserva(vassoio=es.migliore.impronta(), altre=es.altre)
+
+
+def montaggio(pdf, v: Vassoio):
+    """`(coperchio?, testata davanti, muto)`: `coperchio` col suo verso, e
+    `muto` se nessuna scritta dice come si monta (meno di due pareti con
+    testo che vota). Un tentativo puo' chiedere il vassoio montato come
+    coperchio proprio quando e' muto (`pack3d.tentativi`, `montaggio`)."""
+    from . import tentativi, tracciati
+    try:
+        verso = tracciati.verso_grafica(pdf, v.riquadri)
+    except Exception:                               # noqa: BLE001
+        verso = {}
+    e, davanti = coperchio(pdf, v, verso)
+    muto = sum(1 for k in verso if k in VERSO_COPERCHIO) < 2
+    tentativi.osserva(muto_montaggio=muto)
+    if muto and not e and tentativi.montaggio() == "coperchio":
+        return True, testata_davanti(v), muto
+    return e, davanti, muto

@@ -40,40 +40,30 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     # una pagina sola, e il nero sul file pulito: vedi `build_carton`
     pdf, n_pagine = artwork.pagina_unica(pdf)
     sorgente = pdf
-    pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(pdf)
-    if v is None:
-        # Non e' un vassoio aperto, ma puo' essere la scatola chiusa che si
-        # apre in espositore: stesso fondo, stesse pareti e un coperchio che
-        # diventa la plancia. Vedi `pack3d.plancia`.
-        pdf, d, p, gradi, giro = plancia.riconosci_sulla_tavola(sorgente)
-        if p is not None:
-            return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
-                                 quality, lastre_extra, colata_riquadro,
-                                 n_pagine)
-        # o la scatola con la plancia ricavata DENTRO il coperchio, lo
-        # sportello perforato che si alza sul retro: `pack3d.sportello`
-        pdf, d, p, gradi, giro = sportello.riconosci_sulla_tavola(sorgente)
-        if p is not None:
-            return build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb,
-                                 quality, lastre_extra, colata_riquadro,
-                                 n_pagine, forma=sportello)
-        # lo sportello disegnato come fustella in CAD, a fessure e cerniera
-        # tratteggiata, che `pack3d.sportello` sulla griglia non vede: vedi
-        # `pack3d.scatola_plancia`
-        sp = scatola_plancia.riconosci(sorgente)
-        if sp is not None:
-            return build_scatola_plancia(sorgente, sp, out_glb, quality,
-                                         lastre_extra, colata_riquadro,
-                                         n_pagine, dove_plancia=dove_plancia,
-                                         chiusa=chiusa)
-        # per ultimo il vassoio sagomato, le pareti con gli obliqui e gli
-        # incavi: vedi `vassoio.riconosci_sagomato`
-        pdf, d, v, gradi, giro = vassoio.riconosci_sulla_tavola(sorgente,
-                                                                sagomato=True)
-        if v is None:
-            raise ValueError("non e' un vassoio: la griglia della fustella "
-                             "non ha cinque colonne e tre fasce, e non e' un "
-                             "display con plancia")
+    # La lettura a punteggio, la stessa del registro (`vassoio.letture`):
+    # il vassoio aperto, la scatola chiusa che si apre in espositore
+    # (`pack3d.plancia`), la plancia ricavata DENTRO il coperchio
+    # (`pack3d.sportello`), lo sportello disegnato in CAD
+    # (`pack3d.scatola_plancia`), il vassoio sagomato; per ogni strada della
+    # fustella e ogni verso del foglio, se la fila di sempre non basta.
+    es = vassoio.letture(sorgente)
+    m = es.migliore
+    if m is None:
+        raise ValueError("non e' un vassoio: la griglia della fustella "
+                         "non ha cinque colonne e tre fasce, e non e' un "
+                         "display con plancia")
+    righe = es.righe()
+    if m.forma in ("plancia", "sportello"):
+        return build_plancia(sorgente, m.pdf, m.d, m.obj, m.giro, m.avviso, out_glb,
+                             quality, lastre_extra, colata_riquadro, n_pagine,
+                             forma=plancia if m.forma == "plancia" else sportello
+                             ) + righe
+    if m.forma == "scatola":
+        return build_scatola_plancia(sorgente, m.obj, out_glb, quality,
+                                     lastre_extra, colata_riquadro,
+                                     n_pagine, dove_plancia=dove_plancia,
+                                     chiusa=chiusa) + righe
+    pdf, d, v, gradi, giro = m.pdf, m.d, m.obj, m.giro, m.avviso
     # la lettura del PDF accanto al GLB (`pack3d.lettura`): mai un errore
     scrivi_lettura(out_glb, lambda: lettura_pdf.vassoio(pdf, v, gradi))
     colata_riquadro = artwork.riquadro_girato(sorgente, colata_riquadro, gradi)
@@ -116,7 +106,11 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     avvisi_fronte = []
     # il coperchio si monta al contrario, col fondo stampato in alto: vedi
     # `vassoio.coperchio`. Il davanti lo dice la grafica del fondo.
-    e_coperchio, davanti = vassoio.coperchio(pdf, v)
+    e_coperchio, davanti, muto = vassoio.montaggio(pdf, v)
+    if e_coperchio and muto:
+        avvisi_fronte.append("montato come coperchio: nessuna scritta delle "
+                             "pareti dice come si monta, e la prima lettura, "
+                             "montata come vassoio, non e' passata")
     if e_coperchio:
         if davanti == "sud":
             V = vassoio.gira(V)
@@ -166,7 +160,7 @@ def build_vassoio(pdf, out_glb, quality="hd", lastre_extra=(),
     if pagine:
         meta.insert(0, pagine)
     return (meta + avvisi_sagoma + avvisi_tex + list(v.warnings) + avvisi_fronte
-            + verifiche + ([riscontro] if riscontro else []))
+            + verifiche + ([riscontro] if riscontro else []) + righe)
 
 
 def build_plancia(sorgente, pdf, d, p, gradi, giro, out_glb, quality="hd",
