@@ -20,6 +20,21 @@ il vassoio lo verifica comunque la lettura: si prova il vassoio su tutti e due
 o nessuno, ci si ferma e lo si dice. L'altro si legge come flowpack, con le
 domande di sempre: zigrinatura, gonfiore, pinne.
 
+**Se passano tutti e due vince la lettura piu' forte**, se e' una sola: la
+fila di sempre prima del sagomato (che si prova per ultimo, e che il film di
+un flowpack a volte imita), e il sagomato prima di una lettura venuta da
+un'altra strada della fustella (`debole`: regole/vassoi.md, *Le letture a
+punteggio*). Per geometria il film del flowpack del cheesecake si leggeva
+come un sagomato.
+
+**Se non passa nessuno, il messaggio dice perche', PDF per PDF** (`motivi`):
+«nessuno si legge come vassoio espositore (il PDF 1 ha una griglia di 11
+colonne e 14 fasce; ...; un vassoio ne ha 5 e 3)». Fino al 22 novembre 2026
+diceva solo «nessuno», e sullo Space nascondeva due cause diverse: il display
+T1x10 era una foto (6 fermate del 5 novembre) e la griglia del sagomato T1x36
+EU il codice di allora la contava 6 e 6 (la fermata del 9 novembre). La foto
+lo diceva gia' (`artwork.PdfImmagine`).
+
 ### Quanti: la domanda, e il vuoto vuol dire pieno
 
 Prima di costruire la pagina chiede **quanti flowpack mettere**. Vuoto vuol
@@ -249,11 +264,30 @@ Il flowpack si misura nella scena e si adatta nella sua maglia: le due cose
 coincidono solo se i suoi nodi non spostano niente, ed e' cosi' che li fa
 `build_flowpack`. Un flowpack coi nodi trasformati ferma il riempimento.
 
-### Il controllo dell'AI non c'e' ancora
+### Il controllo dell'AI, e i tentativi
 
-Il controllo confronta il modello con l'artwork di un pack solo: sul vassoio
-pieno non saprebbe cosa guardare. Il riempimento lo salta, e lo dice nel
-riquadro del controllo.
+Il controllo guarda anche il riempimento, sapendo che lo e': la nota «e' un
+RIEMPIMENTO: il PDF ... e' il contenitore, il PDF ... il pack»
+(`server.nota_riempimento`, dal 3 novembre 2026) e le regole del riempimento
+in `pack3d/controllo.py` (le copie del pack non sono pezzi in piu').
+
+Se il controllo lo scarta, il giro dei tentativi (regole/verifiche.md, *Il
+secondo tentativo prima della coda*) prova, dal 22 novembre 2026:
+
+- **il pack girato attorno al fronte** («altro verso del pack»,
+  `riempimento.gira_il_pack`), quando il pack non sa il suo verso: nessun
+  testo vivo, e il flowpack resta come sta sulla tavola, coricato o in piedi
+  a seconda del foglio (`VERSO_MUTO`). Prima si disfa il giro che il flowpack
+  ha dato al modello perche' il marchio si legga orizzontale («modello girato
+  di 90 gradi attorno al fronte»), poi un quarto, tre quarti, mezzo giro. Sul
+  riempimento T1x36 EU col foglio girato di 90 gradi il pack stava in piedi e
+  sporgeva 4 mm dalle pareti (150,4 invece di 146,2): girato di 270 gradi
+  torna come quello approvato;
+- **le soglie larghe**: le letture del vassoio con tutte le strade, e del
+  pack se e' un astuccio.
+
+Ogni tentativo ricostruisce il vassoio e il pack, e un riempimento costa un
+minuto: nei tre minuti del tetto ne stanno due o tre.
 
 ### Cosa manca
 
