@@ -307,9 +307,14 @@ class Giro:
             return
         if oss.get("astuccio") is not None:
             self.escludi.append(oss["astuccio"])
-        if oss.get("vassoio") is not None and not (t.montaggio or oss.get("muto_montaggio")):
+        if (oss.get("vassoio") is not None and self.kind == "vassoio"
+                and not (t.montaggio or oss.get("muto_montaggio"))):
             # il display scartato non vince piu'; se e' muto si prova prima
-            # montato come coperchio, sulla stessa lettura
+            # montato come coperchio, sulla stessa lettura. Solo dichiarato
+            # vassoio: nel riempimento lo scarto puo' essere del pack, e
+            # senza il contenitore il tentativo del verso del pack si
+            # fermava su «nessuno si legge come vassoio» (i display a scatola
+            # T1x10 e T15, che non passano per il montaggio)
             self.escludi.append(oss["vassoio"])
         if oss.get("giro") is not None:
             self.giri.add(oss["giro"])

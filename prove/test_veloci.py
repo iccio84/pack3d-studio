@@ -2778,10 +2778,14 @@ class RiempimentoTentativi(unittest.TestCase):
         g = tentativi.Giro(True, "riempimento", orologio=lambda: 0.0)
         t = g.primo()
         t.osservato.update(famiglia="flowpack", muto_pack=True, giro_pack=90)
+        # il contenitore letto (un display a scatola, senza montaggio) non si
+        # esclude: lo scarto puo' essere del pack
+        t.osservato.update(vassoio=LettureTradeUnit._lettura(0.0, prima=True).impronta())
         g.esito(t, "sbagliato", "ingombro")
         t = g.prossimo()
         # prima si disfa il giro che il flowpack ha dato per il marchio
         self.assertEqual((t.cosa, t.gira_pack), (tentativi.VERSO_PACK, 270))
+        self.assertEqual(t.escludi, ())
         self.assertFalse(t.neutro)
         t.osservato.update(famiglia="flowpack", muto_pack=True, giro_pack=90)
         g.esito(t, "sbagliato")
