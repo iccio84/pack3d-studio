@@ -380,7 +380,7 @@ def costruisci(args):
         oracolo = _scrivi_oracolo(os.path.join(args.uscita, "oracolo.json"),
                                   {c["nome"]: (oracolo, c["nome"], 1.0) for c in casi})
     riusati = (_da_riusare(args.uscita, casi, impronta, impronte, pulisci=not args.solo)
-               if getattr(args, "riusa", False) and not oracolo else {})
+               if getattr(args, "riusa", False) else {})
     riassunto = {n: dict(stato=e["stato"], md5=e["md5"], secondi=e["secondi"])
                  for n, e in riusati.items()}
     da_fare = [c for c in casi if c["nome"] not in riusati]
