@@ -808,6 +808,65 @@ La seconda costruzione usa pdfium come la prima, quindi aspetta il suo posto
 (`PACK3D_CORREZIONE_ATTESA`, 240 s); se non arriva si consegna il primo
 modello. `PACK3D_CORREZIONE=0` spegne la correzione e lascia il controllo.
 
+### Il secondo tentativo prima della coda
+
+Il proprietario, il 20 novembre 2026 (`pack3d-casi/regole/decisioni.md`,
+punto 3): il tempo di calcolo e' un budget da spendere in robustezza. Se la
+lettura si ferma, o il controllo dice sbagliato o dubbio, il codice riprova
+da solo con le letture successive e le soglie piu' larghe, ricostruisce e fa
+ricontrollare; il caso va alla routine solo quando i tentativi sono finiti
+(`pack3d/tentativi.py`).
+
+- **Solo col giudice.** Il giro parte col controllo dell'AI acceso (o
+  l'oracolo delle prove, sotto). Senza, un tentativo solo, come prima: una
+  lettura piu' larga che nessuno conferma sarebbe un modello sbagliato in
+  silenzio. Per questo il parco, che gira col controllo spento, non cambia.
+- **L'ordine** (`Giro.prossimo`), ognuno solo se puo' dare un modello
+  diverso da quelli gia' provati: sugli astucci la seconda lettura
+  plausibile del punteggio (un astuccio diverso, `strade.scegli` salta
+  quelli scartati); gli altri versi del foglio quando niente dice il verso
+  (nessuna faccia con testo vivo, o la grafica d'accordo in nessun verso:
+  `artwork.astuccio_sulla_grafica` legge il foglio nel verso imposto); le
+  soglie larghe (tutte le strade della fustella, letture plausibili fino a
+  `COSTO_MAX_LARGO`; da li' in poi restano larghe); la prova dopo nel
+  registro, saltando quella scartata (`registro.prove_dopo`: dichiarato
+  cartotecnico, la punta, la coppa e il tubo dopo l'astuccio), mai fuori
+  dalla tipologia dichiarata. Le strade proprie delle altre famiglie (il
+  verso del film, il ripiego del flowpack, le forme del vassoio) entrano una
+  famiglia per PR, come le letture a punteggio.
+- **Una lettura o un modello gia' visti** (`Giro.gia_letto`,
+  `gia_costruito`) non si ricostruiscono e non si ricontrollano.
+- **Il tetto**: tre minuti dall'inizio della costruzione al verdetto
+  dell'ultimo tentativo (`TETTO_S`), sei tentativi al massimo. Un tentativo
+  non parte se, durando quanto il piu' lungo dei precedenti, sforerebbe.
+  Una fermata costa solo la lettura.
+- **Il verdetto migliore vince**; a pari merito resta il primo modello. Un
+  tentativo che il controllo non ha potuto guardare non vale (`da_tentativo`:
+  e' un dubbio). La correzione degli inchiostri tecnici resta sul primo
+  modello, prima dei tentativi.
+- **Cosa vede chi carica**: la riga di stato dice «provo un'altra lettura,
+  con ... (tentativo n)». Mentre aspetta il modello la pagina la legge da
+  `/api/lavori` (`fase`), mentre aspetta il verdetto da `/api/verdetto`; il
+  lavoratore la manda al server con un messaggio suo (`lavoratori`, tipo
+  `fase`). Il modello di un tentativo prende il posto del primo come quello
+  corretto (`/api/verdetto/glb`), con la sua lettura del PDF, e il
+  cartellino «TENTATIVO n, con ...: la prima lettura ...». La lettura che si
+  ferma in `/api/analyze` riprova solo le letture, senza costruire; la
+  costruzione rifa' gli stessi tentativi, nello stesso ordine.
+- **Il controllo sa** che e' un tentativo (la nota «questo modello e' il
+  tentativo n ...» nel contesto), e la coda riceve la riga «TENTATIVI: ...»
+  con tutto quello che e' stato provato. `pack3d/controllo.py` non cambia.
+- **Le statistiche**: un evento `tentativo` per ogni tentativo dopo il primo
+  (cosa ha provato, com'e' andato), un evento `tentativi` per ogni giro con
+  piu' di un tentativo (riuscito al tentativo n, o finiti e perche'), e nel
+  riassunto `tentativi`: casi, tentativi, riusciti.
+- **L'oracolo** (`PACK3D_ORACOLO`), per provarlo senza spendere: un giudice
+  finto al posto dell'AI, che dice ok se il modello torna come quello
+  approvato (ingombro entro 1,5 mm, viste entro 3 livelli di grigio, la misura
+  del banco). `prove/parco.py costruisci --oracolo <costruzione del parco>`,
+  `--oracolo pessimista` (dice sempre di no: il giro deve finire in tempo e
+  mettere il caso in coda), `varianti --oracolo`. Mai sullo Space.
+
 ### La coda dei casi nuovi
 
 Un modello respinto e' un pack che il codice non sa ancora costruire. Non

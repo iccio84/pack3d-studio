@@ -80,7 +80,9 @@ def in_prova(si):
 
 
 def conta(evento, **campi):
-    """Una riga: `evento` (lettura, costruzione, fermata, verdetto) e i suoi
+    """Una riga: `evento` (lettura, costruzione, fermata, verdetto,
+    tentativo - uno dopo il primo, `pack3d.tentativi` -, tentativi - com'e'
+    finito un giro con piu' di un tentativo) e i suoi
     campi. Mai un errore: le statistiche non fermano niente. Le prove non
     contano (`in_prova`)."""
     if not FILE or getattr(_richiesta, "prova", False):
@@ -102,6 +104,9 @@ def riassunto(file=None):
     per esito e per motivo, piu' la prima e l'ultima volta. `file`: quali
     sommare (quelli salvati nel registro); senza, quelli di questo Space."""
     conti, prima, ultima, n = {}, None, None, 0
+    # il secondo tentativo prima della coda (`pack3d.tentativi`): quanti
+    # tentativi dopo il primo, su quanti casi, e quanti casi sono riusciti
+    giri = dict(casi=0, tentativi=0, riusciti=0)
     if file is None:
         file = (FILE + ".1", FILE) if FILE else ()
     for f in file:
@@ -122,10 +127,15 @@ def riassunto(file=None):
                                                      "esito", "motivo") if k in d)
             per = conti.setdefault(d.get("e", "?"), {})
             per[chiave] = per.get(chiave, 0) + 1
+            if d.get("e") == "tentativo":
+                giri["tentativi"] += 1
+            elif d.get("e") == "tentativi":
+                giri["casi"] += 1
+                giri["riusciti"] += str(d.get("esito", "")).startswith("riuscito")
     fuori = {e: [dict(cosa=k, quante=v) for k, v in
                  sorted(c.items(), key=lambda kv: (-kv[1], kv[0]))]
              for e, c in sorted(conti.items())}
-    return dict(eventi=n,
+    return dict(eventi=n, tentativi=giri,
                 dal=time.strftime("%Y-%m-%d %H:%M", time.gmtime(prima)) if prima else None,
                 al=time.strftime("%Y-%m-%d %H:%M", time.gmtime(ultima)) if ultima else None,
                 conti=fuori)

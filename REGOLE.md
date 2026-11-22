@@ -397,6 +397,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
 - Il controllo dell'AI prima della consegna
   - Il modello subito, il verdetto dopo
   - La correzione: gli inchiostri tecnici li sceglie chi li vede
+  - Il secondo tentativo prima della coda
   - La coda dei casi nuovi
   - Chi lavora la coda, e il parco che la protegge
   - Chi ha caricato il PDF segue il caso, e risponde
