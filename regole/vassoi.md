@@ -401,7 +401,7 @@ due volte, nel registro e nella costruzione.
   i versi del foglio (0, 90 e 270 gradi; mezzo giro solo per lo sportello, che
   vuole il retro in alto). Ogni verso si legge una volta sola (`_Fogli`): la
   fila di sempre rileggeva lo stesso foglio per ogni forma, 13 volte su un
-  foglio che nessuna forma legge, e sul display KMS coi tratti spezzati la
+  foglio che nessuna forma legge, e sul display T1x40 coi tratti spezzati la
   lettura e' scesa da 38 a 9 secondi.
 - **Il costo** (`_punteggio`): i fianchi che non sono alti uguali (il 5% costa
   uno), le cordonature diverse (un millimetro costa uno), il davanti - la
