@@ -153,32 +153,26 @@ def _prova_vassoio(l):
     a scatola, sagomato. Dichiarato vassoio, se nessuno e' suo si ferma: la
     dichiarazione vale anche quando dice di no."""
     pdf, kind = l.pdf, l.kind
+    if kind == "vassoio":
+        return _vassoio_dichiarato(pdf)
     grezza = None
-    giro_v = None
     try:
-        if kind == "vassoio":
-            # dichiarato: vale la pena di provarlo anche di traverso,
-            # vedi `vassoio.riconosci_sulla_tavola`. Senza dichiarazione
-            # no: la prova la pagherebbe ogni astuccio e ogni flowpack.
-            _p, grezza, v, _g, giro_v = vassoio.riconosci_sulla_tavola(pdf)
-        else:
-            grezza = dl.extract(pdf)
-            v = vassoio.riconosci(grezza)
+        # senza dichiarazione la griglia gia' letta e basta: la prova la
+        # pagherebbe ogni astuccio e ogni flowpack
+        grezza = dl.extract(pdf)
+        v = vassoio.riconosci(grezza)
     except Exception:
         v = None
     finally:
         dl.scarta_resa()
-    if v is None and kind in (None, "vassoio"):
+    if v is None and kind is None:
         # Non e' un vassoio aperto: puo' essere il display con plancia, la
-        # scatola chiusa che si apre in espositore (`pack3d.plancia`).
-        # Dichiarato si prova anche di traverso, come il vassoio; senza
-        # dichiarazione si guarda la griglia gia' letta, e non costa
-        # niente. E' qui che il display T1x48 smette di uscire flowpack.
+        # scatola chiusa che si apre in espositore (`pack3d.plancia`). Senza
+        # dichiarazione si guarda la griglia gia' letta, e non costa niente.
+        # E' qui che il display T1x48 smette di uscire flowpack.
         pl, giro_p = None, None
         try:
-            if kind == "vassoio":
-                _p, _g, pl, _gr, giro_p = plancia.riconosci_sulla_tavola(pdf)
-            elif grezza is not None:
+            if grezza is not None:
                 pl = plancia.riconosci(grezza)
                 if pl is None:
                     # di traverso sulla tavola: la griglia trasposta lo
@@ -196,41 +190,36 @@ def _prova_vassoio(l):
             return dict(kind="vassoio", title="Display con plancia",
                         meta=plancia.dichiara(pl)
                         + ([giro_p] if giro_p else []))
-        if kind == "vassoio":
-            # la plancia ricavata dentro il coperchio (`pack3d.sportello`):
-            # solo dichiarato, la prova gira il foglio e costa
-            try:
-                _p, _g, sp, _gr, giro_s = sportello.riconosci_sulla_tavola(pdf)
-            except Exception:
-                sp = None
-            finally:
-                dl.scarta_resa()
-            if sp is not None:
-                return dict(kind="vassoio", title="Display con plancia",
-                            meta=sportello.dichiara(sp)
-                            + ([giro_s] if giro_s else []))
-    if v is None and kind == "vassoio":
-        # la scatola che resta chiusa, con la plancia ricavata dal
-        # coperchio (`pack3d.scatola_plancia`): si prova solo dichiarata
-        try:
-            sp = scatola_plancia.riconosci(pdf)
-        except Exception:
-            sp = None
-        if sp is not None:
-            return dict(kind="vassoio", title="Display a scatola",
-                        meta=scatola_plancia.dichiara(sp))
-    sagomato = False
-    if v is None and kind == "vassoio":
-        # per ultimo il vassoio sagomato, come in `build_vassoio`
-        try:
-            _p, _g, v, _gr, giro_v = vassoio.riconosci_sulla_tavola(
-                pdf, sagomato=True)
-        except Exception:
-            v = None
-        finally:
-            dl.scarta_resa()
-        sagomato = v is not None
-    if v is None and kind == "vassoio":
+    if v is None:
+        return None
+    return _dict_vassoio(v, None, False)
+
+
+def _dict_vassoio(v, giro_v, sagomato, extra=()):
+    return dict(kind="vassoio", title="Vassoio espositore", sagomato=sagomato,
+                meta=["vassoio espositore",
+                      "fondo %.1f x %.1f mm, pareti %s mm"
+                      % (v.fondo_w, v.fondo_h,
+                         " / ".join("%s %.1f" % (k, a)
+                                    for k, a in v.pareti.items()))]
+                     + ([giro_v] if giro_v else [])
+                     + list(v.warnings) + list(extra))
+
+
+def _vassoio_dichiarato(pdf):
+    """Dichiarato vassoio: la lettura a punteggio di `vassoio.letture` - la
+    stessa che fa la costruzione - con tutte le forme, le strade della
+    fustella e i versi del foglio."""
+    try:
+        es = vassoio.letture(pdf)
+    finally:
+        dl.scarta_resa()
+    m = es.migliore
+    if m is None and any(tentativi.escluso_display(l.impronta()) for l in es.letture):
+        # un tentativo dopo il primo: le letture che ci sono le ha gia'
+        # costruite e scartate il controllo (`pack3d.tentativi`)
+        raise ValueError(VASSOIO_SCARTATO)
+    if m is None:
         # La dichiarazione deve valere anche quando dice di NO. Senza
         # questo ramo "vassoio" scivolava fino in fondo e usciva un
         # FLOWPACK: un modello plausibile della famiglia sbagliata, cioe' il
@@ -241,6 +230,7 @@ def _prova_vassoio(l):
         # mostra: piu' lungo, e il consiglio finale - quello che dice
         # cosa fare - veniva tagliato via proprio lui.
         letto = "non si legge"
+        grezza = es.colore
         if grezza is not None:
             # stesso arrotondamento di `vassoio.riconosci`, altrimenti
             # il conto che si legge nel messaggio non e' quello su cui la
@@ -253,16 +243,26 @@ def _prova_vassoio(l):
             "display con plancia un coperchio sul fianco o sul retro; "
             "questa fustella "
             "%s. Se e' un astuccio dichiara 'cartotecnico'." % letto)
-    if v is not None:
-        return dict(kind="vassoio", title="Vassoio espositore", sagomato=sagomato,
-                    meta=["vassoio espositore",
-                          "fondo %.1f x %.1f mm, pareti %s mm"
-                          % (v.fondo_w, v.fondo_h,
-                             " / ".join("%s %.1f" % (k, a)
-                                        for k, a in v.pareti.items()))]
-                         + ([giro_v] if giro_v else [])
-                         + list(v.warnings))
-    return None
+    extra = es.righe()
+    # letto per un'altra strada, non dalla fila di sempre: il riempimento lo
+    # conta come il sagomato, una lettura debole (`analisi_riempimento`)
+    debole = {} if m.prima else {"debole": True}
+    if m.forma in ("vassoio", "sagomato") and tentativi.montaggio() == "coperchio":
+        # il tentativo che monta il vassoio come coperchio: e' un'altra
+        # lettura, e il giro la deve costruire (`tentativi.firma`)
+        extra.append("montaggio come coperchio, chiesto dal tentativo: nessuna "
+                     "scritta delle pareti dice come si monta")
+    giro = [m.avviso] if m.avviso else []
+    if m.forma == "plancia":
+        return dict(kind="vassoio", title="Display con plancia",
+                    meta=plancia.dichiara(m.obj) + giro + extra, **debole)
+    if m.forma == "sportello":
+        return dict(kind="vassoio", title="Display con plancia",
+                    meta=sportello.dichiara(m.obj) + giro + extra, **debole)
+    if m.forma == "scatola":
+        return dict(kind="vassoio", title="Display a scatola",
+                    meta=scatola_plancia.dichiara(m.obj) + extra, **debole)
+    return dict(_dict_vassoio(m.obj, m.avviso, m.forma == "sagomato", extra), **debole)
 
 
 def _prova_cono(l):
@@ -504,6 +504,8 @@ RICONOSCIMENTO = (
 # Le prove che non si saltano mai: il caso calibrato e' il piu' sicuro, e il
 # cartotecnico che non si legge e' la fermata, non una lettura.
 NON_SI_SALTANO = ("caso calibrato", "cartotecnico che non si legge")
+VASSOIO_SCARTATO = ("vassoio: le letture del display le ha scartate il controllo "
+                    "dell'AI, e nessun'altra forma, strada o verso del foglio torna")
 ASTUCCIO_SCARTATO = ("astuccio: le sue letture le ha scartate il controllo "
                      "dell'AI, e nessun'altra forma del cartotecnico e' sua")
 
