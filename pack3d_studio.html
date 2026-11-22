@@ -1455,8 +1455,14 @@ function seguiFila(id){
   const giro = async () => {
     try{
       const r = await fetch(url('/api/lavori?id=' + id), {cache: 'no-store'});
-      const n = r.ok ? (await r.json()).posizione : null;
-      if (!fermo && n >= 1){
+      const j = r.ok ? await r.json() : {};
+      const n = j.posizione;
+      if (!fermo && !(n >= 1) && j.fase){
+        // la prima lettura non torna e il codice ne prova un'altra prima di
+        // fermarsi (`pack3d.tentativi`): lo dice la riga di stato
+        if (prima === null) prima = [statusEl.textContent, statusEl.className];
+        setStatus(j.fase, 'busy');
+      }else if (!fermo && n >= 1){
         if (prima === null) prima = [statusEl.textContent, statusEl.className];
         setStatus(n === 1 ? 'In fila: le costruzioni in corso sono al massimo, la tua è la prossima…'
                   : 'In fila: ' + (n - 1) + (n === 2 ? ' costruzione' : ' costruzioni')
@@ -1616,6 +1622,9 @@ async function seguiVerdetto(gettone, blob){
       if (r.ok){
         d = await r.json();
         if (d.pronto) break;
+        // il controllo non e' convinto e il codice prova un'altra lettura
+        // prima della coda (`pack3d.tentativi`): Scarica GLB aspetta ancora
+        if (d.fase) setStatus((titoloInAttesa || 'Modello pronto') + ' · ' + d.fase, 'busy');
         d = null;
       }
     }catch(e){ /* la rete puo' sbagliare un giro: si riprova */ }
@@ -1640,6 +1649,8 @@ async function seguiVerdetto(gettone, blob){
         if (glbBlob !== blob) return;
         modello = glbBlob = nuovo;
         show(await nuovo.arrayBuffer());
+        // il modello di un altro tentativo ha la sua lettura del PDF
+        if (d.lettura) aggiornaLettura(d.lettura);
       }
     }catch(e){ /* resta il primo modello, e il verdetto vale per lui */ }
   }
@@ -1667,8 +1678,11 @@ function esitoFinale(v, titolo){
     return;
   }
   if (!v || v.esito === 'non controllato'){ setStatus(titolo, ''); return; }
-  // corretto: l'AI ha tolto lastre tecniche e il modello e' stato rifatto
-  const da = v.corretto ? 'corretto e controllato dall\u2019AI' : 'controllato dall\u2019AI';
+  // corretto: l'AI ha tolto lastre tecniche e il modello e' stato rifatto;
+  // tentativo: la prima lettura non andava, e questa e' una successiva
+  const da = v.corretto ? 'corretto e controllato dall\u2019AI'
+           : v.tentativo ? 'letto al tentativo ' + v.tentativo + ' e controllato dall\u2019AI'
+           : 'controllato dall\u2019AI';
   if (v.esito === 'ok'){ setStatus(titolo + ' \u00b7 ' + da, ''); return; }
   if (v.esito === 'dubbio'){
     // una riga sola in fondo al visore: il motivo intero e' nei cartellini
@@ -2069,6 +2083,14 @@ function nascondiLettura(){
   apriFinestra(letturaEl, letturaBtn, false);
   letturaImg.removeAttribute('src');
 }
+/** La lettura del PDF del modello che ha preso il posto del primo (un
+ *  tentativo dopo il primo): la stessa finestra, l'immagine nuova. */
+function aggiornaLettura(gettone){
+  const u = url('/api/lettura/' + encodeURIComponent(gettone));
+  letturaImg.src = u;
+  document.getElementById('lettura-apri').href = u;
+}
+
 function mostraLettura(gettone, buf, opts){
   if (!gettone){ nascondiLettura(); return; }
   ultimaCostruzione = {buf, opts};

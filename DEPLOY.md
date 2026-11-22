@@ -137,6 +137,13 @@ si rifa' senza: una costruzione e due chiamate in piu', solo su quei modelli. La
 secondi della risposta, ma il posto di costruzione si libera prima: il
 prossimo utente non aspetta Claude.
 
+Se il modello non passa, o la lettura si ferma, il codice riprova con le
+letture successive prima della coda (REGOLE.md, *Il secondo tentativo prima
+della coda*): una costruzione e una chiamata in piu' per tentativo, fino a
+tre minuti in tutto, solo sui modelli deboli. Intanto il lavoratore resta
+occupato: con due lavoratori, un caso debole ne tiene uno fino a tre minuti
+e mezzo, e il terzo utente aspetta in fila.
+
 I modelli respinti, quelli su cui il controllo ha un dubbio e le costruzioni
 che si fermano con un errore vanno in coda solo se c'e' un repository
 **privato**:

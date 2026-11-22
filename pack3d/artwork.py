@@ -1254,24 +1254,55 @@ def astuccio_sulla_grafica(pdf, page_no=0, cartotecnico=False):
     """
     import copy
     from . import strade
+    from . import tentativi
     from . import tracciati
-    impronta = _impronta(pdf)
+    # Un tentativo dopo il primo (`pack3d.tentativi`) legge diversamente - un
+    # astuccio scartato in meno, le soglie larghe, il verso imposto - e la
+    # memoria delle letture decise non vale per lui, ne' lui la scrive.
+    impronta = _impronta(pdf) if tentativi.neutro() else None
     chiave = (impronta, bool(cartotecnico)) if impronta else None
     noto = _SULLA_GRAFICA.get(chiave) if chiave else None
     if noto is not None:
-        giro, avviso, d = noto
+        giro, avviso, d, visto = noto
+        tentativi.osserva(**visto)
         scelto = pagina_girata(pdf, giro) if giro else pdf
         return scelto, copy.deepcopy(d), giro, avviso
 
-    def ricorda(giro, avviso, d):
+    def ricorda(giro, avviso, d, es=None, muto=False):
+        # cosa ha visto la lettura, per il prossimo tentativo: l'astuccio
+        # scelto, se c'erano altre letture plausibili, se il verso e' muto
+        visto = dict(giro=giro, muto=bool(muto), astuccio=None, altre=0)
+        if es is not None and es.migliore is not None:
+            visto["astuccio"] = tentativi.impronta(es.migliore)
+            visto["altre"] = len([l for l in dl.plausibili(es.letture)
+                                  if not tentativi.escluso(l)
+                                  and not dl.stesso_modello(l, es.migliore)])
+        tentativi.osserva(**visto)
         if chiave:
             while len(_SULLA_GRAFICA) >= _SULLA_GRAFICA_MAX:
                 _SULLA_GRAFICA.pop(next(iter(_SULLA_GRAFICA)))
-            _SULLA_GRAFICA[chiave] = (giro, avviso, copy.deepcopy(d))
+            _SULLA_GRAFICA[chiave] = (giro, avviso, copy.deepcopy(d), visto)
 
-    def fatto(scelto, d, giro, avviso):
-        ricorda(giro, avviso, d)
+    def fatto(scelto, d, giro, avviso, es=None, muto=False):
+        ricorda(giro, avviso, d, es, muto)
         return scelto, d, giro, avviso
+
+    from . import dieline as dl
+    forzato = tentativi.giro_forzato()
+    if forzato is not None:
+        # il verso lo impone il tentativo: niente diceva da che parte sta il
+        # foglio, e il modello di prima l'ha scartato il controllo
+        scelto = pagina_girata(pdf, forzato) if forzato else pdf
+        es = strade.letture(scelto, page_no, forzato, cartotecnico)
+        if es.migliore is None:
+            raise es.errore or ValueError("astuccio: la fustella non si risolve "
+                                          "col foglio girato di %d gradi" % forzato)
+        # (non comincia con TENTATIVO: il verso entra nell'impronta della
+        # lettura, `tentativi.firma`, e due versi non sono la stessa lettura)
+        avviso = ("foglio %s da un tentativo dopo il primo: niente nella grafica "
+                  "diceva il verso" % ("girato di %d gradi" % forzato
+                                       if forzato else "com'e' sulla tavola"))
+        return fatto(scelto, es.dieline(), forzato, avviso, es, muto=True)
 
     es0 = strade.letture(pdf, page_no, 0, cartotecnico)
     letture = []                     # (giro, pdf, esito delle letture)
@@ -1288,16 +1319,17 @@ def astuccio_sulla_grafica(pdf, page_no=0, cartotecnico=False):
             # (`_dalla_tavola`). Dritta o muta, il foglio resta com'e'.
             dalla = _dalla_tavola(pdf, d0, page_no)
             if dalla is not None:
-                ricorda(dalla[2], dalla[3], dalla[1])
+                ricorda(dalla[2], dalla[3], dalla[1], muto=True)
                 return dalla
             # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
             # dipendere da come il DT sta sulla tavola.
             avviso = ("verso della grafica non letto: nessuna faccia ha testo "
                       "vivo (scritte vettorializzate), e il foglio resta com'e' "
                       "sulla tavola - il verso va controllato sul modello")
-            return fatto(pdf, d0, 0, avviso)
+            return fatto(pdf, d0, 0, avviso, es0, muto=True)
         if all(g == 0 for g in v0.values()):
-            return fatto(pdf, d0, 0, None)  # ogni faccia che parla si legge come deve
+            # ogni faccia che parla si legge come deve
+            return fatto(pdf, d0, 0, None, es0)
         letture.append((0, pdf, es0))
         # prima i giri che la grafica suggerisce, quello del fronte in testa
         ordine = [(360 - g) % 360 for n, g in
@@ -1363,7 +1395,8 @@ def astuccio_sulla_grafica(pdf, page_no=0, cartotecnico=False):
         avviso = ("foglio girato di %d gradi prima di risolvere: sulla tavola "
                   "il DT stava girato rispetto alla grafica, e cielo, fondo, "
                   "retro e fianchi si leggono nel suo verso" % giro)
-    return fatto(scelto, d, giro, avviso)
+    # niente dice il verso: la grafica non e' d'accordo in nessun verso
+    return fatto(scelto, d, giro, avviso, es, muto=_consenso(v) <= 0)
 
 
 def _stesso(a, b):

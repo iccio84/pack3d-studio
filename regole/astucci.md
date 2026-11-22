@@ -320,6 +320,22 @@ uguale al byte. Il banco delle varianti sui 21 cartotecnici del parco, il
   verso, e sul foglio girato ora si trova un astuccio che prima non si
   trovava. Con la scala presa dalle quote tornano quote.
 
+**Il secondo tentativo** (regole/verifiche.md, *Il secondo tentativo prima
+della coda*, 22 novembre 2026). Col controllo dell'AI, se il modello non
+passa o la lettura si ferma, l'astuccio riprova: la plausibile successiva del
+punteggio (`strade.scegli` salta gli astucci scartati, `tentativi.escluso`);
+gli altri versi del foglio quando niente dice il verso
+(`artwork.astuccio_sulla_grafica` col verso imposto, `tentativi.giro_forzato`;
+la memoria `_SULLA_GRAFICA` vale solo per la lettura di sempre); le soglie
+larghe (`dieline.plausibili` fino a `tentativi.COSTO_MAX_LARGO`, e
+`strade.forte` dice di no: tutte le strade); poi, dichiarato cartotecnico,
+le forme dopo l'astuccio nel registro. Col giudice finto (l'oracolo del
+banco) il T6 aperto e l'astuccio della ciambella coi testi in curve, i due che
+qui restavano girati, vengono giusti al terzo e al quarto tentativo; le
+altre varianti dei cartotecnici sbagliate senza errore (il ballotin con le
+penne e spezzato, il cono con le penne, il T5 a strappo aperto spezzato) vanno
+in coda col verdetto che non passa.
+
 ### Un astuccio puo' non chiudersi
 
 **Un astuccio non e' obbligato ad avere il retro.** Un vassoio non ce l'ha per

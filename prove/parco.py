@@ -157,19 +157,25 @@ def _porta_libera():
     return porta
 
 
-def _avvia(codice, log, casi=None):
+def _avvia(codice, log, casi=None, oracolo=None):
     """Un server col codice di `codice`, solo in locale. (processo, url)
 
     Senza chiave e con il controllo spento: il parco misura il codice, non
     l'AI, e un caso del parco non deve finire nella coda dei casi nuovi. Con
     `casi`, il clone del repository privato, le risorse che stanno li' (la
-    colata: e' grafica del cliente, vedi `pack3d.colata`).
+    colata: e' grafica del cliente, vedi `pack3d.colata`). Con `oracolo` - il
+    file dei modelli approvati, o `pessimista` - il giudice finto al posto
+    dell'AI (`pack3d.tentativi`): il giro dei tentativi si prova senza
+    spendere.
     """
     porta = _porta_libera()
     env = dict(os.environ, PORT=str(porta), HOST="127.0.0.1",
                PACK3D_CONTROLLO="0", PACK3D_STATISTICHE="0")
     if casi and os.path.isdir(os.path.join(casi, "risorse")):
         env["PACK3D_RISORSE"] = os.path.abspath(os.path.join(casi, "risorse"))
+    if oracolo:
+        env["PACK3D_ORACOLO"] = (oracolo if oracolo == "pessimista"
+                                 else os.path.abspath(oracolo))
     for k in ("ANTHROPIC_API_KEY", "PACK3D_CODA_REPO", "PACK3D_CODA_TOKEN"):
         env.pop(k, None)
     p = subprocess.Popen([sys.executable, "server.py"], cwd=codice, env=env,
@@ -204,6 +210,9 @@ def _richiesta(url, percorso, cartella, caso, controllo=True):
     # un caso del parco e' una prova, non un lavoro: sullo Space non conta
     # nelle statistiche (`pack3d.statistiche.in_prova`)
     opts["prova"] = True
+    # il nome del caso, per l'oracolo delle prove (`pack3d.tentativi`): il
+    # server lo guarda solo con PACK3D_ORACOLO
+    opts["oracolo"] = caso["nome"]
     if not controllo:
         opts["controllo"] = False
     return urllib.request.Request(
@@ -253,6 +262,28 @@ def _costruisci_caso(url, cartella, caso, lettura=None, controllo=True):
         # il server ha chiuso la connessione (un 413 a corpo non letto): e'
         # l'esito di questo caso, non la fine del parco
         return 0, None, ["connessione caduta: %s" % e.reason], time.time() - t, None
+
+
+def _scrivi_oracolo(percorso, voci):
+    """Il file dell'oracolo (`pack3d.tentativi`): per ogni nome di caso, il
+    modello approvato - l'ingombro e le viste di una costruzione del parco -
+    in scala. `voci`: nome -> (cartella della costruzione, nome del caso
+    li', scala). Torna il percorso."""
+    dati = {}
+    for nome, (cartella, origine, scala) in voci.items():
+        try:
+            with open(os.path.join(cartella, origine + ".json"), encoding="utf-8") as fh:
+                e = json.load(fh)
+        except OSError:
+            continue
+        ingombro = (e.get("misure") or {}).get("ingombro")
+        if e.get("stato") != 200 or not ingombro:
+            continue
+        dati[nome] = dict(nome=origine, ingombro=ingombro, scala=scala,
+                          viste=os.path.abspath(os.path.join(cartella, origine + "_viste.png")))
+    with open(percorso, "w", encoding="utf-8") as fh:
+        json.dump(dati, fh, ensure_ascii=False, indent=1)
+    return percorso
 
 
 def _verdetto(url, gettone):
@@ -343,6 +374,11 @@ def costruisci(args):
     impronta = versione.impronta(codice)
     risorse = _impronta_risorse(args.casi)
     impronte = {c["nome"]: _impronta_caso(args.casi, c, risorse) for c in casi}
+    oracolo = getattr(args, "oracolo", None)
+    if oracolo and oracolo != "pessimista" and os.path.isdir(oracolo):
+        # i modelli approvati: una costruzione del parco col codice di prima
+        oracolo = _scrivi_oracolo(os.path.join(args.uscita, "oracolo.json"),
+                                  {c["nome"]: (oracolo, c["nome"], 1.0) for c in casi})
     riusati = (_da_riusare(args.uscita, casi, impronta, impronte, pulisci=not args.solo)
                if getattr(args, "riusa", False) else {})
     riassunto = {n: dict(stato=e["stato"], md5=e["md5"], secondi=e["secondi"])
@@ -352,16 +388,22 @@ def costruisci(args):
         print("%d casi gia' costruiti con questo codice e gli stessi file: non li rifaccio"
               % len(riusati))
     with open(os.path.join(args.uscita, "server.log"), "w") as log:
-        p, url = _avvia(codice, log, args.casi) if da_fare else (None, None)
+        p, url = _avvia(codice, log, args.casi, oracolo) if da_fare else (None, None)
         try:
             for caso in da_fare:
                 nome = caso["nome"]
-                stato, glb, avvisi, sec, _ = _costruisci_caso(
+                inizio = time.time()
+                stato, glb, avvisi, sec, verdetto = _costruisci_caso(
                     url, args.casi, caso, os.path.join(args.uscita, nome + "_lettura.jpg"))
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
                              file=caso["file"], opzioni=caso.get("opzioni"),
                              avvisi=avvisi, md5=None, versione=impronta,
                              caso=impronte[nome])
+                if verdetto:
+                    # il verdetto del giudice: c'e' solo con l'oracolo, e coi
+                    # tentativi il tempo fino all'ultimo verdetto
+                    esito["controllo"] = verdetto
+                    esito["secondi_verdetto"] = round(time.time() - inizio, 1)
                 if glb is not None:
                     with open(os.path.join(args.uscita, nome + ".glb"), "wb") as fh:
                         fh.write(glb)
@@ -4165,20 +4207,27 @@ def varianti(args):
         riusa = getattr(args, "riusa", False)
         costruisci(argparse.Namespace(casi=args.casi, uscita=originali, codice=None,
                                       solo=[c["nome"] for c in tutte], riusa=riusa))
+        oracolo = None
+        if getattr(args, "oracolo", False):
+            # il giudice finto al posto dell'AI (`pack3d.tentativi`): la
+            # variante va bene se torna come l'originale, in scala
+            os.makedirs(variate, exist_ok=True)
+            oracolo = _scrivi_oracolo(os.path.join(variate, "oracolo.json"), {
+                x["nome"]: (originali, x["originale"]["nome"], _scala(x["variante"]))
+                for x in nuovi if x["cambiata"]})
         costruisci(argparse.Namespace(casi=finto, uscita=variate, codice=None, solo=None,
-                                      riusa=riusa))
-    risultati, conto = {}, {}
+                                      riusa=riusa, oracolo=oracolo))
+    risultati, conto, giudizi = {}, {}, {}
     for x in nuovi:
         c, v = x["originale"], x["variante"]
         if not x["cambiata"]:
             conto.setdefault(v, [0, 0, 0])[2] += 1
             continue
-        s = 1.0
-        for passo in v.split("+"):
-            if passo.startswith("scala"):
-                s *= float(passo[5:])
+        s = _scala(v)
         with open(os.path.join(variate, x["nome"] + ".json"), encoding="utf-8") as fh:
             e = json.load(fh)
+        if getattr(args, "oracolo", False):
+            giudizi.setdefault(v, []).append((x["nome"], _giudizio(e)))
         motivo = None
         if e.get("stato") != 200:
             motivo = "non si costruisce: %s" % str((e.get("avvisi") or [""])[0])[:200]
@@ -4214,6 +4263,21 @@ def varianti(args):
     for n in guarite:
         righe.append("  %-44s adesso come l'originale: era nota (%s)" % (n[:44], note[n]))
     print("\n".join(righe))
+    if giudizi:
+        # col giudice: giusta al primo verdetto, giusta a un tentativo dopo,
+        # fermata (in coda, col verdetto che non passa o la lettura ferma)
+        print("\ncol giudice (oracolo):")
+        for v, lista in sorted(giudizi.items()):
+            for nome, g in lista:
+                if g != "giusta al primo":
+                    print("  %-44s %s" % (nome[:44], g))
+        for v, lista in sorted(giudizi.items()):
+            n = {}
+            for _nome, g in lista:
+                k = g.split(":")[0]
+                k = "giusta dopo" if k.startswith("giusta al tentativo") else k
+                n[k] = n.get(k, 0) + 1
+            print("%-10s %s" % (v, ", ".join("%s %d" % kv for kv in sorted(n.items()))))
     for v, (uguali, no, niente) in sorted(conto.items()):
         print("%-10s %d su %d come l'originale%s" % (
             v, uguali, uguali + no, ", %d senza niente da variare" % niente if niente else ""))
@@ -4239,6 +4303,28 @@ def varianti(args):
         shutil.rmtree(finto)
     if nuove and not args.approva:
         raise SystemExit(1)
+
+
+def _scala(variante):
+    s = 1.0
+    for passo in variante.split("+"):
+        if passo.startswith("scala"):
+            s *= float(passo[5:])
+    return s
+
+
+def _giudizio(e):
+    """Com'e' finita una variante col giudice finto: «giusta al primo», «giusta
+    al tentativo N», «in coda: ...» (il verdetto non passa), «ferma: ...» (la
+    lettura o la costruzione si e' fermata, e il caso e' in coda)."""
+    if e.get("stato") != 200:
+        return "ferma: %s" % str((e.get("avvisi") or [""])[0])[:120]
+    v = e.get("controllo") or {}
+    if v.get("esito") == "ok":
+        return ("giusta al tentativo %d" % v["tentativo"] if v.get("tentativo")
+                else "giusta al primo")
+    tr = next((a for a in e.get("avvisi") or [] if str(a).startswith("TENTATIVI")), "")
+    return "in coda: %s%s" % (v.get("esito", "-"), " (%s)" % tr[:200] if tr else "")
 
 
 def stesi(args):
@@ -4345,6 +4431,10 @@ def main():
     c.add_argument("--riusa", action="store_true",
                    help="non rifare i casi gia' in USCITA con lo stesso codice e "
                         "gli stessi file (la cassa del parco nelle Actions)")
+    c.add_argument("--oracolo",
+                   help="il giudice finto al posto dell'AI (`pack3d.tentativi`): "
+                        "la cartella di una costruzione del parco coi modelli "
+                        "approvati, o `pessimista` (dice sempre sbagliato)")
     c.set_defaults(fai=costruisci)
     k = sub.add_parser("confronta", help="confronta due costruzioni del parco")
     k.add_argument("prima")
@@ -4396,6 +4486,10 @@ def main():
                          "(limiti dichiarati), in parco/varianti.json")
     va.add_argument("--riassunto", help="il file dove aggiungere il riassunto in "
                                         "markdown (nelle Actions: $GITHUB_STEP_SUMMARY)")
+    va.add_argument("--oracolo", action="store_true",
+                    help="le varianti col giudice finto al posto dell'AI "
+                         "(`pack3d.tentativi`): ok se tornano come l'originale; "
+                         "col giro dei tentativi prima della coda")
     va.set_defaults(fai=varianti)
     lt = sub.add_parser("letture", help="la lettura di ogni caso contro quella "
                                         "approvata, senza costruire")

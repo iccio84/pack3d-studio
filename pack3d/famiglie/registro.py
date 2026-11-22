@@ -20,6 +20,7 @@ from .. import punta
 from .. import scatola_plancia
 from .. import sportello
 from .. import strade
+from .. import tentativi
 from .. import tubo
 from .. import vassoio
 from .astuccio import (build_carton,
@@ -500,6 +501,24 @@ RICONOSCIMENTO = (
 )
 
 
+# Le prove che non si saltano mai: il caso calibrato e' il piu' sicuro, e il
+# cartotecnico che non si legge e' la fermata, non una lettura.
+NON_SI_SALTANO = ("caso calibrato", "cartotecnico che non si legge")
+ASTUCCIO_SCARTATO = ("astuccio: le sue letture le ha scartate il controllo "
+                     "dell'AI, e nessun'altra forma del cartotecnico e' sua")
+
+
+def prove_dopo(nome, kind):
+    """Le prove del registro che vengono dopo `nome` e valgono per la
+    tipologia `kind`: quelle che un tentativo puo' ancora provare saltando
+    `nome` (`pack3d.tentativi`). Vuoto se `nome` non si salta."""
+    nomi = [f.nome for f in RICONOSCIMENTO]
+    if nome not in nomi or nome in NON_SI_SALTANO:
+        return []
+    return [f.nome for f in RICONOSCIMENTO[nomi.index(nome) + 1:]
+            if kind in f.dichiarate and f.nome not in NON_SI_SALTANO]
+
+
 def _analyze_pdf(pdf, kind=None, domande=False):
     """La lettura del PDF: la prima famiglia di `RICONOSCIMENTO` che dice
     che e' suo.
@@ -519,10 +538,19 @@ def _analyze_pdf(pdf, kind=None, domande=False):
         raise ValueError("tipologia '%s' non riconosciuta: dichiara %s"
                          % (kind, " o ".join("'%s'" % k for k in KIND_NOTI)))
     lettura = _Lettura(pdf, kind, domande)
+    # un tentativo dopo il primo (`pack3d.tentativi`) salta le prove i cui
+    # modelli il controllo ha scartato: l'astuccio scartato di un
+    # cartotecnico e' un rifiuto come gli altri, e le forme dopo si provano
+    scartate = tentativi.prove_scartate()
     for famiglia in RICONOSCIMENTO:
         if kind in famiglia.dichiarate:
+            if famiglia.nome in scartate:
+                if famiglia.nome == "astuccio" and kind == "carton":
+                    lettura.errore_astuccio = ValueError(ASTUCCIO_SCARTATO)
+                continue
             letto = famiglia.prova(lettura)
             if letto is not None:
+                tentativi.osserva(famiglia=famiglia.nome)
                 return letto
     # il flowpack, per ultimo, o risponde o si ferma: qui non si arriva
     raise ValueError("nessuna famiglia riconosce questo PDF")
