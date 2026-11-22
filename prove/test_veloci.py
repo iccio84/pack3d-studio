@@ -2768,6 +2768,53 @@ class LettureTradeUnit(unittest.TestCase):
         self.assertEqual(tre.pareti, due.pareti)
 
 
+class RiempimentoTentativi(unittest.TestCase):
+    """Il riempimento coi tentativi della Trade Unit: il pack girato attorno
+    al fronte quando non sa il verso, il contenitore piu' forte, il motivo
+    PDF per PDF."""
+
+    def test_il_verso_del_pack_nel_piano(self):
+        from pack3d import tentativi
+        g = tentativi.Giro(True, "riempimento", orologio=lambda: 0.0)
+        t = g.primo()
+        t.osservato.update(famiglia="flowpack", muto_pack=True, giro_pack=90)
+        g.esito(t, "sbagliato", "ingombro")
+        t = g.prossimo()
+        # prima si disfa il giro che il flowpack ha dato per il marchio
+        self.assertEqual((t.cosa, t.gira_pack), (tentativi.VERSO_PACK, 270))
+        self.assertFalse(t.neutro)
+        t.osservato.update(famiglia="flowpack", muto_pack=True, giro_pack=90)
+        g.esito(t, "sbagliato")
+        self.assertEqual(g.prossimo().gira_pack, 90)
+
+    def test_il_pack_girato_attorno_al_fronte(self):
+        from pack3d import exporters, misure, riempimento
+        from PIL import Image
+        V = np.array([[0, 0, 0], [0.152, 0, 0], [0.152, 0.058, 0], [0, 0.058, 0],
+                      [0, 0, 0.017], [0.152, 0, 0.017], [0.152, 0.058, 0.017],
+                      [0, 0.058, 0.017]], float) * 1000.0
+        T = np.array([[0, 1, 2], [0, 2, 3], [4, 5, 6], [4, 6, 7]])
+        UV = np.zeros((8, 2))
+        with tempfile.TemporaryDirectory() as td:
+            f = os.path.join(td, "p.glb")
+            exporters.write_glb_mesh(V, UV, T, Image.new("RGB", (4, 4)), f)
+            with open(f, "rb") as fh:
+                glb = fh.read()
+        a = misure.misura(glb)["ingombro"]
+        b = misure.misura(riempimento.gira_il_pack(glb, 90))["ingombro"]
+        self.assertEqual(sorted(a), sorted(b))
+        self.assertAlmostEqual(a[0], b[1], places=1)
+        self.assertEqual(riempimento.gira_il_pack(glb, 0), glb)
+
+    def test_perche_nessuno_e_un_vassoio(self):
+        from pack3d.famiglie import riempimento as fr
+        m = fr.motivi([(0, ValueError("vassoio: ... questa fustella ne ha 11 e 14. Se e'")),
+                       (1, ValueError("il PDF e' un'immagine"))])
+        self.assertIn("il PDF 1 ha una griglia di 11 colonne e 14 fasce", m)
+        self.assertIn("il PDF 2: il PDF e' un'immagine", m)
+        self.assertEqual(fr.motivi([]), "")
+
+
 class SecondoTentativo(unittest.TestCase):
     """Il secondo tentativo prima della coda (`pack3d.tentativi`): le letture
     successive, le soglie larghe, il piano e il tetto di tempo."""

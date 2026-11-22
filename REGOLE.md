@@ -593,7 +593,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Il flowpack si adatta al vano, una volta per tutti
   - Se non ci sta in nessuna posa, il flowpack si accorcia
   - Il GLB: il flowpack una volta, un nodo per pezzo
-  - Il controllo dell'AI non c'e' ancora
+  - Il controllo dell'AI, e i tentativi
   - Cosa manca
   - Il display e' fatto per il suo numero: la griglia piena
   - Sdraiati, stanno in piano

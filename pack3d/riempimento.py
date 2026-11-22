@@ -110,6 +110,52 @@ def _dati(J, B, i):
     return out.view(tipo).reshape(acc["count"], k)
 
 
+def gira_il_pack(glb, gradi):
+    """Il GLB del pack girato di `gradi` attorno alla normale del fronte (+Z
+    nel riferimento dei modelli di pack3d), sul centro del suo ingombro: i
+    vertici e le normali, nel buffer, e il resto com'e'.
+
+    Serve al tentativo «altro verso del pack» (`pack3d.tentativi`): un
+    flowpack senza testo vivo non sa il verso, e resta come sta sulla tavola
+    (`build_flowpack`); col foglio girato di 90 gradi il pack del T1x36 EU
+    stava in piedi nel vassoio, e sporgeva di 4 mm dalle pareti."""
+    import math
+    gradi = float(gradi) % 360.0
+    if not gradi:
+        return glb
+    J, B = leggi(glb)
+    B = bytearray(B)
+    a = math.radians(gradi)
+    R = np.array([[math.cos(a), -math.sin(a), 0.0], [math.sin(a), math.cos(a), 0.0],
+                  [0.0, 0.0, 1.0]])
+    V = vertici(J, B)
+    c = (V.min(0) + V.max(0)) / 2.0 / 1000.0
+    c[2] = 0.0
+    fatti = set()
+    for me in J.get("meshes", []):
+        for prim in me.get("primitives", []):
+            for nome in ("POSITION", "NORMAL"):
+                i = prim.get("attributes", {}).get(nome)
+                if i is None or i in fatti:
+                    continue
+                fatti.add(i)
+                acc = J["accessors"][i]
+                if acc["componentType"] != 5126 or acc["type"] != "VEC3":
+                    raise ValueError("riempimento: il pack ha %s non in float" % nome)
+                P = _dati(J, B, i).astype(float)
+                P = ((P - c) @ R.T + c) if nome == "POSITION" else P @ R.T
+                bv = J["bufferViews"][acc["bufferView"]]
+                inizio = bv.get("byteOffset", 0) + acc.get("byteOffset", 0)
+                passo = bv.get("byteStride") or 12
+                arr = np.ascontiguousarray(P, dtype="<f4")
+                np.ndarray((len(arr), 3), "<f4", buffer=B, offset=inizio,
+                           strides=(passo, 4))[:] = arr
+                if nome == "POSITION":
+                    acc["min"] = arr.min(0).tolist()
+                    acc["max"] = arr.max(0).tolist()
+    return scrivi(J, B)
+
+
 def _matrice(nodo):
     """La matrice 4x4 di un nodo glTF."""
     if "matrix" in nodo:
