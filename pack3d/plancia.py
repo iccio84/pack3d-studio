@@ -495,7 +495,7 @@ def di_traverso(d):
     return riconosci(_Trasposta)
 
 
-def riconosci_sulla_tavola(pdf):
+def riconosci_sulla_tavola(pdf, estrai=None):
     """`(pdf, dieline estratta, Plancia o None, giro, avviso)`.
 
     Come `vassoio.riconosci_sulla_tavola`: se nel verso del foglio non torna si
@@ -504,7 +504,8 @@ def riconosci_sulla_tavola(pdf):
     tavola.
     """
     from . import artwork, dieline
-    d = dieline.extract(pdf)
+    estrai = estrai or dieline.extract
+    d = estrai(pdf)
     p = riconosci(d)
     if p is not None:
         return pdf, d, p, 0, None
@@ -512,7 +513,7 @@ def riconosci_sulla_tavola(pdf):
         girato = artwork.pagina_girata(pdf, giro)
         if girato == pdf:
             break
-        d2 = dieline.extract(girato)
+        d2 = estrai(girato)
         p2 = riconosci(d2)
         if p2 is not None:
             return girato, d2, p2, giro, (
@@ -596,6 +597,37 @@ def _spiana(path):
     return out
 
 
+def _penne_della_fustella(pdf, page_no=0):
+    """`(tratti della pagina, penne della fustella)`: la parte di `tratti` che
+    non dipende dal riquadro, letta una volta per foglio e per lavoro. Lo
+    sportello la chiede per ogni verso e ogni strada della fustella
+    (`vassoio.letture`), e sui disegni a pezzi corti costava un secondo per
+    volta."""
+    from . import artwork, dieline as dl, stato
+    global _PENNE
+    if _PENNE is None:
+        _PENNE = stato.per_lavoro({})
+    imp = artwork._impronta(pdf)
+    chiave = (imp, pdf, page_no) if imp is not None else None
+    if chiave is not None and chiave in _PENNE:
+        return _PENNE[chiave]
+    t = dl.tratti(pdf, page_no)
+    tutti = list(t.segmenti)
+    penne = dl._technical_pens(tutti, t.larghezza, t.altezza)
+    segs = [s for s in tutti if s[4] in penne] or tutti
+    segs = dl._largest_cluster(segs)
+    fustella = (dl.penne_di_fustella(segs, t.larghezza, t.altezza)
+                or {s[4] for s in segs})
+    if chiave is not None:
+        if len(_PENNE) > 16:
+            _PENNE.clear()
+        _PENNE[chiave] = (t, fustella)
+    return t, fustella
+
+
+_PENNE = None
+
+
 def tratti(pdf, riquadro, page_no=0):
     """I tratti della fustella come spezzate, in punti con la y dall'alto.
 
@@ -611,13 +643,7 @@ def tratti(pdf, riquadro, page_no=0):
     tol = 3.0
     dentro = lambda x, y: x0 - tol <= x <= x1 + tol and y0 - tol <= y <= y1 + tol
     out = []
-    t = dl.tratti(pdf, page_no)
-    tutti = list(t.segmenti)
-    penne = dl._technical_pens(tutti, t.larghezza, t.altezza)
-    segs = [s for s in tutti if s[4] in penne] or tutti
-    segs = dl._largest_cluster(segs)
-    fustella = (dl.penne_di_fustella(segs, t.larghezza, t.altezza)
-                or {s[4] for s in segs})
+    t, fustella = _penne_della_fustella(pdf, page_no)
     for kind, st, o in t.oggetti:
         if st not in fustella:
             continue

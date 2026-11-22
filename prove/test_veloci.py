@@ -23,6 +23,7 @@ import os
 import shutil
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -2671,6 +2672,100 @@ class VariantiDelDisegno(unittest.TestCase):
         # la copertina non e' bianca: pypdf 6 dava la pagina di prima della copia
         with pdfplumber.open(copertina) as d:
             self.assertIn("SCHEDA TECNICA", d.pages[0].extract_text())
+
+
+class LettureTradeUnit(unittest.TestCase):
+    """Le letture a punteggio della Trade Unit (`vassoio.letture`): il
+    verdetto, i display scartati da un tentativo, il piano dei tentativi, la
+    cordonatura a tre righe del sagomato."""
+
+    @staticmethod
+    def _lettura(costo, prima=False, fondo=(145.5, 385.4), forma="vassoio",
+                 pareti=(40.5, 98.5, 40.6, 98.7)):
+        from pack3d import vassoio as vs
+        v = vs.Vassoio(fondo_w=fondo[0], fondo_h=fondo[1],
+                       pareti=dict(zip(("nord", "est", "sud", "ovest"), pareti)),
+                       riquadri={})
+        l = vs.LetturaTU(forma, 0, "colore" if prima else "uniti",
+                         () if prima else ("tratti riuniti",), "x.pdf", None, v,
+                         prima=prima)
+        l.voci = {"misure": costo} if costo else {}
+        l.costo = costo
+        return l
+
+    def test_vince_la_prima_a_pari_merito(self):
+        from pack3d import vassoio as vs
+        prima = self._lettura(0.25, prima=True)
+        altra = self._lettura(0.0, fondo=(150.0, 385.4))
+        best, dubbio, altre = vs.scegli([prima, altra])
+        self.assertIs(best, prima)
+        self.assertIn("DUBBIO DI LETTURA", dubbio)
+        self.assertEqual(altre, 1)
+        # lo stesso display per un'altra strada non e' un dubbio
+        stessa = self._lettura(0.1, fondo=(145.0, 385.0))
+        self.assertEqual(vs.scegli([prima, stessa])[1], "")
+        # troppo cara, se non e' la prima, non vale
+        self.assertEqual(vs.plausibili([self._lettura(2.5)]), [])
+
+    def test_il_display_scartato_non_vince_piu(self):
+        from pack3d import tentativi, vassoio as vs
+        prima = self._lettura(0.0, prima=True)
+        altra = self._lettura(0.8, fondo=(150.0, 385.4))
+        t = tentativi.Tentativo(n=2, cosa=tentativi.SECONDA,
+                                escludi=(prima.impronta(),))
+        with tentativi.dentro(t):
+            self.assertIs(vs.scegli([prima, altra])[0], altra)
+        self.assertIs(vs.scegli([prima, altra])[0], prima)
+        # l'impronta di un display non confonde quelle degli astucci
+        with tentativi.dentro(t):
+            self.assertFalse(tentativi.escluso(
+                SecondoTentativo("test_le_soglie_larghe")._lettura(0.1)))
+
+    def test_il_piano_della_trade_unit(self):
+        from pack3d import tentativi
+        ora = [0.0]
+        g = tentativi.Giro(True, "vassoio", orologio=lambda: ora[0])
+        imp = self._lettura(0.0, prima=True).impronta()
+        t = g.primo()
+        t.osservato.update(famiglia="vassoio e display", vassoio=imp, altre=1,
+                           muto_montaggio=True)
+        ora[0] = 20
+        g.esito(t, "sbagliato", "viste diverse")
+        t = g.prossimo()
+        self.assertEqual((t.n, t.cosa, t.montaggio), (2, tentativi.MONTAGGIO, "coperchio"))
+        self.assertEqual(t.escludi, ())
+        t.osservato.update(famiglia="vassoio e display", vassoio=imp, altre=1,
+                           muto_montaggio=True)
+        ora[0] = 40
+        g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.SECONDA)
+        self.assertIsNone(t.montaggio)
+        self.assertEqual(len(t.escludi), 1)
+        t.osservato.update(famiglia="vassoio e display")
+        g.esito(t, "fermata")
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.LARGHE)
+        self.assertTrue(t.larghe)
+
+    def test_la_cordonatura_a_tre_righe(self):
+        from pack3d import vassoio as vs
+        mm = 1.0 / dl.PT2MM
+
+        def griglia(luci):
+            t = [0.0]
+            for x in luci:
+                t.append(t[-1] + x * mm)
+            return t
+        # coi tratti riuniti la riga di mezzo resta: 1,5 + 1,5 invece di 3
+        g = types.SimpleNamespace(xs=griglia([146, 1.5, 1.5, 142.5, 1.5, 1.5, 146]),
+                                  ys=griglia([76.5, 68.5, 2.5, 227, 2.5, 68.5, 76.5]))
+        tre = vs.riconosci_sagomato(g)
+        g2 = types.SimpleNamespace(xs=griglia([146, 3, 142.5, 3, 146]), ys=g.ys)
+        due = vs.riconosci_sagomato(g2)
+        self.assertAlmostEqual(tre.fondo_w, due.fondo_w, places=1)
+        self.assertAlmostEqual(tre.fondo_w, 145.5, places=1)
+        self.assertEqual(tre.pareti, due.pareti)
 
 
 class SecondoTentativo(unittest.TestCase):

@@ -491,6 +491,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Il cartoncino fra due righe e' quello che hanno in comune
   - Un blocco unico, senza feritoie
   - Il vassoio sagomato: il fondo fra quattro cordonature
+  - Le letture a punteggio: tutte le forme, tutte le strade, tutti i versi
 - Display con plancia
   - Si riconosce dalla croce, non dalla grafica
   - Come si apre: lo dice il DT

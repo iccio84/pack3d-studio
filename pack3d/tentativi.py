@@ -79,10 +79,12 @@ SECONDA = "seconda lettura"
 VERSO = "altro verso"
 LARGHE = "soglie larghe"
 FORMA = "altra forma"
+MONTAGGIO = "altro montaggio"
 COME = {SECONDA: "la seconda lettura del punteggio",
         VERSO: "un altro verso del foglio",
         LARGHE: "le soglie piu' larghe",
-        FORMA: "un'altra forma della famiglia"}
+        FORMA: "un'altra forma della famiglia",
+        MONTAGGIO: "il vassoio montato come coperchio"}
 
 # l'inizio delle righe che il giro aggiunge agli avvisi: non entrano
 # nell'impronta della lettura (`firma`)
@@ -105,6 +107,9 @@ class Tentativo:
     giro: int | None = None
     escludi: tuple = ()
     prove_scartate: frozenset = frozenset()
+    # il vassoio montato come coperchio, quando nessuna scritta lo dice
+    # (`vassoio.montaggio`)
+    montaggio: str | None = None
     osservato: dict = field(default_factory=dict)
 
     @property
@@ -112,7 +117,7 @@ class Tentativo:
         """Se legge come la lettura di sempre: allora valgono anche le
         memorie delle letture (`artwork._SULLA_GRAFICA`)."""
         return (not self.larghe and self.giro is None and not self.escludi
-                and not self.prove_scartate)
+                and not self.prove_scartate and self.montaggio is None)
 
     def descrivi(self):
         return COME.get(self.cosa, self.cosa)
@@ -162,6 +167,11 @@ def neutro():
     return t is None or t.neutro
 
 
+def montaggio():
+    t = _ORA.get()
+    return t.montaggio if t else None
+
+
 def escluso(lettura):
     """Se la lettura dell'astuccio da' un astuccio gia' scartato da un
     tentativo prima (stesso modello, stesso verso: `dieline.stesso_modello`)."""
@@ -169,14 +179,27 @@ def escluso(lettura):
     if not t or not t.escludi or getattr(lettura, "d", None) is None:
         return False
     from . import dieline as dl
-    return any(dl.stesso_modello(lettura, s) for s in t.escludi)
+    return any(dl.stesso_modello(lettura, s) for s in t.escludi
+               if getattr(s, "tipo", None) is None)
+
+
+def escluso_display(impronta):
+    """Se la lettura della Trade Unit (`vassoio.LetturaTU.impronta`) da' un
+    display gia' scartato da un tentativo prima (`vassoio.stesso_display`)."""
+    t = _ORA.get()
+    if not t or not t.escludi:
+        return False
+    from . import vassoio
+    return any(vassoio.stesso_display(impronta, s) for s in t.escludi
+               if getattr(s, "tipo", None) == "vassoio")
 
 
 def osserva(**cosa):
     """La lettura dice cosa ha visto: `famiglia` (la prova del registro),
     `astuccio` (`impronta` della lettura scelta), `altre` (quante altre
     letture plausibili danno un astuccio diverso), `giro`, `muto` (niente
-    dice il verso)."""
+    dice il verso); sulla Trade Unit `vassoio` (`vassoio.LetturaTU.impronta`)
+    e `muto_montaggio` (niente dice se il vassoio e' un coperchio)."""
     t = _ORA.get()
     if t is not None:
         t.osservato.update(cosa)
@@ -222,6 +245,7 @@ class Giro:
         self.glb = set()
         self.ultimo = None
         self.astuccio = None        # l'ultimo osservato con un astuccio
+        self.montaggi = set()       # i montaggi del vassoio gia' provati
         self.perche_finiti = ""
         self._dal = None
         self._scartata = None
@@ -262,10 +286,16 @@ class Giro:
             self.giri.add(t.giro)
         if oss.get("astuccio") is not None:
             self.astuccio = dict(oss)
+        if t.montaggio is not None:
+            self.montaggi.add(t.montaggio)
         if esito == "ok":
             return
         if oss.get("astuccio") is not None:
             self.escludi.append(oss["astuccio"])
+        if oss.get("vassoio") is not None and not (t.montaggio or oss.get("muto_montaggio")):
+            # il display scartato non vince piu'; se e' muto si prova prima
+            # montato come coperchio, sulla stessa lettura
+            self.escludi.append(oss["vassoio"])
         if oss.get("giro") is not None:
             self.giri.add(oss["giro"])
         if esito != "fermata" and oss.get("famiglia"):
@@ -312,13 +342,23 @@ class Giro:
         if (scartato and oss.get("famiglia") == "astuccio"
                 and oss.get("astuccio") is not None and oss.get("altre")):
             return self._nuovo(SECONDA, giro=self.ultimo.giro)
+        # sulla Trade Unit, il vassoio che nessuna scritta dice come si monta:
+        # montato come coperchio, poi la plausibile successiva
+        if (scartato and oss.get("famiglia") == "vassoio e display"
+                and oss.get("vassoio") is not None):
+            if oss.get("muto_montaggio") and "coperchio" not in self.montaggi:
+                return self._nuovo(MONTAGGIO, montaggio="coperchio")
+            if oss.get("altre"):
+                if oss["vassoio"] not in self.escludi:
+                    self.escludi.append(oss["vassoio"])
+                return self._nuovo(SECONDA)
         # 2. gli altri versi, quando niente dice il verso
         if ast is not None and ast.get("muto"):
             for g in GIRI:
                 if g not in self.giri:
                     return self._nuovo(VERSO, giro=g)
-        # 3. le soglie larghe (solo gli astucci le hanno, per ora)
-        if not self.larghe and self.kind in (None, "carton"):
+        # 3. le soglie larghe: gli astucci e la Trade Unit
+        if not self.larghe and self.kind in (None, "carton", "vassoio"):
             self.larghe = True
             return self._nuovo(LARGHE)
         # 4. la prova dopo nel registro

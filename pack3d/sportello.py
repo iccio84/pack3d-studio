@@ -237,18 +237,19 @@ def _attorno(V, H, linee, x0, y0, x1, y1):
     return s
 
 
-def riconosci_sulla_tavola(pdf):
+def riconosci_sulla_tavola(pdf, estrai=None):
     """`(pdf, dieline estratta, Sportello o None, giro, avviso)`.
 
     Il retro deve stare in alto sul foglio: si prova il foglio com'e', e
     girato di un quarto, di mezzo giro e di tre quarti.
     """
     from . import artwork, dieline
+    estrai = estrai or dieline.extract
     for giro in (0, 90, 180, 270):
         g = artwork.pagina_girata(pdf, giro) if giro else pdf
         if giro and g == pdf:
             break
-        d = dieline.extract(g)
+        d = estrai(g)
         if d.bbox is None:
             continue
         s = riconosci(d, tratti(g, d.bbox))

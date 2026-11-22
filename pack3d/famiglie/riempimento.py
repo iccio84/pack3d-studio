@@ -71,7 +71,11 @@ def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
         # pack. Il film del flowpack del display da 26 ha un fondo chiuso da
         # quattro coppie di righe e si leggeva come vassoio sagomato: il
         # riempimento, che si costruiva, si fermava su «tutti e due».
-        forti = [k for k in vassoi if not letti[k].get("sagomato")]
+        # E lo stesso una lettura venuta da un'altra strada della fustella,
+        # non dalla fila di sempre (`vassoio.letture`): per geometria il film
+        # del flowpack del cheesecake si leggeva come un sagomato.
+        forti = [k for k in vassoi
+                 if not letti[k].get("sagomato") and not letti[k].get("debole")]
         if len(forti) == 1:
             vassoi = forti
     if aperto and len(vassoi) != 1:
