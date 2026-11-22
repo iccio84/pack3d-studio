@@ -1160,7 +1160,8 @@ class Handler(BaseHTTPRequestHandler):
                             errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                           blocchi_caso, None, giro.riga()
                                                           if len(giro.fatti) > 1 else "")
-                            return self._send(500, errore, controllo=verdetto)
+                            return self._send(500, errore + riga_finiti(giro),
+                                              controllo=verdetto)
                     statistiche.conta("lettura", dichiarato=kind or "nessuna",
                                       letto=letto.get("kind"))
                     return self._send(200, json.dumps(letto))
@@ -1381,7 +1382,8 @@ class Handler(BaseHTTPRequestHandler):
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                       blocchi_caso, info_primo or info,
                                                       giro.riga())
-                        return self._send(500, errore, controllo=verdetto)
+                        return self._send(500, errore + riga_finiti(giro),
+                                          controllo=verdetto)
                     finally:
                         _slots.release()
                     verdetto = None
@@ -1840,6 +1842,17 @@ def conta_tentativi(giro, kind, verdetto):
         esito = "finiti, in coda: %s" % (giro.perche_finiti or "-")
     statistiche.conta("tentativi", dichiarato=kind or "nessuna",
                       fase="%d tentativi" % len(giro.fatti), esito=esito)
+
+
+def riga_finiti(giro):
+    """In fondo all'errore di una lettura che si ferma: le altre letture
+    provate prima di fermarsi, se ce ne sono state (`pack3d.tentativi`)."""
+    altri = len(giro.fatti) - 1
+    if altri < 1:
+        return ""
+    return (" [provate altre %d letture prima di fermarsi: %s]"
+            % (altri, ", ".join("%s %s" % (f["cosa"], f["esito"])
+                                for f in giro.fatti[1:])))
 
 
 def riga_tentativo(t, giro, verdetto):

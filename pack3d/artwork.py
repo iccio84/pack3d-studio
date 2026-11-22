@@ -1297,9 +1297,11 @@ def astuccio_sulla_grafica(pdf, page_no=0, cartotecnico=False):
         if es.migliore is None:
             raise es.errore or ValueError("astuccio: la fustella non si risolve "
                                           "col foglio girato di %d gradi" % forzato)
-        avviso = ("%s: foglio %s, provato perche' niente nella grafica diceva il "
-                  "verso" % (tentativi.RIGA, "girato di %d gradi" % forzato
-                             if forzato else "com'e' sulla tavola"))
+        # (non comincia con TENTATIVO: il verso entra nell'impronta della
+        # lettura, `tentativi.firma`, e due versi non sono la stessa lettura)
+        avviso = ("foglio %s da un tentativo dopo il primo: niente nella grafica "
+                  "diceva il verso" % ("girato di %d gradi" % forzato
+                                       if forzato else "com'e' sulla tavola"))
         return fatto(scelto, es.dieline(), forzato, avviso, es, muto=True)
 
     es0 = strade.letture(pdf, page_no, 0, cartotecnico)

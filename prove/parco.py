@@ -392,6 +392,7 @@ def costruisci(args):
         try:
             for caso in da_fare:
                 nome = caso["nome"]
+                inizio = time.time()
                 stato, glb, avvisi, sec, verdetto = _costruisci_caso(
                     url, args.casi, caso, os.path.join(args.uscita, nome + "_lettura.jpg"))
                 esito = dict(nome=nome, stato=stato, secondi=round(sec, 1),
@@ -399,8 +400,10 @@ def costruisci(args):
                              avvisi=avvisi, md5=None, versione=impronta,
                              caso=impronte[nome])
                 if verdetto:
-                    # il verdetto del giudice: c'e' solo con l'oracolo
+                    # il verdetto del giudice: c'e' solo con l'oracolo, e coi
+                    # tentativi il tempo fino all'ultimo verdetto
                     esito["controllo"] = verdetto
+                    esito["secondi_verdetto"] = round(time.time() - inizio, 1)
                 if glb is not None:
                     with open(os.path.join(args.uscita, nome + ".glb"), "wb") as fh:
                         fh.write(glb)
