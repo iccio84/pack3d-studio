@@ -4,17 +4,23 @@ Il riempimento: un contenitore coi suoi pack dentro.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 
 from .. import atlante
 from .. import lettura as lettura_pdf
 from .. import stato
+from .. import tentativi
 from .. import scatola_plancia
 from .astuccio import build_carton
 from .comune import normalizza_kind, scrivi_lettura
 from .flowpack import build_flowpack
 from .vassoio import build_vassoio
 
+
+# L'avviso di una famiglia che non ha letto il verso della grafica: il pack
+# resta com'e' sulla tavola (`build_flowpack`, `artwork`).
+VERSO_MUTO = "verso della grafica non letto"
 
 # Che cosa va nel vassoio: il flowpack, o l'astuccio - un cartotecnico di un
 # pezzo solo. Lo dichiara chi carica, come la famiglia.
@@ -44,7 +50,7 @@ def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
     if len(pdfs) != 2:
         raise ValueError("riempimento: carica due PDF, il vassoio e il pack (CU)")
     from .. import artwork
-    letti = []
+    letti, perche = [], []
     for k, p in enumerate(pdfs):
         try:
             if aperto:
@@ -61,8 +67,9 @@ def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
             # di «nessuno si legge come vassoio» (`artwork.solo_immagine`)
             raise ValueError("riempimento: %s (il PDF %d)"
                              % (artwork.MSG_IMMAGINE, k + 1))
-        except Exception:
+        except Exception as e:                      # noqa: BLE001
             letti.append(None)
+            perche.append((k, e))
     vassoi = [k for k, l in enumerate(letti) if l is not None]
     if len(vassoi) == 2:
         # Il vassoio sagomato si prova per ultimo, quando gli altri hanno
@@ -71,11 +78,14 @@ def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
         # pack. Il film del flowpack del display da 26 ha un fondo chiuso da
         # quattro coppie di righe e si leggeva come vassoio sagomato: il
         # riempimento, che si costruiva, si fermava su «tutti e due».
-        # E lo stesso una lettura venuta da un'altra strada della fustella,
-        # non dalla fila di sempre (`vassoio.letture`): per geometria il film
-        # del flowpack del cheesecake si leggeva come un sagomato.
-        forti = [k for k in vassoi
-                 if not letti[k].get("sagomato") and not letti[k].get("debole")]
+        # E piu' debole ancora una lettura venuta da un'altra strada della
+        # fustella, non dalla fila di sempre (`vassoio.letture`): per
+        # geometria il film del flowpack del cheesecake si leggeva come un
+        # sagomato. Vince la lettura piu' forte, se e' una sola.
+        def forza(k):
+            return 2 if letti[k].get("debole") else 1 if letti[k].get("sagomato") else 0
+        meglio = min(forza(k) for k in vassoi)
+        forti = [k for k in vassoi if forza(k) == meglio]
         if len(forti) == 1:
             vassoi = forti
     if aperto and len(vassoi) != 1:
@@ -85,7 +95,8 @@ def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
             "deve essere il pack (CU)"))
     if len(vassoi) != 1:
         raise ValueError("riempimento: dei due PDF %s" % (
-            "nessuno si legge come vassoio espositore" if not vassoi else
+            "nessuno si legge come vassoio espositore" + motivi(perche)
+            if not vassoi else
             "tutti e due si leggono come vassoi: l'altro deve essere il pack (CU)"))
     iv = vassoi[0]
     ifp = 1 - iv
@@ -104,11 +115,37 @@ def analisi_riempimento(pdfs, cu="flowpack", aperto=False):
                meta=meta, vassoio=iv, flowpack=ifp,
                teeth_default=fp.get("teeth_default", 20),
                soft_default=fp.get("soft_default", "medio"))
+    if tentativi.gira_pack():
+        # il tentativo che gira il pack attorno al fronte: un'altra lettura,
+        # che il giro deve costruire (`tentativi.firma`)
+        out["meta"].append("il pack girato di %d gradi attorno al fronte, chiesto "
+                           "dal tentativo" % tentativi.gira_pack())
     if aperto:
         out["contenitore"] = "carton"
     if cu == "carton" and fp.get("strappo"):
         out["strappo"] = fp["strappo"]
     return out
+
+
+def motivi(perche):
+    """Perche' nessuno dei due PDF si legge come vassoio, PDF per PDF e in
+    breve: fino al 22 novembre 2026 il messaggio diceva solo «nessuno», e sullo
+    Space nascondeva tanto il display che era una foto quanto la griglia del
+    sagomato T1x36 EU, che il codice di allora contava 6 e 6."""
+    import re
+    righe = []
+    for k, e in perche:
+        m = re.search(r"ne ha (\d+) e (\d+)", str(e))
+        if m:
+            righe.append("il PDF %d ha una griglia di %s colonne e %s fasce"
+                         % (k + 1, m.group(1), m.group(2)))
+        elif str(e).startswith("vassoio: le letture del display le ha scartate"):
+            righe.append("il PDF %d l'ha scartato il controllo" % (k + 1))
+        else:
+            righe.append("il PDF %d: %s" % (k + 1, str(e)[:60]))
+    if not righe:
+        return ""
+    return " (%s; un vassoio ne ha 5 e 3)" % "; ".join(righe)
 
 
 def quanti_pezzi(valore):
@@ -185,6 +222,26 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
             glb_v = fh.read()
         with open(gf, "rb") as fh:
             glb_f = fh.read()
+    # Il pack che non sa il suo verso - nessun testo vivo, e resta come sta
+    # sulla tavola - puo' stare nel vassoio coricato o in piedi a seconda del
+    # foglio: il giro dei tentativi lo prova girato attorno al fronte
+    # (`pack3d.tentativi`, «altro verso del pack").
+    giro_pack = tentativi.gira_pack()
+    if any(str(a).startswith(VERSO_MUTO) for a in av_f):
+        # il giro che il flowpack ha dato al modello perche' il marchio si
+        # legga orizzontale, sul foglio com'era: il primo da disfare
+        fatto = 0
+        for a in av_f:
+            m = re.search(r"modello girato di (\d+) gradi attorno al fronte", str(a))
+            if m:
+                fatto = int(m.group(1)) % 360
+        tentativi.osserva(muto_pack=True, giro_pack=fatto)
+    girato = []
+    if giro_pack:
+        glb_f = riempimento.gira_il_pack(glb_f, giro_pack)
+        girato = ["il pack girato di %d gradi attorno al fronte: il suo verso non "
+                  "si legge (nessun testo vivo), e montato com'era sulla tavola "
+                  "il controllo l'ha scartato" % giro_pack]
     # nel display a scatola il prodotto si guarda dall'alto, dalla finestra
     # del coperchio (`riempimento._griglia`)
     dall_alto = bool(av_v) and av_v[0] == scatola_plancia.TITOLO
@@ -198,5 +255,6 @@ def build_riempimento(pdfs, info, out_glb, quanti, flowpack=None, quality="hd",
     glb, _zone = atlante.unisci(glb)
     with open(out_glb, "wb") as fh:
         fh.write(glb)
-    return (righe + ["%s: %s" % ("astuccio aperto" if aperto else "vassoio", a) for a in av_v]
+    return (girato + righe
+            + ["%s: %s" % ("astuccio aperto" if aperto else "vassoio", a) for a in av_v]
             + ["%s: %s" % ("astuccio" if astuccio else "flowpack", a) for a in av_f])

@@ -835,7 +835,9 @@ ricontrollare; il caso va alla routine solo quando i tentativi sono finiti
   regole/vassoi.md, *Le letture a punteggio*): il vassoio montato come
   coperchio quando nessuna scritta lo dice (`Tentativo.montaggio`), la
   seconda lettura (`tentativi.escluso_display`), le soglie larghe anche per
-  chi dichiara vassoio. Le strade proprie delle altre famiglie (il verso del
+  chi dichiara vassoio o riempimento, e nel riempimento il pack girato
+  attorno al fronte quando non sa il suo verso (`Tentativo.gira_pack`,
+  regole/riempimenti.md, *Il controllo dell'AI, e i tentativi*). Le strade proprie delle altre famiglie (il verso del
   film, il ripiego del flowpack) entrano una famiglia per PR, come le
   letture a punteggio.
 - **Una lettura o un modello gia' visti** (`Giro.gia_letto`,

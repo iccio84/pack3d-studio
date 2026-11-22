@@ -80,11 +80,13 @@ VERSO = "altro verso"
 LARGHE = "soglie larghe"
 FORMA = "altra forma"
 MONTAGGIO = "altro montaggio"
+VERSO_PACK = "altro verso del pack"
 COME = {SECONDA: "la seconda lettura del punteggio",
         VERSO: "un altro verso del foglio",
         LARGHE: "le soglie piu' larghe",
         FORMA: "un'altra forma della famiglia",
-        MONTAGGIO: "il vassoio montato come coperchio"}
+        MONTAGGIO: "il vassoio montato come coperchio",
+        VERSO_PACK: "il pack girato attorno al fronte"}
 
 # l'inizio delle righe che il giro aggiunge agli avvisi: non entrano
 # nell'impronta della lettura (`firma`)
@@ -110,6 +112,9 @@ class Tentativo:
     # il vassoio montato come coperchio, quando nessuna scritta lo dice
     # (`vassoio.montaggio`)
     montaggio: str | None = None
+    # nel riempimento, il pack girato di tanti gradi attorno al fronte,
+    # quando il suo verso non si legge (`riempimento.gira_il_pack`)
+    gira_pack: int | None = None
     osservato: dict = field(default_factory=dict)
 
     @property
@@ -117,7 +122,8 @@ class Tentativo:
         """Se legge come la lettura di sempre: allora valgono anche le
         memorie delle letture (`artwork._SULLA_GRAFICA`)."""
         return (not self.larghe and self.giro is None and not self.escludi
-                and not self.prove_scartate and self.montaggio is None)
+                and not self.prove_scartate and self.montaggio is None
+                and self.gira_pack is None)
 
     def descrivi(self):
         return COME.get(self.cosa, self.cosa)
@@ -172,6 +178,11 @@ def montaggio():
     return t.montaggio if t else None
 
 
+def gira_pack():
+    t = _ORA.get()
+    return t.gira_pack if t else None
+
+
 def escluso(lettura):
     """Se la lettura dell'astuccio da' un astuccio gia' scartato da un
     tentativo prima (stesso modello, stesso verso: `dieline.stesso_modello`)."""
@@ -199,7 +210,8 @@ def osserva(**cosa):
     `astuccio` (`impronta` della lettura scelta), `altre` (quante altre
     letture plausibili danno un astuccio diverso), `giro`, `muto` (niente
     dice il verso); sulla Trade Unit `vassoio` (`vassoio.LetturaTU.impronta`)
-    e `muto_montaggio` (niente dice se il vassoio e' un coperchio)."""
+    e `muto_montaggio` (niente dice se il vassoio e' un coperchio); nel
+    riempimento `muto_pack` (il pack non sa il suo verso)."""
     t = _ORA.get()
     if t is not None:
         t.osservato.update(cosa)
@@ -246,6 +258,7 @@ class Giro:
         self.ultimo = None
         self.astuccio = None        # l'ultimo osservato con un astuccio
         self.montaggi = set()       # i montaggi del vassoio gia' provati
+        self.giri_pack = set()      # i versi del pack del riempimento provati
         self.perche_finiti = ""
         self._dal = None
         self._scartata = None
@@ -288,13 +301,20 @@ class Giro:
             self.astuccio = dict(oss)
         if t.montaggio is not None:
             self.montaggi.add(t.montaggio)
+        if t.gira_pack is not None:
+            self.giri_pack.add(t.gira_pack)
         if esito == "ok":
             return
         if oss.get("astuccio") is not None:
             self.escludi.append(oss["astuccio"])
-        if oss.get("vassoio") is not None and not (t.montaggio or oss.get("muto_montaggio")):
+        if (oss.get("vassoio") is not None and self.kind == "vassoio"
+                and not (t.montaggio or oss.get("muto_montaggio"))):
             # il display scartato non vince piu'; se e' muto si prova prima
-            # montato come coperchio, sulla stessa lettura
+            # montato come coperchio, sulla stessa lettura. Solo dichiarato
+            # vassoio: nel riempimento lo scarto puo' essere del pack, e
+            # senza il contenitore il tentativo del verso del pack si
+            # fermava su «nessuno si legge come vassoio» (i display a scatola
+            # T1x10 e T15, che non passano per il montaggio)
             self.escludi.append(oss["vassoio"])
         if oss.get("giro") is not None:
             self.giri.add(oss["giro"])
@@ -352,13 +372,23 @@ class Giro:
                 if oss["vassoio"] not in self.escludi:
                     self.escludi.append(oss["vassoio"])
                 return self._nuovo(SECONDA)
+        # nel riempimento, il pack che non sa il suo verso: girato attorno al
+        # fronte, un quarto, tre quarti, mezzo giro
+        if scartato and oss.get("muto_pack"):
+            # prima si disfa il giro che il flowpack ha dato al modello per
+            # il marchio (`giro_pack`), poi gli altri
+            fatto = int(oss.get("giro_pack") or 0)
+            ordine = ([(360 - fatto) % 360] if fatto else []) + [90, 270, 180]
+            for g in ordine:
+                if g and g not in self.giri_pack:
+                    return self._nuovo(VERSO_PACK, gira_pack=g)
         # 2. gli altri versi, quando niente dice il verso
         if ast is not None and ast.get("muto"):
             for g in GIRI:
                 if g not in self.giri:
                     return self._nuovo(VERSO, giro=g)
         # 3. le soglie larghe: gli astucci e la Trade Unit
-        if not self.larghe and self.kind in (None, "carton", "vassoio"):
+        if not self.larghe and self.kind in (None, "carton", "vassoio", "riempimento"):
             self.larghe = True
             return self._nuovo(LARGHE)
         # 4. la prova dopo nel registro
