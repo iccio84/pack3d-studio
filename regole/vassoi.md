@@ -377,6 +377,70 @@ pareti 51,0 / 76,3 / 81,0 / 76,3. Il fronte resta la testata bassa.
   quello e l'altro e' il pack. Il display da 26 torna identico al byte a
   quello pubblicato; i tre vassoi del parco non cambiano.
 
+### Le letture a punteggio: tutte le forme, tutte le strade, tutti i versi
+
+Il punto 2 e il punto 3 del piano del 20 novembre 2026 (`pack3d-casi/regole/
+decisioni.md`, *Un deterministico che fallisce il meno possibile*) portati
+alla Trade Unit il 22 novembre, come sugli astucci (regole/astucci.md, *Le
+letture a punteggio*). Fino ad allora la fustella si leggeva in un modo solo,
+per penna, e delle forme vinceva la prima che passava, in fila: il vassoio
+piano, la plancia, lo sportello, la scatola, il sagomato. La fila era scritta
+due volte, nel registro e nella costruzione.
+
+- **Una lettura sola** (`vassoio.letture`), chiesta dal registro (dichiarato
+  vassoio) e dalla costruzione: non possono piu' leggere due cose diverse.
+  Senza dichiarazione resta la prova di sempre sulla griglia gia' letta, che
+  non costa niente a chi non e' un vassoio.
+- **La prima lettura e' la fila di sempre** (`_prima`). Se e' forte - i
+  fianchi alti uguali, le cordonature larghe uguali, le quote che non la
+  smentiscono - basta, e le altre non si provano: e' la strada dei PDF come
+  quelli del parco, che non pagano niente.
+- **Se no, le altre**: le strade della fustella di `pack3d.strade` (per
+  colore, coi tratti riuniti, senza una penna dubbia, per geometria) per le
+  forme che leggono la griglia - vassoio, sagomato, plancia, sportello - e per
+  i versi del foglio (0, 90 e 270 gradi; mezzo giro solo per lo sportello, che
+  vuole il retro in alto). Ogni verso si legge una volta sola (`_Fogli`): la
+  fila di sempre rileggeva lo stesso foglio per ogni forma, 13 volte su un
+  foglio che nessuna forma legge, e sul display KMS coi tratti spezzati la
+  lettura e' scesa da 38 a 9 secondi.
+- **Il costo** (`_punteggio`): i fianchi che non sono alti uguali (il 5% costa
+  uno), le cordonature diverse (un millimetro costa uno), il davanti - la
+  parete piu' bassa - di lato sul foglio (0,5), ogni correzione della strada
+  (0,1), la copertura della fustella (sotto il 45% del riquadro piu' grande
+  fra le letture), le quote scritte (conferme e smentite, come sugli
+  astucci).
+- **Il verdetto** (`scegli`): vince il costo piu' basso, la prima lettura a
+  meno di 0,3; un'altra vale solo se il suo costo geometrico e' al piu' 2.
+  Due display diversi a meno di 0,25 sono un dubbio dichiarato negli avvisi
+  («DUBBIO DI LETTURA: costruito ...; quasi alla pari ...»). Una fustella
+  letta per un'altra strada lo dice («fustella letta coi tratti riuniti
+  ...»).
+- **Un vassoio letto per un'altra strada ha il fondo di almeno 40 mm**
+  (`FONDO_MINIMO_ALTRE`, come la plancia): sul film del flowpack del
+  riempimento cheesecake la strada per geometria trovava un sagomato col
+  fondo di 34 x 123 mm. E il riempimento conta una lettura venuta da un'altra
+  strada come conta il sagomato: debole (`debole`, `analisi_riempimento`).
+- **La cordonatura a tre righe** (`_due_meta`): due luci sottili uguali
+  accanto al fondo sono le due meta' di una cordonatura, e la piega e' la riga
+  di mezzo. Sul coperchio T1x36 coi tratti riuniti la riga di mezzo, in
+  un'altra penna che per colore si scarta, restava: il fondo veniva 144,0 mm
+  invece di 145,5.
+
+**I tentativi** (regole/verifiche.md, *Il secondo tentativo prima della
+coda*): se il controllo scarta il display,
+
+1. **montato come coperchio**, se nessuna scritta delle pareti dice come si
+   monta (`vassoio.montaggio`: meno di due pareti col testo che vota). Sul
+   coperchio T1x36 coi testi in curve la prima lettura lo montava come
+   vassoio, col marchio sotto; il tentativo lo monta come coperchio;
+2. **la seconda lettura**: il display gia' scartato non vince piu'
+   (`tentativi.escluso_display`), e si costruisce il plausibile dopo;
+3. **le soglie larghe**: tutte le strade anche se la prima e' forte,
+   plausibili fino a costo 3.
+
+Quando non resta niente: «le letture del display le ha scartate il controllo
+dell'AI» (`VASSOIO_SCARTATO`), non piu' «cinque colonne e tre fasce».
+
 ## Display con plancia
 
 La quarta famiglia, e sta accanto al vassoio: una scatola che arriva CHIUSA e

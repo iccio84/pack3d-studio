@@ -831,9 +831,13 @@ ricontrollare; il caso va alla routine solo quando i tentativi sono finiti
   `COSTO_MAX_LARGO`; da li' in poi restano larghe); la prova dopo nel
   registro, saltando quella scartata (`registro.prove_dopo`: dichiarato
   cartotecnico, la punta, la coppa e il tubo dopo l'astuccio), mai fuori
-  dalla tipologia dichiarata. Le strade proprie delle altre famiglie (il
-  verso del film, il ripiego del flowpack, le forme del vassoio) entrano una
-  famiglia per PR, come le letture a punteggio.
+  dalla tipologia dichiarata. Sulla Trade Unit (dal 22 novembre 2026,
+  regole/vassoi.md, *Le letture a punteggio*): il vassoio montato come
+  coperchio quando nessuna scritta lo dice (`Tentativo.montaggio`), la
+  seconda lettura (`tentativi.escluso_display`), le soglie larghe anche per
+  chi dichiara vassoio. Le strade proprie delle altre famiglie (il verso del
+  film, il ripiego del flowpack) entrano una famiglia per PR, come le
+  letture a punteggio.
 - **Una lettura o un modello gia' visti** (`Giro.gia_letto`,
   `gia_costruito`) non si ricostruiscono e non si ricontrollano.
 - **Il tetto**: tre minuti dall'inizio della costruzione al verdetto
