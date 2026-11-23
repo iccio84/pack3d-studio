@@ -534,6 +534,44 @@ già pronto da scrivere. Se il caso non è risolto lo dice, e mostra il caso
 com'è; se non si trova più dice di ricaricare il PDF. `nome` è facoltativo:
 serve solo finché lo Space non ha detto il nome del caso.
 
+**Anche i modelli costruiti dal codice.** Un modello che il controllo
+dell'AI dice ok Glam lo salva senza nessun caso: niente da rimandare alla
+routine. Dal 23 novembre 2026 lo Space, quando la pagina è dentro Glam (la
+costruzione porta `glam: true` e il nome del modello), ne mette i PDF, le
+opzioni e il verdetto nell'**archivio** del registro dei casi
+(`archivio/<data>_<codice>/`, senza issue), per **90 giorni**: il
+proprietario, il 23 novembre 2026. Il codice è l'impronta dei PDF, come per
+i casi. Prima di mostrare «Scarica GLB» - cioè prima di `pack3d:built` - la
+pagina lo dice a Glam:
+
+```js
+{ type: "pack3d:archiviato",
+  codice: "b312f1e238",                 // 10 cifre esadecimali
+  nome: "NOME_DEL_PDF",
+  sezione: "pack",                      // "pop" dalla finestra dei materiali POP
+  glb: 4447372 }                        // la misura in byte del GLB
+```
+
+Glam lo tiene e, quando salva il modello di `pack3d:built` con la stessa
+misura (come la texture, sezione 8), crea per l'utente collegato una riga di
+`pack3d_cases` con quel codice, stato `risolto`, esito `archiviato` e
+`model_id` del modello appena salvato, senza notifica. Così il tasto **Chiedi
+una modifica** dell'anteprima vale per lui come per un modello corretto
+dalla routine: stessa regola, stesso indirizzo.
+
+Per lo Space un codice archiviato senza issue è `risolto`, con
+`archiviato: true` e senza `modello` (il GLB non si archivia: è in Glam), e
+`/api/modifica` apre il caso in quel momento, coi PDF dell'archivio: come
+«Chiedi una modifica» subito dopo la costruzione, con la modifica come prima
+voce, e la routine parte. Dopo 90 giorni la cartella si cancella, lo Space
+risponde `404`, e per modificare il modello si ricarica il PDF.
+
+**Il modello nuovo prende il posto di quello vecchio**, per `model_id`.
+Quando arriva `/api/import-model` con `X-Pack3d-Codice` e il caso
+dell'utente ha un `model_id`, Glam sostituisce **quel** modello, nella sua
+cartella e col suo nome, qualunque siano: un modello costruito dal codice
+non sta in «Casi risolti». Texture e template seguono lo stesso modello.
+
 ## Il testo per Lovable
 
 Da incollare in Lovable così com'è. Dei due segreti, `PACK3D_IMPORT_TOKEN`
@@ -708,13 +746,17 @@ Aggiungi una nuova finestra, "Crea materiali POP 3D da PDF", accanto a "Costruis
 Da incollare dopo i testi qui sopra. Non servono segreti nuovi.
 
 ```text
-Sulla scheda di un modello (l'anteprima con i tasti Elimina e Rinomina), aggiungi un tasto "Chiedi una modifica", per i modelli che arrivano da un caso corretto. Il contratto completo è in GLAM.md, sezione 11, del repository iccio84/pack3d-studio.
+Sulla scheda di un modello (l'anteprima con i tasti Elimina e Rinomina), aggiungi un tasto "Chiedi una modifica", per i modelli che arrivano da un caso corretto dalla routine o che il codice ha costruito e lo Space ha archiviato. Il contratto completo è in GLAM.md, sezione 11, del repository iccio84/pack3d-studio.
 
-1. Il tasto si vede solo se c'è una riga di pack3d_cases dell'utente collegato con model_id uguale all'id di quel modello. Mettilo accanto a Elimina e Rinomina, con lo stesso stile.
+1. Il tasto si vede solo se c'è una riga di pack3d_cases dell'utente collegato con model_id uguale all'id di quel modello (un caso corretto dalla routine, o un modello costruito dal codice e archiviato: punto 5). Mettilo accanto a Elimina e Rinomina, con lo stesso stile.
 
 2. Premuto, apre il dialog della sezione del modello ("Costruisci modello 3D da PDF" per i modelli in <user_id>/pdf/, "Crea materiali POP 3D da PDF" per quelli in <user_id>/pop/), con lo stesso iframe di sempre e due parametri in più nell'indirizzo: modifica=<codice del caso> e nome=<nome del modello> (encodeURIComponent). Per esempio .../api/public/pack3d?api=...&casi=1&modifica=b312f1e238&nome=ASTUCCIO. Il codice deve rispettare /^[0-9a-f]{10}$/. La pagina dello Space apre da sola il modulo della modifica: Glam non manda niente allo Space.
 
-3. Quando la modifica parte, l'iframe manda "pack3d:caso" (con esito "modifica") e poi "pack3d:chiudi" (titolo "Modifica inviata"): trattali come fai già. Con "pack3d:caso" il caso torna 'in-coda' (aggiorna la riga che c'è, senza toccare model_id); con "pack3d:chiudi" chiudi il dialog e mostri il toast. Il modello resta dov'è finché non arriva quello nuovo da /api/import-model, che lo sostituisce come già fa.
+3. Quando la modifica parte, l'iframe manda "pack3d:caso" (con esito "modifica") e poi "pack3d:chiudi" (titolo "Modifica inviata"): trattali come fai già. Con "pack3d:caso" il caso torna 'in-coda' (aggiorna la riga che c'è, senza toccare model_id); con "pack3d:chiudi" chiudi il dialog e mostri il toast. Il modello resta dov'è finché non arriva quello nuovo da /api/import-model, che lo sostituisce (punto 4).
 
-4. Tutto il resto resta com'è: Elimina, Rinomina, i casi, le notifiche, la busta e i token.
+4. /api/import-model: quando arriva X-Pack3d-Codice e il caso di un utente ha un model_id, sostituisci quel modello - stesso percorso del file, stessa cartella, stesso nome - invece di cercare un modello con lo stesso nome nella cartella di X-Model-Category; senza model_id, come adesso. /api/import-texture e /api/import-template mettono texture e template su quello stesso modello.
+
+5. Ascolta anche { type: "pack3d:archiviato", codice, nome, sezione, glb } dall'iframe, con gli stessi controlli degli altri messaggi (e.origin === window.location.origin, e.source uguale alla contentWindow dell'iframe, codice /^[0-9a-f]{10}$/). Arriva subito prima di "pack3d:built". Tienilo come tieni la texture: quando salvi il modello di "pack3d:built" e la sua misura in byte è uguale a glb, crea (o aggiorna) per l'utente collegato la riga di pack3d_cases con quel codice: stato 'risolto', esito 'archiviato', nome, sezione e model_id del modello appena salvato. Nessuna notifica e nessun toast: per l'utente è un modello come gli altri, con in più il tasto "Chiedi una modifica" sull'anteprima.
+
+6. Tutto il resto resta com'è: Elimina, Rinomina, i casi, le notifiche, la busta e i token.
 ```
