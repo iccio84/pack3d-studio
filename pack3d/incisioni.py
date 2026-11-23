@@ -494,12 +494,13 @@ def _perforata_continua(percorsi, pezzi, quadri, sul_lato=False):
                     migliore = (lunga, catena, [list(a), punta, list(b)])
             # `sul_lato` (`continua_per_penna`): senza una punta, i capi
             # liberi si chiudono lungo il lato della faccia a cui arrivano
-            chiusura = _chiusa_sul_lato(a, b, la, quadri) if sul_lato else None
-            if chiusura is not None:
-                catena = list(a) + chiusura[1:-1] + list(b[::-1])
+            chiusa = _chiusa_sul_lato(a, b, la, quadri) if sul_lato else None
+            if chiusa is not None:
+                chiusura, ca, cb = chiusa
+                catena = list(ca) + chiusura[1:-1] + list(cb[::-1])
                 lunga = _lunghezza(catena) * PT2MM
                 if lunga >= PERFORATA_MIN and (migliore is None or lunga > migliore[0]):
-                    migliore = (lunga, catena, [list(a), list(b)], chiusura)
+                    migliore = (lunga, catena, [list(ca), list(cb)], chiusura)
     if migliore is None:
         return None
     _lunga, catena, linee = migliore[:3]
@@ -522,7 +523,6 @@ def _chiusa_sul_lato(a, b, la, quadri):
     finisce sulla piega con una falda che non e' una faccia: la linguetta
     gira li', e del solido la finestra arriva fino al lato."""
     ponte = PONTE * MM
-    A, B = a[-1], b[-1]
     # la finestra va da una piega al lato opposto della stessa faccia, e la
     # cerniera e' una cerniera, non due tagli quasi attaccati: sul parco una
     # coppia di tratti a 5,5 mm sul fondo di un astuccio passava per apertura
@@ -533,6 +533,10 @@ def _chiusa_sul_lato(a, b, la, quadri):
         for lato, (u, v) in enumerate(_lati_quadri(p)):
             if (k, lato) not in opposti:
                 continue
+            # i rami che passano il lato e continuano sulla falda oltre si
+            # tagliano sul lato (`_taglia_al_lato`)
+            ra, rb = _taglia_al_lato(a, u, v), _taglia_al_lato(b, u, v)
+            A, B = ra[-1], rb[-1]
             if _distanza_punto(A, [u, v]) > ponte or _distanza_punto(B, [u, v]) > ponte:
                 continue
             dx, dy = v[0] - u[0], v[1] - u[1]
@@ -544,9 +548,34 @@ def _chiusa_sul_lato(a, b, la, quadri):
                 t = max(0.0, min(1.0, ((q[0] - u[0]) * dx + (q[1] - u[1]) * dy) / l2))
                 return (u[0] + dx * t, u[1] + dy * t)
             chiusura = [A, su(A), su(B), B]
-            if _lunghezza(chiusura) < min(_lunghezza(a), _lunghezza(b)):
-                return chiusura
+            if _lunghezza(chiusura) < min(_lunghezza(ra), _lunghezza(rb)):
+                return chiusura, ra, rb
     return None
+
+
+def _taglia_al_lato(ramo, u, v):
+    """Il ramo fino a dove passa la retta del lato u-v, o il ramo intero se
+    non la passa. Sull'astuccio di biscotti T25 (caso 24f72422b1) i due rami
+    verdi da 0,82 scendono dalla piega col cielo per tutto il fronte e
+    continuano per 11-13 mm sulla falda sotto il fronte, fino alla tacca
+    della linguetta: la finestra del fronte finisce sul lato, come sul T10
+    dove i rami si fermavano a 1,4 mm dal lato, e la coda sulla falda e' la
+    linguetta (`linguetta_oltre`)."""
+    dx, dy = v[0] - u[0], v[1] - u[1]
+
+    def lato(q):
+        return (q[0] - u[0]) * dy - (q[1] - u[1]) * dx
+
+    s0 = lato(ramo[0])
+    for i in range(1, len(ramo)):
+        s1 = lato(ramo[i])
+        if s0 != 0 and s1 != 0 and (s0 > 0) != (s1 > 0):
+            p, q = ramo[i - 1], ramo[i]
+            t = s0 / (s0 - s1)
+            return list(ramo[:i]) + [(p[0] + (q[0] - p[0]) * t,
+                                      p[1] + (q[1] - p[1]) * t)]
+        s0 = s1
+    return list(ramo)
 
 
 def continua_per_penna(pdf, panels, facce, page_no=0):
