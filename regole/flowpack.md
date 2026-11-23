@@ -1114,7 +1114,10 @@ quali altre letture ci sono da provare.
 La costruzione pulisce la texture con le penne della strada che ha letto lo
 steso (`strati.usa_penne`, dentro `strati.strada_del_pack`): letto coi
 tratti riuniti, per colore le penne tecniche sarebbero la cornice e il
-cartiglio, e il DT a pezzi resterebbe stampato.
+cartiglio, e il DT a pezzi resterebbe stampato. Anche le copie del DT che
+dicono il materiale del film (`materiali.copie_del_dt`) si cercano coi
+tratti riuniti: a pezzi il biscotto T3 e il T2 di cialde perdevano il
+metallo.
 
 E il ripiego del riquadro della fustella non e' piu' quadratico nei tratti:
 un rettangolo che somiglia per meta' allo stampato ha i lati lunghi almeno un
