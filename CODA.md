@@ -97,6 +97,10 @@ cartoncino, e' un cartotecnico e si costruisce.
     `prodotto_<nome>.jpg` (o `.png`, `.webp`), accanto al PDF.
   - Una **issue aperta per ogni caso**, `Caso nuovo <codice>: <file>`. Arriva
     solo se chi ha caricato il PDF l'ha **mandato** dalla pagina.
+  - `archivio/<data>_<codice>/`: i PDF, le opzioni e il verdetto dei modelli
+    che il codice ha costruito e Glam ha salvato (controllo ok), per 90
+    giorni: servono solo a una modifica chiesta dopo (GLAM.md, sezione 11).
+    Non sono casi: nessuna issue, e i giri non li guardano.
   - `contatti/<codice>.json`: l'email di chi ha mandato il caso. **Non
     aprirlo e non copiarlo mai** altrove: serve solo allo Space.
   - `parco/`: i PDF di prova, il manifesto `parco/parco.json` (opzioni e
@@ -373,6 +377,11 @@ commento che comincia con «**Modifica chiesta**» e la voce `modifica` in
   quello vecchio (stesso nome, stessa cartella).
 - Le misure approvate del caso nel parco cambiano con la nuova `consegna`:
   e' chi l'ha caricato a volerle diverse.
+- **Un modello costruito dal codice** (il controllo aveva detto ok, e non
+  c'era nessun caso): lo Space ne teneva i PDF nell'archivio (`archivio/`
+  qui sotto) e apre il caso adesso, coi PDF e le opzioni di allora e la
+  modifica come prima voce. Il verdetto del caso ha `modifica: true` e
+  `archiviato` con la data: per il resto e' la *modifica chiesta* di sopra.
 
 ## Dopo un Non approvo, prima si chiede
 

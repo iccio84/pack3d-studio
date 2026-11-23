@@ -202,6 +202,13 @@ def senza_controllo(opts):
             and opts.get("controllo") is False)
 
 
+def da_archiviare(opts):
+    """Il modello ok va nell'archivio dei modelli costruiti dal codice: solo
+    se la pagina e' dentro Glam (`glam`, che lo salva) e non e' una prova."""
+    return (isinstance(opts, dict) and opts.get("glam") is True
+            and opts.get("prova") is not True)
+
+
 def caso_fermo(e, kind, pdfs, nomi, opts, blocchi, info=None, tentati=""):
     """`(errore, verdetto)` di una lettura o di una costruzione che si e'
     fermata, col caso gia' messo in coda.
@@ -1542,6 +1549,14 @@ class Handler(BaseHTTPRequestHandler):
                                     blocchi_caso, nomi_caso, verdetto, quadro["viste"],
                                     ctx)
                                 verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])
+                            elif verdetto["esito"] == "ok" and da_archiviare(opts):
+                                # ok, dentro Glam: Glam lo salva, e lo Space ne
+                                # tiene i PDF per una modifica chiesta piu'
+                                # avanti (`coda.archivia`, GLAM.md sezione 11)
+                                verdetto["archivio"], _ = coda.metti(
+                                    blocchi_caso, nomi_caso, dict(verdetto), None,
+                                    dict(ctx, nome_glam=str(opts.get("nome") or "")[:120]),
+                                    archivia=True)
                             if riga:
                                 meta.insert(0, riga)
                                 righe_ai.insert(0, riga)
