@@ -242,7 +242,7 @@ OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
                 "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura",
                 "gonfio", "plancia", "inclina", "pinne_cromate", "chiusa", "gira",
-                "film_argento", "senza_grafica")
+                "film_argento", "senza_grafica", "senza_intersezioni")
 
 
 # l'immagine del prodotto da incartare: la pagina la rimpicciolisce a 1600 px

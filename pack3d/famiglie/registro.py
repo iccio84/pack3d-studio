@@ -715,6 +715,19 @@ def gira_scelta(opts):
     return g % 360.0
 
 
+def senza_intersezioni_scelto(opts):
+    """I pezzi del riempimento si toccano senza compenetrarsi, fra loro e col
+    contenitore: `"senza_intersezioni": true`, scelta del pack (il T10 di
+    biscotti, caso e88a907c54). Di serie no: stringere e schiacciare i pezzi
+    fino al passo cambia i modelli approvati degli altri riempimenti (fino al
+    7,6% di largo su un T1), e il film resta schiacciato fra i vicini come
+    prima (`riempimento.COMPRIME`)."""
+    v = opts.get("senza_intersezioni", False)
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "si", "sì", "yes")
+    return bool(v)
+
+
 @_vertici_separati
 def _costruisci_riempimento(r, info):
     if info.get("cu") == "carton":
@@ -723,7 +736,8 @@ def _costruisci_riempimento(r, info):
             return build_riempimento(r.pdfs, info, uscita, r.quanti, quality=r.q,
                                      carta=r.carta, incisioni=r.incisioni,
                                      per_fila=r.per_fila, apertura=r.apertura,
-                                     gira=gira_scelta(r.opts), pellicola=r.pellicola)
+                                     gira=gira_scelta(r.opts), pellicola=r.pellicola,
+                                     senza_intersezioni=senza_intersezioni_scelto(r.opts))
         return costruisci
     # un vassoio coi suoi flowpack: due costruzioni e un GLB solo, vedi
     # `pack3d.riempimento`
@@ -743,6 +757,7 @@ def _costruisci_riempimento(r, info):
             per_fila=r.per_fila, dove_plancia=plancia_scelta(opts),
             gradi=inclina_scelta(opts), tegola=tegola_scelta(opts),
             carta=r.carta, apertura=r.apertura, gira=gira_scelta(opts),
+            senza_intersezioni=senza_intersezioni_scelto(opts),
             pellicola=r.pellicola)
     return costruisci
 

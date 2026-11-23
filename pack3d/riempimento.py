@@ -282,7 +282,7 @@ def corpo_aperto(V, tol=0.3):
 
 
 def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False,
-                   aperto=False):
+                   aperto=False, sotto_il_cielo=False):
     # del display conta la scatola: la plancia sta dietro, in alto, e non
     # contiene niente. Il fianco a soffietto si guarda dopo
     V = vertici(J, B, senza=("plancia", "soffietto"))
@@ -324,7 +324,7 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False,
     # (caso e88a907c54) lo strato in alto arrivava a 31,1 mm col cielo dentro
     # a 30,25, e lo passava di 0,85 ai lati della finestra.
     vano = Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
-                lo[1] + spessore, hi[1] - (spessore if aperto else 0.0))
+                lo[1] + spessore, hi[1] - (spessore if aperto and sotto_il_cielo else 0.0))
     # il fianco piegato a soffietto (`scatola_plancia._soffietto`) rientra:
     # il vano resta la scatola intera, perche' i pezzi stiano al centro con le
     # pinne di sempre, e del soffietto si tiene il profilo, dove le punte dei
@@ -1023,12 +1023,13 @@ def a_tegola(vano, p, poste, V_prodotto, gradi):
 # --------------------------------------------------------------------------- #
 # Il prodotto adattato al vano
 
-def adatta(P, N, p, d):
+def adatta(P, N, p, d, tetto=False):
     """Posizioni e normali del prodotto (mm, nel suo riferimento) con le
     pinne strette quanto il passo fra due pezzi lungo la loro larghezza, e le
     punte che uscirebbero dal posto del pezzo piegate contro la parete:
     sdraiati in su, frontali verso il dietro. Torna (P, N, quante pinne
-    piegate)."""
+    piegate). `tetto`: le pinne mai piu' larghe del passo, neanche
+    all'attacco col corpo (`senza_intersezioni`, scelta del pack)."""
     lungo, largo, spesso = p.assi
     P = P.copy()
     N = N.copy() if N is not None else None
@@ -1063,14 +1064,15 @@ def adatta(P, N, p, d):
         # corpo e la pinna, restavano larghe 70,7 sul passo da 69,75 e i due
         # vicini si compenetravano di un millimetro. Un tetto morbido: sotto
         # `h0` niente, sopra si avvicina a `h` senza toccarlo
-        h = (d.passo[d.asse(largo)] - GIOCO) / 2.0
-        h0 = h - 1.0
-        m = np.abs(x) > fine
-        r = P[m, largo] - c
-        a = np.abs(r)
-        oltre = a > h0
-        a[oltre] = h0 + (h - h0) * np.tanh((a[oltre] - h0) / (h - h0))
-        P[m, largo] = c + np.sign(r) * a
+        if tetto:
+            h = (d.passo[d.asse(largo)] - GIOCO) / 2.0
+            h0 = h - 1.0
+            m = np.abs(x) > fine
+            r = P[m, largo] - c
+            a = np.abs(r)
+            oltre = a > h0
+            a[oltre] = h0 + (h - h0) * np.tanh((a[oltre] - h0) / (h - h0))
+            P[m, largo] = c + np.sign(r) * a
     # 2. le punte che uscirebbero, piegate sullo spessore come il film vero
     meta = d.passo[d.asse(lungo)] / 2.0 - GIOCO
     piegate = 0
@@ -1229,7 +1231,7 @@ def contro_le_pareti(vano, p, d, poste, V_prodotto):
 
 def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
             dall_alto=False, gradi=0.0, plancia_sul_fondo=False, tegola=0.0,
-            aperto=False, gira=0.0):
+            aperto=False, gira=0.0, senza_intersezioni=False):
     """Il GLB del vassoio con `quanti` pezzi dentro (None: pieno, quanti ne
     stanno). Torna (byte, righe da mostrare). Se ne chiedi piu' di quanti ne
     stanno, mette quelli che ci stanno e lo dice; ValueError se non ce ne sta
@@ -1250,7 +1252,8 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
     if any(k in n for n in Jp.get("nodes", [])
            for k in ("matrix", "rotation", "translation", "scale")):
         raise ValueError("riempimento: il GLB del pack ha nodi trasformati")
-    vano = misura_vassoio(Jv, Bv, plancia_sul_fondo=plancia_sul_fondo, aperto=aperto)
+    vano = misura_vassoio(Jv, Bv, plancia_sul_fondo=plancia_sul_fondo, aperto=aperto,
+                          sotto_il_cielo=senza_intersezioni)
     vano.dall_alto = dall_alto
     p = misura_prodotto(Jp, Bp, rigido)
     chiesti = quanti
@@ -1285,7 +1288,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
             accorciato.append("%s, gonfio, e' largo %.1f mm e i %d pezzi chiesti non ci "
                               "stavano: stretto di lato fra i vicini a %.1f mm (%.1f%%)"
                               % (cosa, largo, quanti, p.largo, 100.0 * p.stringe))
-    if quanti is not None and d.capienza < quanti:
+    if senza_intersezioni and quanti is not None and d.capienza < quanti:
         q = stringe_e_schiaccia(vano, p, quanti, per_fila)
         if q is not None:
             largo, spesso = p.largo, p.spesso
@@ -1300,10 +1303,11 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
         quanti = massimo
     # il pezzo poggia col corpo: le pinne, piu' larghe, si stringono prima
     Vp = vertici(Jp, Bp)
-    p, righe = senza_compenetrare(vano, p, d, Vp)
-    accorciato += righe
+    if senza_intersezioni:
+        p, righe = senza_compenetrare(vano, p, d, Vp)
+        accorciato += righe
     if not rigido:
-        Vp, _, _ = adatta(Vp, None, p, d)
+        Vp, _, _ = adatta(Vp, None, p, d, senza_intersezioni)
     poste = pose(vano, p, d, quanti, Vp)
     if gira:
         # prima di inclinarli: girati sul proprio centro attorno alla
@@ -1407,7 +1411,7 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
                 if (i_me, i_pr) not in adattate:
                     P = _dati(Jp, Bp, a["POSITION"]).astype(float) * 1000.0
                     Nn = _dati(Jp, Bp, a["NORMAL"]).astype(float) if "NORMAL" in a else None
-                    P2, N2, piegate = adatta(P, Nn, p, d)
+                    P2, N2, piegate = adatta(P, Nn, p, d, senza_intersezioni)
                     scarto = max(scarto, fuori_dal_modello(P, P2, p))
                     adattate[(i_me, i_pr)] = (P2, N2)
                 P2, N2 = adattate[(i_me, i_pr)]

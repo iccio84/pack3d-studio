@@ -2031,6 +2031,12 @@ class SenzaCompenetrare(unittest.TestCase):
     largo o spesso del suo passo, si porta al passo meno `FRA_VICINI`
     (`R.senza_compenetrare`)."""
 
+    def test_la_scelta(self):
+        from pack3d.famiglie.registro import senza_intersezioni_scelto
+        self.assertTrue(senza_intersezioni_scelto({"senza_intersezioni": True}))
+        self.assertTrue(senza_intersezioni_scelto({"senza_intersezioni": "si"}))
+        self.assertFalse(senza_intersezioni_scelto({}))
+
     def _p(self, largo, spesso):
         from pack3d import riempimento as R
         return R.Prodotto(assi=(2, 0, 1), centro=np.zeros(3), lungo=100.0,
