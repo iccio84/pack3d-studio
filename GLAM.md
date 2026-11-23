@@ -746,13 +746,13 @@ Aggiungi una nuova finestra, "Crea materiali POP 3D da PDF", accanto a "Costruis
 Da incollare dopo i testi qui sopra. Non servono segreti nuovi.
 
 ```text
-Sulla scheda di un modello (l'anteprima con i tasti Elimina e Rinomina), aggiungi un tasto "Chiedi una modifica", per i modelli che arrivano da un caso corretto. Il contratto completo è in GLAM.md, sezione 11, del repository iccio84/pack3d-studio.
+Sulla scheda di un modello (l'anteprima con i tasti Elimina e Rinomina), aggiungi un tasto "Chiedi una modifica", per i modelli che arrivano da un caso corretto dalla routine o che il codice ha costruito e lo Space ha archiviato. Il contratto completo è in GLAM.md, sezione 11, del repository iccio84/pack3d-studio.
 
 1. Il tasto si vede solo se c'è una riga di pack3d_cases dell'utente collegato con model_id uguale all'id di quel modello (un caso corretto dalla routine, o un modello costruito dal codice e archiviato: punto 5). Mettilo accanto a Elimina e Rinomina, con lo stesso stile.
 
 2. Premuto, apre il dialog della sezione del modello ("Costruisci modello 3D da PDF" per i modelli in <user_id>/pdf/, "Crea materiali POP 3D da PDF" per quelli in <user_id>/pop/), con lo stesso iframe di sempre e due parametri in più nell'indirizzo: modifica=<codice del caso> e nome=<nome del modello> (encodeURIComponent). Per esempio .../api/public/pack3d?api=...&casi=1&modifica=b312f1e238&nome=ASTUCCIO. Il codice deve rispettare /^[0-9a-f]{10}$/. La pagina dello Space apre da sola il modulo della modifica: Glam non manda niente allo Space.
 
-3. Quando la modifica parte, l'iframe manda "pack3d:caso" (con esito "modifica") e poi "pack3d:chiudi" (titolo "Modifica inviata"): trattali come fai già. Con "pack3d:caso" il caso torna 'in-coda' (aggiorna la riga che c'è, senza toccare model_id); con "pack3d:chiudi" chiudi il dialog e mostri il toast. Il modello resta dov'è finché non arriva quello nuovo da /api/import-model, che lo sostituisce come già fa.
+3. Quando la modifica parte, l'iframe manda "pack3d:caso" (con esito "modifica") e poi "pack3d:chiudi" (titolo "Modifica inviata"): trattali come fai già. Con "pack3d:caso" il caso torna 'in-coda' (aggiorna la riga che c'è, senza toccare model_id); con "pack3d:chiudi" chiudi il dialog e mostri il toast. Il modello resta dov'è finché non arriva quello nuovo da /api/import-model, che lo sostituisce (punto 4).
 
 4. /api/import-model: quando arriva X-Pack3d-Codice e il caso di un utente ha un model_id, sostituisci quel modello - stesso percorso del file, stessa cartella, stesso nome - invece di cercare un modello con lo stesso nome nella cartella di X-Model-Category; senza model_id, come adesso. /api/import-texture e /api/import-template mettono texture e template su quello stesso modello.
 
