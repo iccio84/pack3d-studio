@@ -785,6 +785,19 @@ diventavano un'apertura. Sul T10: cerniera di 98 mm, finestra di tutto il
 fronte fra i due tagli; aperto di 120 gradi l'ingombro e' 141,5 x 147,9 x
 149,6 mm. Nessun altro caso del parco cambia lettura.
 
+**I rami che passano il lato si tagliano sul lato**
+(`incisioni._taglia_al_lato`, in `_chiusa_sul_lato`). Sull'astuccio di
+biscotti T25 (213,6 x 99,7 x 61,3 mm, caso 24f72422b1) il contorno e' verde
+da 0,82 e i due rami non si fermano prima della piega con la falda sotto il
+fronte: la passano e continuano per 11-13 mm sulla falda, fino alla tacca
+della linguetta. I capi liberi stavano a 13 mm dal lato, oltre `PONTE`, e
+l'astuccio «nessuno si legge come astuccio con l'apertura a strappo» non si
+apriva. La regola: prima di misurare i capi dal lato opposto alla piega, un
+ramo che passa la retta di quel lato si taglia dove la passa; la coda sulla
+falda e' la linguetta (`linguetta_oltre`). Un ramo che si ferma prima, come
+sul T10, resta intero: la lettura del T10 non cambia (cerniera di 98 mm).
+Sul T25: cerniera di 157 mm.
+
 **La linguetta oltre il lato si alza con la finestra**
 (`incisioni.linguetta_oltre`, `apertura._linguetta`). Sullo stesso T10,
 aperto, chi l'ha caricato: «manca il pezzo di sotto che e' il proseguimento
