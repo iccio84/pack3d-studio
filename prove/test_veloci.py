@@ -17,6 +17,7 @@ Le letture vere, sui PDF del parco, le dice in qualche minuto
 from __future__ import annotations
 
 import contextlib
+import datetime
 import io
 import json
 import os
@@ -3060,6 +3061,100 @@ class ModificaDopoLApprovazione(unittest.TestCase):
             self._giro(dict(self.ISSUE, labels=[{"name": "eliminato"}]), self.RISOLTO)
         with self.assertRaises(ValueError):
             self._giro(self.ISSUE, self.RISOLTO, testo="  ")
+
+
+
+class ArchivioDeiModelliOk(unittest.TestCase):
+    """Un modello ok salvato in Glam: i PDF nell'archivio (`coda._archivia`),
+    ritrovati per codice per 90 giorni (`coda.archiviato`); la modifica apre
+    il caso da li' (`coda.modifica`). Senza GitHub."""
+
+    def setUp(self):
+        from pack3d import coda
+        self.coda = coda
+        coda._dimentica(coda.ARCHIVIO)
+        self.addCleanup(coda._dimentica, coda.ARCHIVIO)
+
+    def test_archivia_mette_pdf_e_verdetto(self):
+        coda, messi = self.coda, []
+        with mock.patch.object(coda, "privato", return_value=True), \
+                mock.patch.object(coda, "_repo", return_value="o/r"), \
+                mock.patch.object(coda, "_metti_file",
+                                  side_effect=lambda r, p, m, d: messi.append((p, d)) or True), \
+                mock.patch.object(coda, "_sfoltisci_archivio"):
+            coda._archivia("b312f1e238", [b"%PDF-1"], ["Astuccio X.pdf"], {"esito": "ok"},
+                           {"nome_glam": "Astuccio X"})
+        oggi = datetime.date.today().isoformat()
+        cartella = "archivio/%s_b312f1e238" % oggi
+        self.assertEqual(messi[0][0], cartella + "/Astuccio_X.pdf")
+        self.assertEqual(messi[1][0], cartella + "/verdetto.json")
+        dati = json.loads(messi[1][1])
+        self.assertEqual((dati["file"], dati["archiviato"]), (["Astuccio_X.pdf"], oggi))
+
+    def _elenco(self, *date):
+        return [{"type": "dir", "name": "%s_b312f1e238" % d,
+                 "path": "archivio/%s_b312f1e238" % d} for d in date]
+
+    def test_archiviato_solo_per_90_giorni(self):
+        coda = self.coda
+        oggi = datetime.date.today()
+        vecchio = (oggi - datetime.timedelta(days=91)).isoformat()
+        recente = (oggi - datetime.timedelta(days=10)).isoformat()
+        with mock.patch.object(coda, "_repo", return_value="o/r"), \
+                mock.patch.object(coda, "_richiesta",
+                                  return_value=self._elenco(vecchio, recente)):
+            self.assertEqual(coda.archiviato("b312f1e238"),
+                             ("archivio/%s_b312f1e238" % recente, recente))
+        coda._dimentica(coda.ARCHIVIO)
+        with mock.patch.object(coda, "_repo", return_value="o/r"), \
+                mock.patch.object(coda, "_richiesta", return_value=self._elenco(vecchio)):
+            self.assertIsNone(coda.archiviato("b312f1e238"))
+
+    def test_stato_e_modifica_dall_archivio(self):
+        coda = self.coda
+        data = (datetime.date.today() - datetime.timedelta(days=3)).isoformat()
+        arch = ("archivio/%s_b312f1e238" % data, data)
+        issue = {"number": 9, "state": "open", "html_url": "u", "labels": [],
+                 "created_at": "2000-01-01T00:00:00Z",
+                 "body": "File: [`casi/x_b312f1e238`](x)"}
+        chiamate, scritto, caricato = [], {}, {}
+        verdetto = {"file": ["A.pdf"], "nomi": ["A.pdf"],
+                    "contesto": {"nome_glam": "A", "opzioni": {"kind": "carton"}}}
+        with mock.patch.object(coda, "pronta", return_value=True), \
+                mock.patch.object(coda, "in_attesa", return_value=False), \
+                mock.patch.object(coda, "_issue_del_caso", return_value=None), \
+                mock.patch.object(coda, "archiviato", return_value=arch):
+            s = coda.stato_caso("b312f1e238")
+        self.assertEqual((s["stato"], s.get("modello")), ("risolto", None))
+        self.assertTrue(s["archiviato"])
+        with mock.patch.object(coda, "pronta", return_value=True), \
+                mock.patch.object(coda, "_repo", return_value="o/r"), \
+                mock.patch.object(coda, "_conta"), \
+                mock.patch.object(coda, "_issue_del_caso", return_value=None), \
+                mock.patch.object(coda, "archiviato", return_value=arch), \
+                mock.patch.object(coda, "_leggi_json",
+                                  side_effect=lambda p: (verdetto, "s") if p.endswith(
+                                      "verdetto.json") else (None, None)), \
+                mock.patch.object(coda, "_grezzo", return_value=b"%PDF-1"), \
+                mock.patch.object(coda, "_carica_davvero",
+                                  side_effect=lambda *a, **k: caricato.update(a=a, k=k)), \
+                mock.patch.object(coda, "trova", return_value=(issue, "casi/x_b312f1e238")), \
+                mock.patch.object(coda, "_richiesta",
+                                  side_effect=lambda m, p, c=None, timeout=60:
+                                  chiamate.append((m, p, c)) or {}), \
+                mock.patch.object(coda, "_scrivi_json",
+                                  side_effect=lambda p, d, s_, m: scritto.update(d)), \
+                mock.patch.object(coda, "avvia_routine", return_value=True) as routine:
+            esito = coda.modifica("b312f1e238", "il fianco piu' basso")
+        self.assertTrue(esito["archivio"])
+        a, k = caricato["a"], caricato["k"]
+        self.assertEqual((a[1], a[2]), ([b"%PDF-1"], ["A.pdf"]))
+        self.assertTrue(a[3]["modifica"] and a[3]["archiviato"] == data)
+        self.assertIs(k.get("routine"), False)
+        commento = [c[2]["body"] for c in chiamate if c[1].endswith("/comments")][0]
+        self.assertTrue(commento.startswith("**Modifica chiesta**"))
+        self.assertEqual(scritto["storia"][-1]["stato"], "modifica")
+        routine.assert_called_once()
 
 
 if __name__ == "__main__":
