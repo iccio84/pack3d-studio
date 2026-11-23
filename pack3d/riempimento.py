@@ -56,6 +56,7 @@ GONFIA_TEGOLA = 0.30        # a tegola, un pezzo si gonfia nello spessore al mas
 TEGOLA_MIN = 5.0            # a tegola, l'inclinazione si sceglie fra questi gradi
 TEGOLA_MAX = 60.0
 STRINGE_MAX = 0.03          # e di lato al massimo cosi': stretta del 7% la grafica si vedeva schiacciata
+FRA_VICINI = 0.2            # mm d'aria fra due pezzi affiancati o impilati: si toccano, non si compenetrano
 
 
 # --------------------------------------------------------------------------- #
@@ -317,8 +318,13 @@ def misura_vassoio(J, B, spessore=SPESSORE_VASSOIO, plancia_sul_fondo=False,
                        if tuple(np.round(q, 4)) not in dentro])
         if len(pl) and pl[:, 2].max() < (lo[2] + hi[2]) / 2:
             z0 = max(z0, pl[:, 2].max() + GIOCO)
+    # Il tetto: in un vassoio aperto sopra non c'e' niente, e il vano arriva
+    # al bordo delle pareti. Nell'astuccio aperto il cielo resta, attorno al
+    # buco della finestra, e i pezzi stanno sotto di lui: nel T10 di biscotti
+    # (caso e88a907c54) lo strato in alto arrivava a 31,1 mm col cielo dentro
+    # a 30,25, e lo passava di 0,85 ai lati della finestra.
     vano = Vano(lo[0] + spessore, hi[0] - spessore, z0, hi[2] - spessore,
-                lo[1] + spessore, hi[1])
+                lo[1] + spessore, hi[1] - (spessore if aperto else 0.0))
     # il fianco piegato a soffietto (`scatola_plancia._soffietto`) rientra:
     # il vano resta la scatola intera, perche' i pezzi stiano al centro con le
     # pinne di sempre, e del soffietto si tiene il profilo, dove le punte dei
@@ -714,8 +720,31 @@ def schiaccia(vano, p, quanti, posa, per_fila=None):
         k -= 0.005
         q = replace(p, spesso=p.spesso * k, schiaccia=p.schiaccia * k)
         d = scegli(vano, q, quanti, per_fila)
-        if d is not None and d.posa == posa and d.capienza >= quanti:
+        if d is not None and (posa is None or d.posa == posa) and d.capienza >= quanti:
             return q, d
+    return None
+
+
+def stringe_e_schiaccia(vano, p, quanti, per_fila=None):
+    """Il flowpack STRETTO DI LATO e SCHIACCIATO nello spessore, quando
+    nessuna delle due basta da sola: `(prodotto, disposizione)`, o None.
+
+    L'astuccio di biscotti T10 aperto coi 10 T1 (caso e88a907c54): sotto il
+    cielo il vano e' alto 59,8 mm, e cinque strati da 12,4 non ci stanno;
+    due T1 larghi 72,4 nei 139,5 neppure. Ognuna delle due, da sola, ne
+    lasciava 4. Si stringe a passi di mezzo per cento, al massimo di
+    `STRINGE_MAX`, e a ogni passo si prova a schiacciare (`schiaccia`, in
+    qualunque posa), al massimo di `SCHIACCIA_MAX`. Un astuccio no."""
+    if p.rigido or quanti is None:
+        return None
+    k = 1.0
+    while k > 1.0 - STRINGE_MAX + 1e-9:
+        k -= 0.005
+        q = replace(p, largo=p.largo * k, largo_pinne=p.largo_pinne * k,
+                    stringe=p.stringe * k)
+        r = schiaccia(vano, q, quanti, None, per_fila)
+        if r is not None:
+            return r
     return None
 
 
@@ -1029,6 +1058,19 @@ def adatta(P, N, p, d):
         f = 1.0 - (1.0 - k) * sfuma
         c = p.centro[largo]
         P[:, largo] = c + (P[:, largo] - c) * f
+        # e nessun punto piu' largo del passo, neanche dove la sfumatura
+        # comincia: sul T10 di biscotti (caso e88a907c54) le spalle, fra il
+        # corpo e la pinna, restavano larghe 70,7 sul passo da 69,75 e i due
+        # vicini si compenetravano di un millimetro. Un tetto morbido: sotto
+        # `h0` niente, sopra si avvicina a `h` senza toccarlo
+        h = (d.passo[d.asse(largo)] - GIOCO) / 2.0
+        h0 = h - 1.0
+        m = np.abs(x) > fine
+        r = P[m, largo] - c
+        a = np.abs(r)
+        oltre = a > h0
+        a[oltre] = h0 + (h - h0) * np.tanh((a[oltre] - h0) / (h - h0))
+        P[m, largo] = c + np.sign(r) * a
     # 2. le punte che uscirebbero, piegate sullo spessore come il film vero
     meta = d.passo[d.asse(lungo)] / 2.0 - GIOCO
     piegate = 0
@@ -1107,6 +1149,50 @@ def fuori_dal_vano(vano, p, poste, V_prodotto):
                      vano.z0 - W[:, 2].min(), W[:, 2].max() - vano.z1,
                      vano.fondo - W[:, 1].min())
     return peggio
+
+
+def senza_compenetrare(vano, p, d, V=None):
+    """`(prodotto, righe)`: il pezzo schiacciato e stretto quanto basta perche'
+    nessun pezzo entri nel vicino ne' nelle pareti.
+
+    `_quanti_lungo` lascia stare due pezzi gonfi un poco piu' larghi o
+    spessi del loro passo (`COMPRIME`): il film si schiaccia fra i vicini.
+    Il modello pero' restava largo com'era, e due pezzi vicini si
+    compenetravano. L'astuccio di biscotti T10 aperto coi 10 T1 (caso
+    e88a907c54): due T1 larghi 70,9 mm sul passo da 69,75 entravano uno
+    nell'altro di 1,2 mm, e cinque strati spessi 12,4 nei 60,8 mm del vano
+    di 0,24 ogni strato; chi l'ha caricato: «ho visto intersezioni». Allora
+    nel largo e nello spessore il corpo del pezzo si porta al suo passo,
+    meno `FRA_VICINI`, a UV ferme come `stringe` e `schiaccia`: al massimo
+    `COMPRIME`, perche' oltre il passo non lo lascia. Per il lungo le pinne
+    hanno le loro regole (`adatta`). Un astuccio non si schiaccia."""
+    if p.rigido:
+        return p, []
+    righe = []
+    lungo, largo, spesso = p.assi
+    # la misura vera del corpo: `p.largo` e' a meta' corpo, e il T1 del T10
+    # e' piu' largo alle spalle (70,7 contro 69,6)
+    vero = p.largo
+    if V is not None and len(V):
+        corpo = np.abs(V[:, lungo] - p.centro[lungo]) <= p.corpo / 2.0
+        if corpo.any():
+            vero = max(vero, float(np.ptp(V[corpo, largo])) * p.stringe)
+    a = d.asse(largo)
+    posto = d.passo[a] - FRA_VICINI
+    if vero > d.passo[a] and posto > 0:
+        k = posto / vero
+        righe.append("largo %.1f mm sul passo da %.2f: stretto a %.1f perche' due "
+                     "vicini non si compenetrino" % (vero, d.passo[a], posto))
+        p = replace(p, largo=p.largo * k, largo_pinne=p.largo_pinne * k,
+                    stringe=p.stringe * k)
+    a = d.asse(spesso)
+    posto = d.passo[a] - FRA_VICINI
+    if d.n[a] > 1 and p.spesso > d.passo[a] and posto > 0:
+        k = posto / p.spesso
+        righe.append("spesso %.1f mm sul passo da %.2f: schiacciato a %.1f perche' "
+                     "due vicini non si compenetrino" % (p.spesso, d.passo[a], posto))
+        p = replace(p, spesso=p.spesso * k, schiaccia=p.schiaccia * k)
+    return p, righe
 
 
 def contro_le_pareti(vano, p, d, poste, V_prodotto):
@@ -1199,11 +1285,23 @@ def componi(glb_vassoio, glb_prodotto, quanti=None, rigido=False, per_fila=None,
             accorciato.append("%s, gonfio, e' largo %.1f mm e i %d pezzi chiesti non ci "
                               "stavano: stretto di lato fra i vicini a %.1f mm (%.1f%%)"
                               % (cosa, largo, quanti, p.largo, 100.0 * p.stringe))
+    if quanti is not None and d.capienza < quanti:
+        q = stringe_e_schiaccia(vano, p, quanti, per_fila)
+        if q is not None:
+            largo, spesso = p.largo, p.spesso
+            p, d = q
+            accorciato.append("%s, gonfio, e' largo %.1f e spesso %.1f mm e i %d pezzi "
+                              "chiesti non ci stavano: stretto di lato a %.1f (%.1f%%) e "
+                              "schiacciato fra i vicini a %.1f mm (%.0f%%)"
+                              % (cosa, largo, spesso, quanti, p.largo, 100.0 * p.stringe,
+                                 p.spesso, 100.0 * p.schiaccia))
     massimo = d.capienza
     if quanti is None or quanti > massimo:
         quanti = massimo
     # il pezzo poggia col corpo: le pinne, piu' larghe, si stringono prima
     Vp = vertici(Jp, Bp)
+    p, righe = senza_compenetrare(vano, p, d, Vp)
+    accorciato += righe
     if not rigido:
         Vp, _, _ = adatta(Vp, None, p, d)
     poste = pose(vano, p, d, quanti, Vp)
