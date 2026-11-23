@@ -169,7 +169,7 @@ def analyze_flowpack(pdf):
         try:
             if not riq or riq == box:
                 raise
-            fp = fpk.analyze_auto(pdf, bbox=riq)
+            fp = fpk.analyze_auto(pdf, bbox=riq, fustella=True)
         except Exception:
             fp = quote_dalla_copia(pdf)
             if fp is None:
@@ -849,7 +849,7 @@ def _griglia(G):
     return x0, y0, x1, y1, righe, colonne
 
 
-def dt_della_tavola(pdf, page_no=0, dpi=100):
+def dt_della_tavola(pdf, page_no=0, dpi=100, penne=None):
     """I DT della tavola, dal piu' grosso: `[{x_mm, y_mm, w_mm, h_mm, righe,
     colonne, colori}]`.
 
@@ -868,7 +868,13 @@ def dt_della_tavola(pdf, page_no=0, dpi=100):
         segs, pw, ph = segmenti(pdf, page_no)
     except Exception:
         return []
-    penne = dl._technical_pens(segs, pw, ph)
+    if penne is None:
+        penne = dl._technical_pens(segs, pw, ph)
+    else:
+        # le penne di un'altra strada (`flowpack.letture`, coi tratti
+        # riuniti): i loro pezzi riuniti, perche' facciano griglia
+        from .strade import unisci
+        segs = unisci(segs)
     gruppi = dl._gruppi([s for s in segs if s[4] in penne])
     if not gruppi:
         return []
@@ -917,7 +923,7 @@ def _scegli_dt(dts):
     return max(pari, key=lambda d: d["colori"])
 
 
-def dt_principale(pdf, page_no=0):
+def dt_principale(pdf, page_no=0, penne=None):
     """Il riquadro del DT con la grafica, `(x, y, w, h)` in mm, o None.
 
     La regola: fra i DT della tavola si prende QUELLO CON LA GRAFICA, che di
@@ -932,7 +938,7 @@ def dt_principale(pdf, page_no=0):
     la lunghezza totale maggiore, la scelta che `dieline` fa sugli astucci
     con `_largest_cluster`. None se il file non ha tratti tecnici.
     """
-    dts = dt_della_tavola(pdf, page_no)
+    dts = dt_della_tavola(pdf, page_no, penne=penne)
     if dts:
         d = _scegli_dt(dts)
         return (d["x_mm"], d["y_mm"], d["w_mm"], d["h_mm"])
@@ -941,7 +947,11 @@ def dt_principale(pdf, page_no=0):
         segs, pw, ph = segmenti(pdf, page_no)
     except Exception:
         return None
-    penne = dl._technical_pens(segs, pw, ph)
+    if penne is None:
+        penne = dl._technical_pens(segs, pw, ph)
+    else:
+        from .strade import unisci
+        segs = unisci(segs)
     S = dl._largest_cluster([s for s in segs if s[4] in penne])
     if not S:
         return None

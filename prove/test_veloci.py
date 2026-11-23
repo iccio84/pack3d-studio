@@ -19,6 +19,7 @@ from __future__ import annotations
 import contextlib
 import io
 import json
+import math
 import os
 import shutil
 import sys
@@ -3060,6 +3061,95 @@ class ModificaDopoLApprovazione(unittest.TestCase):
             self._giro(dict(self.ISSUE, labels=[{"name": "eliminato"}]), self.RISOLTO)
         with self.assertRaises(ValueError):
             self._giro(self.ISSUE, self.RISOLTO, testo="  ")
+
+
+class LettureDelFlowpack(unittest.TestCase):
+    """`flowpack.letture`: le strade dei tratti, il costo, la scelta."""
+
+    def setUp(self):
+        self.cartella = tempfile.mkdtemp()
+        self.addCleanup(lambda: shutil.rmtree(self.cartella, True))
+        self._cache = mock.patch.object(dl, "CACHE", os.path.join(self.cartella, "cache"))
+        self._cache.start()
+        self.addCleanup(self._cache.stop)
+        dl._TRATTI.clear()
+
+    def _steso(self, pezzo=None):
+        """Lo steso di un flowpack a pinna: nastro 138 = 14 | 20 | 15 | 40 |
+        15 | 20 | 14, passo 150 con le saldature a 8 mm dai capi; intero, o
+        coi tratti in pezzi di `pezzo` mm, come la variante `spezzati`."""
+        from pack3d import flowpack as fpk
+        mm = 1.0 / fpk.PT2MM
+        x0, y0, web, passo = 60.0, 60.0, 138.0, 150.0
+        linee = ([(x0, y0 + p * mm, x0 + passo * mm, y0 + p * mm)
+                  for p in (0, 14, 34, 49, 89, 104, 124, 138)]
+                 + [(x0 + s * mm, y0, x0 + s * mm, y0 + web * mm)
+                    for s in (0, 8, 142, 150)])
+        if pezzo:
+            fuori = []
+            for a, b, c, d in linee:
+                n = max(1, int(round(math.hypot(c - a, d - b) / (pezzo * mm))))
+                fuori += [(a + (c - a) * k / n, b + (d - b) * k / n,
+                           a + (c - a) * (k + 1) / n, b + (d - b) * (k + 1) / n)
+                          for k in range(n)]
+            linee = fuori
+        f = _pdf(self.cartella, linee)
+        box = (x0 - 5, 600 - (y0 + web * mm) - 5, x0 + passo * mm + 5, 600 - y0 + 5)
+        return f, box
+
+    def test_il_dt_a_pezzi_si_legge_coi_tratti_riuniti(self):
+        from pack3d import flowpack as fpk
+        f, box = self._steso()
+        intero = fpk.analyze_auto(f, bbox=box)
+        self.assertEqual(intero.strada, "colore")
+        dl._TRATTI.clear()
+        f, box = self._steso(pezzo=3.0)
+        pezzi = fpk.analyze_auto(f, bbox=box)
+        self.assertEqual(pezzi.strada, "uniti")
+        for k in ("web_mm", "step_mm", "W", "T", "end_fin", "side_fin", "ruotato"):
+            self.assertEqual(getattr(pezzi, k), getattr(intero, k), k)
+        self.assertTrue(pezzi.warnings[0].startswith("fustella letta coi tratti riuniti"))
+
+    def _lettura(self, costo, W=40.0, ordine=0, segni=()):
+        from pack3d import flowpack as fpk
+        fp = fpk.Flowpack(W=W, T=15.0, L=134.0, end_fin=8.0, side_fin=14.0,
+                          web_mm=138.0, step_mm=150.0)
+        return fpk.Lettura(fp=fp, ordine=ordine, costo=costo, segni=list(segni))
+
+    def test_la_prima_vince_a_meno_della_precedenza(self):
+        from pack3d import flowpack as fpk
+        prima = self._lettura(1.0, segni=["testate non speculari"])
+        altra = self._lettura(0.8, W=50.0, ordine=1)
+        scelta, dubbio = fpk.scegli([prima, altra])
+        self.assertIs(scelta, prima)
+        # e la' vicino, con un flowpack diverso: un dubbio dichiarato
+        self.assertTrue(dubbio.startswith("DUBBIO DI LETTURA"))
+        lontana = self._lettura(0.5, W=50.0, ordine=1)
+        scelta, dubbio = fpk.scegli([prima, lontana])
+        self.assertIs(scelta, lontana)
+        self.assertIsNone(dubbio)
+
+    def test_lo_stesso_flowpack_non_e_un_dubbio(self):
+        from pack3d import flowpack as fpk
+        prima = self._lettura(0.0)
+        uguale = self._lettura(0.1, ordine=1)
+        self.assertEqual(fpk.scegli([prima, uguale]), (prima, None))
+
+    def test_i_segni_del_solutore(self):
+        from pack3d import flowpack as fpk
+        l = self._lettura(0.0)
+        self.assertEqual(fpk.segni(l), (0.0, []))
+        l.fp.warnings = ["rientri diversi (10.0 e 34.0 mm) su un disegno speculare",
+                         "steso per coerenza, 7° riquadro: 184.0 x 102.0 mm (2 punti "
+                         "meno del primo)"]
+        costo, visti = fpk.segni(l)
+        self.assertAlmostEqual(costo, 1.5)
+        self.assertEqual(visti, ["testate non speculari", "2 punti di coerenza meno"])
+        # una quota scritta che torna col passo fa guadagnare
+        self.assertAlmostEqual(fpk.segni(l, conferme=[150.0])[0], 1.0)
+        # una falda che non e' una falda
+        l.fp.warnings, l.fp.side_fin = [], 2.1
+        self.assertEqual(fpk.segni(l)[1], ["falda di 2.1 mm"])
 
 
 if __name__ == "__main__":
