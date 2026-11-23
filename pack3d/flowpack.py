@@ -1429,6 +1429,13 @@ COSTO_PUNTO = 0.25
 # sbagliata*).
 FALDA_MIN = 3.0
 FALDA_MAX = 24.0
+# Le pinne di testa del parco vanno da 6 a 37,5 mm: sotto tanto non sono
+# saldature, e' una miniatura o una copia in scala.
+PINNA_MIN = 4.0
+# Uno steso che ha meno di questa frazione dell'area del piu' grande fra le
+# letture e' una miniatura o un pezzo del disegno (il T2 di cialde a pezzi:
+# 28 x 18 mm contro 148 x 108).
+AREA_MIN = 0.25
 # I segni nelle righe del solutore, e quanto costano.
 SEGNI = (("rientri diversi", 1.0, "testate non speculari"),
          ("testata letta da un lato solo", 0.5, "testata da un lato solo"),
@@ -1499,6 +1506,9 @@ def segni(l, conferme=()):
     if not fp.tubo_piatto and not (FALDA_MIN <= fp.side_fin <= FALDA_MAX):
         costo += 1.0
         visti.append("falda di %.1f mm" % fp.side_fin)
+    if fp.end_fin < PINNA_MIN:
+        costo += 1.0
+        visti.append("pinne di testa di %.1f mm" % fp.end_fin)
     m = re.search(r"\((\d+) punti meno del primo\)", righe)
     if m and int(m.group(1)):
         costo += COSTO_PUNTO * int(m.group(1))
@@ -1769,6 +1779,13 @@ def _letture(pdf_path, page_no, bbox, tutte, strade, fustella):
             errore = errore or e
     if not trovate and errore is not None:
         raise errore
+    # uno steso molto piu' piccolo delle altre letture: una miniatura
+    if len(trovate) > 1:
+        grande = max(l.fp.web_mm * l.fp.step_mm for l in trovate)
+        for l in trovate:
+            if l.fp.web_mm * l.fp.step_mm < AREA_MIN * grande:
+                l.costo = round(l.costo + 1.0, 3)
+                l.segni.append("steso piccolo rispetto alle altre letture")
     return trovate, (primo[0] if primo else None)
 
 

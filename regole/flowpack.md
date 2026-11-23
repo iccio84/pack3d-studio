@@ -1089,7 +1089,10 @@ Adesso (`flowpack.letture`, `flowpack.scegli`):
 - **Il costo** (`segni`), dai segni che il codice vede da solo: testate non
   speculari (1), testata letta da un lato solo, testate stimate dallo
   stampato, capi dello steso dubbi (0,5 ciascuno), una falda a pinna fuori
-  da 3-24 mm (1), i punti di coerenza che il riquadro ha meno del primo del
+  da 3-24 mm (1), pinne di testa sotto i 4 mm (1: nel parco vanno da 6 a
+  37,5), uno steso con meno di un quarto dell'area della lettura piu' grande
+  (1: una miniatura - il T2 di cialde a pezzi si leggeva per colore su una
+  copia di 28 x 18 mm), i punti di coerenza che il riquadro ha meno del primo del
   giudice (0,25 l'uno), la strada riunita (0,1), la sovrapposizione e il tubo
   piatto dopo la pinna (0,3 e 0,5: l'ordine di sempre, non un segno). Ogni
   numero scritto come testo che torna col passo o col nastro fa guadagnare
