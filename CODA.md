@@ -351,6 +351,29 @@ approvato**» o «**Modello NON approvato**» - e in `stato.json`, e toglie
 
 Un caso `da-approvare` o `da-rilasciare` non e' libero: i giri lo saltano.
 
+## Una modifica dopo l'approvazione
+
+Il proprietario, il 23 novembre 2026: «una volta approvato un modello in
+Glam, si possa modificare e rimandare all'agente». Chi l'ha caricato, dalla
+finestra dei casi della pagina - o dal tasto «Chiedi una modifica»
+sull'anteprima del modello in Glam, che la apre - manda cosa va cambiato e
+come deve venire, con le foto (GLAM.md, sezione 11). Lo Space riapre la
+issue se il rilascio l'aveva chiusa, toglie `da-rilasciare`, scrive un
+commento che comincia con «**Modifica chiesta**» e la voce `modifica` in
+`stato.json`, e rilancia la routine: il caso e' di nuovo libero.
+
+- E' come un **Non approvo** su un modello che era giusto: si riparte dal
+  punto 3 del giro, con `prepara`, e la modifica e' fra le voci. Dice come
+  deve venire: diventa il `come_deve_venire` del caso nel parco, e la
+  correzione si fa come le altre - una regola generale o una scelta del pack
+  nelle opzioni del caso, mai un ritocco a mano del GLB. Se la modifica non
+  dice abbastanza, prima si chiede (*Dopo un Non approvo, prima si chiede*).
+- Il modello approvato resta in Glam fino al nuovo: `consegna` lo mette
+  `da-approvare`, chi l'ha caricato lo approva, e in Glam prende il posto di
+  quello vecchio (stesso nome, stessa cartella).
+- Le misure approvate del caso nel parco cambiano con la nuova `consegna`:
+  e' chi l'ha caricato a volerle diverse.
+
 ## Dopo un Non approvo, prima si chiede
 
 Un «Non approvo» dice che il modello e' sbagliato, non sempre come va

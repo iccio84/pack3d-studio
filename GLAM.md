@@ -469,6 +469,71 @@ caso nuovo («questo materiale»), e la sezione dove arriverà il modello. I
 casi e le notifiche che la pagina tiene nel browser stanno a parte da quelli
 dei pack.
 
+## 11. Modificare un modello già approvato
+
+Il proprietario, il 23 novembre 2026: «una volta approvato un modello in
+Glam, si possa modificare e rimandare all'agente». Approvato, il modello va
+in Glam (sezione 3) e il caso è risolto; da lì chi l'ha caricato può
+chiederne una modifica, che rimanda il caso alla routine.
+
+**Dalla finestra dei casi della pagina.** Un caso risolto resta nella
+finestra «Casi» per 30 giorni, con l'etichetta **Risolto** e tre tasti:
+**Guarda il modello** (il modello approvato nel visore, da `/api/modello`),
+**Chiedi una modifica** e **Togli dalla lista** (solo dal browser: il
+modello resta in Glam). «Chiedi una modifica» apre il modulo: cosa va
+modificato e come deve venire, obbligatorio, e fino a sei foto. L'invio va
+allo Space:
+
+```
+POST /api/modifica
+Content-Type: application/json
+
+{ "codice": "b312f1e238",
+  "testo": "La finestra deve essere più alta, fino al bordo del logo",
+  "foto": ["data:image/jpeg;base64,…"] }
+```
+
+| risposta dello Space | |
+|---|---|
+| `200 {"ok": true, "issue": 3, "riaperta": true, "rilanciata": true}` | arrivata: il caso è ripartito |
+| `400` | manca il testo, o una foto non va |
+| `404` | il caso non si trova più (eliminato, o chiuso da troppo): si ricarica il PDF |
+| `409` | il caso non è risolto: si segue la finestra dei casi |
+| `429` | troppe voci su questo caso |
+| `502` / `503` | il repository dei casi non risponde, o la coda non è configurata |
+
+Lo Space riapre la issue se il rilascio l'aveva già chiusa, toglie
+`da-rilasciare`, scrive il commento «**Modifica chiesta**» e la voce
+`modifica` in `stato.json`, e rilancia la routine (CODA.md, *Una modifica
+dopo l'approvazione*). Poi la pagina manda a Glam, in fila:
+
+```js
+{ type: "pack3d:caso", codice, nome, cartella: "Casi risolti", sezione: "pack",
+  esito: "modifica", stima: "Di solito arriva entro un’ora." }
+{ type: "pack3d:chiudi", codice, titolo: "Modifica inviata",
+  testo: "«NOME»: il caso è ripartito. Il modello di adesso resta in «Costruisci modello 3D da PDF» finché non approvi quello nuovo, nella finestra dei casi. Di solito arriva entro un’ora." }
+```
+
+Con `pack3d:caso` Glam rimette il caso in coda, come per un caso nuovo; con
+`pack3d:chiudi` chiude la finestra col toast (sezione 1). Il modello di
+adesso resta dov'è: quello nuovo, quando chi l'ha caricato lo approva, prende
+il suo posto (stesso nome, stessa cartella: sezione 3).
+
+**Dall'anteprima del modello in Glam.** Sulla scheda di un modello nella
+cartella «Casi risolti», accanto a **Elimina** e **Rinomina**, Glam mostra
+**Chiedi una modifica** quando il modello viene da un caso: c'è una riga di
+`pack3d_cases` di quell'utente con quel `model_id`. Il tasto apre la finestra
+della sua sezione («Costruisci modello 3D da PDF», o quella dei materiali POP
+con `pop=1`) con due parametri in più nell'indirizzo dell'iframe:
+
+    .../api/public/pack3d?api=...&casi=1&modifica=b312f1e238&nome=NOME_DEL_MODELLO
+
+La pagina mette il caso nella sua finestra dei casi (se non c'era), la apre
+e, quando lo Space dice che il caso è risolto, apre il modulo della modifica
+già pronto da scrivere. Se il caso non è risolto lo dice, e mostra il caso
+com'è; se non si trova più dice di ricaricare il PDF. `nome` è facoltativo:
+serve solo finché lo Space non ha detto il nome del caso.
+
 ## Il testo per Lovable
 
 Da incollare in Lovable così com'è. Dei due segreti, `PACK3D_IMPORT_TOKEN`
@@ -636,4 +701,20 @@ Aggiungi una nuova finestra, "Crea materiali POP 3D da PDF", accanto a "Costruis
 4. /api/import-model, /api/import-texture e /api/import-template accettano l'intestazione facoltativa X-Model-Section: se vale "pop", il modello si salva nella sezione "Crea materiali POP 3D da PDF" (<user_id>/pop/), e texture e template cercano il modello in quella sezione. Senza intestazione, o con un altro valore, tutto come adesso.
 
 5. Tutto il resto resta com'è: la finestra "Costruisci modello 3D da PDF", i suoi casi, le notifiche, la busta, il modulo di risposta e i token.
+```
+
+### Il testo per Lovable: chiedere una modifica dall'anteprima
+
+Da incollare dopo i testi qui sopra. Non servono segreti nuovi.
+
+```text
+Sulla scheda di un modello (l'anteprima con i tasti Elimina e Rinomina), aggiungi un tasto "Chiedi una modifica", per i modelli che arrivano da un caso corretto. Il contratto completo è in GLAM.md, sezione 11, del repository iccio84/pack3d-studio.
+
+1. Il tasto si vede solo se c'è una riga di pack3d_cases dell'utente collegato con model_id uguale all'id di quel modello. Mettilo accanto a Elimina e Rinomina, con lo stesso stile.
+
+2. Premuto, apre il dialog della sezione del modello ("Costruisci modello 3D da PDF" per i modelli in <user_id>/pdf/, "Crea materiali POP 3D da PDF" per quelli in <user_id>/pop/), con lo stesso iframe di sempre e due parametri in più nell'indirizzo: modifica=<codice del caso> e nome=<nome del modello> (encodeURIComponent). Per esempio .../api/public/pack3d?api=...&casi=1&modifica=b312f1e238&nome=ASTUCCIO. Il codice deve rispettare /^[0-9a-f]{10}$/. La pagina dello Space apre da sola il modulo della modifica: Glam non manda niente allo Space.
+
+3. Quando la modifica parte, l'iframe manda "pack3d:caso" (con esito "modifica") e poi "pack3d:chiudi" (titolo "Modifica inviata"): trattali come fai già. Con "pack3d:caso" il caso torna 'in-coda' (aggiorna la riga che c'è, senza toccare model_id); con "pack3d:chiudi" chiudi il dialog e mostri il toast. Il modello resta dov'è finché non arriva quello nuovo da /api/import-model, che lo sostituisce come già fa.
+
+4. Tutto il resto resta com'è: Elimina, Rinomina, i casi, le notifiche, la busta e i token.
 ```

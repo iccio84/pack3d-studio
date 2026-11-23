@@ -129,6 +129,11 @@
   .chip.da-approvare{color:var(--surface);background:var(--primary)}
   #casi-lista > li.da-approvare{background:color-mix(in oklab,var(--primary) 9%,var(--surface));
                                 border:1px solid color-mix(in oklab,var(--primary) 40%,transparent)}
+  /* un caso risolto resta qui RISOLTO_GIORNI giorni: se ne puo' chiedere una modifica */
+  .chip.risolto{color:var(--muted-foreground);background:var(--secondary)}
+  .caso-piede{display:flex;justify-content:flex-end}
+  .caso-piede button{font-size:11px;padding:4px 8px;background:transparent;border-color:transparent;
+                     color:var(--muted-foreground);box-shadow:none;text-decoration:underline}
   /* le foto scelte, prima di mandarle: anteprime con la crocetta per toglierle */
   .anteprime{display:flex;flex-wrap:wrap;gap:6px}
   .anteprime:empty{display:none}
@@ -2048,7 +2053,7 @@ const notificheBtn = document.getElementById('notifiche-btn');
 
 const ETICHETTA = {'in-coda': 'In coda', 'in-lavorazione': 'In lavorazione',
                    'domanda': 'Serve una tua risposta', 'non-risolto': 'Non risolto per ora',
-                   'da-approvare': 'Da approvare', 'approvato': 'Approvato'};
+                   'da-approvare': 'Da approvare', 'approvato': 'Approvato', 'risolto': 'Risolto'};
 // gli stati che aspettano chi ha mandato il caso
 const TOCCA_A_TE = s => s === 'domanda' || s === 'da-approvare';
 
@@ -2239,6 +2244,7 @@ function disegnaCaso(c){
   if (c.stato === 'domanda' && c.domanda) li.append(moduloRisposta(c));
   if (c.stato === 'da-approvare') li.append(moduloApprova(c));
   if (c.stato === 'approvato') li.append(tastoGuarda(c));
+  if (c.stato === 'risolto') li.append(moduloModifica(c), tastoTogli(c));
   if (puoEliminare(c)) li.append(tastoElimina(c));
   return li;
 }
@@ -2322,7 +2328,9 @@ function tastoGuarda(c){
       setFase('pronto');
       setTitolo(c.nome);
       setMeta([]);
-      setStatus('Il modello corretto di \u00ab' + c.nome + '\u00bb: approvalo, o dicci cosa non va, dalla finestra dei casi', '');
+      setStatus(c.stato === 'risolto'
+        ? 'Il modello approvato di \u00ab' + c.nome + '\u00bb: se va cambiato, chiedi una modifica dalla finestra dei casi'
+        : 'Il modello corretto di \u00ab' + c.nome + '\u00bb: approvalo, o dicci cosa non va, dalla finestra dei casi', '');
     }catch(err){
       setStatus('Il modello non si carica: ' + testoErrore(err), 'err');
     }finally{
@@ -2433,6 +2441,134 @@ function moduloApprova(c){
   return box;
 }
 
+/* ----------- la modifica di un modello gia' approvato --------------- */
+// Il proprietario, il 23 novembre 2026: «una volta approvato un modello in
+// Glam, si possa modificare e rimandare all'agente». Approvato, il modello va
+// in Glam e il caso e' risolto; qui resta RISOLTO_GIORNI giorni con «Chiedi
+// una modifica»: cosa cambiare e come deve venire, con le foto, a
+// /api/modifica. Lo Space riapre il caso e rilancia la routine; il modello in
+// Glam resta finche' il nuovo, approvato, non prende il suo posto. Glam ci
+// arriva anche dall'anteprima del modello, col tasto accanto a Elimina e
+// Rinomina: apre questa pagina con modifica=<codice> (GLAM.md, sezione 11).
+const RISOLTO_GIORNI = 30;
+const modificaDaLink = (new URLSearchParams(location.search).get('modifica') || '').trim().toLowerCase();
+// il caso del link, finche' il suo modulo non si e' aperto
+let modificaDaAprire = CODICE_CASO.test(modificaDaLink) ? modificaDaLink : '';
+
+/** La modifica chiesta e' partita: come dopo l'invio di un caso, dentro Glam
+ *  la finestra si chiude con un messaggio. Prima Glam riprende il caso fra
+ *  quelli in coda (pack3d:caso), che per lui era risolto. */
+function modificaInviata(c){
+  aGlam({type: 'pack3d:caso', codice: c.codice, nome: c.nome, cartella: GLAM_CARTELLA,
+         sezione: POP ? 'pop' : 'pack', esito: 'modifica', stima: STIMA});
+  aGlam({type: 'pack3d:chiudi', codice: c.codice, titolo: 'Modifica inviata',
+         testo: '«' + c.nome + '»: il caso è ripartito. Il modello di adesso resta in «'
+           + GLAM_SEZIONE + '» finché non approvi quello nuovo, nella finestra dei casi. ' + STIMA});
+}
+
+/** Un caso risolto: il modello e' in Glam. Lo si riguarda, e se va cambiato
+ *  si chiede una modifica, con cosa cambiare (obbligatorio) e le foto. */
+function moduloModifica(c){
+  const box = document.createElement('div');
+  box.className = 'risposta';
+  const q = document.createElement('div');
+  q.className = 'q';
+  q.textContent = 'Va cambiato qualcosa?';
+  const az = document.createElement('div');
+  az.className = 'azioni';
+  const chiedi = document.createElement('button');
+  chiedi.type = 'button';
+  chiedi.textContent = 'Chiedi una modifica';
+  chiedi.setAttribute('aria-expanded', 'false');
+  az.append(tastoGuarda(c), chiedi);
+  const modulo = document.createElement('div');
+  modulo.className = 'risposta';
+  modulo.hidden = true;
+  const ta = document.createElement('textarea');
+  ta.maxLength = 2000;
+  ta.rows = 6;
+  ta.placeholder = 'Cosa va modificato e come deve venire? Per esempio: la finestra deve essere più alta, fino al bordo del logo';
+  ta.setAttribute('aria-label', 'Cosa va modificato e come deve venire');
+  const sf = selettoreFoto('modifica-' + c.codice, 'Aggiungi foto');
+  const az2 = document.createElement('div');
+  az2.className = 'azioni';
+  const invia = document.createElement('button');
+  invia.type = 'button';
+  invia.className = 'primary';
+  invia.textContent = 'Invia la modifica';
+  az2.append(...sf.tasto, invia);
+  modulo.append(ta, sf.griglia, az2);
+  const es = document.createElement('div');
+  es.className = 'esito';
+  es.setAttribute('role', 'status');
+  function apri(si){
+    modulo.hidden = !si;
+    chiedi.setAttribute('aria-expanded', String(si));
+    if (si) ta.focus();
+  }
+  chiedi.onclick = () => apri(modulo.hidden);
+  invia.onclick = async () => {
+    const testo = ta.value.trim();
+    if (!testo){
+      es.textContent = 'Scrivi cosa va modificato e come deve venire.';
+      es.className = 'esito err';
+      ta.focus();
+      return;
+    }
+    chiedi.disabled = invia.disabled = true;
+    es.textContent = 'Invio della modifica…';
+    es.className = 'esito';
+    try{
+      const foto = await sf.foto();
+      const r = await fetch(url('/api/modifica'), {method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({codice: c.codice, testo, foto})});
+      if (!r.ok) throw await erroreDa(r);
+      sf.svuota();
+      c.stato = 'in-coda';
+      c.messaggio = 'Hai chiesto una modifica: il caso è ripartito.';
+      c.chiave = c.stato;
+      tolti.delete(c.codice);
+      notifica('«' + c.nome + '»: modifica inviata, il caso è ripartito.', c.codice);
+      salvaCasi();
+      disegnaCasi();
+      modificaInviata(c);
+    }catch(err){
+      chiedi.disabled = invia.disabled = false;
+      es.textContent = 'Non inviata: ' + testoErrore(err);
+      es.className = 'esito err';
+    }
+  };
+  box.append(q, az, modulo, es);
+  // dal tasto di Glam (modifica=<codice>): il modulo gia' aperto
+  if (modificaDaAprire === c.codice){
+    modificaDaAprire = '';
+    modulo.hidden = false;
+    chiedi.setAttribute('aria-expanded', 'true');
+    setTimeout(() => { (box.closest('li') || box).scrollIntoView({block: 'start'}); ta.focus({preventScroll: true}); }, 0);
+  }
+  return box;
+}
+
+/** "Togli dalla lista": un caso risolto che non serve piu' vedere qui. Non
+ *  tocca niente fuori dal browser: il modello resta in Glam. */
+function tastoTogli(c){
+  const piede = document.createElement('div');
+  piede.className = 'caso-piede';
+  const bt = document.createElement('button');
+  bt.type = 'button';
+  bt.textContent = 'Togli dalla lista';
+  bt.title = 'Il modello resta in Glam Lab';
+  bt.onclick = () => {
+    tolti.add(c.codice);
+    casi = casi.filter(k => k.codice !== c.codice);
+    salvaCasi();
+    disegnaCasi();
+  };
+  piede.append(bt);
+  return piede;
+}
+
 /** La risposta a una domanda della routine: una scelta, parole sue, una foto.
  *  Va sulla issue del caso come la nota (/api/nota) e rilancia la routine. */
 function moduloRisposta(c){
@@ -2539,7 +2675,9 @@ const NOVITA = {
   'domanda': c => 'c’è una domanda per te: rispondi dalla finestra dei casi.',
   'da-approvare': c => 'il modello corretto è pronto: guardalo e approvalo dalla finestra dei casi.',
   'non-risolto': c => 'per ora non si risolve.' + (c.messaggio ? ' ' + c.messaggio : ''),
-  'in-coda': c => c.messaggio || 'è di nuovo in coda.'};
+  'in-coda': c => c.messaggio || 'è di nuovo in coda.',
+  'risolto': c => 'risolto! Trovi il modello corretto in Glam Lab, cartella «' + GLAM_CARTELLA
+                  + '». Se va cambiato, chiedi una modifica dalla finestra dei casi.'};
 
 let casiInVolo = false;
 
@@ -2565,19 +2703,28 @@ async function aggiornaCasi(){
       if (!s){ restano.push(c); continue; }
       if (s.nome && /^Caso [0-9a-f]{10}$/.test(c.nome)){ c.nome = s.nome; cambiato = true; }
       if (s.stato === 'assente' || s.stato === 'in-attesa'){
-        if (Date.now() - new Date(c.inviato).getTime() < GRAZIA_MS){ restano.push(c); continue; }
+        if (c.codice !== modificaDaAprire
+            && Date.now() - new Date(c.inviato).getTime() < GRAZIA_MS){ restano.push(c); continue; }
         allineaGlam(c);
         cambiato = true;
         continue;
       }
-      if (s.stato === 'risolto' || s.stato === 'chiuso' || s.stato === 'eliminato'){
-        if (!c.quieto) notifica('«' + c.nome + '»: ' + (s.stato === 'risolto'
-          ? 'risolto! Trovi il modello corretto in Glam Lab, cartella «' + GLAM_CARTELLA + '».'
-          : s.stato === 'eliminato' ? 'il caso è stato eliminato.'
-          : 'il caso è chiuso.') + (s.messaggio ? ' ' + s.messaggio : ''), c.codice);
-        if (s.stato !== 'risolto') allineaGlam(c); else tolti.add(c.codice);
+      if (s.stato === 'chiuso' || s.stato === 'eliminato'){
+        if (!c.quieto) notifica('«' + c.nome + '»: ' + (s.stato === 'eliminato'
+          ? 'il caso è stato eliminato.' : 'il caso è chiuso.')
+          + (s.messaggio ? ' ' + s.messaggio : ''), c.codice);
+        allineaGlam(c);
         cambiato = true;
         continue;
+      }
+      if (s.stato === 'risolto'){
+        // resta nella lista RISOLTO_GIORNI giorni, per chiederne una modifica
+        tolti.add(c.codice);
+        const da = new Date(s.quando || '').getTime();
+        if (!isNaN(da) && Date.now() - da > RISOLTO_GIORNI * 864e5 && c.codice !== modificaDaAprire){
+          cambiato = true;
+          continue;
+        }
       }
       const chiave = [s.stato, s.quando || '', s.domanda || ''].join('|');
       if (chiave !== c.chiave){
@@ -2596,6 +2743,15 @@ async function aggiornaCasi(){
     }
     casi = restano;
     if (cambiato){ salvaCasi(); disegnaCasi(); }
+    // il caso del tasto di Glam (modifica=) che non e' risolto, o non c'e' piu'
+    if (modificaDaAprire){
+      const c = casi.find(k => k.codice === modificaDaAprire);
+      if (!c || c.chiave){
+        modificaDaAprire = '';
+        setStatus(!c ? 'Il caso di questo modello non si trova pi\u00f9: ricarica il PDF e, a modello costruito, usa \u00abChiedi una modifica\u00bb'
+          : '\u00ab' + c.nome + '\u00bb non \u00e8 risolto: segui quello che dice la finestra dei casi', 'err');
+      }
+    }
   }catch(e){ /* riprova al giro dopo */ }
   finally{ casiInVolo = false; }
 }
@@ -2607,6 +2763,19 @@ if (CODICE_CASO.test(casoDaLink) && !casi.some(c => c.codice === casoDaLink)){
   casi.unshift({codice: casoDaLink, nome: 'Caso ' + casoDaLink,
                 inviato: new Date().toISOString(), stato: 'in-coda', messaggio: ''});
   salvaCasi();
+}
+// Dal tasto «Chiedi una modifica» dell'anteprima in Glam, con modifica=: il
+// caso entra nella lista (se non c'era) e, quando lo Space dice che e'
+// risolto, il suo modulo si apre. Il nome lo puo' dire Glam (nome=).
+if (modificaDaAprire){
+  let c = casi.find(k => k.codice === modificaDaAprire);
+  if (!c){
+    const nome = (new URLSearchParams(location.search).get('nome') || '').trim().slice(0, 120);
+    c = {codice: modificaDaAprire, nome: nome || ('Caso ' + modificaDaAprire),
+         inviato: new Date().toISOString(), stato: 'in-coda', messaggio: '', quieto: true};
+    casi.unshift(c);
+    salvaCasi();
+  }
 }
 
 /* ------------------- eliminare un caso, da Glam Lab ------------------- */
@@ -3865,7 +4034,7 @@ aGlam({type: 'pack3d:ruolo?'});
 // le finestre come le aveva lasciate chi guarda; dal link dell'email, i casi
 {
   const f = leggi(RICORDA_FINESTRE, {}) || {};
-  if (f.casi || CODICE_CASO.test(casoDaLink)) apriFinestra(casiEl, casiBtn, true, false);
+  if (f.casi || CODICE_CASO.test(casoDaLink) || modificaDaAprire) apriFinestra(casiEl, casiBtn, true, false);
   if (f.notifiche) apriFinestra(notificheEl, notificheBtn, true, false);
 }
 // lo stato dei casi ogni minuto, e subito quando la pagina torna in vista

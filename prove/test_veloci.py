@@ -2957,5 +2957,61 @@ class SecondoTentativo(unittest.TestCase):
                              {"casi": 2, "tentativi": 2, "riusciti": 1})
 
 
+
+class ModificaDopoLApprovazione(unittest.TestCase):
+    """«Chiedi una modifica» su un caso risolto (`coda.modifica`): la issue
+    si riapre se era chiusa, perde `da-rilasciare`, prende il commento
+    «Modifica chiesta» e la voce "modifica", e la routine riparte. Senza
+    GitHub: le chiamate si registrano."""
+
+    def _giro(self, issue, storia, testo="la finestra piu' alta"):
+        from pack3d import coda
+        chiamate, scritto = [], {}
+
+        def richiesta(metodo, percorso, corpo=None, timeout=60):
+            chiamate.append((metodo, percorso, corpo))
+            return dict(issue) if metodo == "GET" else {}
+
+        with mock.patch.object(coda, "pronta", return_value=True), \
+                mock.patch.object(coda, "_repo", return_value="o/r"), \
+                mock.patch.object(coda, "_conta"), \
+                mock.patch.object(coda, "_issue_del_caso", return_value=dict(issue)), \
+                mock.patch.object(coda, "_richiesta", side_effect=richiesta), \
+                mock.patch.object(coda, "_leggi_json",
+                                  return_value=({"storia": storia}, "sha")), \
+                mock.patch.object(coda, "_scrivi_json",
+                                  side_effect=lambda p, d, s, m: scritto.update(d)), \
+                mock.patch.object(coda, "avvia_routine", return_value=True) as routine:
+            esito = coda.modifica("b312f1e238", testo)
+        return esito, chiamate, scritto, routine
+
+    ISSUE = {"number": 7, "state": "closed", "created_at": "2026-11-01T00:00:00Z",
+             "html_url": "u", "labels": [{"name": "da-rilasciare"}],
+             "body": "File: [`casi/2026-11-01_b312f1e238`](x)"}
+    RISOLTO = [{"stato": "da-approvare", "quando": "2026-11-02T00:00:00Z"},
+               {"stato": "risolto", "nome": "PACK", "quando": "2026-11-03T00:00:00Z"}]
+
+    def test_riapre_e_rilancia(self):
+        esito, chiamate, scritto, routine = self._giro(self.ISSUE, self.RISOLTO)
+        self.assertEqual(esito, {"ok": True, "issue": 7, "riaperta": True, "rilanciata": True})
+        self.assertIn(("PATCH", "/repos/o/r/issues/7", {"state": "open"}), chiamate)
+        commento = [c[2]["body"] for c in chiamate if c[1].endswith("/comments")][0]
+        self.assertTrue(commento.startswith("**Modifica chiesta**"))
+        self.assertIn("> la finestra piu' alta", commento)
+        self.assertIn(("DELETE", "/repos/o/r/issues/7/labels/da-rilasciare", None), chiamate)
+        voce = scritto["storia"][-1]
+        self.assertEqual((voce["stato"], voce["nome"]), ("modifica", "PACK"))
+        routine.assert_called_once()
+
+    def test_solo_un_caso_risolto_e_col_testo(self):
+        from pack3d import coda
+        with self.assertRaises(coda.NonRisolto):
+            self._giro(self.ISSUE, self.RISOLTO[:1])
+        with self.assertRaises(coda.Assente):
+            self._giro(dict(self.ISSUE, labels=[{"name": "eliminato"}]), self.RISOLTO)
+        with self.assertRaises(ValueError):
+            self._giro(self.ISSUE, self.RISOLTO, testo="  ")
+
+
 if __name__ == "__main__":
     unittest.main()
