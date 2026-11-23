@@ -2026,6 +2026,55 @@ class FiancoASoffietto(unittest.TestCase):
         self.assertEqual(P2[2, 0], -45.0)         # dall'altra parte niente
         self.assertEqual(len(riempimento.vertici(J, B, solo="soffietto")), 6)
 
+class SenzaCompenetrare(unittest.TestCase):
+    """Due pezzi vicini si toccano, non si compenetrano: il corpo, piu'
+    largo o spesso del suo passo, si porta al passo meno `FRA_VICINI`
+    (`R.senza_compenetrare`)."""
+
+    def test_la_scelta(self):
+        from pack3d.famiglie.registro import senza_intersezioni_scelto
+        self.assertTrue(senza_intersezioni_scelto({"senza_intersezioni": True}))
+        self.assertTrue(senza_intersezioni_scelto({"senza_intersezioni": "si"}))
+        self.assertFalse(senza_intersezioni_scelto({}))
+
+    def _p(self, largo, spesso):
+        from pack3d import riempimento as R
+        return R.Prodotto(assi=(2, 0, 1), centro=np.zeros(3), lungo=100.0,
+                                    corpo=80.0, largo=largo, spesso=spesso,
+                                    largo_pinne=largo + 4.0, fronte=1)
+
+    def _d(self, passo_x, passo_y, n_y=5):
+        from pack3d import riempimento as R
+        return R.Disposizione("sdraiati", "", np.eye(3), (2, n_y, 1),
+                                        (passo_x, passo_y, 100.0), 1.0)
+
+    def test_stretto_e_schiacciato(self):
+        from pack3d import riempimento as R
+        q, righe = R.senza_compenetrare(None, self._p(70.9, 12.2),
+                                                  self._d(69.75, 11.97))
+        self.assertAlmostEqual(q.largo, 69.75 - R.FRA_VICINI, places=6)
+        self.assertAlmostEqual(q.spesso, 11.97 - R.FRA_VICINI, places=6)
+        self.assertLess(q.stringe, 1.0)
+        self.assertEqual(len(righe), 2)
+
+    def test_chi_ci_sta_resta_com_era(self):
+        from pack3d import riempimento as R
+        p = self._p(60.0, 11.0)
+        q, righe = R.senza_compenetrare(None, p, self._d(69.75, 11.0))
+        self.assertIs(q, p)
+        self.assertEqual(righe, [])
+
+    def test_il_largo_vero_del_corpo(self):
+        from pack3d import riempimento as R
+        # a meta' corpo 60, alle spalle 72: conta 72
+        V = np.array([[-30.0, 0.0, 0.0], [30.0, 0.0, 0.0],
+                      [-36.0, 0.0, 35.0], [36.0, 0.0, 35.0], [0.0, 0.0, 50.0]])
+        q, _ = R.senza_compenetrare(None, self._p(60.0, 10.0),
+                                              self._d(70.0, 10.0), V)
+        self.assertAlmostEqual(q.largo, 60.0 * (70.0 - R.FRA_VICINI) / 72.0,
+                               places=6)
+
+
 class FilmArgento(unittest.TestCase):
     """Il grigio stampato del film e' il film argentato, scelta del pack:
     metallo senza inchiostro dove la texture e' grigio neutro chiaro, il
