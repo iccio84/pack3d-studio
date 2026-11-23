@@ -517,7 +517,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(502, "Il repository dei casi non risponde: riprova "
                                    "fra poco")
         if glb is None:
-            return self._send(404, "Nessun modello da approvare per questo caso")
+            return self._send(404, "Nessun modello per questo caso")
         return self._send(200, glb, "model/gltf-binary")
 
     # L'anteprima di una domanda della routine (`coda.anteprima`): il modello
@@ -861,11 +861,42 @@ class Handler(BaseHTTPRequestHandler):
                                    "fra poco")
         return self._send(200, json.dumps(esito))
 
+    # Una modifica al modello gia' approvato, dalla finestra dei casi
+    # (`coda.modifica`): cosa cambiare, con le foto. Il caso riparte.
+    def _modifica(self):
+        try:
+            n = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            n = 0
+        corpo, foto, errore = self._corpo_con_foto(n)
+        if errore:
+            return self._send(*errore)
+        cod = str(corpo.get("codice") or "").strip().lower()
+        try:
+            esito = coda.modifica(cod, corpo.get("testo"), foto)
+        except coda.Assente as e:
+            return self._send(404, str(e))
+        except coda.NonRisolto as e:
+            return self._send(409, str(e))
+        except coda.Troppe as e:
+            return self._send(429, str(e))
+        except RuntimeError as e:
+            return self._send(503, str(e))
+        except ValueError as e:
+            return self._send(400, str(e))
+        except OSError as e:
+            print("modifica del caso %s non arrivata: %s" % (cod, e), file=sys.stderr)
+            return self._send(502, "Il repository dei casi non risponde: riprova "
+                                   "fra poco")
+        return self._send(200, json.dumps(esito))
+
     def do_POST(self):
         if self.path.startswith("/api/nota") or self.path.startswith("/api/risposta"):
             return self._voce()
         if self.path.startswith("/api/approva"):
             return self._approva()
+        if self.path.startswith("/api/modifica"):
+            return self._modifica()
         if self.path.startswith("/api/elimina"):
             return self._elimina()
         if self.path.startswith("/api/caso"):
