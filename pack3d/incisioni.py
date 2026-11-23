@@ -687,9 +687,11 @@ def linguetta_oltre(pdf, quadri, chiusura, page_no=0):
     for percorsi in _tratti_per_penna(pdf, page_no).values():
         for sg in _segmenti(percorsi):
             # il tratto che attraversa il lato (`_fino_al_lato`): conta la
-            # parte oltre, dal lato in fuori
+            # parte oltre, dal lato in fuori. Solo se entra davvero nella
+            # faccia: sul T10 il primo tratto della linguetta parte 0,1 mm
+            # dentro il fronte, e resta com'era
             fa, fb = fuori(sg[0]), fuori(sg[1])
-            if fa * fb < 0 and max(fa, fb) > 0.3 * MM:
+            if min(fa, fb) < -0.3 * MM and max(fa, fb) > 0.3 * MM:
                 a, b = sg if fb > 0 else sg[::-1]
                 t = fuori(a) / (fuori(a) - fuori(b))
                 X = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
