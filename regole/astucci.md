@@ -822,7 +822,8 @@ l'apertura a strappo». Tre regole:
 - la chiusura sul lato e' piu' corta **dei due rami insieme**, non di
   ciascuno: la finestra del T25 e' larga 162 mm e i rami lunghi 144;
 - nella linguetta oltre il lato (`linguetta_oltre`) conta anche la parte
-  oltre il lato di un tratto che lo attraversa, e il capo libero che si cuce
+  oltre il lato di un tratto che lo attraversa (e che entra nella faccia
+  per piu' di 0,3 mm), e il capo libero che si cuce
   a un altro tratto non si cuce a quello attaccato a lui: sulla curva della
   linguetta il tratto dopo della stessa linea (5,5 pt) era piu' vicino del
   taglio nero (6,4 pt), e il cammino si spezzava.
