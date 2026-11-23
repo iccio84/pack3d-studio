@@ -567,6 +567,35 @@ parete si sposta dentro fino al filo, non piu' di `COMPRIME` del largo: si
 schiaccia un po' di piu' contro il vicino. Per il lungo vale la punta
 piegata, qui sopra.
 
+### Due pezzi vicini si toccano, non si compenetrano
+
+`COMPRIME` lascia stare in fila due pezzi gonfi un poco piu' larghi o spessi
+del loro passo: il film si schiaccia fra i vicini. Ma il modello restava
+largo com'era, e i vicini entravano uno nell'altro. Il T10 di biscotti
+aperto coi 10 T1 (caso e88a907c54), dopo l'approvazione: «ho visto
+intersezioni», «rifallo eliminando le intersezioni tra i modelli». Misurate
+sul GLB: 3,5 mm fra i due T1 affiancati (le spalle, fra corpo e pinna),
+0,2 mm fra uno strato e l'altro, e lo strato in alto passava di 0,85 mm il
+cielo ai lati della finestra.
+
+La regola (`senza_compenetrare`, `stringe_e_schiaccia`, il tetto delle
+pinne in `adatta`):
+
+- nel largo e nello spessore il corpo del pezzo si porta al suo passo meno
+  `FRA_VICINI` (0,2 mm), a UV ferme come `stringe` e `schiaccia`, e solo se
+  il pezzo e' piu' grande del passo: chi si tocca appena resta com'era. Il
+  largo e' quello vero del corpo, misurato su tutti i suoi vertici: il T1 a
+  meta' corpo e' 69,6 ma alle spalle 71,6;
+- le pinne, gia' strette al passo meno `GIOCO`, hanno un tetto morbido su
+  tutta la loro lunghezza: dove la sfumatura comincia restavano larghe come
+  le spalle;
+- quando ne' stringere ne' schiacciare bastano da soli, si fanno tutti e
+  due (`stringe_e_schiaccia`), ognuno nel suo limite (`STRINGE_MAX`,
+  `SCHIACCIA_MAX`).
+
+Sul T10: T1 stretti a 69,6 (corpo vero) e schiacciati a 11,8 mm, 0,2 mm
+d'aria di lato e 0,09 fra gli strati, tutti dentro l'astuccio.
+
 ### Il contenitore puo' essere l'astuccio aperto
 
 Un riempimento con l'opzione `apertura` (gradi) ha per contenitore un
@@ -587,6 +616,10 @@ Cards (caso 88976a700d) con 25 flowpack Kinder Cards T2, 5 x 5
   piedi e' alto 108 contro 89,7: i pack stanno sdraiati rispetto alla scena,
   cioe' in piedi rispetto alla scatola - la faccia stampata verso la
   finestra, 5 per strato per il largo e 5 strati.
+- **Sotto il cielo**: attorno al buco della finestra il cielo resta, e il
+  vano arriva alla sua faccia di dentro (`misura_vassoio`, il tetto meno lo
+  spessore), non a quella di fuori come in un vassoio aperto. Sul T10 di
+  biscotti lo strato in alto passava il cielo di 0,85 mm.
 - **Il piano e' il fondo intero**: i bordi del buco sulle pareti non sono un
   piano su cui poggiare (`vano.piano` veniva -22,5 invece di -44,1).
 - **Girati, se il pack lo chiede** (`gira`, scelta del pack): ogni pezzo
