@@ -2968,12 +2968,66 @@ class SecondoTentativo(unittest.TestCase):
         t = g.primo()
         g.esito(t, "fermata")
         self.assertIsNone(g.prossimo())
-        # un flowpack non ha soglie larghe ne' forme dopo
+        # un flowpack che non ha detto la sua lettura: le soglie larghe, poi
+        # niente (le forme dopo nel registro non ci sono)
         g, _ = self._giro("flowpack")
         t = g.primo()
         t.osservato.update(famiglia="flowpack")
         g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.LARGHE)
+        g.esito(t, "sbagliato")
         self.assertIsNone(g.prossimo())
+
+    def test_il_piano_del_flowpack(self):
+        from pack3d import tentativi
+        g, _ = self._giro("flowpack")
+        t = g.primo()
+        impronta = (False, False, True, 67, 11, 82, 10, 14, 184, 136)
+        t.osservato.update(famiglia="flowpack", flowpack=impronta, altre=None,
+                           giro_film=0, muto_film=True, ripiego="stampato")
+        g.esito(t, "sbagliato")
+        # 1. la seconda lettura, che salta quella scartata
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.SECONDA)
+        with tentativi.dentro(t):
+            self.assertTrue(tentativi.escluso_flowpack(impronta, 0))
+            self.assertFalse(tentativi.escluso_flowpack(impronta, 180))
+        # non ce n'erano altre: si ferma, e non si riprova
+        g.esito(t, "fermata", "nessun'altra lettura dello steso")
+        # 2. gli altri versi del film: mezzo giro, poi un quarto e tre quarti
+        visti = []
+        for _ in range(3):
+            t = g.prossimo()
+            self.assertEqual(t.cosa, tentativi.VERSO_FILM)
+            visti.append(t.giro)
+            g.esito(t, "uguale" if t.giro == 90 else "sbagliato")
+        self.assertEqual(visti, [180, 90, 270])
+        # 3. gli altri ripieghi, dopo quello che aveva letto
+        t = g.prossimo()
+        self.assertEqual((t.cosa, t.ripiego), (tentativi.RIPIEGO, "fustella"))
+        self.assertFalse(t.neutro)
+
+    def test_un_film_forte_che_non_sa_il_verso(self):
+        from pack3d import tentativi
+        g, _ = self._giro("flowpack")
+        t = g.primo()
+        impronta = (False, False, True, 36, 20, 133, 8, 12, 136, 149)
+        t.osservato.update(famiglia="flowpack", flowpack=impronta, altre=None,
+                           giro_film=0, muto_film=True, forte=True)
+        g.esito(t, "sbagliato")
+        # la lettura non ha segni: prima mezzo giro, poi la seconda lettura
+        # nel verso della prima, poi gli altri versi
+        t = g.prossimo()
+        self.assertEqual((t.cosa, t.giro), (tentativi.VERSO_FILM, 180))
+        t.osservato.update(famiglia="flowpack", flowpack=impronta, altre=0,
+                           giro_film=180, muto_film=True, forte=True)
+        g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertEqual((t.cosa, t.giro), (tentativi.SECONDA, None))
+        g.esito(t, "fermata", "nessun'altra lettura dello steso")
+        t = g.prossimo()
+        self.assertEqual((t.cosa, t.giro), (tentativi.VERSO_FILM, 90))
 
     def test_le_prove_dopo_nel_registro(self):
         from pack3d.famiglie import registro
@@ -3005,6 +3059,29 @@ class SecondoTentativo(unittest.TestCase):
                     fh.write(json.dumps(dict(r, t=1)) + "\n")
             self.assertEqual(statistiche.riassunto([f])["tentativi"],
                              {"casi": 2, "tentativi": 2, "riusciti": 1})
+
+    def test_il_tipo_di_difetto_e_i_file_vecchi(self):
+        from pack3d import statistiche
+        tipo = statistiche.tipo_difetto
+        self.assertIsNone(tipo({"esito": "ok"}))
+        self.assertEqual(tipo({"esito": "sbagliato", "residui_tecnici": True,
+                               "motivo": "alto 136 mm invece di 102"}), "misure+residui")
+        self.assertEqual(tipo({"esito": "dubbio", "difetti": ["marchio capovolto"]}),
+                         "verso")
+        self.assertEqual(tipo({"esito": "dubbio", "motivo": "non convince"}), "altro")
+        # una riga di prima, senza il tipo, e una di adesso si sommano insieme
+        with tempfile.TemporaryDirectory() as td:
+            vecchio, nuovo = os.path.join(td, "a.jsonl"), os.path.join(td, "b.jsonl")
+            with open(vecchio, "w") as fh:
+                fh.write(json.dumps({"t": 1, "e": "verdetto", "letto": "flowpack",
+                                     "esito": "dubbio"}) + "\n")
+            with open(nuovo, "w") as fh:
+                fh.write(json.dumps({"t": 2, "e": "verdetto", "letto": "flowpack",
+                                     "esito": "dubbio", "difetto": "verso"}) + "\n")
+            r = statistiche.riassunto([vecchio, nuovo])
+            self.assertEqual(r["eventi"], 2)
+            self.assertEqual({c["cosa"] for c in r["conti"]["verdetto"]},
+                             {"flowpack | dubbio", "flowpack | dubbio | verso"})
 
 
 

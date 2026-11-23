@@ -121,12 +121,39 @@ def analisi_flowpack(pdf):
     /api/build: senza memoria la stessa analisi si rifaceva da capo, e non e'
     poco - sette secondi e mezzo di CPU e trecento MB, due volte. Su
     un'istanza piccola e' la differenza fra farcela e non farcela.
+
+    Dentro un tentativo dopo il primo (`pack3d.tentativi`) la memoria non si
+    usa: la lettura e' un'altra. Il tentativo puo' chiedere un ripiego solo
+    (`tentativi.ripiego_forzato`, uno di `tentativi.RIPIEGHI`).
     """
+    from pack3d import tentativi
+    neutro = tentativi.neutro()
     imp = _impronta(pdf)
+    if neutro:
+        with _ANALISI_CHIAVE:
+            if imp in _ANALISI:
+                _ANALISI.move_to_end(imp)
+                box, fp, ripiego, passo = _ANALISI[imp]
+                tentativi.osserva(ripiego=passo)
+                return box, fp, ripiego
+    forzato = tentativi.ripiego_forzato()
+    if forzato:
+        box, fp, ripiego, passo = _un_ripiego(pdf, forzato)
+    else:
+        box, fp, ripiego, passo = _analisi(pdf)
+    tentativi.osserva(ripiego=passo)
+    if not neutro:
+        return box, fp, ripiego
     with _ANALISI_CHIAVE:
-        if imp in _ANALISI:
-            _ANALISI.move_to_end(imp)
-            return _ANALISI[imp]
+        _ANALISI[imp] = (box, fp, ripiego, passo)
+        while len(_ANALISI) > _ANALISI_MAX:
+            _ANALISI.popitem(last=False)
+        return box, fp, ripiego
+
+
+def _analisi(pdf):
+    """La fila dei ripieghi: `(box, fp, ripiego, passo)`, con `passo` quello
+    di `tentativi.RIPIEGHI` che ha letto lo steso."""
     # Si rasterizza QUI, una volta, alla risoluzione piu' alta che serva: da
     # qui in avanti find_blocks (100 dpi) e la texture riscalano quella invece
     # di rifarla. Senza, il primo che chiede e' find_blocks a 100 e l'analisi
@@ -135,8 +162,12 @@ def analisi_flowpack(pdf):
 
     box, _dt = printed_bbox(pdf)
     ripiego = None
+    passo = "stampato"
     try:
         fp = fpk.analyze_auto(pdf, bbox=box)
+    except fpk.NessunAltra:
+        # un tentativo senza un'altra lettura: i ripieghi sono tentativi loro
+        raise
     except Exception as e:
         # Secondo tentativo, sul RIQUADRO DELLA FUSTELLA invece che
         # sull'ingombro stampato. Non sono la stessa cosa: sul T1 al
@@ -151,13 +182,7 @@ def analisi_flowpack(pdf):
         primo = str(e)
         fp = ripiego = None
         try:
-            riq = fpk.riquadro_fustella(pdf, stampato=box)
-            if riq and riq != box:
-                fp = fpk.analyze_auto(pdf, bbox=riq, fustella=True)
-                fp.warnings.append(
-                    "riquadro preso dalla fustella e non dallo stampato: "
-                    "la grafica esce dal tracciato, e misurando lo stampato "
-                    "le fasce non chiudevano")
+            fp, passo = _sulla_fustella(pdf, box), "fustella"
         except Exception:
             fp = None
         if fp is None:
@@ -167,7 +192,7 @@ def analisi_flowpack(pdf):
             # riferimento la miniatura". Vedi `tools.quote_dalla_copia`.
             try:
                 from pack3d.tools import quote_dalla_copia
-                fp = quote_dalla_copia(pdf)
+                fp, passo = quote_dalla_copia(pdf), "copia"
             except Exception:
                 fp = None
         if fp is None:
@@ -176,12 +201,44 @@ def analisi_flowpack(pdf):
             # guarda solo il DT con la grafica: sulla pagina intera misurava
             # anche quote, copie tecniche e cartiglio.
             fp = fpk.analyze(pdf, bbox=box)
-            ripiego = primo
-    with _ANALISI_CHIAVE:
-        _ANALISI[imp] = (box, fp, ripiego)
-        while len(_ANALISI) > _ANALISI_MAX:
-            _ANALISI.popitem(last=False)
-        return _ANALISI[imp]
+            ripiego, passo = primo, "vecchio"
+    return box, fp, ripiego, passo
+
+
+def _sulla_fustella(pdf, box):
+    """Lo steso sul riquadro che la fustella chiude, o None."""
+    riq = fpk.riquadro_fustella(pdf, stampato=box)
+    if not riq or riq == box:
+        return None
+    fp = fpk.analyze_auto(pdf, bbox=riq, fustella=True)
+    fp.warnings.append(
+        "riquadro preso dalla fustella e non dallo stampato: "
+        "la grafica esce dal tracciato, e misurando lo stampato "
+        "le fasce non chiudevano")
+    return fp
+
+
+def _un_ripiego(pdf, passo):
+    """Un ripiego solo, chiesto da un tentativo (`pack3d.tentativi`, «il
+    ripiego»): `(box, fp, ripiego, passo)`, o un errore se non legge."""
+    dl.render_page(pdf, 0, fpk.SCALA_ANALISI)
+    box, _dt = printed_bbox(pdf)
+    ripiego = None
+    if passo == "stampato":
+        fp = fpk.analyze_auto(pdf, bbox=box)
+    elif passo == "fustella":
+        fp = _sulla_fustella(pdf, box)
+    elif passo == "copia":
+        from pack3d.tools import quote_dalla_copia
+        fp = quote_dalla_copia(pdf)
+    else:
+        fp = fpk.analyze(pdf, bbox=box)
+        ripiego = "chiesto dal tentativo: il solutore vecchio"
+    if fp is None:
+        raise ValueError("il ripiego «%s» non legge lo steso" % passo)
+    fp.warnings.insert(0, "steso letto dal ripiego «%s», chiesto dal tentativo"
+                       % passo)
+    return box, fp, ripiego, passo
 
 
 # I versi gia' decisi: impronta del file -> (giro, avviso). Come _ANALISI:
@@ -220,12 +277,22 @@ def flowpack_sulla_grafica(pdf):
     Un caso calibrato non passa di qui: le sue quote sono scritte a mano sul
     foglio com'e'.
     """
-    from pack3d import tracciati
+    from pack3d import tentativi, tracciati
+    forzato = tentativi.giro_forzato()
+    if forzato is not None:
+        t = tentativi.ora()
+        if t is not None and t.cosa == tentativi.VERSO_FILM:
+            return _film_girato(pdf, forzato)
+        # un altro tentativo nel verso che la prima lettura aveva preso
+        tentativi.osserva(giro_film=forzato)
+        return (artwork.pagina_girata(pdf, forzato) if forzato else pdf, forzato,
+                "steso girato di %d gradi prima di risolvere, come nella prima "
+                "lettura" % forzato if forzato else None, 0)
     imp = _impronta(pdf)
     with _ANALISI_CHIAVE:
         noto = _VERSO_FP.get(imp)
     if noto is None:
-        giro, avviso, resta = 0, None, 0
+        giro, avviso, resta, muto = 0, None, 0, False
 
         def verso(p):
             """`(gradi, chi li dice)`: il fronte, o se il fronte non ha testo
@@ -249,6 +316,7 @@ def flowpack_sulla_grafica(pdf):
         except Exception:
             g, chi = None, None
         if g == -1:
+            muto = True
             # Detto, non taciuto: e' l'unico caso in cui il pack puo' ancora
             # dipendere da come lo steso sta sulla tavola.
             avviso = ("verso della grafica non letto: ne' sul fronte ne' sulla "
@@ -279,17 +347,59 @@ def flowpack_sulla_grafica(pdf):
             else:
                 # la tavola dice la pagina, non il testo del fronte: il giro
                 # del marchio non lo sa, e lo steso resta com'e'
+                muto = True
                 avviso = ("il testo della tavola e' girato di %d gradi, ma girato "
                           "il foglio lo steso non si risolve: resta com'e' sulla "
                           "tavola - il verso va controllato sul modello" % g)
-        noto = (giro, avviso, resta)
+        noto = (giro, avviso, resta, muto)
         with _ANALISI_CHIAVE:
             _VERSO_FP[imp] = noto
             while len(_VERSO_FP) > _ANALISI_MAX:
                 _VERSO_FP.popitem(last=False)
-    giro, avviso, resta = noto
+    giro, avviso, resta, muto = noto
+    # per il giro dei tentativi: il verso del foglio, e se niente lo dice
+    tentativi.osserva(giro_film=giro, muto_film=muto)
     return ((artwork.pagina_girata(pdf, giro) if giro else pdf), giro, avviso,
             resta)
+
+
+def _misure(fp):
+    """Il flowpack al millimetro, senza il verso dello steso: un foglio girato
+    di un quarto lo legge trasposto, con le stesse misure."""
+    return (fp.pillow, fp.piatto, round(fp.W), round(fp.T), round(fp.L),
+            round(fp.end_fin), round(fp.side_fin), round(fp.web_mm),
+            round(fp.step_mm))
+
+
+def _film_girato(pdf, giro):
+    """Lo steso girato di `giro` gradi, chiesto da un tentativo (`pack3d.
+    tentativi`, «altro verso del film»), quando niente dice il verso.
+
+    Mezzo giro rimette il marchio capovolto e non cambia le misure. Un quarto
+    si prova solo se il film girato da' le misure del foglio com'era: se no il
+    modello sarebbe un altro, non lo stesso nell'altro verso, e il tentativo
+    non si costruisce (`tentativi.NonPlausibile`)."""
+    from pack3d import tentativi
+    giro = int(giro) % 360
+    if not giro:
+        return pdf, 0, None, 0
+    girato = artwork.pagina_girata(pdf, giro)
+    if giro in (90, 270):
+        with tentativi.dentro(tentativi.Tentativo()):
+            _b, com_era, rip0 = analisi_flowpack(pdf)
+        _b, cosi, rip1 = analisi_flowpack(girato)
+        if rip0 is not None or rip1 is not None or _misure(com_era) != _misure(cosi):
+            raise tentativi.NonPlausibile(
+                "il film girato di %d gradi non da' le misure del DT (%s invece "
+                "di %s): non e' lo stesso pack in un altro verso"
+                % (giro, "ripiego" if rip1 is not None else
+                   "%.1f x %.1f" % (cosi.web_mm, cosi.step_mm),
+                   "%.1f x %.1f" % (com_era.web_mm, com_era.step_mm)))
+    tentativi.osserva(giro_film=giro, muto_film=True)
+    avviso = ("steso girato di %d gradi dal tentativo: niente dice il verso del "
+              "film (nessun testo vivo), e com'era sulla tavola il controllo "
+              "l'ha scartato" % giro)
+    return girato, giro, avviso, 0
 
 
 def _flowpack_from_case(case):
