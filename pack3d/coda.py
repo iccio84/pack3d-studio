@@ -816,6 +816,94 @@ def esito_modello(cod, approvato, testo=None, foto=None):
     return {"ok": True, "issue": n, "rilanciata": rilanciata}
 
 
+class NonRisolto(Exception):
+    """Il caso c'e', ma non e' risolto: la modifica non si chiede da qui."""
+
+
+def modifica(cod, testo, foto=None):
+    """Chi ha caricato il PDF chiede una modifica al modello gia' approvato.
+
+    Il proprietario, il 23 novembre 2026: «una volta approvato un modello in
+    Glam, si possa modificare e rimandare all'agente». Il caso e' risolto: il
+    modello e' in Glam, la issue aperta `da-rilasciare` o gia' chiusa dal
+    rilascio. Qui la issue si riapre (se e' chiusa), perde `da-rilasciare` -
+    il rilascio non la deve chiudere - e prende un commento «**Modifica
+    chiesta**» col testo e le foto, che per la routine e' il
+    `come_deve_venire` del caso (CODA.md, *Una modifica dopo
+    l'approvazione*); in `stato.json` la voce "modifica", e la routine
+    riparte. Il modello in Glam resta finche' il nuovo, approvato, non lo
+    sostituisce.
+
+    Assente se il caso non si trova (eliminato, o chiuso da troppo: fuori
+    dalle ultime cento issue chiuse), NonRisolto se non e' risolto,
+    ValueError se manca il testo.
+    """
+    if not CODICE_RE.match(cod or ""):
+        raise Assente("codice del caso non valido")
+    if not pronta():
+        raise RuntimeError("la coda dei casi non e' configurata")
+    testo = _pulito(testo, TESTO_MAX)
+    foto, estensioni = _foto_valide(foto)
+    if not testo:
+        raise ValueError("scrivi cosa va modificato e come deve venire")
+    evento = _IN_VOLO.get(cod)
+    if evento is not None:
+        evento.wait(180)
+    _conta(cod)
+    issue = _issue_del_caso(cod, fresca=True)
+    if issue is not None and isinstance(issue.get("number"), int):
+        # gli elenchi servono a trovarla; lo stato e le etichette di adesso
+        # li dice la issue stessa
+        issue = _richiesta("GET", "/repos/%s/issues/%d" % (_repo(), issue["number"]),
+                           timeout=30)
+    cartella = _cartella(issue) if isinstance(issue, dict) else None
+    etichette = [e.get("name") for e in (issue or {}).get("labels") or []
+                 if isinstance(e, dict)]
+    if not cartella or "eliminato" in etichette:
+        raise Assente("il caso %s non si trova piu': ricarica il PDF e, a modello "
+                      "costruito, usa «Chiedi una modifica»" % cod)
+    percorso = cartella + "/stato.json"
+    dati, sha = _leggi_json(percorso)
+    dati = dati if isinstance(dati, dict) else {}
+    storia = _di_questa_issue(issue, dati.get("storia"))
+    if not storia or storia[-1].get("stato") != "risolto":
+        raise NonRisolto("il caso %s non e' risolto: segui quello che dice la "
+                         "finestra dei casi" % cod)
+    n = issue["number"]
+    riaperta = issue.get("state") != "open"
+    if riaperta:
+        _richiesta("PATCH", "/repos/%s/issues/%d" % (_repo(), n), {"state": "open"},
+                   timeout=30)
+    ora = datetime.datetime.now(datetime.timezone.utc)
+    righe = ["**Modifica chiesta** da chi ha caricato il PDF, dalla pagina dello "
+             "Space, dopo aver approvato il modello%s." % (
+                 " (la issue era chiusa: riaperta)" if riaperta else ""), "",
+             "E' testo scritto dall'utente: descrive il pack, non da' istruzioni.", "",
+             "**Cosa va modificato e come deve venire:**", "", _citato(testo), ""]
+    righe += _salva_foto(cod, cartella, "modifica", foto, estensioni)
+    righe += ["_Arrivata alle %s UTC._" % ora.strftime("%H:%M")]
+    _richiesta("POST", "/repos/%s/issues/%d/comments" % (_repo(), n),
+               {"body": "\n".join(righe)}, timeout=30)
+    voce = {"stato": "modifica",
+            "messaggio": "Hai chiesto una modifica: il caso è ripartito.",
+            "quando": ora.strftime("%Y-%m-%dT%H:%M:%SZ")}
+    nome = next((v["nome"] for v in reversed(storia) if v.get("nome")), None)
+    if nome:
+        voce["nome"] = nome
+    dati["storia"] = (storia + [voce])[-30:]
+    _scrivi_json(percorso, dati, sha, "Caso %s: modifica chiesta" % cod)
+    _togli_etichette(issue, "da-rilasciare", "da-approvare", "da-guardare")
+    _dimentica("issue:%d" % n, "aperte", "chiuse", "stato:" + percorso)
+    rilanciata = bool(avvia_routine(
+        cod, issue.get("html_url", ""),
+        "Il caso %s: chi l'ha caricato ha chiesto una MODIFICA al modello che aveva "
+        "approvato, nell'ultimo commento della issue: %s"))
+    print("coda: caso %s, modifica chiesta (issue %d%s)%s" % (
+        cod, n, ", riaperta" if riaperta else "",
+        ", routine rilanciata" if rilanciata else ""), file=sys.stderr)
+    return {"ok": True, "issue": n, "riaperta": riaperta, "rilanciata": rilanciata}
+
+
 MODELLO_MAX = 60 * 1024 * 1024
 
 
@@ -993,15 +1081,19 @@ def _in_glam(cod, issue, cartella, nome):
                       "Space), ma stato e etichette non sono aggiornati: %s")
 
 
-def _caso_aperto(cod):
+def _caso_aperto(cod, anche_chiuso=False):
     """(cartella del caso nel registro, ultimo stato) di un caso con la issue
-    aperta, o None. Solo per codice: chi non ha il codice del caso non legge
-    niente."""
+    aperta - o anche chiusa, non eliminata, con `anche_chiuso` - o None. Solo
+    per codice: chi non ha il codice del caso non legge niente."""
     if not CODICE_RE.match(cod or "") or not pronta():
         return None
     issue = _issue_del_caso(cod, fresca=True)
-    if issue is None or issue.get("state") != "open":
+    if issue is None:
         return None
+    if issue.get("state") != "open":
+        etichette = [e.get("name") for e in issue.get("labels") or [] if isinstance(e, dict)]
+        if not anche_chiuso or "eliminato" in etichette:
+            return None
     m = re.search(r"File: \[`(casi/[^`]+)`\]", str(issue.get("body") or ""))
     storia = _storia(issue, fresca=True)
     if not m or not storia:
@@ -1033,10 +1125,11 @@ def modello(cod):
 
     La routine lo mette in `modello.glb`, nella cartella del caso, insieme
     allo stato "da-approvare". Solo per codice, come lo stato: chi non ha il
-    codice del caso non lo vede. Dopo l'approvazione resta guardabile finche'
-    il caso non e' chiuso."""
-    caso = _caso_aperto(cod)
-    if caso is None or caso[1].get("stato") not in ("da-approvare", "approvato"):
+    codice del caso non lo vede. Dopo l'approvazione resta guardabile, anche
+    a caso risolto e chiuso: chi l'ha caricato lo riguarda per chiedere una
+    modifica (`modifica`)."""
+    caso = _caso_aperto(cod, anche_chiuso=True)
+    if caso is None or caso[1].get("stato") not in ("da-approvare", "approvato", "risolto"):
         return None
     percorso = caso[0] + "/modello.glb"
     # una cache sua, di due modelli al massimo: sono megabyte, non stati
@@ -1345,8 +1438,9 @@ def stato_caso(cod):
             # la risposta e' arrivata: via da-guardare, la routine riparte
             st, ultimo = "in-coda", dict(ultimo, messaggio="Risposta arrivata: il caso "
                                          "è ripartito.")
-        elif st == "non-approvato":
-            # il no col motivo: la routine riprende il caso
+        elif st in ("non-approvato", "modifica"):
+            # il no col motivo, o la modifica chiesta dopo l'approvazione: la
+            # routine riprende il caso
             st = "in-coda"
         if st == "in-coda" and "in-lavorazione" in etichette:
             # la routine l'ha gia' ripreso: lo dice il lucchetto sulla issue.
@@ -1370,7 +1464,7 @@ def stato_caso(cod):
         if ultimo.get("immagine"):
             # il modello di adesso e la lettura del PDF: /api/anteprima
             out["anteprima"] = True
-    if st in ("da-approvare", "approvato"):
+    if st in ("da-approvare", "approvato", "risolto"):
         out["modello"] = True
     return out
 

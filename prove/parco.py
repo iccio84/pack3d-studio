@@ -1570,7 +1570,7 @@ FERMI = ("da-guardare", "da-approvare", "da-rilasciare")
 SEGNAPOSTO = "DA SCRIVERE"
 # le voci di chi ha caricato il PDF, sulla issue (pack3d/coda.py)
 VOCI = ("**Nota di chi ha caricato", "**Risposta dell'utente", "**Modello NON approvato",
-        "**Modello approvato")
+        "**Modello approvato", "**Modifica chiesta")
 
 
 def _gh(metodo, percorso, corpo=None, tollera=()):
@@ -1907,6 +1907,10 @@ def prepara(args):
         "; foto: " + ", ".join(foto) if foto else ""))
     for v in voci[-3:]:
         print("  > " + " ".join(v.split())[:600])
+    if voci and voci[-1].startswith("**Modifica chiesta"):
+        print("modifica chiesta dopo l'approvazione: il modello approvato e' in Glam, "
+              "e la modifica e' il come_deve_venire del caso (CODA.md, *Una modifica "
+              "dopo l'approvazione*)")
     no = sum(1 for v in voci if v.startswith("**Modello NON approvato"))
     if no:
         print("respinto %d %s: prima di un'altra interpretazione, la domanda con "
