@@ -806,6 +806,30 @@ allarga al riquadro della linguetta (`apertura.riquadro_linguetta`, solo
 sull'astuccio chiesto aperto). Il T10 aperto passa da 147,9 a 166,1 mm
 d'altezza: la linguetta sta in cima alla finestra sollevata.
 
+**Il contorno che attraversa la piega e continua sulla falda**
+(`incisioni._fino_al_lato`, in `continua_per_penna`). Sull'astuccio di
+biscotti T25 (349,2 x 99,8 x 61,3 mm, caso ab4fa8dad8, la fustella giusta
+dopo quella sbagliata del caso 24f72422b1) il contorno verde da 0,82 non si
+ferma prima della piega fra fronte e falda come sul T10: la attraversa e
+continua sulla falda attorno alla linguetta, con due ponticelli da 2,3 e 1
+mm, fino al taglio nero del bordo della falda. Chiesto aperto «come il
+T10», il riempimento si fermava su «nessuno si legge come astuccio con
+l'apertura a strappo». Tre regole:
+- un ramo con un capo in una faccia e l'altro fuori da tutte si taglia dove
+  esce dalla sua faccia, `STACCO` (1 mm) prima del lato: finisce come quello
+  del T10, e si chiude sul lato; un ramo che passa in un'altra faccia resta
+  com'e';
+- la chiusura sul lato e' piu' corta **dei due rami insieme**, non di
+  ciascuno: la finestra del T25 e' larga 162 mm e i rami lunghi 144;
+- nella linguetta oltre il lato (`linguetta_oltre`) conta anche la parte
+  oltre il lato di un tratto che lo attraversa, e il capo libero che si cuce
+  a un altro tratto non si cuce a quello attaccato a lui: sulla curva della
+  linguetta il tratto dopo della stessa linea (5,5 pt) era piu' vicino del
+  taglio nero (6,4 pt), e il cammino si spezzava.
+Sul T25: cerniera di 242 mm sulla piega col cielo, linguetta larga 162 mm
+fino alla tacca; aperto di 120 gradi coi 25 T1 l'ingombro e' 349,2 x 167,3
+x 149,7 mm. Il T10 legge la stessa apertura di prima.
+
 **L'apertura sul taglio dal rovescio** (`incisioni.firma` con `larga`,
 provata quando la firma sulle penne tecniche non trova niente, PRIMA della
 perforazione). Sul T2x12

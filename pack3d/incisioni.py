@@ -518,9 +518,9 @@ def _chiusa_sul_lato(a, b, la, quadri):
     """Il tratto che chiude i due rami `a` e `b` lungo un lato di faccia, o
     None: i loro capi liberi stanno a meno di PONTE mm dallo stesso lato -
     non quello della piega da cui partono - e il tratto fra le due
-    proiezioni e' piu' corto di ciascun ramo. E' il contorno che sul fronte
-    finisce sulla piega con una falda che non e' una faccia: la linguetta
-    gira li', e del solido la finestra arriva fino al lato."""
+    proiezioni e' piu' corto dei due rami insieme. E' il contorno che sul
+    fronte finisce sulla piega con una falda che non e' una faccia: la
+    linguetta gira li', e del solido la finestra arriva fino al lato."""
     ponte = PONTE * MM
     A, B = a[-1], b[-1]
     # la finestra va da una piega al lato opposto della stessa faccia, e la
@@ -544,7 +544,10 @@ def _chiusa_sul_lato(a, b, la, quadri):
                 t = max(0.0, min(1.0, ((q[0] - u[0]) * dx + (q[1] - u[1]) * dy) / l2))
                 return (u[0] + dx * t, u[1] + dy * t)
             chiusura = [A, su(A), su(B), B]
-            if _lunghezza(chiusura) < min(_lunghezza(a), _lunghezza(b)):
+            # piu' corto dei due rami insieme: sul T25 (caso ab4fa8dad8) la
+            # finestra e' larga 162 mm e i rami lunghi 144, e la chiusura e'
+            # piu' lunga di ciascuno
+            if _lunghezza(chiusura) < _lunghezza(a) + _lunghezza(b):
                 return chiusura
     return None
 
@@ -570,7 +573,8 @@ def continua_per_penna(pdf, panels, facce, page_no=0):
     for _st, percorsi in _tratti_per_penna(pdf, page_no).items():
         segmenti = [sg for sg in _segmenti(percorsi)
                     if any(_dentro_pannello(sg, p) is not None for p in quadri)]
-        pezzi = [l for l in _catene(segmenti) if not _di_bordo(l, quadri)]
+        pezzi = [_fino_al_lato(l, quadri)
+                 for l in _catene(segmenti) if not _di_bordo(l, quadri)]
         if len(pezzi) < 2:
             continue
         t = _perforata_continua(percorsi, pezzi, quadri, sul_lato=True)
@@ -586,6 +590,61 @@ def continua_per_penna(pdf, panels, facce, page_no=0):
         if oltre is not None:
             t["linguetta"] = oltre
     return t
+
+
+# Quanto prima del lato si ferma un ramo che lo attraversa, in mm: il ramo
+# finisce come quello del T10, che il disegno ferma a 1,4 mm dalla piega.
+STACCO = 1.0
+
+
+def _fino_al_lato(l, quadri):
+    """Il ramo `l` fino al lato da cui esce dalle facce, o `l` com'e'.
+
+    Sull'astuccio di biscotti T25 (caso ab4fa8dad8) il contorno verde
+    dell'apertura non si ferma prima della piega fra il fronte e la falda
+    sotto, come sul T10: la attraversa e continua sulla falda, dove gira
+    attorno alla linguetta. Un capo del ramo sta in una faccia, l'altro
+    fuori da tutte: il ramo si taglia dove esce dalla sua faccia, STACCO mm
+    prima del lato - il contorno della finestra si chiude sul lato
+    (`_chiusa_sul_lato`), e quello che c'e' oltre e' la linguetta
+    (`linguetta_oltre`). Un ramo che passa in un'altra faccia resta com'e'.
+    """
+    tol = 0.5 * MM
+
+    def dentro(q, p):
+        return (p.x0 - tol <= q[0] <= p.x1 + tol
+                and p.y0 - tol <= q[1] <= p.y1 + tol)
+
+    def in_una(q):
+        return any(dentro(q, p) for p in quadri)
+    if len(l) < 2 or in_una(l[0]) == in_una(l[-1]):
+        return l
+    giro = not in_una(l[0])
+    c = list(l[::-1]) if giro else list(l)
+    m = ((c[0][0] + c[1][0]) / 2.0, (c[0][1] + c[1][1]) / 2.0)
+    p = next((p for p in quadri if dentro(m, p)), None)
+    if p is None:
+        return l
+    for i in range(len(c) - 1):
+        a, b = c[i], c[i + 1]
+        if dentro(b, p):
+            continue
+        if in_una(b):
+            return l            # passa in un'altra faccia: non e' questo
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        t = 1.0
+        for o, dk, lo, hi in ((a[0], dx, p.x0, p.x1), (a[1], dy, p.y0, p.y1)):
+            if dk > 1e-12:
+                t = min(t, (hi - o) / dk)
+            elif dk < -1e-12:
+                t = min(t, (lo - o) / dk)
+        lungo = math.hypot(dx, dy) * t
+        if lungo <= STACCO * MM:
+            return l
+        t *= (lungo - STACCO * MM) / lungo
+        taglio = c[:i + 1] + [(a[0] + dx * t, a[1] + dy * t)]
+        return taglio[::-1] if giro else taglio
+    return l
 
 
 def linguetta_oltre(pdf, quadri, chiusura, page_no=0):
@@ -627,6 +686,15 @@ def linguetta_oltre(pdf, quadri, chiusura, page_no=0):
     segs = []
     for percorsi in _tratti_per_penna(pdf, page_no).values():
         for sg in _segmenti(percorsi):
+            # il tratto che attraversa il lato (`_fino_al_lato`): conta la
+            # parte oltre, dal lato in fuori
+            fa, fb = fuori(sg[0]), fuori(sg[1])
+            if fa * fb < 0 and max(fa, fb) > 0.3 * MM:
+                a, b = sg if fb > 0 else sg[::-1]
+                t = fuori(a) / (fuori(a) - fuori(b))
+                X = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+                if -0.5 * MM <= lungo(X) <= lato + 0.5 * MM:
+                    sg = (X, b)
             if any(_dentro_pannello(sg, p) is not None for p in quadri):
                 continue
             if max(abs(fuori(q)) for q in sg) < 0.3 * MM:
@@ -655,7 +723,10 @@ def linguetta_oltre(pdf, quadri, chiusura, page_no=0):
                 continue
             meglio = None
             for j, (c, d) in enumerate(segs):
-                if j == i:
+                # non il tratto stesso, ne' quello che gli e' attaccato: sulla
+                # curva della linguetta del T25 (caso ab4fa8dad8) il tratto
+                # dopo sulla stessa linea e' piu' vicino del taglio nero
+                if j == i or {chiave(c), chiave(d)} & {chiave(a), chiave(b)}:
                     continue
                 dx, dy = d[0] - c[0], d[1] - c[1]
                 l2 = dx * dx + dy * dy
