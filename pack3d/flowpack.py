@@ -13,6 +13,8 @@ lo sviluppo del perimetro della sezione, quella longitudinale e' la lunghezza.
 from __future__ import annotations
 
 import math
+import re
+import threading
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -56,6 +58,10 @@ class Flowpack:
     # a pinna, il rigonfiamento nello SPESSORE invece che nel rapporto del DT:
     # una scelta del pack, non una regola (`sezione_rigonfiata`)
     nello_spessore: bool = False
+    # la strada dei tratti da cui viene la lettura (`letture`) e le penne del
+    # DT di quella strada: la costruzione pulisce la texture con quelle
+    strada: str = "colore"
+    penne: frozenset = None
 
     @property
     def pillow(self):
@@ -1383,54 +1389,209 @@ def _ricuci(S):
     return fuori
 
 
-def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
-    """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
+# --------------------------------------------------------------------------- #
+# Le letture del flowpack (il punto 2 del piano di robustezza, regole/flowpack.md
+# *Le letture a punteggio*). Fino al 23 novembre 2026 vinceva la prima
+# soluzione che tornava, sui tratti di una strada sola: col DT disegnato a
+# pezzi di 3 mm (la variante `spezzati` del banco) nessun tratto era una penna
+# tecnica, e 18 flowpack su 18 si fermavano o uscivano sbagliati; coi testi in
+# curve il T1 a fondo argento prendeva una quota per il capo dello steso e
+# usciva alto 136 invece di 102, gridando «rientri diversi» senza che niente
+# cambiasse. Adesso:
+#
+# - le STRADE dei tratti: per colore, quella di sempre, e coi tratti riuniti
+#   (`strade.unisci`: i pezzi della stessa penna sulla stessa retta che si
+#   toccano sono una linea), solo se riunire cambia le penne tecniche;
+# - su ogni strada TUTTE le soluzioni, nell'ordine di sempre - riquadro del
+#   giudice, riquadro di prima; pinna, sovrapposizione, tubo piatto; dritto e
+#   ruotato - e dopo gli altri riquadri coerenti del giudice (`RANGHI`);
+# - il COSTO di ogni lettura dai segni che il codice vede da solo (`segni`);
+# - la SCELTA: la prima lettura, se non ha segni, vince senza che le altre si
+#   leggano (i PDF puliti non pagano niente); se no vince la piu' economica, ma
+#   la prima a meno di PRECEDENZA; due flowpack diversi a meno di DUBBIO sono
+#   un dubbio dichiarato.
+# --------------------------------------------------------------------------- #
 
-    Copre gli impaginati in cui il disegno tecnico traccia le cordonature; per
-    gli artwork che non rientrano resta il registro dei casi calibrati.
-    """
-    import numpy as np
-    from .dieline import _technical_pens, render_page
+# Quanti altri riquadri del giudice si provano, dopo il primo.
+RANGHI = 12
+# La prima lettura vince a meno di tanto di costo; due flowpack diversi a meno
+# di tanto sono un dubbio dichiarato (come gli astucci, `strade`).
+PRECEDENZA = 0.3
+DUBBIO = 0.25
+# Oltre questo costo una lettura non e' plausibile.
+COSTO_MAX = 2.0
+# Il costo di una strada che non e' quella di sempre, e di ogni punto di
+# coerenza che un riquadro ha meno del primo del giudice.
+COSTO_STRADA = 0.1
+COSTO_PUNTO = 0.25
+# Una falda a pinna sotto tanto non e' una falda: da 122 a 420 mm di nastro le
+# falde misurate stanno fra 4 e 16 (*La falda dice se la soluzione e'
+# sbagliata*).
+FALDA_MIN = 3.0
+FALDA_MAX = 24.0
+# Le pinne di testa del parco vanno da 6 a 37,5 mm: sotto tanto non sono
+# saldature, e' una miniatura o una copia in scala.
+PINNA_MIN = 4.0
+# Uno steso che ha meno di questa frazione dell'area del piu' grande fra le
+# letture e' una miniatura o un pezzo del disegno (il T2 di cialde a pezzi:
+# 28 x 18 mm contro 148 x 108).
+AREA_MIN = 0.25
+# I segni nelle righe del solutore, e quanto costano.
+SEGNI = (("rientri diversi", 1.0, "testate non speculari"),
+         ("testata letta da un lato solo", 0.5, "testata da un lato solo"),
+         ("testate: il DT non segna la saldatura", 0.5, "testate stimate dallo stampato"),
+         ("capi esterni dubbi", 0.5, "capi dello steso dubbi"))
+# Quanto costa una chiusura che il solutore prova dopo la pinna: a pari segni
+# vince l'ordine di sempre, e non e' un dubbio (sul T1 ai cereali pinna e
+# sovrapposizione hanno le stesse testate non speculari).
+COSTO_CHIUSURA = {"pillow": 0.3, "piatta": 0.5}
+# Le quote scritte che confermano il passo o il nastro: ognuna fa guadagnare
+# tanto.
+QUOTA_CONFERMA = 0.5
+
+STRADE = {"colore": "per colore", "uniti": "coi tratti riuniti"}
+
+
+@dataclass
+class Lettura:
+    """Una soluzione dello steso: il flowpack, da dove viene e quanto costa."""
+    fp: Flowpack
+    strada: str = "colore"
+    ipotesi: str = "giudice"
+    modo: str = "pinna"
+    ruotato: bool = False
+    ordine: int = 0
+    costo: float = 0.0
+    segni: list = field(default_factory=list)
+    penne: frozenset = None
+
+    def impronta(self):
+        """Il flowpack che la lettura costruisce, al millimetro."""
+        fp = self.fp
+        return (fp.pillow, fp.piatto, self.ruotato,
+                round(fp.W), round(fp.T), round(fp.L), round(fp.end_fin),
+                round(fp.side_fin), round(fp.web_mm), round(fp.step_mm))
+
+    def descrivi(self):
+        fp = self.fp
+        chiusura = ("a sovrapposizione" if fp.pillow else
+                    "a tubo piatto" if fp.piatto else "a pinna")
+        return ("%s, nastro %.1f x passo %.1f, fronte %.1f, corpo %.1f, pinne %.1f"
+                % (chiusura, fp.web_mm, fp.step_mm, fp.W, fp.L, fp.end_fin))
+
+
+def stesso_flowpack(a, b):
+    """Se le due letture danno lo stesso flowpack."""
+    return a.impronta() == b.impronta()
+
+
+def segni(l, conferme=()):
+    """Il costo della lettura `l` e i suoi segni: `(costo, [segno])`.
+
+    I segni sono quelli che il codice vede da solo: testate non speculari,
+    testata da un lato solo o stimata dallo stampato, capi dubbi, una falda
+    che non e' una falda; poi la strada che non e' quella di sempre e i punti
+    di coerenza che il riquadro ha meno del primo del giudice. Le quote
+    scritte che tornano col passo o col nastro (`conferme`) fanno guadagnare.
+    Nessun segno da solo vuol dire sbagliato: sul T1 ai cereali, sul croccante
+    T2 fondente e sul T1 al cioccolato fresco del parco le testate del DT sono
+    davvero diverse. Servono a scegliere fra le letture."""
+    fp = l.fp
+    costo, visti = 0.0, []
+    righe = " | ".join(str(w) for w in fp.warnings)
+    for testo, peso, nome in SEGNI:
+        if testo in righe:
+            costo += peso
+            visti.append(nome)
+    if not fp.tubo_piatto and not (FALDA_MIN <= fp.side_fin <= FALDA_MAX):
+        costo += 1.0
+        visti.append("falda di %.1f mm" % fp.side_fin)
+    if fp.end_fin < PINNA_MIN:
+        costo += 1.0
+        visti.append("pinne di testa di %.1f mm" % fp.end_fin)
+    m = re.search(r"\((\d+) punti meno del primo\)", righe)
+    if m and int(m.group(1)):
+        costo += COSTO_PUNTO * int(m.group(1))
+        visti.append("%s punti di coerenza meno" % m.group(1))
+    if l.strada != "colore":
+        costo += COSTO_STRADA
+    # l'ordine delle chiusure (`_soluzioni`): chi chiede meno al disegno viene
+    # dopo, e a pari segni costa di piu'. Non e' un segno: un pack a
+    # sovrapposizione che si legge solo cosi' resta forte
+    costo += COSTO_CHIUSURA.get(l.modo, 0.0)
+    for v in conferme:
+        if any(abs(v - x) <= 0.6 for x in (fp.step_mm, fp.web_mm)):
+            costo -= QUOTA_CONFERMA
+    return round(costo, 3), visti
+
+
+def _ingressi(pdf_path, page_no, bbox, strada="colore", fustella=False):
+    """I segmenti del DT di una strada, gia' ricuciti: `(S, S_quote, penne)`,
+    o None se la strada non ha penne tecniche. `fustella`: il riquadro e'
+    quello che la fustella chiude (`riquadro_fustella`), non lo stampato, e
+    vale per tutte le strade."""
+    from .dieline import _technical_pens
     from .tracciati import segmenti
-
     # I tracciati li legge pypdfium2, non pdfplumber: stessa informazione,
     # un decimo del tempo e un sesto della memoria. Vedi tracciati.py.
-    if True:
-        segs, pagina_w, pagina_h = segmenti(pdf_path, page_no)
-        tutte = segs
-        if bbox:
-            # una tavola contiene piu' viste: senza riquadro si misura il foglio
-            bx0, by0, bx1, by1 = bbox
-            def _in(sg):
-                k, c, a0, b0, _ = sg
-                if k == "H":
-                    return by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3 and b0 <= bx1 + 3
-                return bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3 and b0 <= by1 + 3
-            segs = [sg for sg in segs if _in(sg)]
-        pens = _technical_pens(segs, pagina_w, pagina_h)
-        S = _ricuci([s for s in segs if s[4] in pens])
-        # le quote si cercano fra tutte le linee del DT, anche fuori dal
-        # riquadro: una quota che ne resta fuori lascia il suo numero a
-        # pochi millimetri dal taglio vero, che se lo prendeva lui
-        S_quote = S if tutte is segs else _ricuci([s for s in tutte if s[4] in pens])
+    segs, pagina_w, pagina_h = segmenti(pdf_path, page_no)
+    if strada == "uniti":
+        from .strade import unisci
+        segs = unisci(segs)
+        if bbox and not fustella:
+            # il riquadro stampato l'ha cercato la strada per colore
+            # (`printed_bbox`): coi pezzi le penne per colore sono altre, e
+            # il blocco scelto puo' essere una miniatura. Si cerca il DT con
+            # le penne di questa strada (`tools.dt_principale`)
+            # (`tools.find_blocks`, come `famiglie.flowpack.printed_bbox`)
+            from .tools import find_blocks
+            penne_pagina = _technical_pens(segs, pagina_w, pagina_h)
+            blocchi = []
+            if penne_pagina:
+                try:
+                    blocchi = [b for b in find_blocks(pdf_path, penne=penne_pagina)["blocchi"]
+                               if b["tipo"] == "stampato"]
+                except Exception:
+                    blocchi = []
+            if blocchi:
+                b = blocchi[0]
+                bbox = (b["x_mm"] / PT2MM, b["y_mm"] / PT2MM,
+                        (b["x_mm"] + b["w_mm"]) / PT2MM, (b["y_mm"] + b["h_mm"]) / PT2MM)
+    tutte = segs
+    if bbox:
+        # una tavola contiene piu' viste: senza riquadro si misura il foglio
+        bx0, by0, bx1, by1 = bbox
 
-    # pdfplumber si tiene un oggetto Python per ogni tracciato della pagina, e
-    # su un impaginato grande sono decine di migliaia: centinaia di MB che il
-    # `with` chiude ma che l'allocatore non restituisce da solo. Qui sotto si
-    # rasterizza, e le due cose sommate sono il picco. Una raccolta esplicita
-    # prima di allocare costa millisecondi.
-    import gc
-    gc.collect()
+        def _in(sg):
+            k, c, a0, b0, _ = sg
+            if k == "H":
+                return by0 - 3 <= c <= by1 + 3 and a0 >= bx0 - 3 and b0 <= bx1 + 3
+            return bx0 - 3 <= c <= bx1 + 3 and a0 >= by0 - 3 and b0 <= by1 + 3
+        segs = [sg for sg in segs if _in(sg)]
+    pens = _technical_pens(segs, pagina_w, pagina_h)
+    if not pens and strada != "colore":
+        return None
+    S = _ricuci([s for s in segs if s[4] in pens])
+    # le quote si cercano fra tutte le linee del DT, anche fuori dal
+    # riquadro: una quota che ne resta fuori lascia il suo numero a
+    # pochi millimetri dal taglio vero, che se lo prendeva lui
+    S_quote = S if tutte is segs else _ricuci([s for s in tutte if s[4] in pens])
+    return S, S_quote, frozenset(pens)
 
-    sc = SCALA_ANALISI
-    im = render_page(pdf_path, page_no, sc)
-    # int16, non int: su un foglio come quello della brioche la rasterizzazione a
-    # 150 dpi e' una ventina di MB in uint8, e .astype(int) li moltiplica per
-    # otto perche' int e' int64. Del raster qui serve solo max(2)-min(2) su
-    # canali 0-255: int16 basta e avanza. Misurato: il picco della sola
-    # analisi passa da 501 a 205 MB.
-    raster = np.asarray(im).astype(np.int16)
 
+def penne_strada(pdf_path, page_no=0, bbox=None, strada="colore"):
+    """Le penne del DT di una strada (`_ingressi`), o un insieme vuoto."""
+    ing = _ingressi(pdf_path, page_no, bbox, strada)
+    return ing[2] if ing else frozenset()
+
+
+def _soluzioni(S, S_quote, raster, sc, numeri, ipotesi, primo, severo=lambda: True):
+    """Le soluzioni dello steso, nell'ordine di sempre: per ogni ipotesi del
+    riquadro, pinna, sovrapposizione e tubo piatto, ognuna dritta e ruotata.
+    `primo` e' una lista dove resta il motivo della prima che non torna.
+    Un altro errore del solutore ferma tutto finche' `severo()` - come prima,
+    fino alla prima lettura - e dopo salta solo quella soluzione.
+    Torna `(fp, ipotesi, modo, ruotato)`."""
     # Le pinne stanno in verticale o in orizzontale a seconda delle proporzioni,
     # ma lo schema e' lo stesso ruotato di 90 gradi. Invece di insegnare
     # l'orientamento al solutore si traspongono i suoi ingressi: i segmenti
@@ -1447,28 +1608,29 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
     # chiusura prima dell'altro verso, la brioche - che va letto ruotato -
     # trovava una lettura plausibile nel verso sbagliato, e il verso giusto
     # non veniva mai provato.
-    # i numeri delle quote, in punti: dicono quali linee lunghe sono quote e
-    # non capi dello steso (`_riquadro_chiuso`)
-    try:
-        from .quote import numeri as _numeri
-        numeri = [((x if asse == 0 else t) / PT2MM,
-                   (t if asse == 0 else x) / PT2MM, v)
-                  for v, x, t, asse in _numeri(pdf_path, page_no)]
-    except Exception:
-        numeri = []
-    primo = None
+    #
     # Due giri: prima il riquadro del giudice (`_riquadro_coerente`) in tutte
     # le chiusure e i versi, poi - se nessuno torna - quello di prima. Dentro
     # lo stesso tentativo il riquadro di prima, sbagliato, si risolveva a
     # pinna prima che il riquadro giusto del giudice arrivasse al tubo
-    # piatto girato, dove torna.
-    for ipotesi in ("giudice", "prima"):
+    # piatto girato, dove torna. Dopo, se si chiedono, gli altri riquadri del
+    # giudice ("giudice:k").
+    trasposti = None
+    for ip in ipotesi:
         for modo in ("pinna", "pillow", "piatta"):
             for ruotato in (False, True):
+                if ruotato and trasposti is None:
+                    trasposti = (
+                        [("V" if k == "H" else "H", c, a0, b0, st)
+                         for k, c, a0, b0, st in S],
+                        [("V" if k == "H" else "H", c, a0, b0, st)
+                         for k, c, a0, b0, st in S_quote],
+                        raster.transpose(1, 0, 2),
+                        [(y, x, v) for x, y, v in numeri])
+                s_, q_, r_, n_ = trasposti if ruotato else (S, S_quote, raster, numeri)
                 try:
-                    return _risolvi_steso(S, raster, sc, ruotato, modo,
-                                          numeri=numeri, S_quote=S_quote,
-                                          ipotesi=ipotesi)
+                    fp = _risolvi_steso(s_, r_, sc, ruotato, modo, numeri=n_,
+                                        S_quote=q_, ipotesi=ip)
                 except _StesoNonRisolto as e:
                     # Si tiene il MESSAGGIO, non l'oggetto eccezione. Un'eccezione si
                     # porta dietro il traceback, il traceback il frame di
@@ -1477,15 +1639,218 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None):
                     # per tutto il secondo tentativo. Su un foglio grande sono
                     # centinaia di MB tenuti in ostaggio da una variabile che serve
                     # solo a ricordare una frase.
-                    primo = primo or str(e)
-                # si passa all'altro verso; al giro dopo si torna a questo
-                S = [("V" if k == "H" else "H", c, a0, b0, st)
-                     for k, c, a0, b0, st in S]
-                S_quote = [("V" if k == "H" else "H", c, a0, b0, st)
-                           for k, c, a0, b0, st in S_quote]
-                raster = raster.transpose(1, 0, 2)
-                numeri = [(y, x, v) for x, y, v in numeri]
-    raise _StesoNonRisolto(primo)
+                    if not primo:
+                        primo.append(str(e))
+                    continue
+                except ValueError:
+                    if severo():
+                        raise
+                    continue
+                yield fp, ip, modo, ruotato
+
+
+def _numeri_raw(pdf_path, page_no):
+    try:
+        from .quote import numeri as _numeri
+        return list(_numeri(pdf_path, page_no))
+    except Exception:
+        return []
+
+
+def _conferme(raw):
+    """I numeri scritti come testo, in mm: quelli che una lettura puo'
+    ritrovare come passo o nastro (`segni`)."""
+    return sorted({round(float(v), 1) for v, _x, _t, _a in raw})
+
+
+def _numeri_pt(raw):
+    # i numeri delle quote, in punti: dicono quali linee lunghe sono quote e
+    # non capi dello steso (`_riquadro_chiuso`)
+    return [((x if asse == 0 else t) / PT2MM,
+             (t if asse == 0 else x) / PT2MM, v)
+            for v, x, t, asse in raw]
+
+
+def letture(pdf_path, page_no: int = 0, bbox=None, tutte=False, strade=None,
+            fustella=False):
+    """Le letture dello steso: `(letture, motivo)`.
+
+    Di serie si ferma alla prima, se non ha segni (`segni`): e' quella di
+    sempre, e i PDF come quelli del parco non pagano niente. Con `tutte`, o se
+    la prima ha segni, legge tutte le soluzioni di tutte le strade. `motivo`
+    e' la prima ragione per cui una soluzione non torna, per l'errore."""
+    import gc
+
+    import numpy as np
+    from .dieline import render_page
+
+    _memo_coerente().clear()
+    try:
+        return _letture(pdf_path, page_no, bbox, tutte, strade, fustella)
+    finally:
+        _memo_coerente().clear()
+
+
+def _letture(pdf_path, page_no, bbox, tutte, strade, fustella):
+    import gc
+
+    import numpy as np
+    from .dieline import render_page
+
+    strade = tuple(strade or ("colore", "uniti"))
+    # le strade si leggono una alla volta, e quelle dopo la prima solo se
+    # servono (`servono`): i PDF puliti non pagano i tratti riuniti
+    ingressi = {}
+
+    def strada(st):
+        ing = _ingressi(pdf_path, page_no, bbox, st, fustella)
+        if ing is None:
+            return None
+        # i tratti riuniti sono una strada solo se cambiano le penne
+        if st != "colore" and any(ing[2] == v[2] for v in ingressi.values()):
+            return None
+        ingressi[st] = ing
+        return ing
+
+    # pdfplumber si tiene un oggetto Python per ogni tracciato della pagina, e
+    # su un impaginato grande sono decine di migliaia: centinaia di MB che il
+    # `with` chiude ma che l'allocatore non restituisce da solo. Qui sotto si
+    # rasterizza, e le due cose sommate sono il picco. Una raccolta esplicita
+    # prima di allocare costa millisecondi.
+    gc.collect()
+    sc = SCALA_ANALISI
+    im = render_page(pdf_path, page_no, sc)
+    # int16, non int: su un foglio come quello della brioche la rasterizzazione a
+    # 150 dpi e' una ventina di MB in uint8, e .astype(int) li moltiplica per
+    # otto perche' int e' int64. Del raster qui serve solo max(2)-min(2) su
+    # canali 0-255: int16 basta e avanza. Misurato: il picco della sola
+    # analisi passa da 501 a 205 MB.
+    raster = np.asarray(im).astype(np.int16)
+    raw = _numeri_raw(pdf_path, page_no)
+    numeri = _numeri_pt(raw)
+    conferme = None
+    trovate, primo = [], []
+
+    def aggiungi(fp, st, ip, modo, ruotato):
+        nonlocal conferme
+        if conferme is None:
+            conferme = _conferme(raw)
+        l = Lettura(fp=fp, strada=st, ipotesi=ip, modo=modo, ruotato=ruotato,
+                    ordine=len(trovate), penne=ingressi[st][2])
+        l.costo, l.segni = segni(l, conferme)
+        trovate.append(l)
+        return l
+
+    base = ("giudice", "prima")
+    altri = tuple("giudice:%d" % k for k in range(1, RANGHI + 1))
+    errore = None
+    for st in strade:
+        # si arriva alla strada dopo solo se la prima non ha letto niente o la
+        # sua prima lettura ha dei segni: una prima forte torna subito
+        ing = strada(st)
+        if ing is None:
+            continue
+        S, S_quote, _p = ing
+        giro = _soluzioni(S, S_quote, raster, sc, numeri,
+                          base + altri if (tutte or trovate) else base, primo,
+                          severo=lambda: not trovate and not tutte)
+        try:
+            for fp, ip, modo, ruotato in giro:
+                l = aggiungi(fp, st, ip, modo, ruotato)
+                if len(trovate) == 1 and not tutte and not l.segni:
+                    # la prima lettura di sempre, senza segni: basta lei
+                    return trovate, None
+                if len(trovate) == 1 and not tutte and l.segni:
+                    # la prima ha dei segni: si leggono tutte, comprese le
+                    # ipotesi dopo quelle di sempre su questa strada
+                    giro.close()
+                    for fp2, ip2, modo2, r2 in _soluzioni(
+                            S, S_quote, raster, sc, numeri, base + altri, [],
+                            severo=lambda: False):
+                        if (ip2, modo2, r2) != (ip, modo, ruotato):
+                            aggiungi(fp2, st, ip2, modo2, r2)
+                    break
+        except ValueError as e:
+            # un errore del solutore prima di ogni lettura: come prima, se
+            # nessun'altra strada legge lo steso (`analisi_flowpack` passa ai
+            # ripieghi)
+            if trovate:
+                raise
+            errore = errore or e
+    if not trovate and errore is not None:
+        raise errore
+    # uno steso molto piu' piccolo delle altre letture: una miniatura
+    if len(trovate) > 1:
+        grande = max(l.fp.web_mm * l.fp.step_mm for l in trovate)
+        for l in trovate:
+            if l.fp.web_mm * l.fp.step_mm < AREA_MIN * grande:
+                l.costo = round(l.costo + 1.0, 3)
+                l.segni.append("steso piccolo rispetto alle altre letture")
+    return trovate, (primo[0] if primo else None)
+
+
+def scegli(trovate, precedenza=PRECEDENZA, dubbio=DUBBIO):
+    """La lettura che vince e la riga del dubbio: `(lettura, dubbio)`.
+
+    Vince il costo piu' basso; la prima lettura (quella di sempre) a meno di
+    `precedenza`. Una lettura plausibile che da' un flowpack diverso a meno di
+    `dubbio` dal vincitore e' un dubbio dichiarato."""
+    if not trovate:
+        return None, None
+    primo = trovate[0]
+    migliore = min(trovate, key=lambda l: (l.costo, l.ordine))
+    if migliore is not primo and primo.costo - migliore.costo < precedenza:
+        migliore = primo
+    vicine = [l for l in trovate if l is not migliore and l.costo <= COSTO_MAX
+              and not stesso_flowpack(l, migliore)
+              and l.costo - migliore.costo < dubbio]
+    riga = None
+    if vicine:
+        v = min(vicine, key=lambda l: (l.costo, l.ordine))
+        riga = ("DUBBIO DI LETTURA: costruito %s (costo %.2f%s); quasi alla pari "
+                "%s (costo %.2f%s) - controllare sul DT"
+                % (migliore.descrivi(), migliore.costo,
+                   ", " + ", ".join(migliore.segni) if migliore.segni else "",
+                   v.descrivi(), v.costo,
+                   ", " + ", ".join(v.segni) if v.segni else ""))
+    return migliore, riga
+
+
+def riga_lettura(l, trovate):
+    """La riga che dice da dove viene la lettura scelta, se non e' la prima di
+    sempre: un'altra strada, un altro riquadro, un'altra chiusura."""
+    if l is None or l is trovate[0]:
+        return None
+    prima = trovate[0]
+    return ("lettura scelta fra %d: %s%s, costo %.2f; la prima (%s) costava %.2f "
+            "per %s" % (len(trovate),
+                        "fustella letta %s, " % STRADE[l.strada] if l.strada != "colore" else "",
+                        l.descrivi(), l.costo, prima.descrivi(), prima.costo,
+                        ", ".join(prima.segni) or "il costo"))
+
+
+def analyze_auto(pdf_path, page_no: int = 0, bbox=None, fustella=False):
+    """Analisi automatica di un flowpack: nastro, passo, fasce e saldature.
+
+    La lettura che vince fra quelle dello steso (`letture`, `scegli`): la
+    prima di sempre, se non ha segni; se no la piu' economica fra tutte le
+    soluzioni di tutte le strade. Il flowpack porta nelle sue righe da dove
+    viene, e il dubbio se c'e'. Copre gli impaginati in cui il disegno tecnico
+    traccia le cordonature; per gli artwork che non rientrano resta il
+    registro dei casi calibrati.
+    """
+    trovate, motivo = letture(pdf_path, page_no, bbox=bbox, fustella=fustella)
+    l, dubbio = scegli(trovate)
+    if l is None:
+        raise _StesoNonRisolto(motivo)
+    fp = l.fp
+    righe = [r for r in (riga_lettura(l, trovate), dubbio) if r]
+    if l.strada != "colore" and l is trovate[0]:
+        righe.insert(0, "fustella letta %s: per colore lo steso non si "
+                        "risolve (il DT disegnato a pezzi?)" % STRADE[l.strada])
+    fp.warnings = righe + list(fp.warnings)
+    fp.strada, fp.penne = l.strada, l.penne
+    return fp
 
 
 # Fin dove, da un taglio verso l'interno, si cerca la testata: oltre un terzo
@@ -1889,7 +2254,32 @@ def _lati(S, stampato, y0, y1, x0, x1, quote):
     return fuori
 
 
-def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
+# I riquadri del giudice gia' cercati, dentro una lettura (`letture` la vuota
+# all'inizio e alla fine): la chiave sono gli oggetti di quella lettura. Uno
+# per thread: i lavoratori del server leggono insieme.
+_MEMO = threading.local()
+
+
+def _memo_coerente():
+    if not hasattr(_MEMO, "d"):
+        _MEMO.d = {}
+    return _MEMO.d
+
+
+def _rango(candidati, hs, vs, rango):
+    """Il riquadro `rango` fra i `candidati` del giudice (`_riquadro_coerente`):
+    `(hs, vs, avviso, punti meno del primo)`, o None."""
+    if rango >= len(candidati):
+        return None
+    k, i, j, p, q = candidati[rango]
+    meno = candidati[0][0][0] - k[0]
+    return (hs[i:j + 1], vs[p:q + 1],
+            "steso per coerenza, %d° riquadro: %.1f x %.1f mm (%d punti meno "
+            "del primo)" % (rango + 1, (hs[j] - hs[i]) * PT2MM,
+                            (vs[q] - vs[p]) * PT2MM, meno), meno)
+
+
+def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None, rango=0):
     """Lo steso che torna con quello che un flowpack e': `(hs, vs, avviso)`.
 
     I capi si prendono come sempre - le linee piu' esterne dei gruppi lunghi -
@@ -1922,6 +2312,11 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     quote,cornice,legenda`): vedi regole/flowpack.md.
     """
     import bisect
+    # dentro una lettura (`letture`) i riquadri si cercano una volta sola: i
+    # ranghi dopo il primo li riprendono da qui
+    memo = (id(S), id(raster), tuple(hs), tuple(vs), len(numeri))
+    if rango and memo in _memo_coerente():
+        return _rango(_memo_coerente()[memo], hs, vs, rango)
     y0, y1, x0, x1 = hs[0], hs[-1], vs[0], vs[-1]
     estese = _quote_estese(S_quote if S_quote is not None else S, numeri)
     quote = {k: v for k, (v, _a, _b) in estese.items()}
@@ -1950,10 +2345,19 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     # smentisce da sola (`_smentito`)
     smentiti = _smentito(estese, y0, y1, x0, x1)
     if (peso < 2 and not smentiti) or len(hs) < 4 or len(vs) < 2:
+        # il giudice non interviene: un altro riquadro non c'e'
+        _memo_coerente()[memo] = []
+        if rango:
+            return None
         hs2, vs2 = _riquadro_chiuso(S, hs, vs, numeri=numeri)
         return hs2, vs2, None
 
-    integrale = _integrale(_senza_linee(raster, S, sc))
+    # una volta per lettura e per verso: le chiusure e i ranghi la riusano
+    chiave_int = ("integrale", id(S), id(raster))
+    integrale = _memo_coerente().get(chiave_int)
+    if integrale is None:
+        integrale = _integrale(_senza_linee(raster, S, sc))
+        _memo_coerente()[chiave_int] = integrale
 
     def veloce(*r):
         return _stampato(integrale, sc, *r)
@@ -2022,7 +2426,9 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
     # argento il 206,5 x 92 - una quota interna e una saldatura - era un
     # pelo piu' grande dello steso vero, 184 x 102, che pero' si chiude su
     # tutti e quattro i lati. A pari coerenza, il piu' grande.
-    meglio = None
+    # tutti i riquadri che tornano, col loro punteggio: vince il primo, e
+    # `rango` chiede il successivo (le letture del flowpack, `letture`)
+    candidati = []
     for i in range(len(hs)):
         for j in range(len(hs) - 1, i + 2, -1):
             for p in range(len(vs)):
@@ -2060,8 +2466,13 @@ def _riquadro_coerente(S, hs, vs, raster, sc, numeri=(), S_quote=None):
                              # piu' in la'
                              - sum(v and not ang[l] for l, (v, q_, a) in sui.items()))
                     chiave = (punti, (a1 - a0) * (b1 - b0))
-                    if meglio is None or chiave > meglio[0]:
-                        meglio = (chiave, i, j, p, q)
+                    candidati.append((chiave, i, j, p, q))
+    # a pari chiave il primo trovato, come prima
+    candidati.sort(key=lambda c: c[0], reverse=True)
+    _memo_coerente()[memo] = candidati
+    if rango:
+        return _rango(candidati, hs, vs, rango)
+    meglio = candidati[0] if candidati else None
     if meglio:
         _k, i, j, p, q = meglio
         a0, a1, b0, b1 = hs[i], hs[j], vs[p], vs[q]
@@ -2168,7 +2579,18 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None
     # le fasce ci tornano: su una variante del tubo piatto da 115 il riquadro
     # esterno era quello giusto, e il giudice ne prendeva uno da 99 x 85 in
     # cui le fasce non si risolvono.
-    if ritagliato is None:
+    # "giudice:k": il k-esimo riquadro del giudice invece del primo (le
+    # letture del flowpack, `letture`)
+    rango = int(ipotesi.split(":")[1]) if ipotesi.startswith("giudice:") else 0
+    if rango and ritagliato is None:
+        altro = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri,
+                                   S_quote=S_quote, rango=rango)
+        if altro is None:
+            raise _StesoNonRisolto("il giudice non ha un riquadro %d" % (rango + 1))
+        hs_g, vs_g, coerenza, _meno = altro
+        hs_g, vs_g = capi(H, hs_g), capi(V, vs_g)
+        vecchio = None
+    elif ritagliato is None:
         hs_g, vs_g, coerenza = _riquadro_coerente(S, hs, vs, raster, sc, numeri=numeri,
                                                   S_quote=S_quote)
         if coerenza and coerenza.startswith("steso per coerenza"):
@@ -2285,7 +2707,7 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None
                                     (y0 + inizio / PT2MM,
                                      y0 + (inizio + giro) / PT2MM)))
 
-    if ipotesi == "giudice":
+    if ipotesi.startswith("giudice"):
         if (coerenza and coerenza.startswith("steso per coerenza")
                 and ritagliato is None):
             # Dentro il riquadro scelto si rifa' tutto da capo, come se il
@@ -2396,7 +2818,7 @@ def _testate_dallo_stampato(raster, sc, x0, x1, y0, inizio, b, spessore):
 
 
 def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.0,
-                      entro=None):
+                      entro=None, uniti=None):
     """Il rettangolo che la fustella CHIUDE, in punti PDF, o `None`.
 
     Serve quando l'ingombro dello stampato non e' la fustella. Sul T1 al
@@ -2421,9 +2843,20 @@ def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.
 
     if stampato is None:
         return None
+    if uniti is None:
+        # prima i tratti come sono; se non chiudono nessun rettangolo, coi
+        # pezzi della stessa linea riuniti (`strade.unisci`: il DT disegnato a
+        # pezzi, come lo esportano certi CAD)
+        trovato = riquadro_fustella(pdf_path, page_no, stampato, tol, entro, False)
+        if trovato is not None:
+            return trovato
+        return riquadro_fustella(pdf_path, page_no, stampato, tol, entro, True)
     try:
         segs, _w, _h = segmenti(pdf_path, page_no)
         S = segs
+        if uniti:
+            from .strade import unisci
+            S = unisci(segs)
     except Exception:
         return None
 
@@ -2437,12 +2870,19 @@ def riquadro_fustella(pdf_path, page_no: int = 0, stampato=None, tol: float = 1.
                  and x[2] <= ex1)
              or (x[0] == "V" and ex0 <= x[1] <= ex1 and x[3] >= ey0
                  and x[2] <= ey1)]
-    H = [(c, a, b) for k, c, a, b, st in S if k == "H"]
-    V = [(c, a, b) for k, c, a, b, st in S if k == "V"]
+    px0, py0, px1, py1 = stampato
+    # Un rettangolo che somiglia allo stampato almeno per meta' (sotto si
+    # scarta) e' largo e alto almeno un terzo di lui: lati piu' corti non ne
+    # chiudono nessuno, e si lasciano fuori prima di provare ogni coppia con
+    # ogni coppia. Col DT a pezzi di 3 mm la ricerca contava centinaia di
+    # milioni di quaterne, da 70 a 500 secondi.
+    corto_h = (px1 - px0) / 3.0 - 2 * tol
+    corto_v = (py1 - py0) / 3.0 - 2 * tol
+    H = [(c, a, b) for k, c, a, b, st in S if k == "H" and b - a >= corto_h]
+    V = [(c, a, b) for k, c, a, b, st in S if k == "V" and b - a >= corto_v]
     if len(H) < 2 or len(V) < 2:
         return None
 
-    px0, py0, px1, py1 = stampato
     area_st = max(1e-6, (px1 - px0) * (py1 - py0))
 
     def somiglianza(x0, y0, x1, y1):

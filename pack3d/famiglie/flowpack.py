@@ -153,7 +153,7 @@ def analisi_flowpack(pdf):
         try:
             riq = fpk.riquadro_fustella(pdf, stampato=box)
             if riq and riq != box:
-                fp = fpk.analyze_auto(pdf, bbox=riq)
+                fp = fpk.analyze_auto(pdf, bbox=riq, fustella=True)
                 fp.warnings.append(
                     "riquadro preso dalla fustella e non dallo stampato: "
                     "la grafica esce dal tracciato, e misurando lo stampato "
@@ -633,11 +633,20 @@ def falda_sospetta(fp):
             % (fp.side_fin, FALDA_VISTA_MAX, fp.T))
 
 
-def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
-                   sezione=None, scatola=False, pinne=None, lastre_extra=(),
-                   colata_riquadro=None, materiali_dich=None,
-                   materiali_ai=None, saldatura=3, nello_spessore=False,
-                   cromate=False, argento=False):
+def build_flowpack(*args, **kw):
+    """Costruisce il flowpack (`_build_flowpack`), con la pulizia della
+    texture fatta sulle penne della strada che ha letto lo steso
+    (`strati.strada_del_pack`)."""
+    from pack3d import strati
+    with strati.strada_del_pack():
+        return _build_flowpack(*args, **kw)
+
+
+def _build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
+                    sezione=None, scatola=False, pinne=None, lastre_extra=(),
+                    colata_riquadro=None, materiali_dich=None,
+                    materiali_ai=None, saldatura=3, nello_spessore=False,
+                    cromate=False, argento=False):
     """Costruisce il flowpack con le tecniche messe a punto sul campo.
 
     Quattro cose che la versione base non faceva, e che senza si vedono subito:
@@ -696,6 +705,10 @@ def build_flowpack(pdf, out_glb, teeth, soft, case=None, quality="hd",
         # di 138,7 e 6,9, con la grafica che scivolava sul fronte) resta
         # dichiarato, perche' il motivo viaggia insieme alle quote.
         box, fp0, ripiego = analisi_flowpack(pdf)
+        if getattr(fp0, "strada", "colore") != "colore":
+            # letto coi tratti riuniti: la texture si pulisce con quelle penne
+            from pack3d import strati
+            strati.usa_penne(fp0.penne)
         # Il materiale si legge sul file intero, prima della pulizia: le
         # copie del DT che lo dicono stanno fuori dallo steso. Se il film e'
         # metallizzato, il grigio che il DT disegna per l'alluminio non e' un
