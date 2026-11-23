@@ -1076,7 +1076,7 @@ Adesso (`flowpack.letture`, `flowpack.scegli`):
   flowpack riunire cambia le penne su tre (T1 cold seal, T1 ai cereali,
   gelato su stecco: aggiunge penne vere della grafica), e per questo non e'
   una regola per tutti ma una strada. Sulla strada riunita il riquadro del
-  DT si cerca con le sue penne (`tools.dt_principale(penne=...)`): il
+  DT si cerca con le sue penne (`tools.find_blocks(penne=...)`): il
   riquadro stampato lo cerca la strada per colore, e col DT a pezzi prendeva
   una miniatura. Il riquadro che la fustella chiude (`riquadro_fustella`,
   il ripiego del T1 al cioccolato fresco) vale per tutte e due, e anche lui

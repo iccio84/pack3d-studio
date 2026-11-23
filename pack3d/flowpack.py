@@ -1533,12 +1533,20 @@ def _ingressi(pdf_path, page_no, bbox, strada="colore", fustella=False):
             # (`printed_bbox`): coi pezzi le penne per colore sono altre, e
             # il blocco scelto puo' essere una miniatura. Si cerca il DT con
             # le penne di questa strada (`tools.dt_principale`)
-            from .tools import dt_principale
+            # (`tools.find_blocks`, come `famiglie.flowpack.printed_bbox`)
+            from .tools import find_blocks
             penne_pagina = _technical_pens(segs, pagina_w, pagina_h)
-            dt = dt_principale(pdf_path, page_no, penne=penne_pagina) if penne_pagina else None
-            if dt:
-                x, y, w, h = (v / PT2MM for v in dt)
-                bbox = (x - 3, y - 3, x + w + 3, y + h + 3)
+            blocchi = []
+            if penne_pagina:
+                try:
+                    blocchi = [b for b in find_blocks(pdf_path, penne=penne_pagina)["blocchi"]
+                               if b["tipo"] == "stampato"]
+                except Exception:
+                    blocchi = []
+            if blocchi:
+                b = blocchi[0]
+                bbox = (b["x_mm"] / PT2MM, b["y_mm"] / PT2MM,
+                        (b["x_mm"] + b["w_mm"]) / PT2MM, (b["y_mm"] + b["h_mm"]) / PT2MM)
     tutte = segs
     if bbox:
         # una tavola contiene piu' viste: senza riquadro si misura il foglio

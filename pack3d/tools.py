@@ -1042,7 +1042,7 @@ def quote_dalla_copia(pdf, page_no=0):
     return None
 
 
-def find_blocks(pdf, dpi=100, min_mm=60.0):
+def find_blocks(pdf, dpi=100, min_mm=60.0, penne=None):
     """Elenca i blocchi della tavola, distinguendo lo stampato dal tecnico.
 
     Un disegno tecnico contiene quasi sempre piu' viste: la OUTSIDE VIEW con la
@@ -1052,6 +1052,8 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
 
     Per ogni blocco riporta ingombro, quota di superficie colorata e quota di
     tratto sottile: il primo distingue lo stampato, il secondo il tecnico.
+    `penne`: il DT si cerca con queste (`dt_principale`), quelle di un'altra
+    strada (`flowpack.letture`, coi tratti riuniti).
     """
     from scipy.ndimage import label, binary_closing, find_objects
     s = dpi / 72.0
@@ -1099,7 +1101,7 @@ def find_blocks(pdf, dpi=100, min_mm=60.0):
     # una legenda, un cartiglio o la copia per la battuta di bianco passano la
     # soglia del colore anche loro, e con un artwork argento passerebbero
     # davanti. Il blocco del DT si promuove a stampato se serve, e va primo.
-    dt = dt_principale(pdf) if out else None
+    dt = dt_principale(pdf, penne=penne) if out else None
     if dt is not None:
         def dentro(b):
             ix = max(0.0, min(b["x_mm"] + b["w_mm"], dt[0] + dt[2])
