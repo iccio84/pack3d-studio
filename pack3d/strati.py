@@ -35,6 +35,7 @@ che c'era davvero - niente maschera, niente pixel inventati.
 from __future__ import annotations
 
 import contextlib
+import contextvars
 import ctypes
 import os
 import re
@@ -269,15 +270,42 @@ def _livelli_oggetto(o):
 _PENNE = stato.per_lavoro({})
 
 
+# Le penne del DT della strada che ha letto il pack, quando non e' quella di
+# sempre (`flowpack.letture`: coi tratti riuniti): la pulizia della texture
+# spegne quelle. Le mette chi costruisce, dentro `strada_del_pack`.
+_STRADA = contextvars.ContextVar("pack3d_penne_strada", default=None)
+
+
+@contextlib.contextmanager
+def strada_del_pack():
+    """Il blocco di una costruzione: dentro, `usa_penne` vale fino alla fine
+    del blocco e non oltre (il lavoratore dopo non la vede)."""
+    tok = _STRADA.set({})
+    try:
+        yield
+    finally:
+        _STRADA.reset(tok)
+
+
+def usa_penne(tecniche):
+    """Da qui alla fine della costruzione le penne tecniche sono `tecniche`
+    (quelle della strada che ha letto il pack), non quelle per colore."""
+    d = _STRADA.get()
+    if d is not None and tecniche:
+        d["penne"] = frozenset(tecniche)
+
+
 def penne(pdf, page_no=0):
-    """Le penne del disegno tecnico, come le sceglie `_technical_pens`."""
+    """Le penne del disegno tecnico, come le sceglie `_technical_pens`; o
+    quelle della strada che ha letto il pack (`usa_penne`)."""
     from .dieline import _technical_pens
     from .tracciati import segmenti
     st = os.stat(pdf)
-    chiave = (pdf, page_no, st.st_mtime_ns, st.st_size)
+    strada = (_STRADA.get() or {}).get("penne")
+    chiave = (pdf, page_no, st.st_mtime_ns, st.st_size, strada)
     if chiave not in _PENNE:
         segs, larghezza, altezza = segmenti(pdf, page_no)
-        tec = set(_technical_pens(segs, larghezza, altezza))
+        tec = set(strada) if strada else set(_technical_pens(segs, larghezza, altezza))
         _PENNE.clear()
         _PENNE[chiave] = frozenset(tec | _penne_accanto(segs, tec))
     return _PENNE[chiave]

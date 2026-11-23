@@ -1052,3 +1052,72 @@ coi ruoli dichiarati, perche' il parco non ha l'AI: metallo sul 37% del film,
 vernice opaca sull'1%. Lo stesso file senza dichiarazione, e senza AI, esce
 al byte com'era, con la riga che dice quali lastre non hanno un titolo
 leggibile; con l'AI esce identico a quello dichiarato.
+
+### Le letture a punteggio: le strade, il costo, il dubbio
+
+Il punto 2 del piano di robustezza (pack3d-casi, `regole/decisioni.md`, *Un
+deterministico che fallisce il meno possibile*) portato al flowpack il 23
+novembre 2026. Fino ad allora vinceva la prima soluzione che tornava, sui
+tratti di una strada sola. Il banco delle varianti (pack3d-casi,
+`parco/quadro_varianti.md`) aveva misurato dove si rompeva: col DT
+disegnato a pezzi di 3 mm 18 flowpack su 18, e coi testi in curve il T1 di
+un biscotto tondo su fondo argento, che prendeva una quota per il capo dello
+steso e usciva alto 136 invece di 102 - lo stesso errore che sullo Space il
+2 novembre il controllo dell'AI aveva respinto due volte (caso e8300dac18),
+e che il codice gridava gia' («rientri diversi (10 e 34 mm) su un disegno
+speculare», «UVW NON CORRISPONDE AL DT») senza che niente cambiasse.
+
+Adesso (`flowpack.letture`, `flowpack.scegli`):
+
+- **Le strade dei tratti.** Per colore, quella di sempre; coi tratti
+  riuniti (`strade.unisci`: i pezzi della stessa penna sulla stessa retta che
+  si toccano sono una linea, come li esportano certi CAD), solo se riunire
+  cambia le penne tecniche. Sui 32 PDF del parco che si leggono come
+  flowpack riunire cambia le penne su tre (T1 cold seal, T1 ai cereali,
+  gelato su stecco: aggiunge penne vere della grafica), e per questo non e'
+  una regola per tutti ma una strada. Sulla strada riunita il riquadro del
+  DT si cerca con le sue penne (`tools.find_blocks(penne=...)`): il
+  riquadro stampato lo cerca la strada per colore, e col DT a pezzi prendeva
+  una miniatura. Il riquadro che la fustella chiude (`riquadro_fustella`,
+  il ripiego del T1 al cioccolato fresco) vale per tutte e due, e anche lui
+  si cerca coi tratti riuniti se coi tratti come sono non ne chiude nessuno.
+- **Tutte le soluzioni.** Su ogni strada, nell'ordine di sempre - il
+  riquadro del giudice e quello di prima; pinna, sovrapposizione e tubo
+  piatto; dritto e ruotato - e dopo gli altri riquadri coerenti del giudice
+  (`RANGHI`, `_riquadro_coerente(rango=k)`): sul T1 a fondo argento coi testi
+  in curve lo steso vero, 184 x 102, era il settimo riquadro.
+- **Il costo** (`segni`), dai segni che il codice vede da solo: testate non
+  speculari (1), testata letta da un lato solo, testate stimate dallo
+  stampato, capi dello steso dubbi (0,5 ciascuno), una falda a pinna fuori
+  da 3-24 mm (1), pinne di testa sotto i 4 mm (1: nel parco vanno da 6 a
+  37,5), uno steso con meno di un quarto dell'area della lettura piu' grande
+  (1: una miniatura - il T2 di cialde a pezzi si leggeva per colore su una
+  copia di 28 x 18 mm), i punti di coerenza che il riquadro ha meno del primo del
+  giudice (0,25 l'uno), la strada riunita (0,1), la sovrapposizione e il tubo
+  piatto dopo la pinna (0,3 e 0,5: l'ordine di sempre, non un segno). Ogni
+  numero scritto come testo che torna col passo o col nastro fa guadagnare
+  0,5.
+- **La scelta.** La prima lettura di sempre, se non ha segni, vince senza
+  che le altre si leggano: i PDF puliti non pagano niente. Se ne ha, si
+  leggono tutte e vince la piu' economica, ma la prima a meno di 0,3; una
+  lettura che da' un flowpack diverso a meno di 0,25 dalla vincitrice e' un
+  **dubbio dichiarato** («DUBBIO DI LETTURA: costruito ...; quasi alla pari
+  ...»), negli avvisi. Una lettura che non e' la prima lo dice («lettura
+  scelta fra N: ...; la prima costava ... per testate non speculari»).
+
+Nessun segno da solo vuol dire sbagliato: sul T1 ai cereali, sul croccante
+T2 fondente e sul T1 al cioccolato fresco del parco le testate del DT sono
+davvero diverse, e la prima lettura resta, perche' nessun'altra costa meno
+di lei di 0,3. Servono a scegliere fra le letture, e - col punto 3 - a dire
+quali altre letture ci sono da provare.
+
+La costruzione pulisce la texture con le penne della strada che ha letto lo
+steso (`strati.usa_penne`, dentro `strati.strada_del_pack`): letto coi
+tratti riuniti, per colore le penne tecniche sarebbero la cornice e il
+cartiglio, e il DT a pezzi resterebbe stampato.
+
+E il ripiego del riquadro della fustella non e' piu' quadratico nei tratti:
+un rettangolo che somiglia per meta' allo stampato ha i lati lunghi almeno un
+terzo di lui, e i tratti piu' corti non si provano. Col DT a pezzi di 3 mm la
+ricerca durava da 70 a 500 secondi, e due flowpack del banco finivano i 20
+minuti del lavoratore.
