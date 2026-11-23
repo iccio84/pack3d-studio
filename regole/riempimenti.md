@@ -567,7 +567,7 @@ parete si sposta dentro fino al filo, non piu' di `COMPRIME` del largo: si
 schiaccia un po' di piu' contro il vicino. Per il lungo vale la punta
 piegata, qui sopra.
 
-### Due pezzi vicini si toccano, non si compenetrano
+### Due pezzi vicini si toccano, non si compenetrano: una scelta del pack
 
 `COMPRIME` lascia stare in fila due pezzi gonfi un poco piu' larghi o spessi
 del loro passo: il film si schiaccia fra i vicini. Ma il modello restava
@@ -578,8 +578,14 @@ sul GLB: 3,5 mm fra i due T1 affiancati (le spalle, fra corpo e pinna),
 0,2 mm fra uno strato e l'altro, e lo strato in alto passava di 0,85 mm il
 cielo ai lati della finestra.
 
-La regola (`senza_compenetrare`, `stringe_e_schiaccia`, il tetto delle
-pinne in `adatta`):
+La regola, con `"senza_intersezioni": true` fra le opzioni del caso
+(`senza_compenetrare`, `stringe_e_schiaccia`, il tetto delle pinne in
+`adatta`, il vano sotto il cielo). Una scelta del pack, non di tutti: fatta
+per tutti, il parco del rilascio ha cambiato altri sette riempimenti, e
+quattro nelle misure approvate - il T1 del vassoio da 36 stretto da 31,5 a
+29,1 mm (7,6%, oltre lo `STRINGE_MAX` per cui la grafica si vedeva
+schiacciata), i T1 dei due display da 40 e da 26 del 6%. Di serie i
+pezzi restano schiacciati fra i vicini come prima (`COMPRIME`).
 
 - nel largo e nello spessore il corpo del pezzo si porta al suo passo meno
   `FRA_VICINI` (0,2 mm), a UV ferme come `stringe` e `schiaccia`, e solo se
@@ -616,8 +622,8 @@ Cards (caso 88976a700d) con 25 flowpack Kinder Cards T2, 5 x 5
   piedi e' alto 108 contro 89,7: i pack stanno sdraiati rispetto alla scena,
   cioe' in piedi rispetto alla scatola - la faccia stampata verso la
   finestra, 5 per strato per il largo e 5 strati.
-- **Sotto il cielo**: attorno al buco della finestra il cielo resta, e il
-  vano arriva alla sua faccia di dentro (`misura_vassoio`, il tetto meno lo
+- **Sotto il cielo**, con `senza_intersezioni`: attorno al buco della
+  finestra il cielo resta, e il vano arriva alla sua faccia di dentro (`misura_vassoio`, il tetto meno lo
   spessore), non a quella di fuori come in un vassoio aperto. Sul T10 di
   biscotti lo strato in alto passava il cielo di 0,85 mm.
 - **Il piano e' il fondo intero**: i bordi del buco sulle pareti non sono un
