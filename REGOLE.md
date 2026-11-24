@@ -437,6 +437,7 @@ Le sezioni di ogni file, nell'ordine in cui stanno.
   - Della falda si vede la fascia dell'altro capo del nastro
   - Il materiale del film lo dicono i DT secondari
   - Le letture a punteggio: le strade, il costo, il dubbio
+  - I tentativi del flowpack
 
 **`regole/pouch.md`** - pouch
 

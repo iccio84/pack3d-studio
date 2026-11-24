@@ -1537,6 +1537,7 @@ class Handler(BaseHTTPRequestHandler):
                                 meta = list(meta) + [tr]
                             statistiche.conta("verdetto", letto=c.info["kind"],
                                               esito=verdetto["esito"],
+                                              difetto=statistiche.tipo_difetto(verdetto),
                                               fase=("corretto" if riga else
                                                     "tentativo %d" % c.t.n if c.t.n > 1
                                                     else None))
@@ -1587,7 +1588,8 @@ class Handler(BaseHTTPRequestHandler):
                         # lo ricostruisce comunque
                         verdetto = con_difetti(None, meta)
                         statistiche.conta("verdetto", letto=c.info["kind"],
-                                          esito=verdetto["esito"], fase="senza AI")
+                                          esito=verdetto["esito"], fase="senza AI",
+                                          difetto=statistiche.tipo_difetto(verdetto))
                         verdetto["codice"], verdetto["in_coda"] = coda.metti(
                             blocchi_caso, nomi_caso, verdetto, None, ctx)
                         verdetto["in_attesa"] = coda.in_attesa(verdetto["codice"])

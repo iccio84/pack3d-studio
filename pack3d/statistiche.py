@@ -99,6 +99,34 @@ def conta(evento, **campi):
         pass
 
 
+# Il tipo di difetto di un verdetto che non e' ok, dalle parole dell'AI: le
+# statistiche del 2-20 novembre dicevano solo l'esito, e dei sei flowpack non
+# ok al primo colpo quattro non si sono potuti ricostruire (lavori/robustezza
+# in pack3d-casi). Tutti quelli che tornano, in quest'ordine.
+DIFETTI = (
+    ("misure", ("misur", "proporzion", "alto ", "alta ", "largo", "larga", "spess",
+                "lung", "passo", "dimension", "piatt", "gonfi", "sezion")),
+    ("verso", ("capovolt", "testa in giu", "testa in giù", "girat", "ruotat",
+               "rovesci", "specchi", "sottosopra")),
+    ("residui", ("residu", "quote", "crocin", "segni tecnic", "linee del disegno",
+                 "disegno tecnico", "tacche")),
+)
+
+
+def tipo_difetto(verdetto):
+    """`misure`, `verso`, `residui` (uniti da «+» se sono piu' d'uno) o
+    `altro` per un verdetto sbagliato o dubbio; None per uno ok o che non
+    c'e'. Non entrano i nomi ne' le parole del PDF: solo il tipo."""
+    if not verdetto or verdetto.get("esito") in (None, "ok"):
+        return None
+    testo = " ".join([str(verdetto.get("motivo") or "")]
+                     + [str(x) for x in verdetto.get("difetti") or []]).lower()
+    tipi = [tipo for tipo, parole in DIFETTI if any(p in testo for p in parole)]
+    if verdetto.get("residui_tecnici") and "residui" not in tipi:
+        tipi.append("residui")
+    return "+".join(tipi) or "altro"
+
+
 def riassunto(file=None):
     """Le righe sommate: per evento, i conti per famiglia dichiarata e letta,
     per esito e per motivo, piu' la prima e l'ultima volta. `file`: quali
@@ -123,8 +151,11 @@ def riassunto(file=None):
             n += 1
             prima = d["t"] if prima is None else min(prima, d["t"])
             ultima = d["t"] if ultima is None else max(ultima, d["t"])
+            # `difetto` c'e' dal 23 novembre 2026: i file di prima, senza,
+            # si sommano come sempre
             chiave = " | ".join(str(d[k]) for k in ("dichiarato", "letto", "fase",
-                                                     "esito", "motivo") if k in d)
+                                                     "esito", "difetto", "motivo")
+                                if k in d)
             per = conti.setdefault(d.get("e", "?"), {})
             per[chiave] = per.get(chiave, 0) + 1
             if d.get("e") == "tentativo":

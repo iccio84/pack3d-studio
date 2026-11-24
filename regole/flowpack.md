@@ -1114,10 +1114,43 @@ quali altre letture ci sono da provare.
 La costruzione pulisce la texture con le penne della strada che ha letto lo
 steso (`strati.usa_penne`, dentro `strati.strada_del_pack`): letto coi
 tratti riuniti, per colore le penne tecniche sarebbero la cornice e il
-cartiglio, e il DT a pezzi resterebbe stampato.
+cartiglio, e il DT a pezzi resterebbe stampato. Anche le copie del DT che
+dicono il materiale del film (`materiali.copie_del_dt`) si cercano coi
+tratti riuniti: a pezzi il biscotto T3 e il T2 di cialde perdevano il
+metallo.
 
 E il ripiego del riquadro della fustella non e' piu' quadratico nei tratti:
 un rettangolo che somiglia per meta' allo stampato ha i lati lunghi almeno un
 terzo di lui, e i tratti piu' corti non si provano. Col DT a pezzi di 3 mm la
 ricerca durava da 70 a 500 secondi, e due flowpack del banco finivano i 20
 minuti del lavoratore.
+
+### I tentativi del flowpack
+
+Il punto 3 del piano (regole/verifiche.md, *Il secondo tentativo prima della
+coda*) portato al flowpack il 23 novembre 2026. Quando il controllo dell'AI
+dice sbagliato o dubbio, o la lettura si ferma, il giro prova, ognuno solo se
+puo' dare un modello diverso:
+
+1. **la seconda lettura** del punteggio (*Le letture a punteggio*): le
+   letture gia' scartate, nello stesso verso del foglio, non vincono piu'
+   (`tentativi.escluso_flowpack`); se la prima lettura era forte le altre si
+   leggono adesso, e se non ce ne sono il tentativo si ferma in un secondo;
+2. **l'altro verso del film**, quando niente dice il verso (nessun testo
+   vivo ne' sul fronte ne' sulla tavola: `flowpack_sulla_grafica`): mezzo
+   giro, il marchio capovolto, che non cambia le misure; un quarto e tre
+   quarti solo se il film girato da' le stesse misure del foglio com'era -
+   se no sarebbe un altro pack, non lo stesso nell'altro verso, e il
+   tentativo non si costruisce (`tentativi.NonPlausibile`). Se la prima
+   lettura non ha segni il mezzo giro viene prima della seconda lettura:
+   con le misure che tornano, quello che sbaglia e' il verso;
+3. **gli altri ripieghi**, dopo quello che aveva letto lo steso
+   (`tentativi.RIPIEGHI`: il riquadro stampato, quello che la fustella
+   chiude, le copie del DT, il solutore vecchio), uno per tentativo
+   (`Tentativo.ripiego`);
+4. **le soglie larghe**: tutte le letture anche se la prima e' forte, e le
+   fasce che tornano con meta' tolleranza in piu' (`flowpack.LARGHE`).
+
+Il giro si ferma ai tre minuti come per le altre famiglie. Nel riempimento il
+flowpack scartato non si esclude: lo scarto puo' essere del contenitore, e
+il verso del pack lo prova il riempimento (`gira_pack`).
