@@ -43,6 +43,7 @@ all'AI puo' sembrare giusto. Senza quote, la scala del PDF, come prima.
 """
 from __future__ import annotations
 
+import math
 import os
 import re
 from dataclasses import dataclass, field
@@ -73,6 +74,8 @@ SOTTILE = 1.2
 # quota d'insieme ne misura almeno tanto
 PARTE = 0.15
 INTERA = 0.6
+# un altro disegno della tavola ha almeno questa parte delle linee del principale
+ALTRO = 0.02
 # i numeri sotto non misurano niente di utile (raggi, tolleranze)
 MINIMO = 3.0
 # quante pagine si guardano
@@ -181,31 +184,63 @@ def _numeri(tp, page):
 
 
 def _disegno(segs, w, h):
-    """Il riquadro del disegno principale in mm, `(x0, y0, x1, y1)`, dalle
-    linee lunghe delle penne tecniche (come la fustella le vede), o None."""
+    """Il riquadro del disegno principale in mm, `(x0, y0, x1, y1)`, e quelli
+    degli altri disegni tecnici della tavola (miniature, copie, legenda): `(
+    principale, [altri])`, o None."""
     from .dieline import _gruppi, _technical_pens
     penne = _technical_pens(segs, w, h)
     if not penne:
         return None
     # il gruppo di tratti tecnici collegati con la lunghezza maggiore: il DT,
     # non le sue miniature, la legenda o il cartiglio (`dieline._gruppi`)
-    corto = 3.0 / PT2MM
+    # i pezzi corti contano: un DT a tratti spezzati (la variante
+    # `spezzati`, pezzi di 3 mm) perdeva il disegno grande, e vinceva la
+    # miniatura del cartiglio con le sue quote vere, che dicevano 1:5
+    corto = 1.0 / PT2MM
     tec = [s for s in segs if s[4] in penne and s[3] - s[2] >= corto]
     gruppi = _gruppi(tec)
     if not gruppi:
         return None
-    g = max(gruppi, key=lambda g: sum(sg[3] - sg[2] for sg, _r in g))
-    x0 = min(r[0] for _s, r in g)
-    y0 = min(r[1] for _s, r in g)
-    x1 = max(r[2] for _s, r in g)
-    y1 = max(r[3] for _s, r in g)
-    if x1 - x0 <= 0 or y1 - y0 <= 0:
+    lunghi = [sum(sg[3] - sg[2] for sg, _r in g) for g in gruppi]
+
+    def riquadro(g):
+        return tuple(v * PT2MM for v in (min(r[0] for _s, r in g), min(r[1] for _s, r in g),
+                                          max(r[2] for _s, r in g), max(r[3] for _s, r in g)))
+    i = max(range(len(gruppi)), key=lambda i: lunghi[i])
+    principale = riquadro(gruppi[i])
+    if principale[2] - principale[0] <= 0 or principale[3] - principale[1] <= 0:
         return None
-    return tuple(v * PT2MM for v in (x0, y0, x1, y1))
+    # gli altri disegni con un po' di linee: le miniature, le copie tecniche
+    altri = [riquadro(g) for j, g in enumerate(gruppi)
+             if j != i and lunghi[j] >= ALTRO * lunghi[i]]
+    return principale, altri
 
 
-def _quote(numeri, segs, riquadro):
-    """Le quote misurate vicino al disegno `riquadro`, una per numero."""
+def _distanza(r, x, y):
+    return math.hypot(max(r[0] - x, 0, x - r[2]), max(r[1] - y, 0, y - r[3]))
+
+
+def _la_quota(r, k, L):
+    """Se il disegno `r` e' la quota stessa, staccata dal DT: la sua linea
+    coi richiami, larga quanto lei e bassa."""
+    lungo, corto = (r[2] - r[0], r[3] - r[1]) if k == "H" else (r[3] - r[1], r[2] - r[0])
+    return lungo <= L + 10.0 and corto <= 15.0
+
+
+def _miniatura(r, principale):
+    """Un altro disegno molto piu' piccolo del principale: una miniatura,
+    in un'altra scala. Le copie grandi uguali hanno le loro quote, buone."""
+    def diagonale(q):
+        return math.hypot(q[2] - q[0], q[3] - q[1])
+    return diagonale(r) < 0.5 * diagonale(principale)
+
+
+def _quote(numeri, segs, disegno):
+    """Le quote misurate vicino al disegno principale, una per numero:
+    `disegno` e' quello di `_disegno`. Una quota piu' vicina a un altro
+    disegno della tavola che al principale e' sua (la miniatura del
+    cartiglio porta le quote vere, ma e' in un'altra scala)."""
+    riquadro, altri = disegno
     X0, Y0, X1, Y1 = riquadro
     lati = (X1 - X0, Y1 - Y0)
     margine = max(40.0, 0.5 * max(lati))
@@ -282,7 +317,17 @@ def _quote(numeri, segs, riquadro):
         if migliore is None:
             continue
         L, _d, linea = migliore
-        lato = lati[asse]
+        _k, c, a, b = linea
+        mx, my = ((a + b) / 2, c) if k == "H" else (c, (a + b) / 2)
+        L0 = b - a
+        # il disegno a cui la quota sta accanto: il principale, o una copia
+        # grande come lui (la tavola coi DT tecnici ripetuti); una miniatura
+        # ha le quote vere ma un'altra scala, e non conta
+        suo = min([riquadro] + [r for r in altri if not _la_quota(r, k, L0)],
+                  key=lambda r: _distanza(r, mx, my))
+        if suo is not riquadro and _miniatura(suo, riquadro):
+            continue
+        lato = (suo[2] - suo[0], suo[3] - suo[1])[asse]
         if L < PARTE * lato:
             continue
         chiave = (round(v, 1), round(L), asse)
@@ -328,9 +373,9 @@ def leggi_pagine(pdf, pagine=PAGINE):
             p = Pagina(i, cartiglio=_cartiglio(testo))
             if numeri:
                 segs, w, h = segmenti(pdf, i)
-                riquadro = _disegno(segs, w, h)
-                if riquadro is not None:
-                    p.quote = _quote(numeri, segs, riquadro)
+                disegno = _disegno(segs, w, h)
+                if disegno is not None:
+                    p.quote = _quote(numeri, segs, disegno)
             fuori.append(p)
     finally:
         doc.close()
@@ -393,7 +438,7 @@ def decidi(p):
             if grappolo[-1] / grappolo[0] - 1 <= 2 * LIBERE_REL:
                 f = grappolo[len(grappolo) // 2]
                 accordo = [q for q in libere if abs(q.rapporto / f - 1) <= LIBERE_REL]
-                if abs(f - 1.0) <= QUASI_UNO:
+                if abs(f - 1.0) <= QUASI_UNO or not any(q.intera for q in accordo):
                     break
                 if uno:
                     return (1.0, "pdf", "%d quote dicono un rapporto di %s (%s), %d "
