@@ -1414,12 +1414,22 @@ def _ricuci(S):
 
 # Quanti altri riquadri del giudice si provano, dopo il primo.
 RANGHI = 12
+# Con le soglie larghe di un tentativo (`pack3d.tentativi`) le tolleranze delle
+# fasce crescono di tanto.
+LARGHE = 1.5
 # La prima lettura vince a meno di tanto di costo; due flowpack diversi a meno
 # di tanto sono un dubbio dichiarato (come gli astucci, `strade`).
 PRECEDENZA = 0.3
 DUBBIO = 0.25
-# Oltre questo costo una lettura non e' plausibile.
+# Oltre questo costo una lettura non e' plausibile; con le soglie larghe di un
+# tentativo fino a tanto.
 COSTO_MAX = 2.0
+COSTO_MAX_LARGO = 3.0
+
+
+class NessunAltra(ValueError):
+    """Un tentativo dopo il primo (`pack3d.tentativi`) non ha un'altra lettura
+    plausibile dello steso: si ferma qui, senza passare ai ripieghi."""
 # Il costo di una strada che non e' quella di sempre, e di ogni punto di
 # coerenza che un riquadro ha meno del primo del giudice.
 COSTO_STRADA = 0.1
@@ -1839,10 +1849,36 @@ def analyze_auto(pdf_path, page_no: int = 0, bbox=None, fustella=False):
     traccia le cordonature; per gli artwork che non rientrano resta il
     registro dei casi calibrati.
     """
-    trovate, motivo = letture(pdf_path, page_no, bbox=bbox, fustella=fustella)
+    from . import tentativi
+    # un tentativo dopo il primo (`pack3d.tentativi`): le letture gia'
+    # scartate non vincono piu', e allora servono tutte; con le soglie larghe
+    # anche
+    giro = tentativi.giro_forzato() or 0
+    escluse = not tentativi.neutro() and any(
+        getattr(s, "tipo", None) == "flowpack" for s in (tentativi.ora().escludi or ()))
+    trovate, motivo = letture(pdf_path, page_no, bbox=bbox, fustella=fustella,
+                              tutte=escluse or tentativi.larghe())
+    if escluse:
+        tutte = len(trovate)
+        # le letture gia' scartate, e quelle che non sono plausibili: una
+        # seconda lettura e' la plausibile successiva, non una qualsiasi
+        tetto = COSTO_MAX_LARGO if tentativi.larghe() else COSTO_MAX
+        trovate = [l for l in trovate
+                   if not tentativi.escluso_flowpack(l.impronta(), giro)
+                   and (l.ordine == 0 or l.costo <= tetto)]
+        if tutte and not trovate:
+            raise NessunAltra("nessun'altra lettura dello steso: le %d che tornano "
+                              "danno modelli gia' scartati o non sono plausibili"
+                              % tutte)
     l, dubbio = scegli(trovate)
     if l is None:
         raise _StesoNonRisolto(motivo)
+    # quante altre letture plausibili danno un flowpack diverso: None se non
+    # si sono lette (la prima forte torna da sola)
+    letto_tutto = len(trovate) > 1 or escluse or tentativi.larghe() or bool(l.segni)
+    altre = (len({x.impronta() for x in trovate if x.costo <= COSTO_MAX
+                  and not stesso_flowpack(x, l)}) if letto_tutto else None)
+    tentativi.osserva(flowpack=l.impronta(), altre=altre, forte=not l.segni)
     fp = l.fp
     righe = [r for r in (riga_lettura(l, trovate), dubbio) if r]
     if l.strada != "colore" and l is trovate[0]:
@@ -2615,15 +2651,20 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None
         lunghe = [(c, a, b) for k, c, a, b, st in S if k == "H" and b - a > seg_h]
         copertura = {(c - y0) * PT2MM: _copre(lunghe, c, x0, x1) for c in hs}
         avvisi = [coerenza] if coerenza else []
+        # con le soglie larghe (`pack3d.tentativi`) le fasce tornano con
+        # meta' tolleranza in piu'
+        from . import tentativi
+        largo = LARGHE if tentativi.larghe() else 1.0
         if modo == "pinna":
-            b = solve_bands(web, folds, copertura=copertura)
+            b = solve_bands(web, folds, tol=1.5 * largo, copertura=copertura)
             if b is None:
                 raise _StesoNonRisolto("fasce non risolvibili: nastro %.1f mm" % web)
             lembo, inizio = 0.0, b["side_fin"]
             giro = 2.0 * (b["front"] + b["thick"])
             spessore, falda = b["thick"], b["side_fin"]
         elif modo == "piatta":
-            sol = [q for q in (risolvi_pinna_piatta(web, f) for f in folds) if q]
+            sol = [q for q in (risolvi_pinna_piatta(web, f, tol=1.5 * largo)
+                               for f in folds) if q]
             b = min(sol, key=lambda q: q["simmetria"]) if sol else None
             if b is None:
                 raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione ne' a "
@@ -2639,7 +2680,8 @@ def _risolvi_steso(S, raster, sc, ruotato, modo="pinna", numeri=(), S_quote=None
                           "due fasce della pinna - pinna %.1f mm, giro %.1f, "
                           "fronte mezzo giro %.1f" % (falda, giro, b["front"]))
         else:
-            sol = [q for f in folds for q in risolvi_pillow(web, f, tutti=True)]
+            sol = [q for f in folds
+                   for q in risolvi_pillow(web, f, tol=2.0 * largo, tutti=True)]
             b = min(sol, key=lambda q: q["scarto"]) if sol else None
             if b is None:
                 raise _StesoNonRisolto("ne' a pinna ne' a sovrapposizione: "

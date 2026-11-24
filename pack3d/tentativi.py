@@ -81,12 +81,28 @@ LARGHE = "soglie larghe"
 FORMA = "altra forma"
 MONTAGGIO = "altro montaggio"
 VERSO_PACK = "altro verso del pack"
+VERSO_FILM = "altro verso del film"
+RIPIEGO = "il ripiego"
 COME = {SECONDA: "la seconda lettura del punteggio",
         VERSO: "un altro verso del foglio",
         LARGHE: "le soglie piu' larghe",
         FORMA: "un'altra forma della famiglia",
         MONTAGGIO: "il vassoio montato come coperchio",
-        VERSO_PACK: "il pack girato attorno al fronte"}
+        VERSO_PACK: "il pack girato attorno al fronte",
+        VERSO_FILM: "il film girato sul foglio",
+        RIPIEGO: "un'altra lettura del riquadro dello steso"}
+# I ripieghi della lettura del flowpack, in ordine (`famiglie.flowpack.
+# analisi_flowpack`): il riquadro stampato, quello che la fustella chiude, le
+# copie del DT, il solutore vecchio.
+RIPIEGHI = ("stampato", "fustella", "copia", "vecchio")
+# Gli altri versi del film, quando niente dice il verso: prima mezzo giro (il
+# marchio capovolto), poi un quarto e tre quarti, solo se il film girato da'
+# le stesse misure (`famiglie.flowpack.flowpack_sulla_grafica`).
+GIRI_FILM = (180, 90, 270)
+# Quante seconde letture del flowpack al piu': uno steso con tanti riquadri
+# plausibili (il T1 a fondo argento ne ha sei) non deve mangiarsi i versi e i
+# ripieghi.
+SECONDE_FILM = 2
 
 # l'inizio delle righe che il giro aggiunge agli avvisi: non entrano
 # nell'impronta della lettura (`firma`)
@@ -97,6 +113,11 @@ GIRI = (0, 90, 180, 270)
 class Uguale(Exception):
     """Il tentativo ha dato una lettura o un modello che un tentativo prima
     ha gia' dato: non si guarda due volte."""
+
+
+class NonPlausibile(Uguale):
+    """Il tentativo darebbe un modello che non torna col DT (il film girato
+    di un quarto con altre misure): non si costruisce e non si guarda."""
 
 
 @dataclass
@@ -115,6 +136,8 @@ class Tentativo:
     # nel riempimento, il pack girato di tanti gradi attorno al fronte,
     # quando il suo verso non si legge (`riempimento.gira_il_pack`)
     gira_pack: int | None = None
+    # sul flowpack, il solo ripiego da leggere (`RIPIEGHI`)
+    ripiego: str | None = None
     osservato: dict = field(default_factory=dict)
 
     @property
@@ -123,7 +146,7 @@ class Tentativo:
         memorie delle letture (`artwork._SULLA_GRAFICA`)."""
         return (not self.larghe and self.giro is None and not self.escludi
                 and not self.prove_scartate and self.montaggio is None
-                and self.gira_pack is None)
+                and self.gira_pack is None and self.ripiego is None)
 
     def descrivi(self):
         return COME.get(self.cosa, self.cosa)
@@ -194,6 +217,30 @@ def escluso(lettura):
                if getattr(s, "tipo", None) is None)
 
 
+def ripiego_forzato():
+    t = _ORA.get()
+    return t.ripiego if t else None
+
+
+def impronta_flowpack(impronta, giro=0):
+    """Quello che dice se due letture del flowpack danno lo stesso modello:
+    il flowpack al millimetro (`flowpack.Lettura.impronta`) e il giro del
+    foglio da cui e' letto."""
+    return SimpleNamespace(tipo="flowpack", impronta=tuple(impronta),
+                           giro=int(giro or 0) % 360)
+
+
+def escluso_flowpack(impronta, giro=0):
+    """Se la lettura del flowpack da' un modello gia' scartato da un
+    tentativo prima, letto dallo stesso verso del foglio."""
+    t = _ORA.get()
+    if not t or not t.escludi:
+        return False
+    io = impronta_flowpack(impronta, giro)
+    return any(getattr(s, "tipo", None) == "flowpack" and s.impronta == io.impronta
+               and s.giro == io.giro for s in t.escludi)
+
+
 def escluso_display(impronta):
     """Se la lettura della Trade Unit (`vassoio.LetturaTU.impronta`) da' un
     display gia' scartato da un tentativo prima (`vassoio.stesso_display`)."""
@@ -211,7 +258,10 @@ def osserva(**cosa):
     letture plausibili danno un astuccio diverso), `giro`, `muto` (niente
     dice il verso); sulla Trade Unit `vassoio` (`vassoio.LetturaTU.impronta`)
     e `muto_montaggio` (niente dice se il vassoio e' un coperchio); nel
-    riempimento `muto_pack` (il pack non sa il suo verso)."""
+    riempimento `muto_pack` (il pack non sa il suo verso); sul flowpack
+    `flowpack` (`flowpack.Lettura.impronta`), `altre` (le altre letture
+    plausibili, None se non si sono lette), `giro_film` (il giro del foglio),
+    `muto_film` (niente dice il verso) e `ripiego` (`RIPIEGHI`)."""
     t = _ORA.get()
     if t is not None:
         t.osservato.update(cosa)
@@ -259,6 +309,11 @@ class Giro:
         self.astuccio = None        # l'ultimo osservato con un astuccio
         self.montaggi = set()       # i montaggi del vassoio gia' provati
         self.giri_pack = set()      # i versi del pack del riempimento provati
+        self.film = None            # l'ultimo osservato con un flowpack
+        self.giri_film = set()      # i versi del foglio del flowpack provati
+        self.ripieghi = set()       # i ripieghi del flowpack gia' letti
+        self.seconde_finite = False  # il flowpack non ha altre letture
+        self.giro_film_primo = None  # il verso del foglio della prima lettura
         self.perche_finiti = ""
         self._dal = None
         self._scartata = None
@@ -303,8 +358,32 @@ class Giro:
             self.montaggi.add(t.montaggio)
         if t.gira_pack is not None:
             self.giri_pack.add(t.gira_pack)
+        if oss.get("flowpack") is not None:
+            self.film = dict(oss)
+            g = int(oss.get("giro_film") or 0) % 360
+            self.giri_film.add(g)
+            if self.giro_film_primo is None:
+                self.giro_film_primo = g
+        if oss.get("ripiego"):
+            self.ripieghi.add(oss["ripiego"])
+        if t.ripiego:
+            self.ripieghi.add(t.ripiego)
+        if t.cosa == VERSO_FILM and t.giro is not None:
+            self.giri_film.add(t.giro)
+        if t.cosa == SECONDA and oss.get("flowpack") is None and self.film:
+            # la seconda lettura del flowpack non ha dato un flowpack: non
+            # ce ne sono altre
+            self.seconde_finite = True
+        if (oss.get("flowpack") is not None and oss.get("altre") == 0
+                and int(oss.get("giro_film") or 0) % 360 == self.giro_film_primo):
+            self.seconde_finite = True
         if esito == "ok":
             return
+        if oss.get("flowpack") is not None and self.kind in (None, "flowpack"):
+            # solo dichiarato flowpack: nel riempimento lo scarto puo' essere
+            # del contenitore, e il pack letto non si esclude
+            self.escludi.append(impronta_flowpack(oss["flowpack"],
+                                                  oss.get("giro_film")))
         if oss.get("astuccio") is not None:
             self.escludi.append(oss["astuccio"])
         if (oss.get("vassoio") is not None and self.kind == "vassoio"
@@ -382,13 +461,39 @@ class Giro:
             for g in ordine:
                 if g and g not in self.giri_pack:
                     return self._nuovo(VERSO_PACK, gira_pack=g)
+        # sul flowpack: la lettura dopo nel punteggio, gli altri versi del
+        # film quando niente dice il verso, gli altri ripieghi
+        film = self.film
+        if (film is not None and ultimo is not None and ultimo["esito"] != "ok"
+                and self.kind in (None, "flowpack")):
+            g = self.giro_film_primo or 0
+            versi = [v for v in GIRI_FILM if v not in self.giri_film] \
+                if film.get("muto_film") else []
+            # una prima lettura forte (nessun segno) di un film che non sa il
+            # suo verso: e' il verso che sbaglia, non le misure - mezzo giro
+            # prima della seconda lettura
+            if versi and film.get("forte") and 180 in versi:
+                return self._nuovo(VERSO_FILM, giro=180)
+            # le altre letture nel verso della prima: negli altri versi sono
+            # le stesse girate
+            seconde = sum(1 for f in self.fatti if f["cosa"] == SECONDA)
+            if not self.seconde_finite and seconde < SECONDE_FILM:
+                return self._nuovo(SECONDA, giro=g or None)
+            if versi:
+                return self._nuovo(VERSO_FILM, giro=versi[0])
+            usato = film.get("ripiego") or RIPIEGHI[0]
+            dopo = RIPIEGHI[RIPIEGHI.index(usato) + 1:] if usato in RIPIEGHI else ()
+            for r in dopo:
+                if r not in self.ripieghi:
+                    return self._nuovo(RIPIEGO, ripiego=r)
         # 2. gli altri versi, quando niente dice il verso
         if ast is not None and ast.get("muto"):
             for g in GIRI:
                 if g not in self.giri:
                     return self._nuovo(VERSO, giro=g)
         # 3. le soglie larghe: gli astucci e la Trade Unit
-        if not self.larghe and self.kind in (None, "carton", "vassoio", "riempimento"):
+        if not self.larghe and self.kind in (None, "carton", "vassoio", "riempimento",
+                                              "flowpack"):
             self.larghe = True
             return self._nuovo(LARGHE)
         # 4. la prova dopo nel registro

@@ -837,9 +837,14 @@ ricontrollare; il caso va alla routine solo quando i tentativi sono finiti
   seconda lettura (`tentativi.escluso_display`), le soglie larghe anche per
   chi dichiara vassoio o riempimento, e nel riempimento il pack girato
   attorno al fronte quando non sa il suo verso (`Tentativo.gira_pack`,
-  regole/riempimenti.md, *Il controllo dell'AI, e i tentativi*). Le strade proprie delle altre famiglie (il verso del
-  film, il ripiego del flowpack) entrano una famiglia per PR, come le
-  letture a punteggio.
+  regole/riempimenti.md, *Il controllo dell'AI, e i tentativi*). Sul
+  flowpack (dal 23 novembre 2026, regole/flowpack.md, *I tentativi del
+  flowpack*): la seconda lettura del punteggio (`tentativi.escluso_flowpack`),
+  gli altri versi del film quando niente dice il verso (mezzo giro, poi un
+  quarto e tre quarti solo se il film girato da' le stesse misure:
+  `tentativi.NonPlausibile`), gli altri ripieghi (`Tentativo.ripiego`), le
+  soglie larghe. Le strade proprie delle altre famiglie entrano una
+  famiglia per PR, come le letture a punteggio.
 - **Una lettura o un modello gia' visti** (`Giro.gia_letto`,
   `gia_costruito`) non si ricostruiscono e non si ricontrollano.
 - **Il tetto**: tre minuti dall'inizio della costruzione al verdetto
@@ -865,7 +870,13 @@ ricontrollare; il caso va alla routine solo quando i tentativi sono finiti
 - **Le statistiche**: un evento `tentativo` per ogni tentativo dopo il primo
   (cosa ha provato, com'e' andato), un evento `tentativi` per ogni giro con
   piu' di un tentativo (riuscito al tentativo n, o finiti e perche'), e nel
-  riassunto `tentativi`: casi, tentativi, riusciti.
+  riassunto `tentativi`: casi, tentativi, riusciti. Dal 23 novembre 2026 il
+  verdetto che non e' ok dice anche il tipo di difetto (`difetto`:
+  `misure`, `verso`, `residui`, uniti da «+», o `altro`;
+  `statistiche.tipo_difetto`), dalle parole dell'AI e dal suo
+  `residui_tecnici`: dei sei flowpack non ok al primo colpo dal 2 al 20
+  novembre quattro non si sono potuti ricostruire, perche' gli eventi
+  dicevano solo l'esito. I file di prima, senza, si sommano come sempre.
 - **L'oracolo** (`PACK3D_ORACOLO`), per provarlo senza spendere: un giudice
   finto al posto dell'AI, che dice ok se il modello torna come quello
   approvato (ingombro entro 1,5 mm, viste entro 3 livelli di grigio, la misura

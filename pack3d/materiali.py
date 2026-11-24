@@ -210,8 +210,14 @@ def copie_del_dt(pdf, foglio, page_no=0):
     stesso posto: un riquadro interno della grafica col rapporto giusto, come
     sul T1 ai cereali, non le ha.
     """
+    from .strati import penne_della_strada
     from .tracciati import segmenti
     segs, _w, _h = segmenti(pdf, page_no)
+    if penne_della_strada():
+        # il pack l'ha letto la strada coi tratti riuniti (`flowpack.letture`):
+        # le copie del DT sono a pezzi come lui, e riunite chiudono la copia
+        from .strade import unisci
+        segs = unisci(segs)
     X0, Y0, X1, Y1 = foglio
     W, H = X1 - X0, Y1 - Y0
     if W <= 0 or H <= 0:

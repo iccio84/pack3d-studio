@@ -295,6 +295,12 @@ def usa_penne(tecniche):
         d["penne"] = frozenset(tecniche)
 
 
+def penne_della_strada():
+    """Le penne della strada che ha letto il pack (`usa_penne`), o None se e'
+    quella di sempre, per colore."""
+    return (_STRADA.get() or {}).get("penne")
+
+
 def penne(pdf, page_no=0):
     """Le penne del disegno tecnico, come le sceglie `_technical_pens`; o
     quelle della strada che ha letto il pack (`usa_penne`)."""
