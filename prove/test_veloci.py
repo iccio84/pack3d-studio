@@ -857,6 +857,16 @@ class GiudiceDelloSteso(unittest.TestCase):
     """`flowpack._riquadro_coerente`: lati che non sono tagli, uno steso
     disegnato dalla prova (nessun file dei clienti)."""
 
+    def setUp(self):
+        # La memoria del giudice e' indicizzata con id(S) e id(raster), e la
+        # lettura vera la svuota prima e dopo ogni PDF (`flowpack.letture`).
+        # Qui il giudice si chiama da solo: senza svuotarla, uno steso nuovo
+        # che riprende l'id di uno di una prova di prima trovava la sua
+        # immagine integrale, e la prova falliva a caso (24 novembre 2026).
+        from pack3d import flowpack as fpk
+        fpk._memo_coerente().clear()
+        self.addCleanup(fpk._memo_coerente().clear)
+
     def _steso(self, cornice=False, pinna_bianca=False, legenda=False, pinna_aperta=False):
         from pack3d import flowpack as fpk
         mm = 1.0 / fpk.PT2MM
