@@ -37,7 +37,7 @@ except ImportError as e:                       # messaggio utile, non uno stack 
              "Installa con:  pip install -r requirements.txt" % e.name)
 
 from pack3d import coda, controllo, gelato, pop, statistiche, strati, verifica, versione
-from pack3d import tentativi
+from pack3d import scala, tentativi
 from pack3d import lettura as lettura_pdf
 from pack3d import lavoratori
 from pack3d import stato
@@ -1011,6 +1011,31 @@ class Handler(BaseHTTPRequestHandler):
                                            "dichiara %s"
                                            % (kind, " o ".join("'%s'" % k
                                                                for k in KIND_NOTI)))
+                # La scala del disegno dalle quote (`pack3d.scala`): un DT in
+                # scala 1:2 si riscrive 1:1 prima di ogni lettura, e la
+                # lettura, la texture e il controllo lo vedono come sempre. Il
+                # PDF caricato resta quello che va in coda. I materiali POP
+                # hanno le loro regole (regole/pop.md, *Il confine*).
+                scale_lette = []
+                if not pop.e_pop(kind):
+                    try:
+                        chiesta = scala.chiesta(opts.get("scala"))
+                    except ValueError as e:
+                        return self._send(400, str(e))
+                    for k, p in enumerate(pdfs):
+                        pdfs[k], letta = scala.in_scala(p, td, k, chiesta)
+                        scale_lette.append(letta)
+                        if letta.applicata or letta.dubbio:
+                            statistiche.conta("scala", dichiarato=kind or "nessuna",
+                                              esito="dubbio" if letta.dubbio else "applicata",
+                                              motivo="%s %s" % (letta.come,
+                                                                scala.nome(letta.fattore)))
+                    pdf = pdfs[0]
+                # in cima ai dettagli tecnici di ogni lettura e costruzione; il
+                # dubbio di scala e' un difetto: il caso va in coda anche col
+                # controllo d'accordo (`con_difetti`, dopo i tentativi)
+                righe_scala = scala.righe_di(scale_lette, nomi)
+                difetti_scala = [d for letta in scale_lette for d in letta.difetti()]
                 if kind == "incarto" and prodotto is None:
                     return self._send(400, "Incarti: carica anche l'immagine del "
                                            "prodotto da incartare. La misura "
@@ -1135,7 +1160,7 @@ class Handler(BaseHTTPRequestHandler):
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                       blocchi_caso)
                         return self._send(500, errore, controllo=verdetto)
-                    return self._send(200, json.dumps(letto))
+                    return self._send(200, json.dumps(con_righe(letto, righe_scala)))
                 if (in_piu_pezzi(kind, pdfs)
                         and self.path.startswith("/api/analyze")):
                     # anche da /api/analyze-ai: i pezzi li misura il codice,
@@ -1146,7 +1171,7 @@ class Handler(BaseHTTPRequestHandler):
                         errore, verdetto = caso_fermo(e, kind, pdfs, nomi_caso, opts,
                                                       blocchi_caso)
                         return self._send(500, errore, controllo=verdetto)
-                    return self._send(200, json.dumps(letto))
+                    return self._send(200, json.dumps(con_righe(letto, righe_scala)))
                 if self.path.startswith("/api/analyze-ai"):
                     import agent
                     par, tr = agent.analyse(pdf, kind, opts)
@@ -1202,7 +1227,7 @@ class Handler(BaseHTTPRequestHandler):
                                               controllo=verdetto)
                     statistiche.conta("lettura", dichiarato=kind or "nessuna",
                                       letto=letto.get("kind"))
-                    return self._send(200, json.dumps(letto))
+                    return self._send(200, json.dumps(con_righe(letto, righe_scala)))
                 if self.path.startswith("/api/build"):
                     if not _slots.acquire(blocking=False):
                         return self._send(503, "Server occupato: riprova fra qualche "
@@ -1231,8 +1256,9 @@ class Handler(BaseHTTPRequestHandler):
                         avvisi_ingresso = []
                         # l'immagine del prodotto da incartare: nei dettagli
                         # tecnici, non fra le righe dell'AI
-                        righe_prodotto = ([riga_prodotto(prodotto, nome_prodotto)]
-                                          if prodotto is not None else [])
+                        righe_prodotto = list(righe_scala) + (
+                            [riga_prodotto(prodotto, nome_prodotto)]
+                            if prodotto is not None else [])
                         # Le aree riservate che l'agente ha visto: valgono su
                         # tutte e due le famiglie, quindi si leggono una volta
                         # sola prima di scegliere il ramo.
@@ -1523,6 +1549,11 @@ class Handler(BaseHTTPRequestHandler):
                                     scelto = (c2, v2, ctx2, None)
                             c, verdetto, ctx, riga = scelto
                             glb, meta, quadro = c.glb, c.meta, c.quadro
+                            # il dubbio di scala dopo il giro: nessuna lettura
+                            # dello stesso PDF lo toglie, e il caso va in coda
+                            # anche col controllo d'accordo - un pack grande la
+                            # meta' con la grafica giusta all'AI sembra giusto
+                            verdetto = con_difetti(verdetto, difetti_scala)
                             righe_ai = list(c.righe_ai)
                             if len(giro.fatti) > 1:
                                 conta_tentativi(giro, kind, verdetto)
@@ -1581,12 +1612,12 @@ class Handler(BaseHTTPRequestHandler):
                                         "ANTHROPIC_API_KEY fra i Secrets dello "
                                         "Space")
                         meta.append(righe_ai[-1])
-                    if quadro is None and verifica.difetti(meta):
+                    if quadro is None and verifica.difetti(meta + difetti_scala):
                         # senza controllo AI - la chiave che manca, o le viste
                         # che non riescono - il verdetto lo danno le verifiche: il caso
                         # va in coda senza le viste del controllo, la routine
                         # lo ricostruisce comunque
-                        verdetto = con_difetti(None, meta)
+                        verdetto = con_difetti(None, meta + difetti_scala)
                         statistiche.conta("verdetto", letto=c.info["kind"],
                                           esito=verdetto["esito"], fase="senza AI",
                                           difetto=statistiche.tipo_difetto(verdetto))
@@ -1787,6 +1818,14 @@ def verdetto_di(gettone):
     with _VERDETTI_LOCK:
         v = VERDETTI.get(gettone)
     return v[1] if v else None
+
+
+def con_righe(letto, righe):
+    """La lettura `letto` con `righe` in cima ai suoi avvisi (la scala del
+    disegno, `pack3d.scala`)."""
+    if not righe or not isinstance(letto, dict):
+        return letto
+    return dict(letto, meta=list(righe) + list(letto.get("meta") or []))
 
 
 def con_difetti(verdetto, meta):
