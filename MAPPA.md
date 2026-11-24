@@ -66,6 +66,10 @@ sono in GADGET.md.
   disco (`PACK3D_CACHE`), per tutti i lavoratori. Chi vuole i tracciati della
   fustella li chiede li' (`extract`, `plancia.tratti`, il ripiego del
   flowpack), non a pdfplumber.
+- `pack3d/scala.py`: la scala del disegno dalle quote scritte (il numero
+  sulla sua linea) e dal cartiglio, prima di ogni lettura: un DT in scala
+  1:2 si riscrive 1:1 per tutte le famiglie, una scala dubbia manda il caso
+  in coda (regole/pdf.md, *La scala del disegno*).
 - `pack3d/strade.py`: le strade di lettura della fustella - per colore, coi
   tratti riuniti, per geometria, senza una penna dubbia - e il punteggio che
   sceglie fra le letture dell'astuccio, con quote e grafica; due letture
@@ -150,7 +154,7 @@ sono in GADGET.md.
 |---|---|
 | segni tecnici, quote o note sulla texture | `strati.py` (livelli, `senza_tecnici`), `techink.py` (inchiostri tecnici), `artwork.py` (aree riservate, GDA, box) |
 | grafica girata, fronte sul retro | `artwork.py` (`verso_della_grafica`, `astuccio_sulla_grafica`), `verifica.py` |
-| misure sbagliate | `dieline.py`, `quote.py` (il riscontro con le quote scritte), `tracciati.py` |
+| misure sbagliate | `dieline.py`, `quote.py` (il riscontro con le quote scritte), `scala.py` (la scala del disegno), `tracciati.py` |
 | colori: colata, nero, sovrastampa | `colata.py`, `nero.py`, `strati.py` (`sovrastampe`) |
 | pagine in piu', DT scelto male | `artwork.py` (`pagina_unica`), `tools.py` (`dt_della_tavola`) |
 

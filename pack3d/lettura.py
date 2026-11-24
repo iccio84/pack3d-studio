@@ -68,6 +68,12 @@ def _tavola(pdf, gradi, parti, riquadro, legenda, lato=LATO):
 
     from .steso import INDIETRO, gira
     from .vista import _carattere, pagina
+    # il disegno riscritto in scala (`pack3d.scala`): chi guarda la lettura
+    # deve sapere che le misure non sono quelle del PDF com'era
+    from .scala import dichiarata
+    in_scala = dichiarata(pdf)
+    if in_scala:
+        legenda = [(in_scala, None), ("", None)] + list(legenda)
     im, (w_mm, _h_mm) = pagina(pdf, lato, misure=True)
     k = im.width / (w_mm / PT2MM)            # pixel per punto
 
