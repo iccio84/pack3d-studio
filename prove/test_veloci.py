@@ -3337,7 +3337,7 @@ if __name__ == "__main__":
     unittest.main()
 
 
-def _tavola_quotata(percorso, scala=1.0, numeri=None, cartiglio=None):
+def _tavola_quotata(percorso, scala=1.0, numeri=None, cartiglio=None, grande=False):
     """Un PDF con un DT rettangolare di 100 x 60 mm disegnato in `scala`
     (0,5 per un disegno 1:2) e le sue due quote d'insieme, coi richiami e il
     numero nel buco della linea: `numeri` (di serie le misure vere)."""
@@ -3345,7 +3345,7 @@ def _tavola_quotata(percorso, scala=1.0, numeri=None, cartiglio=None):
     from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject)
     mm = 72.0 / 25.4
     W, H = 260 * mm, 200 * mm
-    x0, y0 = 30 * mm, 60 * mm
+    x0, y0 = (200 * mm, 150 * mm) if grande else (30 * mm, 60 * mm)
     w, h = 100 * mm * scala, 60 * mm * scala
     passo, giro = numeri or (100, 60)
     r = ["q 0 0 1 RG 0.5 w"]
@@ -3358,7 +3358,16 @@ def _tavola_quotata(percorso, scala=1.0, numeri=None, cartiglio=None):
                            (x0 + w / 3, y0, x0 + w / 3, y0 + h),
                            (x0 + 2 * w / 3, y0, x0 + 2 * w / 3, y0 + h)):
         linea(xa, ya, xb, yb)
-    buco = 8 * mm
+    if grande:
+        # il DT vero, 150 x 90 senza quote; quello quotato e' la sua miniatura
+        gx, gy, gw, gh = 20 * mm, 20 * mm, 150 * mm, 90 * mm
+        for xa, ya, xb, yb in ((gx, gy, gx + gw, gy), (gx, gy + gh, gx + gw, gy + gh),
+                               (gx, gy, gx, gy + gh), (gx + gw, gy, gx + gw, gy + gh),
+                               (gx + gw / 3, gy, gx + gw / 3, gy + gh),
+                               (gx + 2 * gw / 3, gy, gx + 2 * gw / 3, gy + gh),
+                               (gx, gy + gh / 2, gx + gw, gy + gh / 2)):
+            linea(xa, ya, xb, yb)
+    buco = 8 * mm * max(scala, 0.5)
     # il passo, sotto
     yq, xm = y0 - 8 * mm, x0 + w / 2
     linea(x0, y0 - 1 * mm, x0, yq - 2 * mm)
@@ -3470,6 +3479,14 @@ class ScalaDelDisegno(unittest.TestCase):
         # la scala chiesta vince, e il PDF dritto non si tocca
         self.assertEqual(scala.in_scala(dritta, self.td, 1)[0], dritta)
         self.assertEqual(scala.leggi(meta, opzione=1.0).fattore, 1.0)
+
+    def test_le_quote_della_miniatura_non_dicono_la_scala(self):
+        from pack3d import scala
+        # la miniatura a un quarto porta le quote vere: 1:4, ma il disegno
+        # grande e' 1:1
+        pdf = _tavola_quotata(os.path.join(self.td, "m.pdf"), scala=0.25, grande=True)
+        s = scala.leggi(pdf)
+        self.assertEqual((s.fattore, s.dubbio), (1.0, None))
 
     def test_il_cartiglio_contro_le_quote(self):
         from pack3d import scala
