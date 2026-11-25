@@ -686,6 +686,20 @@ Senza quote, la scala del PDF, come sempre, e nessuna riga. L'opzione
 `scala` della richiesta (`1:2`, `2:1` o il fattore) vince su tutto, come
 `larghezza_fustella`. Le statistiche contano l'evento `scala`.
 
+**L'altra scala come tentativo** (regole/verifiche.md, *Il secondo tentativo
+prima della coda*): col controllo dell'AI, se il modello non passa, il codice
+lo rifa' nell'altra scala - per prima col dubbio di scala, per ultima quando
+le quote d'accordo l'hanno applicata - con le righe «DISEGNO IN SCALA 1:2,
+l'altra scala» o «DISEGNO ALLA SCALA DEL PDF, l'altra scala».
+
+Attenzione: un PDF con revisioni incrementali (`/Prev` nel trailer: 22 dei 69
+PDF del parco) riscritto da pypdf in una revisione sola non si legge proprio
+uguale - sul T2x12 a strappo, riscritto senza cambiare la scala, 5 livelli di
+grigio sulle viste e le UVW che tornano col DT invece di stirarsi. Succede
+solo ai PDF riscritti in scala; i PDF senza revisioni tornano uguali al byte
+(il T10 al lampone a meta' col cartiglio, nell'altra scala, e' il modello del
+parco).
+
 Sul parco nessun PDF cambia scala ne' ha un dubbio; la variante `dimezzato`
 del banco (il disegno a meta' con le quote vere) si legge 1:2 su 64 PDF su
 68 - non i due totem POP e lo scaffale POP, fuori da qui, e la foto del
