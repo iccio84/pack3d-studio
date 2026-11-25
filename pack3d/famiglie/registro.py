@@ -473,6 +473,68 @@ def _prova_flowpack(l):
         raise
 
 
+# ---------------------------------------------------------------------------
+# L'astuccio dichiarato flowpack (25 novembre 2026). Dichiarato flowpack, un
+# astuccio usciva flowpack plausibile - a pinna, a sovrapposizione - e lo
+# fermava solo il controllo dell'AI (il T10 al lampone e il T2x25,
+# lavori/robustezza/flowpack.md in pack3d-casi). Se il PDF si legge
+# CHIARAMENTE come astuccio, la lettura si ferma con una domanda: e' un
+# astuccio o un flowpack? Non e' un errore e il caso non va in coda; chi ha
+# davvero un flowpack lo conferma (`flowpack_confermato`, un'opzione del
+# caso) e si costruisce come sempre.
+#
+# Chiaramente vuol dire tutte e due: il file non dice di essere un film
+# (`_dice_film`: WRAPPING, o FASCIA e PASSO), e la lettura dell'astuccio per
+# colore e' forte - le misure tornano e le quote non la smentiscono
+# (`strade.forte`). Sul parco i 18 flowpack non danno nessuna lettura
+# d'astuccio; gli astucci a fasciatura verticale la danno forte.
+
+OPZIONE_CONFERMA = "flowpack_confermato"
+
+# dentro i 200 caratteri che la pagina mostra di un errore (REGOLE.md, *La
+# dichiarazione vale anche quando dice di no*)
+DOMANDA_FLOWPACK = (
+    "Hai scelto Flowpack, ma il disegno si legge come un astuccio %s di %s e "
+    "non dice di essere un film: se e' un astuccio scegli Astuccio; se e' un "
+    "flowpack, confermalo.")
+
+RIGA_CONFERMA = (
+    "FLOWPACK CONFERMATO da chi ha caricato il PDF: il disegno si legge anche "
+    "come un astuccio %s di %s, ma il pack e' un film")
+
+
+def astuccio_nel_flowpack(pdf):
+    """Un PDF dichiarato flowpack che si legge chiaramente come astuccio:
+    `{"misure": "271 x 100 x 45 mm", "chiuso": True, "come": "chiuso"}`;
+    None se no, o se la lettura dell'astuccio si rompe (il flowpack va
+    avanti come prima)."""
+    try:
+        pdf, _n = artwork.pagina_unica(pdf)
+        if artwork.solo_immagine(pdf) or _dice_film(pdf):
+            return None
+        es = strade.letture(pdf, solo=set())
+        m = es.migliore
+        if m is None or m.d is None or not strade.forte(m, strade.Contesto(pdf, 0)):
+            return None
+        d = es.dieline()
+        chiuso = bool(getattr(d, "chiuso", True))
+        return dict(misure="%.0f x %.0f x %.0f mm" % tuple(d.dims_mm),
+                    chiuso=chiuso, come="chiuso" if chiuso else "aperto")
+    except Exception:                               # noqa: BLE001
+        traceback.print_exc()
+        return None
+
+
+def domanda_flowpack(a):
+    """Il testo della domanda, per chi chiama l'API senza la pagina."""
+    return DOMANDA_FLOWPACK % (a["come"], a["misure"])
+
+
+def riga_conferma(a):
+    """La riga dei dettagli tecnici di un flowpack confermato."""
+    return RIGA_CONFERMA % (a["come"], a["misure"])
+
+
 # L'ordine e' la regola. Le dichiarate solo: si fanno subito, e non cadono
 # mai in un'altra famiglia. Poi, senza dichiarazione o dichiarate, le forme
 # che il solutore astuccio risolverebbe male - vassoio e display, cono,

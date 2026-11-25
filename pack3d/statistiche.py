@@ -83,7 +83,8 @@ def conta(evento, **campi):
     """Una riga: `evento` (lettura, costruzione, fermata, verdetto,
     tentativo - uno dopo il primo, `pack3d.tentativi` -, tentativi - com'e'
     finito un giro con piu' di un tentativo -, scala - un PDF in un'altra
-    scala o in dubbio, `pack3d.scala`) e i suoi
+    scala o in dubbio, `pack3d.scala` -, domanda - una lettura fermata da
+    una domanda e le sue risposte, `registro.astuccio_nel_flowpack`) e i suoi
     campi. Mai un errore: le statistiche non fermano niente. Le prove non
     contano (`in_prova`)."""
     if not FILE or getattr(_richiesta, "prova", False):

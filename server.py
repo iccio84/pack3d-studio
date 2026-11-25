@@ -74,7 +74,9 @@ from pack3d.famiglie.riempimento import (
     cu_riempimento,
     per_fila_scelti,
     quanti_pezzi)
-from pack3d.famiglie.registro import COSTRUZIONI, _costruisci_flowpack, analyze_pdf
+from pack3d.famiglie.registro import (COSTRUZIONI, OPZIONE_CONFERMA, _costruisci_flowpack,
+                                      analyze_pdf, astuccio_nel_flowpack,
+                                      domanda_flowpack, riga_conferma)
 
 
 def nota_incisioni(meta):
@@ -249,7 +251,8 @@ OPZIONI_CASO = ("kind", "teeth", "soft", "pinne", "saldatura", "scatola",
                 "pezzi", "spessore", "apertura", "pellicola", "quality", "materiali",
                 "quanti", "per_fila", "incisioni", "cu", "gelato", "chiusura",
                 "gonfio", "plancia", "inclina", "pinne_cromate", "chiusa", "gira",
-                "film_argento", "senza_grafica", "senza_intersezioni")
+                "film_argento", "senza_grafica", "senza_intersezioni",
+                "flowpack_confermato")
 
 
 # l'immagine del prodotto da incartare: la pagina la rimpicciolisce a 1600 px
@@ -1168,6 +1171,39 @@ class Handler(BaseHTTPRequestHandler):
                         return self._send(500, errore, controllo=verdetto)
                     statistiche.conta("lettura", dichiarato=kind, letto=letto.get("kind"))
                     return self._send(200, json.dumps(letto))
+                # L'astuccio dichiarato flowpack (`registro.astuccio_nel_flowpack`):
+                # se il PDF si legge chiaramente come astuccio, la lettura si
+                # ferma con una domanda - non un errore, e il caso non va in
+                # coda. La pagina chiede «e' un astuccio o un flowpack?»; chi ha
+                # davvero un flowpack lo conferma (`flowpack_confermato`, che
+                # viaggia col caso) e si costruisce come sempre, con la riga
+                # della conferma nei dettagli e davanti al controllo dell'AI.
+                # Le statistiche contano la domanda e le due risposte.
+                righe_conferma = []
+                lettura_o_costruzione = (self.path.startswith(("/api/analyze", "/api/build"))
+                                         and not self.path.startswith("/api/analyze-ai"))
+                if kind == "flowpack" and len(pdfs) == 1 and lettura_o_costruzione:
+                    nel = astuccio_nel_flowpack(pdf)
+                    if nel is not None and not opts.get(OPZIONE_CONFERMA):
+                        statistiche.conta("domanda", dichiarato="flowpack", letto="astuccio",
+                                          esito="chiesta")
+                        if self.path.startswith("/api/build"):
+                            return self._send(409, domanda_flowpack(nel))
+                        return self._send(200, json.dumps(con_righe(dict(
+                            kind="flowpack", title="Flowpack o astuccio?",
+                            meta=[domanda_flowpack(nel)], domanda="flowpack_astuccio",
+                            astuccio=nel), righe_scala)))
+                    if nel is not None:
+                        righe_conferma.append(riga_conferma(nel))
+                        if self.path.startswith("/api/analyze"):
+                            statistiche.conta("domanda", dichiarato="flowpack",
+                                              letto="astuccio", esito="flowpack")
+                if (kind == "carton" and opts.get("da_flowpack")
+                        and self.path.startswith("/api/analyze") and lettura_o_costruzione):
+                    # la risposta «e' un astuccio»: la pagina rifa' la lettura
+                    # come astuccio, e lo dice una volta
+                    statistiche.conta("domanda", dichiarato="flowpack", letto="astuccio",
+                                      esito="astuccio")
                 if kind == "riempimento" and self.path.startswith("/api/analyze"):
                     try:
                         letto = analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta))
@@ -1244,8 +1280,10 @@ class Handler(BaseHTTPRequestHandler):
                                               controllo=verdetto)
                     statistiche.conta("lettura", dichiarato=kind or "nessuna",
                                       letto=letto.get("kind"))
-                    # le righe della scala del tentativo che ha letto
-                    return self._send(200, json.dumps(con_righe(letto, pdf_del(t)[2])))
+                    # le righe della scala del tentativo che ha letto, e la
+                    # conferma del flowpack
+                    return self._send(200, json.dumps(con_righe(
+                        letto, list(pdf_del(t)[2]) + righe_conferma)))
                 if self.path.startswith("/api/build"):
                     if not _slots.acquire(blocking=False):
                         return self._send(503, "Server occupato: riprova fra qualche "
@@ -1277,7 +1315,7 @@ class Handler(BaseHTTPRequestHandler):
                         # tecnici, non fra le righe dell'AI
                         righe_prodotto = list(righe_scala) + (
                             [riga_prodotto(prodotto, nome_prodotto)]
-                            if prodotto is not None else [])
+                            if prodotto is not None else []) + righe_conferma
                         # Le aree riservate che l'agente ha visto: valgono su
                         # tutte e due le famiglie, quindi si leggono una volta
                         # sola prima di scegliere il ramo.

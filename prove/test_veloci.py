@@ -3617,3 +3617,174 @@ class LAltraScala(unittest.TestCase):
                                    "la prima lettura era in scala 1:2")
         self.assertTrue(righe[1].startswith("DISEGNO IN SCALA 1:2 (b.pdf), l'altra scala"))
         self.assertTrue(righe[2].startswith("DUBBIO DI SCALA (b.pdf): "))
+
+
+def _pdf_con_revisione(percorso):
+    """Un PDF di due revisioni, come lo lascia Acrobat quando si ritaglia la
+    pagina e si aggiunge una scritta: la prima ha la pagina intera, 600 x
+    400 pt, con un tratto e «PRIMA»; la seconda, appesa in fondo al file con
+    la sua xref e il `/Prev`, ritaglia la pagina (CropBox e TrimBox) e
+    sostituisce il contenuto con un tratto in piu' e «DOPO»."""
+    from pypdf import PdfWriter
+    from pypdf.generic import (ArrayObject, DecodedStreamObject, DictionaryObject,
+                               FloatObject, NameObject)
+
+    def flusso(w, testo, tratti):
+        s = DecodedStreamObject()
+        s.set_data(("q 1 0 0 RG 1 w %s Q BT /F1 12 Tf 1 0 0 1 150 200 Tm (%s) Tj ET\n"
+                    % (" ".join("%d %d m %d %d l S" % t for t in tratti), testo)).encode())
+        return w._add_object(s)
+
+    w = PdfWriter()
+    p = w.add_blank_page(600, 400)
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                             NameObject("/Subtype"): NameObject("/Type1"),
+                             NameObject("/BaseFont"): NameObject("/Helvetica")})
+    p[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+        {NameObject("/F1"): w._add_object(font)})})
+    p[NameObject("/Contents")] = flusso(w, "PRIMA", [(120, 150, 380, 150)])
+    prima = percorso + ".prima"
+    with open(prima, "wb") as fh:
+        w.write(fh)
+    w = PdfWriter(prima, incremental=True)
+    p = w.pages[0]
+    for nome in ("/CropBox", "/TrimBox"):
+        p[NameObject(nome)] = ArrayObject(FloatObject(v) for v in (100, 100, 400, 300))
+    p[NameObject("/Contents")] = flusso(w, "DOPO", [(120, 150, 380, 150), (120, 250, 380, 250)])
+    with open(percorso, "wb") as fh:
+        w.write(fh)
+    os.remove(prima)
+    return percorso
+
+
+class RevisioniIncrementali(unittest.TestCase):
+    """Un PDF con revisioni incrementali si legge com'e' l'ultima, e riscritto
+    in una revisione sola si legge uguale (`regole/pdf.md`, *Le revisioni
+    incrementali*). Il 25 novembre 2026 sul parco: 4 PDF su 69 con una
+    revisione vera (tre ritagli di Acrobat, un'aggiunta di Illustrator),
+    letti da pdfplumber, pdfium e pypdf all'ultima revisione, come li mostra
+    un visualizzatore; riscritti da pypdf, 66 modelli su 66 uguali al byte.
+    Il giro delle librerie (requirements.txt) li aggiorna tutte e tre: se
+    una comincia a leggere la prima revisione, o a mescolarle, si vede qui."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.td = tempfile.mkdtemp()
+        cls.pdf = _pdf_con_revisione(os.path.join(cls.td, "rev.pdf"))
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.td, ignore_errors=True)
+
+    def test_e_davvero_una_revisione_incrementale(self):
+        with open(self.pdf, "rb") as fh:
+            b = fh.read()
+        self.assertEqual(b.count(b"%%EOF"), 2)
+        self.assertIn(b"/Prev", b[b.index(b"%%EOF"):])
+
+    def test_pdfplumber_legge_l_ultima(self):
+        import pdfplumber
+        with pdfplumber.open(self.pdf) as pdf:
+            pg = pdf.pages[0]
+            # il telaio resta la MediaBox; il ritaglio e' quello nuovo
+            self.assertEqual([round(v) for v in pg.mediabox], [0, 0, 600, 400])
+            self.assertEqual([round(v) for v in pg.cropbox], [100, 100, 400, 300])
+            self.assertEqual(pg.extract_text().strip(), "DOPO")
+            self.assertEqual(len(pg.lines), 2)
+
+    def test_pdfium_legge_l_ultima(self):
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(self.pdf)
+        try:
+            pg = doc[0]
+            self.assertEqual([round(v) for v in pg.get_cropbox()], [100, 100, 400, 300])
+            self.assertEqual([round(v) for v in pg.get_mediabox()], [0, 0, 600, 400])
+            self.assertEqual(pg.get_textpage().get_text_range().strip(), "DOPO")
+            # la resa e' il ritaglio, 300 x 200 pt
+            self.assertEqual(pg.render(scale=1).to_pil().size, (300, 200))
+        finally:
+            doc.close()
+
+    def test_pypdf_legge_l_ultima(self):
+        from pypdf import PdfReader
+        pg = PdfReader(self.pdf).pages[0]
+        self.assertEqual([round(float(v)) for v in pg.cropbox], [100, 100, 400, 300])
+        self.assertEqual(pg.extract_text().strip(), "DOPO")
+
+    def test_riscritto_si_legge_uguale(self):
+        import pdfplumber
+        import pypdfium2 as pdfium
+        from pack3d import scala
+        uno = os.path.join(self.td, "una_revisione.pdf")
+        scala.riscrivi(self.pdf, uno, {})
+        with open(uno, "rb") as fh:
+            self.assertEqual(fh.read().count(b"%%EOF"), 1)
+
+        def lettura(p):
+            with pdfplumber.open(p) as pdf:
+                pg = pdf.pages[0]
+                return ([round(v, 2) for v in pg.cropbox], pg.extract_text(),
+                        sorted((round(l["x0"], 2), round(l["top"], 2), round(l["x1"], 2))
+                               for l in pg.lines))
+
+        def resa(p):
+            doc = pdfium.PdfDocument(p)
+            try:
+                return np.asarray(doc[0].render(scale=1).to_pil().convert("RGB"))
+            finally:
+                doc.close()
+        self.assertEqual(lettura(uno), lettura(self.pdf))
+        self.assertTrue(np.array_equal(resa(uno), resa(self.pdf)))
+
+
+class AstuccioDichiaratoFlowpack(unittest.TestCase):
+    """Dichiarato flowpack, un PDF che si legge chiaramente come astuccio si
+    ferma con una domanda (`registro.astuccio_nel_flowpack`, regole/
+    flowpack.md, *L'astuccio dichiarato flowpack*). Chiaramente: il file non
+    dice di essere un film, e la lettura dell'astuccio per colore e' forte."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        self.pdf = _tavola_quotata(os.path.join(self.td, "t.pdf"))
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def _esito(self, forte=True):
+        from pack3d import strade
+        d = types.SimpleNamespace(dims_mm=(187.4, 146.5, 50.0), chiuso=True)
+        es = strade.Esito()
+        es.migliore = types.SimpleNamespace(d=d)
+        es.dieline = lambda: d
+        return es, forte
+
+    def _prova(self, film=False, forte=True, nessuna=False):
+        from pack3d.famiglie import registro
+        es, f = self._esito(forte)
+        if nessuna:
+            es.migliore = None
+        with mock.patch.object(registro, "_dice_film", return_value=film), \
+                mock.patch.object(registro.strade, "letture", return_value=es) as letture, \
+                mock.patch.object(registro.strade, "forte", return_value=f):
+            return registro.astuccio_nel_flowpack(self.pdf), letture
+
+    def test_astuccio_chiaro_fa_la_domanda(self):
+        from pack3d.famiglie import registro
+        a, _ = self._prova()
+        self.assertEqual(a, dict(misure="187 x 146 x 50 mm", chiuso=True, come="chiuso"))
+        self.assertIn("astuccio chiuso di 187 x 146 x 50 mm", registro.domanda_flowpack(a))
+        self.assertLessEqual(len(registro.domanda_flowpack(a)), 200)
+        self.assertTrue(registro.riga_conferma(a).startswith("FLOWPACK CONFERMATO"))
+
+    def test_il_film_che_lo_dice_non_si_legge_come_astuccio(self):
+        a, letture = self._prova(film=True)
+        self.assertIsNone(a)
+        letture.assert_not_called()
+
+    def test_una_lettura_debole_non_basta(self):
+        self.assertIsNone(self._prova(forte=False)[0])
+        self.assertIsNone(self._prova(nessuna=True)[0])
+
+    def test_la_conferma_viaggia_col_caso(self):
+        import server
+        self.assertIn("flowpack_confermato", server.OPZIONI_CASO)
