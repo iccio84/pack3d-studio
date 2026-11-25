@@ -45,6 +45,15 @@ modello diverso da quelli gia' provati:
    cartotecnico, la punta, la coppa, il tubo dopo l'astuccio; dentro la
    tipologia dichiarata, mai fuori.
 
+**L'altra scala** (`pack3d.scala`, il punto 4): quando la scala del disegno
+e' in dubbio, il primo tentativo dopo la prima lettura e' l'altra scala - il
+PDF riscritto nella scala che le quote o il cartiglio dicevano, o quello
+caricato se la prima e' quella delle quote. Quando la scala delle quote e'
+applicata senza dubbi, la scala del PDF e' l'ultimo tentativo: una scala
+che quote d'accordo dicono si sbaglia di rado. Il PDF lo sceglie chi
+costruisce (`server`), dal tentativo (`Tentativo.scala`); il dubbio di scala
+manda comunque il caso in coda.
+
 Quando la prima lettura si ferma non c'e' una seconda plausibile: si
 comincia dalle soglie larghe.
 
@@ -83,6 +92,7 @@ MONTAGGIO = "altro montaggio"
 VERSO_PACK = "altro verso del pack"
 VERSO_FILM = "altro verso del film"
 RIPIEGO = "il ripiego"
+SCALA = "altra scala"
 COME = {SECONDA: "la seconda lettura del punteggio",
         VERSO: "un altro verso del foglio",
         LARGHE: "le soglie piu' larghe",
@@ -90,7 +100,8 @@ COME = {SECONDA: "la seconda lettura del punteggio",
         MONTAGGIO: "il vassoio montato come coperchio",
         VERSO_PACK: "il pack girato attorno al fronte",
         VERSO_FILM: "il film girato sul foglio",
-        RIPIEGO: "un'altra lettura del riquadro dello steso"}
+        RIPIEGO: "un'altra lettura del riquadro dello steso",
+        SCALA: "il disegno nell'altra scala"}
 # I ripieghi della lettura del flowpack, in ordine (`famiglie.flowpack.
 # analisi_flowpack`): il riquadro stampato, quello che la fustella chiude, le
 # copie del DT, il solutore vecchio.
@@ -138,6 +149,8 @@ class Tentativo:
     gira_pack: int | None = None
     # sul flowpack, il solo ripiego da leggere (`RIPIEGHI`)
     ripiego: str | None = None
+    # il PDF nell'altra scala (`pack3d.scala`): lo sceglie chi costruisce
+    scala: bool = False
     osservato: dict = field(default_factory=dict)
 
     @property
@@ -146,7 +159,8 @@ class Tentativo:
         memorie delle letture (`artwork._SULLA_GRAFICA`)."""
         return (not self.larghe and self.giro is None and not self.escludi
                 and not self.prove_scartate and self.montaggio is None
-                and self.gira_pack is None and self.ripiego is None)
+                and self.gira_pack is None and self.ripiego is None
+                and not self.scala)
 
     def descrivi(self):
         return COME.get(self.cosa, self.cosa)
@@ -314,6 +328,11 @@ class Giro:
         self.ripieghi = set()       # i ripieghi del flowpack gia' letti
         self.seconde_finite = False  # il flowpack non ha altre letture
         self.giro_film_primo = None  # il verso del foglio della prima lettura
+        # l'altra scala del disegno (`pack3d.scala`): None se non c'e';
+        # "prima" se la scala e' in dubbio (il primo tentativo dopo la prima
+        # lettura), "ultima" se e' applicata senza dubbi
+        self.altra_scala = None
+        self.scala_provata = False
         self.perche_finiti = ""
         self._dal = None
         self._scartata = None
@@ -368,6 +387,8 @@ class Giro:
             self.ripieghi.add(oss["ripiego"])
         if t.ripiego:
             self.ripieghi.add(t.ripiego)
+        if t.scala:
+            self.scala_provata = True
         if t.cosa == VERSO_FILM and t.giro is not None:
             self.giri_film.add(t.giro)
         if t.cosa == SECONDA and oss.get("flowpack") is None and self.film:
@@ -437,6 +458,17 @@ class Giro:
         oss = self.ultimo.osservato if self.ultimo else {}
         scartato = ultimo is not None and ultimo["esito"] not in ("ok", "fermata")
         ast = self.astuccio
+        # la scala in dubbio: prima di tutto, anche dopo una lettura ferma -
+        # nell'altra scala le misure e le soglie sono altre. Quella applicata
+        # senza dubbi ha comunque l'ultimo posto: dopo le altre letture
+        # della famiglia i tentativi finivano prima di arrivarci
+        ultimo_posto = len(self.fatti) >= TENTATIVI_MAX - 1
+        if ((self.altra_scala == "prima"
+             or (self.altra_scala == "ultima" and ultimo_posto))
+                and not self.scala_provata
+                and ultimo is not None and ultimo["esito"] != "ok"):
+            self.scala_provata = True
+            return self._nuovo(SCALA, scala=True)
         # 1. la plausibile successiva, nello stesso verso
         if (scartato and oss.get("famiglia") == "astuccio"
                 and oss.get("astuccio") is not None and oss.get("altre")):
@@ -502,6 +534,12 @@ class Giro:
             self.prove.add(nome)
             self._scartata = None
             return self._nuovo(FORMA)
+        # la scala del PDF, quando quella delle quote non convince il
+        # controllo e non resta altro
+        if (self.altra_scala == "ultima" and not self.scala_provata
+                and ultimo is not None and ultimo["esito"] != "ok"):
+            self.scala_provata = True
+            return self._nuovo(SCALA, scala=True)
         return None
 
     # per la pagina, gli avvisi, la coda e il controllo

@@ -1017,6 +1017,8 @@ class Handler(BaseHTTPRequestHandler):
                 # PDF caricato resta quello che va in coda. I materiali POP
                 # hanno le loro regole (regole/pop.md, *Il confine*).
                 scale_lette = []
+                # i PDF com'erano, per l'altra scala dei tentativi
+                caricati = list(pdfs)
                 if not pop.e_pop(kind):
                     try:
                         chiesta = scala.chiesta(opts.get("scala"))
@@ -1036,6 +1038,19 @@ class Handler(BaseHTTPRequestHandler):
                 # controllo d'accordo (`con_difetti`, dopo i tentativi)
                 righe_scala = scala.righe_di(scale_lette, nomi)
                 difetti_scala = [d for letta in scale_lette for d in letta.difetti()]
+                altri_pdf = []
+
+                def pdf_del(t):
+                    """`(pdf, pdfs, righe della scala)` del tentativo `t`:
+                    quelli in scala, o nell'altra scala se il tentativo la
+                    prova (`tentativi.SCALA`), riscritti una volta sola."""
+                    if not getattr(t, "scala", False):
+                        return pdf, pdfs, righe_scala
+                    if not altri_pdf:
+                        altri = scala.in_altra_scala(caricati, scale_lette, td)
+                        altri_pdf.extend(a or p for a, p in zip(altri, pdfs))
+                    return (altri_pdf[0], list(altri_pdf),
+                            scala.righe_altra(scale_lette, nomi))
                 if kind == "incarto" and prodotto is None:
                     return self._send(400, "Incarti: carica anche l'immagine del "
                                            "prodotto da incartare. La misura "
@@ -1183,6 +1198,7 @@ class Handler(BaseHTTPRequestHandler):
                     # costruzione non parte mai. Va in coda da qui.
                     giro = tentativi.Giro(giudice_attivo(opts) and kind != "incarto",
                                           kind)
+                    giro.altra_scala = scala.quando(scale_lette)
                     t = giro.primo()
                     try:
                         with tentativi.dentro(t):
@@ -1206,9 +1222,10 @@ class Handler(BaseHTTPRequestHandler):
                             if t is None:
                                 break
                             self._fase(tentativi.fase(t, "La prima lettura non torna"))
+                            pdf_t = pdf_del(t)[0]
                             try:
                                 with tentativi.dentro(t):
-                                    letto = analyze_pdf(pdf, kind, domande=True)
+                                    letto = analyze_pdf(pdf_t, kind, domande=True)
                             except Exception as e2:     # noqa: BLE001
                                 giro.esito(t, "fermata", statistiche.motivo(e2))
                                 continue
@@ -1227,7 +1244,8 @@ class Handler(BaseHTTPRequestHandler):
                                               controllo=verdetto)
                     statistiche.conta("lettura", dichiarato=kind or "nessuna",
                                       letto=letto.get("kind"))
-                    return self._send(200, json.dumps(con_righe(letto, righe_scala)))
+                    # le righe della scala del tentativo che ha letto
+                    return self._send(200, json.dumps(con_righe(letto, pdf_del(t)[2])))
                 if self.path.startswith("/api/build"):
                     if not _slots.acquire(blocking=False):
                         return self._send(503, "Server occupato: riprova fra qualche "
@@ -1246,6 +1264,7 @@ class Handler(BaseHTTPRequestHandler):
                     # tentativo solo, come prima.
                     giudice = giudice_attivo(opts)
                     giro = tentativi.Giro(giudice, kind)
+                    giro.altra_scala = scala.quando(scale_lette)
                     errore_primo = info_primo = None
                     try:
                         t0 = traccia("inizio")
@@ -1340,15 +1359,18 @@ class Handler(BaseHTTPRequestHandler):
                             del avvisi_ingresso[:]
                             out = os.path.join(td, "out.glb" if t.n == 1
                                                else "tentativo%d.glb" % t.n)
+                            # i PDF del tentativo: nell'altra scala, se la prova
+                            pdf_t, pdfs_t, righe_t = pdf_del(t)
+                            righe_t = righe_t + righe_prodotto[len(righe_scala):]
                             with tentativi.dentro(t):
-                                info = (analisi_incarto_dichiarato(pdf, chiusura, pdfs,
+                                info = (analisi_incarto_dichiarato(pdf_t, chiusura, pdfs_t,
                                                                    senza, nomi)
                                         if kind == "incarto"
-                                        else analisi_riempimento(pdfs, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
-                                        else pop.analisi(pdfs, kind) if pop.e_pop(kind)
-                                        else analisi_coppa(pdfs, kind)
-                                        if in_piu_pezzi(kind, pdfs)
-                                        else analyze_pdf(pdf, kind))
+                                        else analisi_riempimento(pdfs_t, cu, aperto=bool(gradi_aperta)) if kind == "riempimento"
+                                        else pop.analisi(pdfs_t, kind) if pop.e_pop(kind)
+                                        else analisi_coppa(pdfs_t, kind)
+                                        if in_piu_pezzi(kind, pdfs_t)
+                                        else analyze_pdf(pdf_t, kind))
                                 t.osservato["info"] = info
                                 c = SimpleNamespace(t=t, info=info, out=out, quadro=None)
                                 if giro.gia_letto(info):
@@ -1358,7 +1380,7 @@ class Handler(BaseHTTPRequestHandler):
                                              "%s, %d kB" % (info["kind"], len(data) // 1024))
                                 # la costruzione della famiglia letta: `COSTRUZIONI`
                                 r = SimpleNamespace(
-                                    pdf=pdf, pdfs=pdfs, nomi=nomi, kind=kind, opts=opts,
+                                    pdf=pdf_t, pdfs=pdfs_t, nomi=nomi, kind=kind, opts=opts,
                                     q=q, col_riq=col_riq, carta=carta,
                                     apertura=gradi_aperta, pellicola=con_pellicola,
                                     incisioni=con_incisioni, gelato=con_gelato,
@@ -1379,7 +1401,7 @@ class Handler(BaseHTTPRequestHandler):
                                 raise tentativi.Uguale("lo stesso modello di un "
                                                        "tentativo prima")
                             c.lettura = lettura_accanto(out)
-                            c.meta = righe_prodotto + avvisi_ingresso + list(avvisi)
+                            c.meta = righe_t + avvisi_ingresso + list(avvisi)
                             # Le righe dell'AI - le sue scelte, il verdetto del
                             # controllo, la correzione - viaggiano anche in un
                             # header loro: la pagina le tiene in vista, e il
@@ -1397,7 +1419,7 @@ class Handler(BaseHTTPRequestHandler):
                                 c.meta.append(c.righe_ai[-1])
                             elif giudice:
                                 try:
-                                    c.quadro = controllo.prepara(pdfs, out)
+                                    c.quadro = controllo.prepara(pdfs_t, out)
                                 except Exception as e:
                                     traceback.print_exc()
                                     if t.n > 1:
@@ -1553,7 +1575,9 @@ class Handler(BaseHTTPRequestHandler):
                             # dello stesso PDF lo toglie, e il caso va in coda
                             # anche col controllo d'accordo - un pack grande la
                             # meta' con la grafica giusta all'AI sembra giusto
-                            verdetto = con_difetti(verdetto, difetti_scala)
+                            verdetto = con_difetti(verdetto, [
+                                d for letta in scale_lette
+                                for d in letta.difetti(altra=c.t.scala)])
                             righe_ai = list(c.righe_ai)
                             if len(giro.fatti) > 1:
                                 conta_tentativi(giro, kind, verdetto)
