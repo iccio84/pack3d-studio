@@ -857,6 +857,16 @@ class GiudiceDelloSteso(unittest.TestCase):
     """`flowpack._riquadro_coerente`: lati che non sono tagli, uno steso
     disegnato dalla prova (nessun file dei clienti)."""
 
+    def setUp(self):
+        # La memoria del giudice e' indicizzata con id(S) e id(raster), e la
+        # lettura vera la svuota prima e dopo ogni PDF (`flowpack.letture`).
+        # Qui il giudice si chiama da solo: senza svuotarla, uno steso nuovo
+        # che riprende l'id di uno di una prova di prima trovava la sua
+        # immagine integrale, e la prova falliva a caso (24 novembre 2026).
+        from pack3d import flowpack as fpk
+        fpk._memo_coerente().clear()
+        self.addCleanup(fpk._memo_coerente().clear)
+
     def _steso(self, cornice=False, pinna_bianca=False, legenda=False, pinna_aperta=False):
         from pack3d import flowpack as fpk
         mm = 1.0 / fpk.PT2MM
@@ -3325,3 +3335,176 @@ class ArchivioDeiModelliOk(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def _tavola_quotata(percorso, scala=1.0, numeri=None, cartiglio=None, grande=False):
+    """Un PDF con un DT rettangolare di 100 x 60 mm disegnato in `scala`
+    (0,5 per un disegno 1:2) e le sue due quote d'insieme, coi richiami e il
+    numero nel buco della linea: `numeri` (di serie le misure vere)."""
+    from pypdf import PdfWriter
+    from pypdf.generic import (DecodedStreamObject, DictionaryObject, NameObject)
+    mm = 72.0 / 25.4
+    W, H = 260 * mm, 200 * mm
+    x0, y0 = (200 * mm, 150 * mm) if grande else (30 * mm, 60 * mm)
+    w, h = 100 * mm * scala, 60 * mm * scala
+    passo, giro = numeri or (100, 60)
+    r = ["q 0 0 1 RG 0.5 w"]
+
+    def linea(xa, ya, xb, yb):
+        r.append("%.2f %.2f m %.2f %.2f l S" % (xa, ya, xb, yb))
+    # il DT: il contorno e due pieghe
+    for xa, ya, xb, yb in ((x0, y0, x0 + w, y0), (x0, y0 + h, x0 + w, y0 + h),
+                           (x0, y0, x0, y0 + h), (x0 + w, y0, x0 + w, y0 + h),
+                           (x0 + w / 3, y0, x0 + w / 3, y0 + h),
+                           (x0 + 2 * w / 3, y0, x0 + 2 * w / 3, y0 + h)):
+        linea(xa, ya, xb, yb)
+    if grande:
+        # il DT vero, 150 x 90 senza quote; quello quotato e' la sua miniatura
+        gx, gy, gw, gh = 20 * mm, 20 * mm, 150 * mm, 90 * mm
+        for xa, ya, xb, yb in ((gx, gy, gx + gw, gy), (gx, gy + gh, gx + gw, gy + gh),
+                               (gx, gy, gx, gy + gh), (gx + gw, gy, gx + gw, gy + gh),
+                               (gx + gw / 3, gy, gx + gw / 3, gy + gh),
+                               (gx + 2 * gw / 3, gy, gx + 2 * gw / 3, gy + gh),
+                               (gx, gy + gh / 2, gx + gw, gy + gh / 2)):
+            linea(xa, ya, xb, yb)
+    buco = 8 * mm * max(scala, 0.5)
+    # il passo, sotto
+    yq, xm = y0 - 8 * mm, x0 + w / 2
+    linea(x0, y0 - 1 * mm, x0, yq - 2 * mm)
+    linea(x0 + w, y0 - 1 * mm, x0 + w, yq - 2 * mm)
+    linea(x0, yq, xm - buco / 2, yq)
+    linea(xm + buco / 2, yq, x0 + w, yq)
+    r.append("BT /F1 7 Tf 1 0 0 1 %.2f %.2f Tm (%g) Tj ET" % (xm - buco / 2 + 1, yq - 1, passo))
+    # il giro, a destra
+    xq, ym = x0 + w + 8 * mm, y0 + h / 2
+    linea(x0 + w + 1 * mm, y0, xq + 2 * mm, y0)
+    linea(x0 + w + 1 * mm, y0 + h, xq + 2 * mm, y0 + h)
+    linea(xq, y0, xq, ym - buco / 2)
+    linea(xq, ym + buco / 2, xq, y0 + h)
+    r.append("BT /F1 7 Tf 0 1 -1 0 %.2f %.2f Tm (%g) Tj ET" % (xq + 1, ym - buco / 2 + 1, giro))
+    if cartiglio:
+        r.append("BT /F1 9 Tf 1 0 0 1 %.2f %.2f Tm (%s) Tj ET" % (180 * mm, 20 * mm, cartiglio))
+    r.append("Q")
+    wr = PdfWriter()
+    p = wr.add_blank_page(W, H)
+    flusso = DecodedStreamObject()
+    flusso.set_data(("\n".join(r) + "\n").encode("ascii"))
+    p[NameObject("/Contents")] = wr._add_object(flusso)
+    font = DictionaryObject({NameObject("/Type"): NameObject("/Font"),
+                             NameObject("/Subtype"): NameObject("/Type1"),
+                             NameObject("/BaseFont"): NameObject("/Helvetica")})
+    p[NameObject("/Resources")] = DictionaryObject({NameObject("/Font"): DictionaryObject(
+        {NameObject("/F1"): wr._add_object(font)})})
+    with open(percorso, "wb") as fh:
+        wr.write(fh)
+    return percorso
+
+
+class ScalaDelDisegno(unittest.TestCase):
+    """Il punto 4 del piano di robustezza (`pack3d.scala`): la scala del
+    disegno dalle quote, il cartiglio come conferma, il dubbio di scala."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def _decidi(self, quote=(), cartiglio=None):
+        from pack3d import scala
+        p = scala.Pagina(0, [scala.Quota(v, L, asse, intera) for v, L, asse, intera in quote],
+                         cartiglio)
+        return scala.decidi(p)
+
+    def test_due_quote_applicano_la_scala(self):
+        f, come, dubbio, alt, _q = self._decidi([(200, 50, 0, True), (120, 30, 1, True)])
+        self.assertEqual((f, come, dubbio, alt), (4.0, "quote", None, None))
+
+    def test_una_quota_sola_e_un_dubbio_senza_cartiglio(self):
+        f, come, dubbio, alt, _q = self._decidi([(200, 100, 0, True)])
+        self.assertEqual((f, alt), (1.0, 2.0))
+        self.assertIn("una quota sola", dubbio)
+
+    def test_una_quota_col_cartiglio_si_applica(self):
+        f, come, dubbio, _a, _q = self._decidi([(200, 100, 0, True)], ("Scala 1:2", 2.0))
+        self.assertEqual((f, come, dubbio), (2.0, "cartiglio", None))
+
+    def test_il_cartiglio_da_solo_non_si_applica(self):
+        f, _c, dubbio, alt, _q = self._decidi([], ("SCALE 1:2", 2.0))
+        self.assertEqual((f, alt), (1.0, 2.0))
+        self.assertIn("nessuna quota lo conferma", dubbio)
+
+    def test_quote_contro_cartiglio_e_contro_quote(self):
+        f, _c, dubbio, alt, _q = self._decidi([(200, 100, 0, True), (120, 60, 1, True)],
+                                              ("Scala 1:1", 1.0))
+        self.assertEqual((f, alt), (2.0, 1.0))
+        self.assertIn("cartiglio", dubbio)
+        f, _c, dubbio, alt, _q = self._decidi([(200, 100, 0, True), (120, 60, 1, True),
+                                               (45, 45, 0, False)])
+        self.assertEqual((f, alt), (2.0, 1.0))
+        self.assertIn("si contraddicono", dubbio)
+
+    def test_rapporto_non_solito_e_quasi_uno(self):
+        f, come, dubbio, _a, _q = self._decidi([(283, 100, 0, True), (170, 60.07, 1, True),
+                                                (56.6, 20, 0, False)])
+        self.assertEqual((round(f, 2), come, dubbio), (2.83, "libero", None))
+        f, *_ = self._decidi([(102, 100, 0, True), (61.2, 60, 1, True), (20.4, 20, 0, False)])
+        self.assertEqual(f, 1.0)
+
+    def test_niente_quote_niente_scala(self):
+        f, *_ = self._decidi([])
+        self.assertIsNone(f)
+        f, _c, dubbio, _a, _q = self._decidi([(100, 100, 0, True)])
+        self.assertEqual((f, dubbio), (1.0, None))
+
+    def test_la_tavola_in_scala_1_2_si_riscrive_1_1(self):
+        from pack3d import scala
+        from pack3d.tracciati import segmenti
+        dritta = _tavola_quotata(os.path.join(self.td, "dritta.pdf"))
+        meta = _tavola_quotata(os.path.join(self.td, "meta.pdf"), scala=0.5)
+        self.assertFalse(scala.leggi(dritta).applicata)
+        s = scala.leggi(meta)
+        self.assertEqual((s.fattore, s.come, s.dubbio), (2.0, "quote", None))
+        self.assertTrue(s.righe[0].startswith("DISEGNO IN SCALA 1:2: misure raddoppiate"))
+        nuovo, s = scala.in_scala(meta, self.td)
+        self.assertNotEqual(nuovo, meta)
+        b, wb, _hb = segmenti(nuovo, 0)
+        self.assertAlmostEqual(wb, 2 * segmenti(meta, 0)[1], delta=0.01)
+
+        def contorno(segs):
+            return max(b_ - a_ for k, c, a_, b_, st in segs if k == "H")
+        self.assertAlmostEqual(contorno(b), 2 * contorno(segmenti(meta, 0)[0]), delta=0.05)
+        self.assertEqual(scala.dichiarata(nuovo), "Disegno in scala 1:2: misure raddoppiate")
+        self.assertIsNone(scala.dichiarata(dritta))
+        # la scala chiesta vince, e il PDF dritto non si tocca
+        self.assertEqual(scala.in_scala(dritta, self.td, 1)[0], dritta)
+        self.assertEqual(scala.leggi(meta, opzione=1.0).fattore, 1.0)
+
+    def test_le_quote_della_miniatura_non_dicono_la_scala(self):
+        from pack3d import scala
+        # la miniatura a un quarto porta le quote vere: 1:4, ma il disegno
+        # grande e' 1:1
+        pdf = _tavola_quotata(os.path.join(self.td, "m.pdf"), scala=0.25, grande=True)
+        s = scala.leggi(pdf)
+        self.assertEqual((s.fattore, s.dubbio), (1.0, None))
+
+    def test_il_cartiglio_contro_le_quote(self):
+        from pack3d import scala
+        # le quote dicono 1:1, ma il cartiglio scrive 1:2: dubbio, non applicata
+        pdf = _tavola_quotata(os.path.join(self.td, "c.pdf"), cartiglio="Scala 1:2")
+        s = scala.leggi(pdf)
+        self.assertEqual((s.fattore, s.alternativa), (1.0, 2.0))
+        self.assertTrue(s.righe[0].startswith("DUBBIO DI SCALA"))
+        self.assertEqual(s.difetti()[0][:9], "DIFETTO: ")
+
+    def test_la_scala_chiesta(self):
+        from pack3d import scala
+        self.assertEqual(scala.chiesta("1:2"), 2.0)
+        self.assertEqual(scala.chiesta("2:1"), 0.5)
+        self.assertEqual(scala.chiesta(4), 4.0)
+        self.assertIsNone(scala.chiesta(""))
+        with self.assertRaises(ValueError):
+            scala.chiesta("mezzo")
+        self.assertEqual(scala.righe_di([scala.leggi(None, 2.0), scala.Scala()],
+                                        ["a.pdf", "b.pdf"]),
+                         ["DISEGNO IN SCALA 1:2, come chiesto (a.pdf): misure raddoppiate"])

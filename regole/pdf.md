@@ -648,6 +648,49 @@ della grafica non va mai messa. Vedi *La GDA sta nel disegno tecnico*.
   caso dal foglio non ci arriva. Sul parco nessun astuccio e nessun vassoio
   scrive le sue quote come testo: lo si dice, e le guarda l'occhio.
 
+### La scala del disegno: dalle quote, prima di leggere
+
+Il punto 4 del piano di robustezza (pack3d-casi `regole/decisioni.md`;
+`lavori/robustezza/punto4_scala.md`, con le scelte del proprietario del 24
+novembre 2026). Un DT non e' sempre in scala 1:1: una tavola grande mandata
+ridotta, un disegno a meta' per stare sul foglio. Le quote lo dicono: il
+numero scritto su una linea di quota diviso la linea. `pack3d/scala.py` le
+legge su ogni PDF caricato, prima di ogni lettura (`server.py`, subito dopo
+la foto rifatta vettoriale; mai per i materiali POP):
+
+- **la quota misurata**: un numero scritto come testo vicino a una linea
+  sottile parallela - sopra, o nel buco della linea - con le due estremita'
+  chiuse da un tratto perpendicolare; vicino al disegno principale e lunga
+  almeno il 15% del suo lato. Non e' una quota un numero chiuso fra due
+  linee parallele (la cella di una tabella), ne' una linea con tanti numeri
+  diversi (una riga di testo, una legenda);
+- **il cartiglio**: «scala 1:2», «scale», «Massstab», «echelle».
+
+Si applica da sola con due quote distinte sulla stessa scala solita (1:4,
+1:2, 2:1, 4:1), una d'insieme o una per asse, e nessuna che dica 1:1; con
+una quota sola se il cartiglio dice la stessa scala; con tre quote d'accordo
+entro lo 0,5% su un rapporto non solito (un PDF stampato adattato alla
+pagina). Vicino a 1:1 (entro il 3%) resta 1:1. Applicata, il PDF si riscrive
+ingrandito - contenuto e riquadri della pagina, livelli conservati, la scala
+scritta nei metadati per la tavola della lettura - e prende il posto di
+quello caricato; alla coda va quello caricato. Chi carica la vede in cima ai
+dettagli e sulla tavola della lettura: «DISEGNO IN SCALA 1:2: misure
+raddoppiate (le quote: ...)».
+
+Quote contro quote, quote contro cartiglio, una quota sola senza cartiglio,
+il cartiglio da solo: **DUBBIO DI SCALA**, con la scala che ha piu' quote (o
+quella del PDF), e un DIFETTO che `server.con_difetti` aggiunge dopo il giro
+dei tentativi: il caso va in coda anche col controllo dell'AI d'accordo,
+perche' un pack grande la meta' con la grafica giusta all'AI sembra giusto.
+Senza quote, la scala del PDF, come sempre, e nessuna riga. L'opzione
+`scala` della richiesta (`1:2`, `2:1` o il fattore) vince su tutto, come
+`larghezza_fustella`. Le statistiche contano l'evento `scala`.
+
+Sul parco nessun PDF cambia scala ne' ha un dubbio; la variante `dimezzato`
+del banco (il disegno a meta' con le quote vere) si legge 1:2 su 64 PDF su
+68 - non i due totem POP e lo scaffale POP, fuori da qui, e la foto del
+display T1x10, che la scala la prende da `larghezza_fustella`.
+
 ### Mezzo millimetro non puo' cambiare il pack
 
 **Due disegni tecnici simili devono dare pack simili.** Se due AW dello stesso
