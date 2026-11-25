@@ -692,18 +692,38 @@ lo rifa' nell'altra scala - per prima col dubbio di scala, per ultima quando
 le quote d'accordo l'hanno applicata - con le righe «DISEGNO IN SCALA 1:2,
 l'altra scala» o «DISEGNO ALLA SCALA DEL PDF, l'altra scala».
 
-Attenzione: un PDF con revisioni incrementali (`/Prev` nel trailer: 22 dei 69
-PDF del parco) riscritto da pypdf in una revisione sola non si legge proprio
-uguale - sul T2x12 a strappo, riscritto senza cambiare la scala, 5 livelli di
-grigio sulle viste e le UVW che tornano col DT invece di stirarsi. Succede
-solo ai PDF riscritti in scala; i PDF senza revisioni tornano uguali al byte
-(il T10 al lampone a meta' col cartiglio, nell'altra scala, e' il modello del
-parco).
-
 Sul parco nessun PDF cambia scala ne' ha un dubbio; la variante `dimezzato`
 del banco (il disegno a meta' con le quote vere) si legge 1:2 su 64 PDF su
 68 - non i due totem POP e lo scaffale POP, fuori da qui, e la foto del
 display T1x10, che la scala la prende da `larghezza_fustella`.
+
+### Le revisioni incrementali: si legge l'ultima
+
+Un PDF salvato con un aggiornamento incrementale porta in fondo al file la
+revisione nuova (gli oggetti cambiati, una xref sua, il `/Prev` verso quella
+di prima), e quella vecchia resta dentro. Si legge **l'ultima**, come la
+mostra un visualizzatore: pdfplumber, pdfium, pypdf, Ghostscript e poppler
+fanno tutti cosi', e riscritto da pypdf in una revisione sola (la scala del
+disegno, `pagina_unica`, lo strappo) il PDF si legge uguale.
+
+Il `/Prev` nel trailer non basta a dire che una revisione c'e': un PDF
+**linearizzato** («salva per il web») ha due xref e il `/Prev` anche con una
+revisione sola. Si riconosce dal dizionario `/Linearized` in testa, con
+`/L` uguale alla lunghezza del file. Sul parco, il 25 novembre 2026: 26 PDF
+su 69 con piu' di una xref, 22 solo linearizzati e 4 con una revisione vera
+- tre ritagli di Acrobat (wafer T1, T1 caramel cheesecake, pane ripieno T15:
+CropBox, BleedBox e TrimBox nuovi, la MediaBox uguale; il ritaglio lo
+gestisce gia' `dieline.render_page`) e un'aggiunta di Illustrator (la
+scatola esagonale: i font e i livelli, la prima revisione non ha testo).
+Riscritti tutti e 69 in una revisione sola: letture uguali, rese uguali, 66
+modelli su 66 uguali al byte. `prove/test_veloci.py`, *RevisioniIncrementali*,
+lo riprova a ogni giro delle librerie.
+
+La «riscrittura che legge diverso» scritta qui il 25 novembre (il T2x12 a
+strappo, 5 livelli di grigio, le UVW col DT) era un confronto sbagliato:
+il PDF del T2x12 con la finestra costruito con le opzioni di quello a
+strappo, contro il modello a strappo. Il PDF riscritto dava, uguale al byte,
+il modello del parco con la finestra.
 
 ### Mezzo millimetro non puo' cambiare il pack
 
