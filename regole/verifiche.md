@@ -845,6 +845,16 @@ ricontrollare; il caso va alla routine solo quando i tentativi sono finiti
   `tentativi.NonPlausibile`), gli altri ripieghi (`Tentativo.ripiego`), le
   soglie larghe. Le strade proprie delle altre famiglie entrano una
   famiglia per PR, come le letture a punteggio.
+- **L'altra scala del disegno** (dal 25 novembre 2026, regole/pdf.md, *La
+  scala del disegno*), per tutte le famiglie: con un dubbio di scala il
+  primo tentativo dopo la prima lettura e' il disegno nell'altra scala -
+  quella che dicevano le quote o il cartiglio, o quella del PDF se la prima
+  era riscritta - anche dopo una lettura ferma; con la scala delle quote
+  applicata senza dubbi, la scala del PDF ha l'ultimo posto, quello che resta
+  prima del sesto tentativo (`Tentativo.scala`, `Giro.altra_scala`). Il PDF
+  del tentativo lo sceglie il server (`pdf_del`), riscritto una volta sola
+  (`scala.in_altra_scala`), con le sue righe (`scala.righe_altra`). Il
+  dubbio di scala manda comunque il caso in coda, dopo il giro.
 - **Una lettura o un modello gia' visti** (`Giro.gia_letto`,
   `gia_costruito`) non si ricostruiscono e non si ricontrollano.
 - **Il tetto**: tre minuti dall'inizio della costruzione al verdetto

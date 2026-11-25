@@ -3508,3 +3508,112 @@ class ScalaDelDisegno(unittest.TestCase):
         self.assertEqual(scala.righe_di([scala.leggi(None, 2.0), scala.Scala()],
                                         ["a.pdf", "b.pdf"]),
                          ["DISEGNO IN SCALA 1:2, come chiesto (a.pdf): misure raddoppiate"])
+
+
+class LAltraScala(unittest.TestCase):
+    """L'altra scala del disegno come tentativo (`pack3d.scala`,
+    `pack3d.tentativi.SCALA`): prima di tutto se la scala e' in dubbio,
+    per ultima se quella delle quote e' applicata senza dubbi."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def _giro(self, quando, kind="carton"):
+        from pack3d import tentativi
+        ora = [0.0]
+        g = tentativi.Giro(True, kind, orologio=lambda: ora[0])
+        g.altra_scala = quando
+        return g, ora
+
+    def test_in_dubbio_e_il_primo_tentativo(self):
+        from pack3d import tentativi
+        g, ora = self._giro("prima")
+        t = g.primo()
+        t.osservato.update(famiglia="astuccio")
+        ora[0] = 10
+        g.esito(t, "sbagliato", "grande la meta'")
+        t = g.prossimo()
+        self.assertEqual((t.n, t.cosa, t.scala), (2, tentativi.SCALA, True))
+        self.assertFalse(t.neutro)
+        g.esito(t, "dubbio")
+        t = g.prossimo()
+        self.assertNotEqual(t.cosa, tentativi.SCALA)
+        self.assertFalse(t.scala)
+        # anche dopo una prima lettura ferma
+        g, ora = self._giro("prima")
+        g.esito(g.primo(), "fermata", "non si risolve")
+        self.assertEqual(g.prossimo().cosa, tentativi.SCALA)
+        # un ok non chiede l'altra scala
+        g, ora = self._giro("prima", kind="pouch")
+        g.esito(g.primo(), "ok")
+        self.assertIsNone(g.prossimo())
+
+    def test_applicata_e_l_ultimo_tentativo(self):
+        from pack3d import tentativi
+        g, ora = self._giro("ultima", kind="pouch")
+        t = g.primo()
+        ora[0] = 10
+        g.esito(t, "sbagliato")
+        t = g.prossimo()
+        self.assertEqual(t.cosa, tentativi.SCALA)
+        g.esito(t, "sbagliato")
+        self.assertIsNone(g.prossimo())
+        # sugli astucci prima le soglie larghe, poi la scala del PDF
+        g, ora = self._giro("ultima")
+        t = g.primo()
+        g.esito(t, "sbagliato")
+        cose = []
+        while True:
+            t = g.prossimo()
+            if t is None:
+                break
+            cose.append(t.cosa)
+            g.esito(t, "sbagliato")
+        self.assertEqual(cose, [tentativi.LARGHE, tentativi.SCALA])
+        # quando le letture della famiglia sono tante, l'ultimo posto e' suo
+        g, ora = self._giro("ultima")
+        t = g.primo()
+        imp = types.SimpleNamespace(giro=0)
+        t.osservato.update(famiglia="astuccio", astuccio=imp, altre=0, muto=True)
+        g.esito(t, "sbagliato")
+        cose = []
+        while True:
+            t = g.prossimo()
+            if t is None:
+                break
+            cose.append(t.cosa)
+            g.esito(t, "sbagliato")
+        self.assertEqual(len(cose), tentativi.TENTATIVI_MAX - 1)
+        self.assertEqual(cose[-1], tentativi.SCALA)
+
+    def test_senza_altra_scala_niente(self):
+        from pack3d import tentativi
+        g, ora = self._giro(None, kind="pouch")
+        g.esito(g.primo(), "sbagliato")
+        self.assertIsNone(g.prossimo())
+
+    def test_i_pdf_e_le_righe_dell_altra_scala(self):
+        from pack3d import scala
+        meta = _tavola_quotata(os.path.join(self.td, "meta.pdf"), scala=0.5)
+        dubbia = _tavola_quotata(os.path.join(self.td, "c.pdf"), cartiglio="Scala 1:2")
+        nuovo, s1 = scala.in_scala(meta, self.td, 0)
+        _p, s2 = scala.in_scala(dubbia, self.td, 1)
+        self.assertEqual((scala.altra(s1), scala.altra(s2)), (1.0, 2.0))
+        self.assertEqual(scala.quando([s1]), "ultima")
+        self.assertEqual(scala.quando([s1, s2]), "prima")
+        self.assertIsNone(scala.quando([scala.Scala()]))
+        self.assertIsNone(scala.altra(scala.leggi(None, 2.0)))
+        altri = scala.in_altra_scala([meta, dubbia, meta], [s1, s2, scala.Scala()], self.td)
+        # la scala del PDF e' il file caricato; l'altra scala un PDF riscritto
+        self.assertEqual(altri[0], meta)
+        self.assertEqual(scala.leggi(altri[1], 1.0).fattore, 1.0)
+        self.assertEqual(scala.dichiarata(altri[1]), "Disegno in scala 1:2: misure raddoppiate")
+        self.assertIsNone(altri[2])
+        righe = scala.righe_altra([s1, s2], ["a.pdf", "b.pdf"])
+        self.assertEqual(righe[0], "DISEGNO ALLA SCALA DEL PDF (a.pdf), l'altra scala: "
+                                   "la prima lettura era in scala 1:2")
+        self.assertTrue(righe[1].startswith("DISEGNO IN SCALA 1:2 (b.pdf), l'altra scala"))
+        self.assertTrue(righe[2].startswith("DUBBIO DI SCALA (b.pdf): "))

@@ -130,9 +130,19 @@ class Scala:
     def applicata(self):
         return self.fattore != 1.0
 
-    def difetti(self):
+    def detto(self, altra=False):
+        """Il dubbio com'e' scritto, o per il modello nell'altra scala
+        (`altra`): li' non e' costruito come dice la fine del dubbio."""
+        if not self.dubbio or not altra:
+            return self.dubbio
+        testa = self.dubbio.rsplit("; costruito", 1)[0]
+        f = self.alternativa or 1.0
+        return "%s; questo modello e' nell'altra scala, %s" % (
+            testa, "quella del PDF" if f == 1.0 else nome(f))
+
+    def difetti(self, altra=False):
         from .verifica import DIFETTO
-        return ([DIFETTO + "dubbio di scala: " + self.dubbio] if self.dubbio else [])
+        return ([DIFETTO + "dubbio di scala: " + self.detto(altra)] if self.dubbio else [])
 
 
 def _n(v, cifre=1):
@@ -575,6 +585,69 @@ def righe_di(scale, nomi=()):
                 testa, _, resto = r.partition(": ")
                 r = "%s (%s): %s" % (testa, nomi[k], resto)
             fuori.append(r)
+    return fuori
+
+
+def altra(s):
+    """L'altra scala da provare come tentativo (`pack3d.tentativi`): quella
+    che le quote o il cartiglio dicevano, se la scala e' in dubbio; la scala
+    del PDF, se quella delle quote e' applicata; None se non ce n'e' (niente
+    quote, o la scala chiesta)."""
+    if s.come == "opzione":
+        return None
+    if s.dubbio and s.alternativa:
+        return s.alternativa
+    if s.applicata:
+        return 1.0
+    return None
+
+
+def quando(scale):
+    """Quando provare l'altra scala, per il giro dei tentativi: "prima" se
+    una scala e' in dubbio, "ultima" se le scale sono applicate senza dubbi,
+    None se nessun PDF ha un'altra scala."""
+    if any(s.dubbio and altra(s) for s in scale):
+        return "prima"
+    if any(altra(s) for s in scale):
+        return "ultima"
+    return None
+
+
+def righe_altra(scale, nomi=()):
+    """Le righe di un modello costruito nell'altra scala: al posto di quelle
+    di `righe_di`."""
+    fuori = []
+    for k, s in enumerate(scale):
+        f = altra(s)
+        chi = " (%s)" % nomi[k] if len(scale) > 1 and k < len(nomi) else ""
+        if f is None:
+            fuori += [r.replace(": ", "%s: " % chi, 1) if chi else r for r in s.righe]
+        elif f == 1.0:
+            # l'altra e' quella del PDF solo se la prima era riscritta
+            fuori.append("DISEGNO ALLA SCALA DEL PDF%s, l'altra scala: la prima "
+                         "lettura era in scala %s" % (chi, nome(s.fattore)))
+        else:
+            fuori.append("DISEGNO IN SCALA %s%s, l'altra scala: %s"
+                         % (nome(f), chi, misure(f)))
+        if s.dubbio:
+            fuori.append("DUBBIO DI SCALA%s: %s. Controllare il DT"
+                         % (chi, s.detto(altra=f is not None)))
+    return fuori
+
+
+def in_altra_scala(caricati, scale, cartella):
+    """I PDF del tentativo nell'altra scala: per ognuno quello caricato
+    riscritto nell'altra scala (o com'e', se l'altra e' quella del PDF);
+    `None` al posto di quelli che non ne hanno una."""
+    fuori = []
+    for k, (p, s) in enumerate(zip(caricati, scale)):
+        f = altra(s)
+        if f is None:
+            fuori.append(None)
+        elif f == 1.0:
+            fuori.append(p)
+        else:
+            fuori.append(in_scala(p, cartella, 100 + k, f)[0])
     return fuori
 
 
