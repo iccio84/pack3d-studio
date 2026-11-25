@@ -1125,6 +1125,47 @@ terzo di lui, e i tratti piu' corti non si provano. Col DT a pezzi di 3 mm la
 ricerca durava da 70 a 500 secondi, e due flowpack del banco finivano i 20
 minuti del lavoratore.
 
+### L'astuccio dichiarato flowpack: una domanda, non un flowpack
+
+Dichiarato flowpack, un astuccio a fasciatura verticale si legge anche come
+film: il T10 al lampone usciva a sovrapposizione 327 x 196 x 103,5, il
+T2x25 a pinna 272 x 150,4 x 49,2, senza difetti misurati, e li fermava solo
+il controllo dell'AI (lavori/robustezza/flowpack.md in pack3d-casi). Dal 25
+novembre 2026 la lettura si ferma prima, con una domanda, quando il PDF si
+legge **chiaramente** come astuccio (`registro.astuccio_nel_flowpack`):
+
+- il file non dice di essere un film (`_dice_film`: WRAPPING, o FASCIA e
+  PASSO) - se lo dice, niente altro si guarda e non costa niente;
+- la lettura dell'astuccio per colore (`strade.letture`, solo la strada
+  per colore) e' **forte** (`strade.forte`): le misure tornano e le quote
+  non la smentiscono.
+
+Sul parco, il 25 novembre: i 18 flowpack non danno nessuna lettura
+d'astuccio; il T10 al lampone (187 x 146 x 50) e il T2x25 (271 x 100 x 90) la
+danno forte. Costa da 0,2 a 2 secondi per lettura.
+
+La pagina mostra «Flowpack o astuccio?» con le misure e due tasti, solo per
+questa domanda:
+
+- **E' un astuccio**: il passo del cartotecnico, astuccio, col PDF gia' nel
+  suo posto; si sceglie lo spessore e si continua come sempre;
+- **E' un flowpack**: la lettura si rifa' con `"flowpack_confermato": 1`,
+  che va anche alla costruzione e fra le opzioni del caso (se il modello va
+  in coda, la routine lo ricostruisce confermato). Nei dettagli e davanti al
+  controllo dell'AI la riga «FLOWPACK CONFERMATO da chi ha caricato il PDF:
+  il disegno si legge anche come un astuccio ...».
+
+La domanda non e' un errore: `/api/analyze` risponde 200 con
+`"domanda": "flowpack_astuccio"` e `astuccio` (le misure); niente coda,
+niente tentativi. `/api/build` senza conferma, da chi chiama l'API senza la
+pagina, risponde 409 col testo della domanda. Le statistiche contano
+l'evento `domanda` (dichiarato flowpack, letto astuccio) con l'esito:
+`chiesta`, poi `flowpack` (confermato) o `astuccio` (la lettura come
+astuccio dopo la domanda, `"da_flowpack": 1` dalla pagina).
+
+Il riempimento col flowpack come CU e la lettura senza dichiarazione non
+cambiano.
+
 ### I tentativi del flowpack
 
 Il punto 3 del piano (regole/verifiche.md, *Il secondo tentativo prima della

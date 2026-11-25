@@ -422,7 +422,7 @@
   #continua{width:100%;max-width:300px;margin:12px auto 0;display:block}
   #continua[hidden]{display:none}
 
-  #params .griglia, #passo .griglia, #strappo .griglia, #pellicola .griglia, #gelato .griglia{display:grid;gap:14px;border:1px solid var(--border);
+  #params .griglia, #passo .griglia, #strappo .griglia, #pellicola .griglia, #gelato .griglia, #dubbia .griglia{display:grid;gap:14px;border:1px solid var(--border);
                    border-radius:var(--radius);padding:14px;
                    background:color-mix(in oklab,var(--background) 60%,transparent)}
   /* la regola qui sopra pesa piu' di .griglia[hidden]: i campi del passo
@@ -442,7 +442,7 @@
   .note{margin:0;font-size:11px;line-height:1.5;color:var(--muted-foreground);
         letter-spacing:0;text-transform:none}
   #go, #strappo-go{width:100%;max-width:300px;margin:12px auto 0;display:block}
-  #spessore, #strappo-scelta, #pellicola-scelta, #gelato-scelta, #fustella-scelta, #cu-fustella, #riempi-scelta, #riempi-cu{display:flex;gap:8px;flex-wrap:wrap}
+  #spessore, #strappo-scelta, #pellicola-scelta, #dubbia-scelta, #gelato-scelta, #fustella-scelta, #cu-fustella, #riempi-scelta, #riempi-cu{display:flex;gap:8px;flex-wrap:wrap}
   #gelato-scelta .gusto::before{content:"";display:inline-block;width:10px;height:10px;border-radius:50%;
     margin-right:7px;vertical-align:-1px;background:var(--gusto);box-shadow:0 0 0 1px rgba(0,0,0,.15)}
   #cu-fustella button[aria-pressed="true"],
@@ -656,6 +656,21 @@
         <button type="button" data-p="0" aria-pressed="false">No &middot; finestra aperta</button>
       </div>
       <p class="note" id="pellicola-dove"></p>
+    </div>
+    </div>
+  </div>
+
+  <!-- Il flowpack che si legge come astuccio (registro.astuccio_nel_flowpack):
+       solo con questa domanda, e la risposta agisce subito -->
+  <div id="dubbia" class="pannello">
+    <span class="tit">Flowpack o astuccio?</span>
+    <div class="griglia">
+    <div class="fld">
+      <p class="note" id="dubbia-testo"></p>
+      <div id="dubbia-scelta" role="group" aria-label="Flowpack o astuccio">
+        <button type="button" data-f="carton">&Egrave; un astuccio</button>
+        <button type="button" data-f="flowpack">&Egrave; un flowpack &middot; costruiscilo come flowpack</button>
+      </div>
     </div>
     </div>
   </div>
@@ -3233,6 +3248,7 @@ function mostraFamiglie(){
 function scegliFamiglia(f){
   if (!FAMIGLIE[f]) return;
   famiglia = f; carto = null; slotAttivo = -1; cuScelta = null; chiusura = null;
+  daFlowpack = false;
   pezziIncarto = 0; tenutiIncarto = [];
   setTimeout(() => { if (famiglia === 'incarto') partiEl.focus(); }, 0);
   tuTipo = null; tuPieno = null;
@@ -3462,6 +3478,7 @@ async function riceviFile(lista){
     famiglieEl.classList.remove('on'); passoEl.classList.remove('on');
     params.classList.remove('on'); strappoEl.classList.remove('on');
     pellicolaEl.classList.remove('on'); gelatoEl.classList.remove('on');
+    dubbiaEl.classList.remove('on');
     glbBlob = f; glbName = f.name;
     show(await f.arrayBuffer()); setFase('pronto'); setTitolo(f.name);
     setStatus('GLB caricato dal disco',''); setMeta([]);
@@ -3577,8 +3594,13 @@ async function avanti(){
   if (famiglia === 'incarto')
     return procedi('incarto', Object.assign({chiusura, pezzi: pezziIncarto},
                                             senza.length ? {senza_grafica: senza} : {}));
-  if (famiglia === 'carton')
-    return procedi('carton', {pezzi: slots.length, spessore: spessoreScelto});
+  // una lettura nuova: la conferma del flowpack di prima non vale piu'
+  flowpackConfermato = false;
+  if (famiglia === 'carton'){
+    const da = daFlowpack ? {da_flowpack: 1} : {};
+    daFlowpack = false;
+    return procedi('carton', Object.assign({pezzi: slots.length, spessore: spessoreScelto}, da));
+  }
   return procedi(famiglia, {});
 }
 
@@ -3665,6 +3687,10 @@ async function procedi(kind, extra, tu){
     const info = await analyze(c.buf, opts);
     setMeta(info.meta || []);
     controllaTu(info, tu);
+    if (kind === 'flowpack' && info.domanda === 'flowpack_astuccio'){
+      chiediFamiglia(info);
+      return;
+    }
     // l'incarto a triangolo e' un film, ma non ha pinne ne' rigonfiamento:
     // si costruisce subito
     if (kind === 'flowpack' && info.kind !== 'incarto'){
@@ -3706,11 +3732,52 @@ function fermato(err){
   // si torna al passo: i PDF restano, e se ne puo' cambiare uno o riprovare
   params.classList.remove('on'); strappoEl.classList.remove('on');
   pellicolaEl.classList.remove('on'); gelatoEl.classList.remove('on');
+  dubbiaEl.classList.remove('on');
   if (famiglia){ disegnaPasso(); passoEl.classList.add('on'); }
   const m = testoErrore(err);
   setStatus(m.includes('occupato') ? 'Server occupato: riprova fra qualche secondo'
                                    : m.replace(/^[A-Za-z]*Error: /, '').slice(0,200), 'err');
 }
+
+/* ------------------------ flowpack o astuccio? ------------------------- */
+// Dichiarato flowpack, il disegno si legge chiaramente come un astuccio e non
+// dice di essere un film (registro.astuccio_nel_flowpack): la lettura si
+// ferma con questa domanda, senza coda. «E' un astuccio» porta al passo
+// dell'astuccio col PDF gia' messo (manca lo spessore); «E' un flowpack» rifa'
+// la lettura con la conferma, che va anche alla costruzione e col caso
+// (`flowpack_confermato`). La statistica conta la domanda e le risposte.
+const dubbiaEl = document.getElementById('dubbia');
+// la conferma del flowpack, per la costruzione dopo le opzioni; e la
+// risposta «astuccio», che la lettura dell'astuccio dice al server una volta
+let flowpackConfermato = false, daFlowpack = false;
+
+function chiediFamiglia(info){
+  const a = info.astuccio || {};
+  document.getElementById('dubbia-testo').textContent =
+    'Hai scelto Flowpack, ma il disegno si legge come un astuccio ' + (a.come || 'chiuso')
+    + ' di ' + (a.misure || '?') + ', e non dice di essere un film. Com\u2019\u00e8 il pack?';
+  dubbiaEl.classList.add('on');
+  setStatus('Flowpack o astuccio? Il disegno si legge come un astuccio','');
+}
+
+function rispondiFamiglia(f){
+  dubbiaEl.classList.remove('on');
+  if (f === 'flowpack'){
+    flowpackConfermato = true;
+    return procedi('flowpack', {flowpack_confermato: 1});
+  }
+  // l'astuccio: il passo del cartotecnico col PDF gia' nel suo posto
+  const pdf = {name: pending.name, buf: pending.buf};
+  scegliFamiglia('carton');
+  scegliCarto('astuccio');
+  slots[0] = pdf;
+  daFlowpack = true;
+  disegnaPasso();
+  statoPasso();
+  setStatus('Astuccio: scegli lo spessore della carta, poi Continua','');
+}
+dubbiaEl.querySelectorAll('#dubbia-scelta button').forEach(b =>
+  b.onclick = () => rispondiFamiglia(b.dataset.f));
 
 /* ----------------------- pellicola delle finestre ----------------------- */
 // L'analisi ha trovato una o piu' finestre: sul ballotin i buchi nei
@@ -3962,6 +4029,8 @@ function annulla(){
   strappoEl.classList.remove('on');
   pellicolaEl.classList.remove('on');
   gelatoEl.classList.remove('on');
+  dubbiaEl.classList.remove('on');
+  flowpackConfermato = false; daFlowpack = false;
   setMeta([]); setTitolo('');
   nascondiCaso();
   togliModello();
@@ -4128,7 +4197,8 @@ document.getElementById('go').onclick = async () => {
                   Object.assign(fp, r.extra, {kind: 'riempimento', cu: 'flowpack', parti: r.c.parti, quanti}));
       esitoFinale(v, r.info.title || 'Vassoio pieno');
     } else {
-      const v = await build(pending.buf, pending.name, Object.assign(fp, {kind: 'flowpack'}));
+      const v = await build(pending.buf, pending.name, Object.assign(fp, {kind: 'flowpack'},
+                            flowpackConfermato ? {flowpack_confermato: 1} : {}));
       esitoFinale(v, 'Modello pronto');
     }
   }catch(err){ fermato(err); }

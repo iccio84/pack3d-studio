@@ -256,6 +256,21 @@ poi ci si ferma dicendo «se e' un film, dichiara flowpack»
 vassoio. La tabella delle famiglie lo dice riga per riga: il flowpack si prova
 solo senza dichiarazione o dichiarato flowpack (`famiglie.registro.RICONOSCIMENTO`).
 
+E al contrario: dichiarato flowpack, un astuccio usciva flowpack plausibile
+- a pinna, a sovrapposizione, le misure credibili - e lo fermava solo il
+controllo dell'AI. Dal 25 novembre 2026, se il PDF si legge **chiaramente**
+come astuccio - il file non dice di essere un film (WRAPPING, o FASCIA e
+PASSO) e la lettura dell'astuccio per colore e' forte - la lettura si ferma
+con una domanda e non costruisce: «Flowpack o astuccio?». Non e' un errore,
+e il caso non va in coda: «E' un astuccio» porta al passo dell'astuccio col
+PDF gia' messo; «E' un flowpack» lo costruisce come flowpack, con
+`"flowpack_confermato": 1` fra le opzioni del caso (la routine lo
+ricostruisce cosi') e la riga «FLOWPACK CONFERMATO» in cima ai dettagli e
+davanti al controllo dell'AI. Chi chiama `/api/build` senza la pagina e
+senza la conferma riceve la stessa domanda con un 409
+(`registro.astuccio_nel_flowpack`; regole/flowpack.md, *L'astuccio
+dichiarato flowpack*).
+
 Lo stesso vale per i nomi. `SINONIMI_KIND` traduce le etichette con cui la
 tipologia puo' arrivare — `cartotecnico` e `astuccio` per l'astuccio,
 `espositore`, `display` e `tray` per il vassoio — perche' **una dichiarazione
