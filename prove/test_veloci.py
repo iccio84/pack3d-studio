@@ -3735,3 +3735,56 @@ class RevisioniIncrementali(unittest.TestCase):
                 doc.close()
         self.assertEqual(lettura(uno), lettura(self.pdf))
         self.assertTrue(np.array_equal(resa(uno), resa(self.pdf)))
+
+
+class AstuccioDichiaratoFlowpack(unittest.TestCase):
+    """Dichiarato flowpack, un PDF che si legge chiaramente come astuccio si
+    ferma con una domanda (`registro.astuccio_nel_flowpack`, regole/
+    flowpack.md, *L'astuccio dichiarato flowpack*). Chiaramente: il file non
+    dice di essere un film, e la lettura dell'astuccio per colore e' forte."""
+
+    def setUp(self):
+        self.td = tempfile.mkdtemp()
+        self.pdf = _tavola_quotata(os.path.join(self.td, "t.pdf"))
+
+    def tearDown(self):
+        shutil.rmtree(self.td, ignore_errors=True)
+
+    def _esito(self, forte=True):
+        from pack3d import strade
+        d = types.SimpleNamespace(dims_mm=(187.4, 146.5, 50.0), chiuso=True)
+        es = strade.Esito()
+        es.migliore = types.SimpleNamespace(d=d)
+        es.dieline = lambda: d
+        return es, forte
+
+    def _prova(self, film=False, forte=True, nessuna=False):
+        from pack3d.famiglie import registro
+        es, f = self._esito(forte)
+        if nessuna:
+            es.migliore = None
+        with mock.patch.object(registro, "_dice_film", return_value=film), \
+                mock.patch.object(registro.strade, "letture", return_value=es) as letture, \
+                mock.patch.object(registro.strade, "forte", return_value=f):
+            return registro.astuccio_nel_flowpack(self.pdf), letture
+
+    def test_astuccio_chiaro_fa_la_domanda(self):
+        from pack3d.famiglie import registro
+        a, _ = self._prova()
+        self.assertEqual(a, dict(misure="187 x 146 x 50 mm", chiuso=True, come="chiuso"))
+        self.assertIn("astuccio chiuso di 187 x 146 x 50 mm", registro.domanda_flowpack(a))
+        self.assertLessEqual(len(registro.domanda_flowpack(a)), 200)
+        self.assertTrue(registro.riga_conferma(a).startswith("FLOWPACK CONFERMATO"))
+
+    def test_il_film_che_lo_dice_non_si_legge_come_astuccio(self):
+        a, letture = self._prova(film=True)
+        self.assertIsNone(a)
+        letture.assert_not_called()
+
+    def test_una_lettura_debole_non_basta(self):
+        self.assertIsNone(self._prova(forte=False)[0])
+        self.assertIsNone(self._prova(nessuna=True)[0])
+
+    def test_la_conferma_viaggia_col_caso(self):
+        import server
+        self.assertIn("flowpack_confermato", server.OPZIONI_CASO)
